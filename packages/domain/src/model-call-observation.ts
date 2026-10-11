@@ -27,11 +27,69 @@ export type ModelHttpTiming = Readonly<
       | "lastByteMs"
       | "firstCompletedItemMs"
       | "terminalMs"
-      | "streamEndMs",
+      | "streamEndMs"
+      | "readClosedMs"
+      | "finishedMs",
       number
     >
   >
 >;
+
+/** Bounded transport codes only; raw exceptions and response bodies are never persisted. */
+export const MODEL_HTTP_NETWORK_CAUSE_CODES = [
+  "ECONNRESET",
+  "ECONNREFUSED",
+  "ECONNABORTED",
+  "ETIMEDOUT",
+  "ENOTFOUND",
+  "EAI_AGAIN",
+  "EHOSTUNREACH",
+  "ENETUNREACH",
+  "EPIPE",
+  "UND_ERR_SOCKET",
+  "UND_ERR_HEADERS_TIMEOUT",
+  "UND_ERR_BODY_TIMEOUT",
+  "UND_ERR_CONNECT_TIMEOUT",
+  "UND_ERR_DESTROYED",
+  "UND_ERR_ABORTED",
+  "CERT_HAS_EXPIRED",
+  "UNABLE_TO_VERIFY_LEAF_SIGNATURE",
+  "DEPTH_ZERO_SELF_SIGNED_CERT",
+  "ERR_TLS_CERT_ALTNAME_INVALID",
+  "ERR_SSL_WRONG_VERSION_NUMBER",
+] as const;
+
+export type ModelHttpNetworkCauseCode =
+  (typeof MODEL_HTTP_NETWORK_CAUSE_CODES)[number];
+
+export type ModelHttpResponseDiagnostics = Readonly<{
+  status: number;
+  contentType?: string;
+  server?: string;
+  cfRay?: string;
+  oneApiRequestId?: string;
+}>;
+
+export type ModelHttpTerminationDiagnostics = Readonly<{
+  reason:
+    | "protocolTerminal"
+    | "httpError"
+    | "idleTimeout"
+    | "transportError"
+    | "protocolError"
+    | "canceled"
+    | "consumerInterrupted"
+    | "controlSinkError";
+  code?: string;
+  networkCode?: ModelHttpNetworkCauseCode;
+}>;
+
+/** Private correlation evidence; none of these values enter model context or Run SSE. */
+export type ModelHttpDiagnostics = Readonly<{
+  response?: ModelHttpResponseDiagnostics;
+  termination?: ModelHttpTerminationDiagnostics;
+  read?: Readonly<{ end: "eof" | "releasedBeforeEof" }>;
+}>;
 
 /** Accounting evidence for a provider request, not authority to retry its effects. */
 export type ModelCallObservation = Readonly<{
@@ -56,6 +114,8 @@ export type ModelCallObservation = Readonly<{
   usageEventObserved: boolean;
   /** Additive diagnostics; absent on historical records and non-HTTP adapters. */
   httpTiming?: ModelHttpTiming;
+  /** Additive, allowlisted HTTP metadata; absent on historical records. */
+  httpDiagnostics?: ModelHttpDiagnostics;
 }>;
 export type ModelCallRecord = Readonly<{
   tenantId: string;
@@ -129,7 +189,6 @@ export function validateModelCallRecord(record: ModelCallRecord): void {
   if (o.httpTiming !== undefined) {
     if (
       o.transport !== "http" ||
-      o.operation !== "generate" ||
       o.outcome === "unknown" ||
       o.httpTiming === null ||
       typeof o.httpTiming !== "object" ||
@@ -145,11 +204,18 @@ export function validateModelCallRecord(record: ModelCallRecord): void {
       "firstCompletedItemMs",
       "terminalMs",
       "streamEndMs",
+      "readClosedMs",
+      "finishedMs",
     ];
     for (const [key, value] of Object.entries(o.httpTiming)) {
       if (!keys.includes(key) || !Number.isSafeInteger(value) || value < 0)
         throw new Error("model_call_http_timing_invalid");
     }
+  }
+  if (o.httpDiagnostics !== undefined) {
+    if (o.transport !== "http" || o.outcome === "unknown")
+      throw new Error("model_call_http_diagnostics_invalid");
+    validateHttpDiagnostics(o.httpDiagnostics);
   }
   timestamp(o.startedAt);
   if (o.finishedAt !== null) timestamp(o.finishedAt);
@@ -161,6 +227,96 @@ export function validateModelCallRecord(record: ModelCallRecord): void {
     throw new Error("model_call_latency_invalid");
   if (new TextEncoder().encode(JSON.stringify(record)).byteLength > 8192)
     throw new Error("model_call_record_too_large");
+}
+
+function validateHttpDiagnostics(value: ModelHttpDiagnostics): void {
+  const invalid = () => {
+    throw new Error("model_call_http_diagnostics_invalid");
+  };
+  if (!diagnosticObject(value, ["response", "termination", "read"])) invalid();
+  if (value.response !== undefined) {
+    const response = value.response;
+    if (
+      !diagnosticObject(response, [
+        "status",
+        "contentType",
+        "server",
+        "cfRay",
+        "oneApiRequestId",
+      ]) ||
+      !Number.isSafeInteger(response.status) ||
+      response.status < 100 ||
+      response.status > 599
+    )
+      invalid();
+    for (const [key, limit] of [
+      ["contentType", 256],
+      ["server", 128],
+      ["cfRay", 128],
+      ["oneApiRequestId", 256],
+    ] as const) {
+      const header = response[key];
+      if (header !== undefined && !boundedDiagnosticHeader(header, limit))
+        invalid();
+    }
+  }
+  if (value.termination !== undefined) {
+    const termination = value.termination;
+    if (
+      !diagnosticObject(termination, ["reason", "code", "networkCode"]) ||
+      ![
+        "protocolTerminal",
+        "httpError",
+        "idleTimeout",
+        "transportError",
+        "protocolError",
+        "canceled",
+        "consumerInterrupted",
+        "controlSinkError",
+      ].includes(termination.reason) ||
+      (termination.code !== undefined &&
+        (typeof termination.code !== "string" ||
+          !/^[a-z][a-z0-9_]{0,127}$/u.test(termination.code))) ||
+      (termination.networkCode !== undefined &&
+        !(MODEL_HTTP_NETWORK_CAUSE_CODES as readonly string[]).includes(
+          termination.networkCode,
+        ))
+    )
+      invalid();
+  }
+  if (
+    value.read !== undefined &&
+    (!diagnosticObject(value.read, ["end"]) ||
+      !["eof", "releasedBeforeEof"].includes(value.read.end))
+  )
+    invalid();
+}
+
+function diagnosticObject(
+  value: unknown,
+  keys: readonly string[],
+): value is Readonly<Record<string, unknown>> {
+  return (
+    typeof value === "object" &&
+    value !== null &&
+    !Array.isArray(value) &&
+    (Object.getPrototypeOf(value) === Object.prototype ||
+      Object.getPrototypeOf(value) === null) &&
+    Object.keys(value).every((key) => keys.includes(key))
+  );
+}
+
+function boundedDiagnosticHeader(
+  value: unknown,
+  limit: number,
+): value is string {
+  return (
+    typeof value === "string" &&
+    value.length > 0 &&
+    value.length <= limit &&
+    value.trim() === value &&
+    /^[\u0020-\u007e]+$/u.test(value)
+  );
 }
 export function validateModelCallGoalAttribution(
   value: ModelCallGoalAttribution,

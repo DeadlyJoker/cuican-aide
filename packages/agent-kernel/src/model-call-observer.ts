@@ -1,11 +1,19 @@
 import { randomUUID } from "node:crypto";
-import type { ModelCallObservation, ModelHttpTiming } from "@crewon/domain";
+import type {
+  ModelCallObservation,
+  ModelHttpDiagnostics,
+  ModelHttpTiming,
+} from "@crewon/domain";
 import { MODEL_SPENDING_ADMISSION_CODES } from "@crewon/domain";
 import {
   ModelTransportError,
   type ModelTransportEvent,
   type ModelTransportStreamOptions,
 } from "./model-transport-port.ts";
+import {
+  modelHttpResponseDiagnostics,
+  modelHttpTerminationDiagnostics,
+} from "./model-http-diagnostics.ts";
 
 /** One object per prepared adapter request, including retries hidden below Kernel. */
 export async function beginModelCall(input: {
@@ -65,8 +73,11 @@ export async function beginModelCall(input: {
   };
   await record(initial);
   const httpTiming: Partial<Record<keyof ModelHttpTiming, number>> = {};
+  const httpDiagnostics: {
+    -readonly [K in keyof ModelHttpDiagnostics]: ModelHttpDiagnostics[K];
+  } = {};
   const httpPhase = (phase: keyof ModelHttpTiming) => {
-    if (input.transport !== "http" || input.operation !== "generate") return;
+    if (input.transport !== "http") return;
     if (httpTiming[phase] === undefined || phase === "lastByteMs")
       httpTiming[phase] = Math.max(0, Math.round(performance.now() - started));
   };
@@ -92,6 +103,28 @@ export async function beginModelCall(input: {
   return {
     responseIdentity,
     httpPhase,
+    httpResponse(
+      status: number,
+      headers: Parameters<typeof modelHttpResponseDiagnostics>[1],
+    ) {
+      if (input.transport !== "http" || httpDiagnostics.response !== undefined)
+        return;
+      const response = modelHttpResponseDiagnostics(status, headers);
+      if (response !== null) httpDiagnostics.response = response;
+    },
+    httpReadClosed(state: Readonly<{ endOfBody: boolean }>) {
+      if (input.transport !== "http") return;
+      httpPhase("readClosedMs");
+      httpDiagnostics.read = {
+        end: state.endOfBody ? "eof" : "releasedBeforeEof",
+      };
+    },
+    httpFailure(
+      failure: Parameters<typeof modelHttpTerminationDiagnostics>[0],
+    ) {
+      if (input.transport !== "http") return;
+      httpDiagnostics.termination = modelHttpTerminationDiagnostics(failure);
+    },
     event(event: ModelTransportEvent): ModelTransportEvent {
       if (
         event.type === "output.delta" &&
@@ -107,6 +140,11 @@ export async function beginModelCall(input: {
       if (event.type === "completed" || event.type === "failed") {
         terminal = event.type;
         httpPhase("terminalMs");
+        if (input.transport === "http")
+          httpDiagnostics.termination = modelHttpTerminationDiagnostics({
+            reason: "protocolTerminal",
+            ...(event.type === "failed" ? { code: event.code } : {}),
+          });
       }
       if (event.type === "response.created") {
         const payload = event.checkpoint.opaquePayload;
@@ -131,6 +169,15 @@ export async function beginModelCall(input: {
     ): Promise<void> {
       if (finished) return;
       finished = true;
+      httpPhase("finishedMs");
+      if (
+        input.transport === "http" &&
+        httpDiagnostics.termination === undefined &&
+        (outcome === "canceled" || outcome === "interrupted")
+      )
+        httpDiagnostics.termination = {
+          reason: outcome === "canceled" ? "canceled" : "consumerInterrupted",
+        };
       await record({
         ...initial,
         finishedAt: new Date().toISOString(),
@@ -144,6 +191,9 @@ export async function beginModelCall(input: {
         firstOutputLatencyMs,
         usageEventObserved,
         ...(Object.keys(httpTiming).length === 0 ? {} : { httpTiming }),
+        ...(Object.keys(httpDiagnostics).length === 0
+          ? {}
+          : { httpDiagnostics }),
       });
     },
   };

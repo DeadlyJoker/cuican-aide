@@ -233,6 +233,7 @@ export class DirectResponsesTransport implements ModelTransportPort {
       value: undefined,
     };
     let call: Awaited<ReturnType<typeof beginModelCall>> = null;
+    let responseStatus: number | null = null;
     let outcome: "completed" | "failed" | "canceled" | "interrupted" =
       "interrupted";
     try {
@@ -269,6 +270,8 @@ export class DirectResponsesTransport implements ModelTransportPort {
         signal: idle.signal,
       });
       call?.httpPhase("headersMs");
+      responseStatus = response.status;
+      call?.httpResponse(response.status, response.headers);
       idle.touch();
       if (!response.ok) {
         const rateLimit = parseResponsesRateLimitHeaders(response.headers);
@@ -335,7 +338,10 @@ export class DirectResponsesTransport implements ModelTransportPort {
           call?.httpPhase("lastByteMs");
           idle.touch();
         },
-        onReadClosed: (state) => idle.releaseRead(state),
+        onReadClosed: (state) => {
+          call?.httpReadClosed(state);
+          idle.releaseRead(state);
+        },
         ...(this.#outputDeltaFlushBytes === undefined
           ? {}
           : { outputDeltaFlushBytes: this.#outputDeltaFlushBytes }),
@@ -366,35 +372,50 @@ export class DirectResponsesTransport implements ModelTransportPort {
       outcome = "completed";
     } catch (error) {
       outcome = signal.aborted ? "canceled" : "failed";
-      if (controlSinkFailure.failed) throw controlSinkFailure.value;
-      if (signal.aborted) {
-        throw transportError(
-          "canceled",
-          "segment_canceled",
-          false,
-          undefined,
-          signal.reason,
-        );
+      if (controlSinkFailure.failed) {
+        call?.httpFailure({ reason: "controlSinkError" });
+        throw controlSinkFailure.value;
       }
-      if (idle.expired) {
-        throw transportError(
-          "timeout",
-          "responses_idle_timeout",
-          true,
-          undefined,
-          error,
-        );
-      }
-      if (error instanceof ModelTransportError) {
-        throw error;
-      }
-      throw transportError(
-        "unavailable",
-        "responses_transport_unavailable",
-        true,
-        undefined,
-        error,
-      );
+      const failure = signal.aborted
+        ? transportError(
+            "canceled",
+            "segment_canceled",
+            false,
+            undefined,
+            signal.reason,
+          )
+        : idle.expired
+          ? transportError(
+              "timeout",
+              "responses_idle_timeout",
+              true,
+              undefined,
+              error,
+            )
+          : error instanceof ModelTransportError
+            ? error
+            : transportError(
+                "unavailable",
+                "responses_transport_unavailable",
+                true,
+                undefined,
+                error,
+              );
+      call?.httpFailure({
+        reason: signal.aborted
+          ? "canceled"
+          : idle.expired
+            ? "idleTimeout"
+            : responseStatus !== null &&
+                (responseStatus < 200 || responseStatus >= 300)
+              ? "httpError"
+              : failure.category === "protocol"
+                ? "protocolError"
+                : "transportError",
+        code: failure.code,
+        ...(signal.aborted ? {} : { cause: error }),
+      });
+      throw failure;
     } finally {
       idle.close();
       await call?.finish(
@@ -423,6 +444,7 @@ export class DirectResponsesTransport implements ModelTransportPort {
     );
     const idle = new IdleWatch(this.#idleTimeoutMs, this.#scheduler, signal);
     let call: Awaited<ReturnType<typeof beginModelCall>> = null;
+    let responseStatus: number | null = null;
     let outcome: "completed" | "failed" | "canceled" | "interrupted" =
       "interrupted";
     try {
@@ -437,19 +459,34 @@ export class DirectResponsesTransport implements ModelTransportPort {
         signal: idle.signal,
         providerResponseId: responseId,
       });
+      call?.httpPhase("dispatchedMs");
       const response = await this.#fetch(url, {
         method: "GET",
         redirect: "manual",
-        headers: responsesHeaders(this.#apiKey, "application/json"),
+        headers: responsesHeaders(
+          this.#apiKey,
+          "application/json",
+          this.#turnStates.get(request.runId),
+        ),
         signal: idle.signal,
       });
+      call?.httpPhase("headersMs");
+      responseStatus = response.status;
+      call?.httpResponse(response.status, response.headers);
       idle.touch();
       if (!response.ok) {
         await cancelBody(response.body);
         throw httpError(response.status, response.headers.get("retry-after"));
       }
-      const value = await readBoundedJson(response, 512 * 1024, () =>
-        idle.touch(),
+      const value = await readBoundedJson(
+        response,
+        512 * 1024,
+        () => {
+          call?.httpPhase("firstByteMs");
+          call?.httpPhase("lastByteMs");
+          idle.touch();
+        },
+        (state) => call?.httpReadClosed(state),
       );
       const projected = projectRetrievedResponse(value, responseId, checkpoint);
       if (projected.status === "pending") {
@@ -460,35 +497,50 @@ export class DirectResponsesTransport implements ModelTransportPort {
         );
       }
       for (const event of projected.events) yield call?.event(event) ?? event;
+      call?.httpPhase("streamEndMs");
       outcome = "completed";
     } catch (error) {
       outcome = signal.aborted ? "canceled" : "failed";
-      if (signal.aborted) {
-        throw transportError(
-          "canceled",
-          "segment_canceled",
-          false,
-          undefined,
-          signal.reason,
-        );
-      }
-      if (idle.expired) {
-        throw transportError(
-          "timeout",
-          "responses_idle_timeout",
-          true,
-          undefined,
-          error,
-        );
-      }
-      if (error instanceof ModelTransportError) throw error;
-      throw transportError(
-        "unavailable",
-        "responses_transport_unavailable",
-        true,
-        undefined,
-        error,
-      );
+      const failure = signal.aborted
+        ? transportError(
+            "canceled",
+            "segment_canceled",
+            false,
+            undefined,
+            signal.reason,
+          )
+        : idle.expired
+          ? transportError(
+              "timeout",
+              "responses_idle_timeout",
+              true,
+              undefined,
+              error,
+            )
+          : error instanceof ModelTransportError
+            ? error
+            : transportError(
+                "unavailable",
+                "responses_transport_unavailable",
+                true,
+                undefined,
+                error,
+              );
+      call?.httpFailure({
+        reason: signal.aborted
+          ? "canceled"
+          : idle.expired
+            ? "idleTimeout"
+            : responseStatus !== null &&
+                (responseStatus < 200 || responseStatus >= 300)
+              ? "httpError"
+              : failure.category === "protocol"
+                ? "protocolError"
+                : "transportError",
+        code: failure.code,
+        ...(signal.aborted ? {} : { cause: error }),
+      });
+      throw failure;
     } finally {
       idle.close();
       await call?.finish(
@@ -1064,16 +1116,21 @@ async function readBoundedJson(
   response: Response,
   maxBytes: number,
   onActivity: () => void,
+  onReadClosed: (state: Readonly<{ endOfBody: boolean }>) => void,
 ): Promise<unknown> {
   if (response.body === null)
     throw protocolError("responses_retrieve_body_missing");
   const reader = response.body.getReader();
   const chunks: Uint8Array[] = [];
   let size = 0;
+  let endOfBody = false;
   try {
     while (true) {
       const { done, value } = await reader.read();
-      if (done) break;
+      if (done) {
+        endOfBody = true;
+        break;
+      }
       onActivity();
       size += value.byteLength;
       if (size > maxBytes)
@@ -1081,6 +1138,7 @@ async function readBoundedJson(
       chunks.push(value);
     }
   } finally {
+    onReadClosed({ endOfBody });
     reader.releaseLock();
   }
   const bytes = new Uint8Array(size);

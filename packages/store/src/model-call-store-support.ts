@@ -48,6 +48,7 @@ export function mergeModelCallReplay(
     firstOutputLatencyMs: _d,
     usageEventObserved: _i,
     httpTiming: _k,
+    httpDiagnostics: _m,
     ...before
   } = prior.observation;
   const {
@@ -57,6 +58,7 @@ export function mergeModelCallReplay(
     firstOutputLatencyMs: _h,
     usageEventObserved: _j,
     httpTiming: _l,
+    httpDiagnostics: _n,
     ...after
   } = next.observation;
   if (
