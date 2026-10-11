@@ -68,6 +68,27 @@ export class SqlitePluginCompositionStore implements PluginCompositionStore {
     this.#readable();
     const { scope } = compositionRead(input, { kind: "current" });
     this.#scope(scope);
+    return this.#current(scope);
+  }
+
+  /** SQLite profile publication fence. Only the actual claimed owner may use
+   * this synchronous read; asynchronous authority refresh is not a head pin.
+   */
+  assertCurrentLock(
+    input: Readonly<{ scope: PluginProfileScope; lockDigest: string }>,
+  ): void {
+    this.#readable();
+    if (this.#binding === undefined)
+      compositionStoreFail("plugin_profile_owner_operation_invalid");
+    const { scope, lockDigest } = compositionRead(input, { kind: "digest" });
+    this.#scope(scope);
+    const current = this.#current(scope);
+    this.#readable();
+    if (current?.lockDigest !== lockDigest)
+      compositionStoreFail("plugin_composition_current_conflict");
+  }
+
+  #current(scope: PluginProfileScope) {
     const head = this.#head(scope);
     if (!head) return null;
     const row = this.#row(scope, String(head.lock_digest));

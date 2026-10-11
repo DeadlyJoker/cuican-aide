@@ -266,6 +266,57 @@ test("SQLite composition: actual profile owner scope, captured input, exclusion 
   await f.second.store.compositionStore!().commit(commitInput(makeLock(2)));
 });
 
+test("SQLite composition: synchronous publication fence observes the actual owned head and strict history", async (t) => {
+  const f = await fixture(t, "sqlite");
+  const root = (
+    f.first.store as SqlitePluginInstallationStore
+  ).compositionStore();
+  await root.migrate();
+  const owner = await (
+    f.first.store as SqlitePluginInstallationStore
+  ).acquireProfileOwner({ scope, onOwnershipLost() {} });
+  t.after(() => owner.close());
+  const owned = owner.store.compositionStore();
+  const one = makeLock();
+  assert.throws(
+    () => owned.assertCurrentLock({ scope, lockDigest: one.lockDigest }),
+    /plugin_composition_current_conflict/,
+  );
+  await owned.commit(commitInput(one));
+  owned.assertCurrentLock({ scope, lockDigest: one.lockDigest });
+  assert.throws(
+    () => root.assertCurrentLock({ scope, lockDigest: one.lockDigest }),
+    /plugin_profile_owner_operation_invalid/,
+  );
+  assert.throws(
+    () =>
+      owned.assertCurrentLock({
+        scope: { ...scope, profileId: "foreign" },
+        lockDigest: one.lockDigest,
+      }),
+    /plugin_installation_scope_mismatch/,
+  );
+  const two = makeLock(2);
+  await owned.commit(commitInput(two));
+  assert.throws(
+    () => owned.assertCurrentLock({ scope, lockDigest: one.lockDigest }),
+    /plugin_composition_current_conflict/,
+  );
+  owned.assertCurrentLock({ scope, lockDigest: two.lockDigest });
+  await f.execute(
+    `UPDATE plugin_composition_heads SET revision=1,lock_digest='${one.lockDigest}'`,
+  );
+  assert.throws(
+    () => owned.assertCurrentLock({ scope, lockDigest: two.lockDigest }),
+    /plugin_composition_current_conflict/,
+  );
+  owned.assertCurrentLock({ scope, lockDigest: one.lockDigest });
+  await owner.close();
+  assert.throws(() =>
+    owned.assertCurrentLock({ scope, lockDigest: two.lockDigest }),
+  );
+});
+
 test("SQLite composition: failed head write rolls back history and JSON identity constraints reject missing fields", async (t) => {
   const f = await fixture(t, "sqlite");
   const store = f.first.store.compositionStore!();

@@ -4,7 +4,6 @@ import {
   type ActorContext,
   type ApplicationClock,
   type ContentDigester,
-  type PluginInstallationAuthorizationAction,
   type PluginInstallationPrepareSelectionInput,
   type PluginPreparedSelection,
   type SelectPluginPackageResult,
@@ -16,8 +15,8 @@ import {
   type PluginSelection,
 } from "@crewon/domain";
 import {
-  LocalPluginInstallationHost,
-  PluginNodeHost,
+  type LocalPluginInstallationHost,
+  PluginCompositionCoordinator,
   assertPluginUiHostServiceAvailability,
   capturePluginUiHostServiceAvailability,
   type PluginActivationCandidate,
@@ -40,6 +39,21 @@ import { verifyDesktopInstalledPackage } from "./desktop-plugin-runtime-support.
 import type { DesktopPreparedBusinessCandidate } from "./desktop-installed-plugin-activation-owner.ts";
 import { DesktopPluginCompositionMetadataOwner } from "./desktop-plugin-composition-metadata-owner.ts";
 import { DesktopPluginExecutionServiceOwner } from "./desktop-plugin-execution-service-owner.ts";
+import { DesktopPluginProfileOperationQueue } from "./desktop-plugin-profile-operation-queue.ts";
+import { captureDesktopPluginCompositionStatus } from "./desktop-plugin-composition-status-capture.ts";
+import {
+  createDesktopPluginInstallationHostPolicy,
+  assertDesktopPluginInstallationDependencies,
+} from "./desktop-plugin-installation-host-policy.ts";
+import { DesktopPluginInstanceCompositionOwner } from "./desktop-plugin-instance-composition-owner.ts";
+import {
+  refreshDesktopPluginInstallationAuthority,
+  type DesktopPluginAuthorityRequest,
+} from "./desktop-plugin-installation-authority-refresh.ts";
+import type {
+  PluginCompositionStatusResponse,
+  PluginSelectionListQuery,
+} from "@crewon/contracts";
 type Method =
   | "install"
   | "select"
@@ -47,13 +61,6 @@ type Method =
   | "getSelection"
   | "listPackages"
   | "listSelections";
-type AuthorityRequest = Readonly<{
-  actor: ActorContext;
-  scope: PluginProfileScope;
-  action: PluginInstallationAuthorizationAction;
-  pluginId: string | null;
-  packageDigest: string | null;
-}>;
 type Operation = {
   actor: ActorContext;
   scope: PluginProfileScope;
@@ -86,17 +93,18 @@ type ProfileDependencies = Readonly<{
 export class DesktopInstallationProfile {
   readonly #dependencies: ProfileDependencies;
   readonly #executionServices = new DesktopPluginExecutionServiceOwner();
-  readonly #node = new PluginNodeHost({
-    services: this.#executionServices.catalog.implementations,
-  });
+  readonly #node: PluginCompositionCoordinator;
+  readonly #removeAuthorityObserver: () => void;
   readonly #lifetime = new AbortController();
   #owner!: SqlitePluginInstallationProfileOwner;
   #local!: LocalPluginInstallationHost;
   #application!: PluginInstallationApplicationService;
   #compositionMetadata!: DesktopPluginCompositionMetadataOwner;
+  #instances!: DesktopPluginInstanceCompositionOwner;
   #operation: Operation | null = null;
-  #tail: Promise<void> = Promise.resolve();
-  #pending = 0;
+  readonly #queue = new DesktopPluginProfileOperationQueue(() =>
+    this.#available(),
+  );
   #closed = false;
   #recovered = false;
   #closing: Promise<void> | null = null;
@@ -108,6 +116,16 @@ export class DesktopInstallationProfile {
         dependencies.hostUiServices,
       ),
     });
+    this.#node = new PluginCompositionCoordinator({
+      scope: {
+        ...dependencies.scope,
+        authorityEpoch: dependencies.configuration.authorityEpoch,
+      },
+      installRoot: dependencies.configuration.installRoot,
+      services: this.#executionServices.catalog.registrations,
+    });
+    this.#removeAuthorityObserver =
+      dependencies.authority.registerWithdrawalObserver(() => this.withdraw());
   }
 
   readonly prepareBusinessCandidate = (
@@ -129,10 +147,16 @@ export class DesktopInstallationProfile {
           dependencies.authority.withdraw();
         },
       });
+      dependencies.authority.assertScope(
+        dependencies.configuration.actor,
+        dependencies.scope,
+      );
+      profile.#available();
       profile.#initialize();
       return profile;
     } catch (error) {
       profile.withdraw();
+      profile.#removeAuthorityObserver();
       await profile.#node.close();
       await profile.#owner?.close();
       throw error;
@@ -149,83 +173,44 @@ export class DesktopInstallationProfile {
       signal: this.#lifetime.signal,
       hostServices: this.#executionServices.catalog.metadata,
     });
-    this.#local = new LocalPluginInstallationHost({
-      profile: dependencies.scope,
-      installRoot: dependencies.configuration.installRoot,
-      nodeHost: this.#node,
+    this.#instances = new DesktopPluginInstanceCompositionOwner({
+      configuration: dependencies.configuration,
+      registry: dependencies.registry,
+      owner: this.#owner,
+      metadata: this.#compositionMetadata,
+      nodes: this.#node,
+      catalog: this.#executionServices.catalog,
       hostUiServices: dependencies.hostUiServices,
-      resolveSource: async ({ actor, scope, sourceId }) => {
+      signal: this.#lifetime.signal,
+      assertOperation: (actor, scope) => {
         this.#assertOperation(actor, scope);
-        const directory = await dependencies.registry.resolveSource(sourceId);
-        this.#available();
-        return directory;
       },
-      authorizeInstallation: async ({ actor, scope, candidate }) => {
-        this.#assertOperation(actor, scope);
-        if (dependencies.registry.authorizeCandidate(candidate) !== "allow")
-          return "deny";
-        await this.#fresh({
+      refreshAuthority: (actor, node) =>
+        this.#fresh({
           actor,
-          scope,
-          action: "pluginInstallation:install",
-          pluginId: candidate.descriptor.pluginId,
-          packageDigest: candidate.packageDigest,
-        });
-        return "allow";
-      },
-      authorizeActivation: async ({ actor, scope, candidate }) => {
-        this.#assertOperation(actor, scope);
-        if (dependencies.registry.authorizeCandidate(candidate) !== "allow")
-          return "deny";
-        await this.#fresh({
-          actor,
-          scope,
+          scope: dependencies.scope,
           action: "pluginInstallation:select",
-          pluginId: candidate.descriptor.pluginId,
-          packageDigest: candidate.packageDigest,
-        });
-        return "allow";
-      },
-      validateCompatibility: async (input) => {
-        this.#assertOperation(input.actor, input.scope);
-        if (input.descriptor !== null && input.package !== null)
-          await verifyDesktopInstalledPackage({
-            installRoot: dependencies.configuration.installRoot,
-            package: input.package,
-            registry: dependencies.registry,
-            signal: this.#lifetime.signal,
-            hostUiServices: dependencies.hostUiServices,
-          });
-        if (
-          input.nextSelection.state === "enabled" &&
-          input.descriptor !== null
-        ) {
-          if (input.descriptor.entrypoints.node === null)
-            this.#checkUiServices({
-              descriptor: input.descriptor,
-              packageDigest: input.package!.packageDigest,
-            });
-          else
-            for (const requirement of input.descriptor.requires)
-              if (
-                !requirement.optional &&
-                !this.#node
-                  .serviceIdentities()
-                  .some(
-                    (service) =>
-                      service.service === requirement.service &&
-                      service.apiVersion === requirement.apiVersion,
-                  )
-              )
-                conflict("plugin_dependency_unavailable");
-        }
-        this.#available();
-      },
-      authorizeCommit: ({ actor, scope, selection, candidate }) => {
-        this.#assertOperation(actor, scope);
-        return this.#consume(selection, candidate);
-      },
+          pluginId: node?.pluginId ?? null,
+          packageDigest: node?.packageDigest ?? null,
+        }),
     });
+    this.#local = this.#node.createInstallationHost(
+      createDesktopPluginInstallationHostPolicy({
+        configuration: dependencies.configuration,
+        registry: dependencies.registry,
+        nodes: this.#node,
+        signal: this.#lifetime.signal,
+        hostUiServices: dependencies.hostUiServices,
+        assertOperation: (actor, scope) => {
+          this.#assertOperation(actor, scope);
+        },
+        assertAvailable: () => this.#available(),
+        refreshAuthority: (request) => this.#fresh(request),
+        checkUiServices: (candidate) => this.#checkUiServices(candidate),
+        authorizeCommit: (selection, candidate) =>
+          this.#consume(selection, candidate),
+      }),
+    );
     this.#application = new PluginInstallationApplicationService({
       store: this.#owner.store,
       clock: dependencies.clock,
@@ -265,10 +250,50 @@ export class DesktopInstallationProfile {
     method: Method,
     input: Readonly<Record<string, unknown>>,
   ): Promise<unknown> {
-    this.#available();
-    if (this.#pending >= 32) conflict("plugin_installation_profile_busy");
-    this.#pending++;
-    const work = this.#tail.then(async () => {
+    return this.#runOperation(actor, async () => {
+      const call = this.#application[method] as (
+        actor: ActorContext,
+        input: unknown,
+      ) => Promise<unknown>;
+      const result = await call.call(this.#application, actor, input);
+      if (method === "select")
+        await this.#instances.observeSelection(
+          actor,
+          result as SelectPluginPackageResult,
+        );
+      return result;
+    });
+  }
+
+  compositionStatus(
+    actor: ActorContext,
+    query: PluginSelectionListQuery,
+  ): Promise<PluginCompositionStatusResponse> {
+    return this.#runOperation(actor, () =>
+      captureDesktopPluginCompositionStatus({
+        actor,
+        scope: this.#dependencies.scope,
+        query,
+        owner: this.#owner,
+        application: this.#application,
+        registry: this.#dependencies.registry,
+        metadata: this.#compositionMetadata,
+        nodes: this.#node,
+        signal: this.#lifetime.signal,
+        refreshAuthority: () =>
+          this.#fresh({
+            actor,
+            scope: this.#dependencies.scope,
+            action: "pluginInstallation:read",
+            pluginId: null,
+            packageDigest: null,
+          }),
+      }),
+    );
+  }
+
+  #runOperation<T>(actor: ActorContext, work: () => Promise<T>): Promise<T> {
+    return this.#queue.run(async () => {
       this.#available();
       const operation: Operation = {
         actor,
@@ -278,28 +303,11 @@ export class DesktopInstallationProfile {
       };
       this.#operation = operation;
       try {
-        const call = this.#application[method] as (
-          actor: ActorContext,
-          input: unknown,
-        ) => Promise<unknown>;
-        const result = await call.call(this.#application, actor, input);
-        if (method === "select")
-          await this.#compositionMetadata.observeSelection(
-            actor,
-            result as SelectPluginPackageResult,
-          );
-        return result;
+        return await work();
       } finally {
         operation.stamp = null;
         this.#operation = null;
       }
-    });
-    this.#tail = work.then(
-      () => {},
-      () => {},
-    );
-    return work.finally(() => {
-      this.#pending--;
     });
   }
 
@@ -334,14 +342,14 @@ export class DesktopInstallationProfile {
     if (this.#operation !== null) this.#operation.stamp = null;
     for (const value of this.#node.snapshot())
       if (value.phase === "accepting")
-        this.#node.deactivate(value.identity.pluginId);
+        this.#node.revoke(value.identity.pluginId);
   }
 
   close(): Promise<void> {
     if (this.#closing !== null) return this.#closing;
     this.withdraw();
     return (this.#closing = (async () => {
-      await this.#tail;
+      await this.#queue.drain();
       const failures: unknown[] = [];
       try {
         await this.#node.close();
@@ -357,6 +365,8 @@ export class DesktopInstallationProfile {
         await this.#owner.close();
       } catch (error) {
         failures.push(error);
+      } finally {
+        this.#removeAuthorityObserver();
       }
       if (failures.length)
         throw new AggregateError(
@@ -384,35 +394,34 @@ export class DesktopInstallationProfile {
       !installationSame(operation.scope, current)
     )
       denied("plugin_installation_operation_mismatch");
+    try {
+      this.#dependencies.authority.assertScope(actor, current);
+    } catch (error) {
+      // Withdrawal of our own Native authority revokes the instance lifetime.
+      // A foreign actor's rejected request must not withdraw another owner.
+      if (
+        installationSame(actor, this.#dependencies.configuration.actor) &&
+        installationSame(current, this.#dependencies.scope)
+      ) {
+        this.withdraw();
+        this.#dependencies.authority.withdraw();
+      }
+      throw error;
+    }
+    this.#owner.assertOwnership();
     return operation;
   }
-  async #fresh(input: AuthorityRequest): Promise<string> {
+  #fresh(input: DesktopPluginAuthorityRequest): Promise<string> {
     const operation = this.#assertOperation(input.actor, input.scope);
-    const current = await this.#dependencies.authority.profile(input.actor);
-    this.#available();
-    if (!installationSame(current, input.scope))
-      denied("plugin_profile_changed");
-    const before = await this.#dependencies.authority.epoch(input);
-    const afterProfile = await this.#dependencies.authority.profile(
-      input.actor,
-    );
-    this.#available();
-    if (!installationSame(afterProfile, input.scope))
-      denied("plugin_profile_changed");
-    const epoch = await this.#dependencies.authority.epoch(input);
-    const finalProfile = await this.#dependencies.authority.profile(
-      input.actor,
-    );
-    this.#available();
-    if (!installationSame(finalProfile, input.scope))
-      denied("plugin_profile_changed");
-    if (
-      before !== epoch ||
-      (operation.epoch !== null && operation.epoch !== epoch)
-    )
-      denied("plugin_installation_authority_changed");
-    operation.epoch = epoch;
-    return epoch;
+    return refreshDesktopPluginInstallationAuthority({
+      request: input,
+      authority: this.#dependencies.authority,
+      operation,
+      assertCurrent: () => {
+        if (this.#assertOperation(input.actor, input.scope) !== operation)
+          denied("plugin_installation_operation_mismatch");
+      },
+    });
   }
 
   #confirmed(selection: PluginSelection): boolean {
@@ -445,7 +454,7 @@ export class DesktopInstallationProfile {
       } catch (error) {
         for (const value of this.#node.snapshot())
           if (value.phase === "accepting")
-            this.#node.deactivate(value.identity.pluginId);
+            this.#node.revoke(value.identity.pluginId);
         try {
           await this.#node.drain();
         } catch (cleanupError) {
@@ -599,8 +608,7 @@ export class DesktopInstallationProfile {
         consumed = true;
         // A durable new desired selection must not keep the old Node accepting while projection is pending.
         try {
-          if (this.#confirmed(selection))
-            this.#node.deactivate(selection.pluginId);
+          if (this.#confirmed(selection)) this.#node.revoke(selection.pluginId);
         } finally {
           await handle.abort();
         }
@@ -614,6 +622,8 @@ export class DesktopInstallationProfile {
     candidate: PluginNodeCommitCandidate | null,
   ): "allow" | "deny" {
     const operation = this.#operation;
+    if (operation === null) return "deny";
+    this.#assertOperation(operation.actor, operation.scope);
     const stamp = operation?.stamp ?? null;
     if (stamp === null) return "deny";
     operation!.stamp = null;
@@ -661,35 +671,13 @@ export class DesktopInstallationProfile {
   #checkDependencies(
     dependencies: PluginNodeCommitCandidate["dependencyIdentities"],
   ): void {
-    this.#available();
-    for (const dependency of dependencies) {
-      if (dependency.provider === null) continue;
-      const provider = dependency.provider;
-      const selection = this.#owner.currentSelection({
-        scope: this.#dependencies.scope,
-        pluginId: provider.pluginId,
-      });
-      const pkg = this.#owner.currentSelectedPackage({
-        scope: this.#dependencies.scope,
-        pluginId: provider.pluginId,
-      });
-      if (
-        selection?.state !== "enabled" ||
-        pkg === null ||
-        pkg.packageDigest !== provider.packageDigest ||
-        pkg.version !== provider.version ||
-        !this.#dependencies.registry
-          .list()
-          .some(
-            (source) =>
-              source.pluginId === pkg.pluginId &&
-              source.publisherId === pkg.publisherId &&
-              source.version === pkg.version &&
-              source.packageDigest === pkg.packageDigest,
-          )
-      )
-        denied("plugin_installation_dependency_changed");
-    }
+    assertDesktopPluginInstallationDependencies({
+      dependencies,
+      scope: this.#dependencies.scope,
+      owner: this.#owner,
+      registry: this.#dependencies.registry,
+      assertAvailable: () => this.#available(),
+    });
   }
 
   async #recover(actor: ActorContext): Promise<void> {
@@ -801,7 +789,7 @@ export class DesktopInstallationProfile {
                 value.identity === identity && value.phase === "accepting",
             )
         )
-          this.#node.deactivate(identity.pluginId);
+          this.#node.revoke(identity.pluginId);
       }
       await this.#node.drain();
       throw error;

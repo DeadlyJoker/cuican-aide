@@ -85,7 +85,7 @@ export type InstallationRecoveryRecord = Readonly<{
 /** Full preflight before setup; required providers precede consumers, never latest-package fallback. */
 export function orderInstallationRecoveries(
   records: readonly InstallationRecoveryRecord[],
-  node: PluginNodeHost,
+  node: Pick<PluginNodeHost, "serviceIdentities">,
   hostUiServices?: PluginUiHostServiceAvailabilityPort,
 ): readonly InstallationRecoveryRecord[] {
   const replacing = new Set(records.map((record) => record.selection.pluginId));

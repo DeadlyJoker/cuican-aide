@@ -3,7 +3,10 @@ import type {
   SelectPluginPackageResult,
 } from "@crewon/application";
 import { publishInstalledPluginComposition } from "@crewon/plugin-host";
-import type { PluginCompositionHostService } from "@crewon/contracts/plugins";
+import type {
+  PluginCompositionHostService,
+  PluginCompositionLock,
+} from "@crewon/contracts/plugins";
 import type { SqlitePluginInstallationProfileOwner } from "@crewon/store";
 import type { DesktopPluginConfiguration } from "./desktop-plugin-configuration.ts";
 import type { DesktopPluginAuthority } from "./desktop-plugin-authority.ts";
@@ -28,6 +31,7 @@ export class DesktopPluginCompositionMetadataOwner {
   #state: DesktopPluginCompositionMetadataState = Object.freeze({
     outcome: "unknown",
   });
+  #lock: PluginCompositionLock | null = null;
   constructor(input: Dependencies) {
     this.#input = Object.freeze({ ...input });
   }
@@ -39,12 +43,19 @@ export class DesktopPluginCompositionMetadataOwner {
     return this.#state;
   }
 
+  /** Only the last successfully published full graph; never permission to restore code. */
+  currentLock(actor: ActorContext): PluginCompositionLock | null {
+    this.#assertOwner(actor);
+    return this.#lock;
+  }
+
   async observeSelection(
     actor: ActorContext,
     result: SelectPluginPackageResult,
   ): Promise<void> {
     if (result.mutation.disposition !== "committed") return;
     if (result.projection.outcome !== "applied") {
+      this.#lock = null;
       this.#state = Object.freeze({
         outcome: "unavailable",
         code: "plugin_projection_pending",
@@ -89,12 +100,14 @@ export class DesktopPluginCompositionMetadataOwner {
         },
       });
       this.#assertOwner(actor);
+      this.#lock = published.lock;
       this.#state = Object.freeze({
         outcome: "published",
         lockDigest: published.lock.lockDigest,
         revision: published.lock.revision,
       });
     } catch (error) {
+      this.#lock = null;
       // Selection has already committed. Preserve its known receipt and report
       // metadata failure separately; never claim rollback or mask it as readiness.
       const value =

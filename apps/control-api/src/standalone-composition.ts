@@ -803,6 +803,7 @@ function composeControlApi(
       extensionTasks,
       extensionReads,
       pluginInstallation: preparedPlugins?.runtime.installation,
+      pluginCompositionStatus: preparedPlugins?.runtime.compositionStatus,
       pluginSources: preparedPlugins?.runtime.sources,
       pluginUi: preparedPlugins?.runtime.ui,
       projectConversations:

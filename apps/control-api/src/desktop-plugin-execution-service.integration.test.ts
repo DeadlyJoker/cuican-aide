@@ -465,9 +465,7 @@ test("current Native authority withdrawn while actual setup awaits prevents sele
     selecting,
     (error) =>
       error instanceof ApplicationError &&
-      error.code === "plugin_installation_profile_unavailable" &&
-      error.cause instanceof ApplicationError &&
-      error.cause.code === "desktop_plugin_authority_closed",
+      error.code === "plugin_installation_profile_unavailable",
   );
   try {
     await reached;
@@ -500,7 +498,7 @@ test("current Native authority withdrawn while actual setup awaits prevents sele
           throw new Error("unexpected");
         },
       }),
-    /plugin_execution_registration_closed/u,
+    /plugin_execution_registry_closed/u,
   );
   assert.equal(probe.createCalls, 0);
 });

@@ -16,6 +16,7 @@ import {
   SqlitePluginInstallationProfileLock,
 } from "./sqlite-plugin-installation-profile-lock.ts";
 import { SqlitePluginInstallationStore } from "./sqlite-plugin-installation-store.ts";
+import type { SqlitePluginCompositionStore } from "./sqlite-plugin-composition-store.ts";
 
 export const SQLITE_PLUGIN_PROFILE_OWNER_LIMITS = Object.freeze({
   ownersPerDatabase: 32,
@@ -60,7 +61,8 @@ export function assertSqlitePluginInstallationProfileBinding(
 
 export class SqlitePluginInstallationProfileOwner {
   readonly scope: PluginProfileScope;
-  readonly store: PluginInstallationStore;
+  readonly store: Omit<PluginInstallationStore, "compositionStore"> &
+    Readonly<{ compositionStore(): SqlitePluginCompositionStore }>;
   readonly #dependencies: Dependencies;
   readonly #registry: Set<SqlitePluginInstallationProfileOwner>;
   readonly #key: string;

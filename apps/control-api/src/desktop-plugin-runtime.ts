@@ -89,6 +89,7 @@ import type { InstalledProjectMediaGenerationRuntime } from "./installed-project
 export type DesktopPluginRuntime = Readonly<{
   installation: PluginInstallationControlService;
   compositionState: DesktopPluginInstallationRuntime["compositionState"];
+  compositionStatus: DesktopPluginInstallationRuntime["compositionStatus"];
   sources: PluginSourceControlService;
   ui: PluginUiControlService;
   configuration: DesktopPluginConfigurationRuntime;
@@ -655,6 +656,7 @@ export async function createDesktopPluginRuntime(
     return Object.freeze({
       installation: ownedInstallation.service,
       compositionState: ownedInstallation.compositionState,
+      compositionStatus: ownedInstallation.compositionStatus,
       sources: ownedInstallation.service,
       ui,
       configuration: ownedConfiguration,

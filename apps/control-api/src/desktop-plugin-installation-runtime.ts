@@ -7,11 +7,13 @@ import {
 } from "@crewon/application";
 import {
   parsePluginSourceListResponse,
+  type PluginSelectionListQuery,
   type PluginSourceListQuery,
   type PluginSourceListResponse,
 } from "@crewon/contracts";
 import {
   extensionCanonicalJson,
+  pluginInstallationNamespaceId,
   pluginInstallationOpaqueId,
 } from "@crewon/domain";
 import { SqliteRunStore } from "@crewon/store";
@@ -33,6 +35,7 @@ import { DesktopInstallationProfile } from "./desktop-plugin-installation-profil
 import { DesktopInstalledPluginActivationOwner } from "./desktop-installed-plugin-activation-owner.ts";
 import { canonicalDesktopPluginConfiguration } from "./desktop-plugin-configuration-canonical.ts";
 import type { DesktopPluginCompositionMetadataState } from "./desktop-plugin-composition-metadata-owner.ts";
+import type { PluginCompositionStatusControlService } from "./plugin-composition-status-route.ts";
 import {
   capturePluginUiHostServiceAvailability,
   type PluginUiHostServiceAvailabilityPort,
@@ -61,6 +64,7 @@ export type DesktopPluginInstallationRuntime = Readonly<{
   assertProfileOwnershipForSelectionCommit(actor: ActorContext): void;
   bindActivation(owner: DesktopInstalledPluginActivationOwner): void;
   compositionState(actor: ActorContext): DesktopPluginCompositionMetadataState;
+  compositionStatus: PluginCompositionStatusControlService;
   close(): Promise<void>;
 }>;
 const runtimes = new WeakMap<
@@ -323,6 +327,45 @@ export async function createDesktopPluginInstallationRuntime(
   });
   const runtime = Object.freeze({
     service,
+    compositionStatus: Object.freeze({
+      listStatus: (
+        actorInput: ActorContext,
+        inputValue: PluginSelectionListQuery,
+      ) => {
+        available();
+        const actor = pluginSecurityActor(actorInput);
+        const value = pluginSecurityRecord(inputValue, [
+          "afterPluginId",
+          "limit",
+        ]);
+        const afterPluginId =
+          value.afterPluginId === null
+            ? null
+            : pluginInstallationNamespaceId(value.afterPluginId);
+        if (
+          !Number.isSafeInteger(value.limit) ||
+          (value.limit as number) < 1 ||
+          (value.limit as number) > 50
+        )
+          throw new ApplicationError(
+            "validation",
+            "plugin_control_limit_invalid",
+          );
+        const query: PluginSelectionListQuery = Object.freeze({
+          afterPluginId,
+          limit: value.limit as number,
+        });
+        if (physical.size >= 128) conflict("plugin_installation_runtime_busy");
+        return track(
+          (async () => {
+            const current = await profile(actor);
+            const response = await current.compositionStatus(actor, query);
+            available();
+            return response;
+          })(),
+        );
+      },
+    }),
     compositionState: (actorInput: ActorContext) => {
       available();
       return initialProfile.compositionState(pluginSecurityActor(actorInput));

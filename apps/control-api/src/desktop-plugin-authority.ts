@@ -27,6 +27,7 @@ export class DesktopPluginAuthority {
   readonly #configuration: DesktopPluginConfiguration;
   readonly #fileConfiguration: DesktopPluginConfiguration | undefined;
   readonly #metadataPublications: readonly PluginCreativeProjectActionPublication[];
+  readonly #withdrawalObservers = new Set<() => void>();
   #closed = false;
   constructor(
     configuration: DesktopPluginConfiguration,
@@ -53,17 +54,40 @@ export class DesktopPluginAuthority {
   }
   assertActor(input: ActorContext): void {
     if (this.#closed) denied("desktop_plugin_authority_closed");
-    if (this.#fileConfiguration !== undefined)
-      assertDesktopPluginConfigurationFileCurrent(this.#fileConfiguration);
     if (
       !installationSame(pluginSecurityActor(input), this.#configuration.actor)
     )
       denied("desktop_plugin_owner_mismatch");
+    if (this.#fileConfiguration !== undefined) {
+      try {
+        assertDesktopPluginConfigurationFileCurrent(this.#fileConfiguration);
+      } catch (error) {
+        this.withdraw();
+        throw error;
+      }
+    }
   }
   assertScope(actor: ActorContext, scope: PluginProfileScope): void {
     this.assertActor(actor);
     if (!installationSame(scope, this.#configuration.scope))
       denied("desktop_plugin_profile_mismatch");
+  }
+  /** Host-owned lifetimes observe the same authority. Renderer rejection is
+   * not withdrawal; explicit close or actual Native-file loss is.
+   */
+  registerWithdrawalObserver(observer: () => void): () => void {
+    if (typeof observer !== "function")
+      throw new Error("desktop_plugin_authority_observer_invalid");
+    if (this.#closed) {
+      observer();
+      return () => {};
+    }
+    if (this.#withdrawalObservers.size >= 32)
+      throw new Error("desktop_plugin_authority_observer_limit");
+    this.#withdrawalObservers.add(observer);
+    return () => {
+      this.#withdrawalObservers.delete(observer);
+    };
   }
   async profile(actor: ActorContext): Promise<PluginProfileScope> {
     this.assertActor(actor);
@@ -131,7 +155,17 @@ export class DesktopPluginAuthority {
     },
   };
   withdraw(): void {
+    if (this.#closed) return;
     this.#closed = true;
+    const observers = [...this.#withdrawalObservers];
+    this.#withdrawalObservers.clear();
+    for (const observer of observers) {
+      // All observers are synchronous withdrawal owners. One cleanup failure
+      // must not keep the other profiles admitted; their close still joins cleanup.
+      try {
+        observer();
+      } catch {}
+    }
   }
   close(): Promise<void> {
     this.withdraw();
