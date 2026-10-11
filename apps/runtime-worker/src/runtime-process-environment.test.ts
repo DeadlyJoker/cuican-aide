@@ -41,11 +41,11 @@ test("uses the native Responses contract only for OpenAI endpoints", () => {
 
 test("uses the portable Responses subset for LiteLLM and third-party gateways", () => {
   assert.deepEqual(responsesCompatibilityProfile("litellm"), {
-    requestProfile: "responsesLite",
+    requestProfile: "standard",
     sequencePolicy: "whenPresent",
   });
   assert.deepEqual(responsesCompatibilityProfile("private-gateway"), {
-    requestProfile: "responsesLite",
+    requestProfile: "standard",
     sequencePolicy: "whenPresent",
   });
   assert.deepEqual(
@@ -54,7 +54,7 @@ test("uses the portable Responses subset for LiteLLM and third-party gateways", 
       "http://127.0.0.1:4000/v1/responses",
     ),
     {
-      requestProfile: "responsesLite",
+      requestProfile: "standard",
       sequencePolicy: "whenPresent",
     },
   );
@@ -130,6 +130,9 @@ test("normalizes LiteLLM stream identities and disables response retrieval", asy
       { type: "completed", checkpoint: null },
     ]);
     assert.equal(requestBody?.store, false);
+    assert.equal(Object.hasOwn(requestBody!, "reasoning"), false);
+    assert.equal(Object.hasOwn(requestBody!, "parallel_tool_calls"), false);
+    assert.equal(transport.adapterVersion, "1");
   } finally {
     globalThis.fetch = originalFetch;
     restoreEnvironment("CREWON_RESPONSES_ENDPOINT", originalEndpoint);

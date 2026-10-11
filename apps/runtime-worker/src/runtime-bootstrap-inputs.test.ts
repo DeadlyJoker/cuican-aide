@@ -195,11 +195,20 @@ test("the shared resolver preserves gateway overrides and ignores unused invalid
   }
 });
 
-test("explicit gateway Standard survives capture, replay, release compilation and runtime materialization", async () => {
+for (const profileSelection of ["default", "explicit"] as const) {
+  test(`${profileSelection} gateway Standard survives capture, replay, release compilation and runtime materialization`, () =>
+    verifyGatewayStandardRelease(profileSelection));
+}
+
+async function verifyGatewayStandardRelease(
+  profileSelection: "default" | "explicit",
+): Promise<void> {
   const environment = {
     ...BASE,
     CREWON_RESPONSES_ENDPOINT: "https://gateway.example/v1/responses",
-    CREWON_RESPONSES_REQUEST_PROFILE: "standard",
+    ...(profileSelection === "default"
+      ? {}
+      : { CREWON_RESPONSES_REQUEST_PROFILE: "standard" }),
     CREWON_MODEL_CREDENTIAL_REQUIRED: "0",
     CREWON_MODEL_CATALOG_JSON: '["model-old","model-new"]',
     CREWON_DEV_AGENT_PROFILES_JSON:
@@ -350,14 +359,15 @@ test("explicit gateway Standard survives capture, replay, release compilation an
   } finally {
     globalThis.fetch = originalFetch;
   }
-});
+}
 
-test("gateway output is immediate by default and legacy bootstrap replay is exact", () => {
+test("gateway Standard output is immediate by default and saved Lite/1024 bootstrap replay remains exact", async () => {
   const environment = {
     ...BASE,
     CREWON_RESPONSES_ENDPOINT: "https://gateway.example/v1/responses",
   };
   const current = capture(environment);
+  assert.equal(current.model.requestProfile, "standard");
   assert.equal(current.model.outputDeltaFlushBytes, null);
   assert.equal(
     Object.hasOwn(
@@ -368,11 +378,26 @@ test("gateway output is immediate by default and legacy bootstrap replay is exac
   );
   const legacy = {
     ...current,
-    model: { ...current.model, outputDeltaFlushBytes: 1024 },
+    model: {
+      ...current.model,
+      requestProfile: "responsesLite" as const,
+      outputDeltaFlushBytes: 1024,
+    },
   };
   const replay = replayRuntimeBootstrapInputs(legacy);
+  assert.equal(replay.CREWON_RESPONSES_REQUEST_PROFILE, "responsesLite");
   assert.equal(replay.CREWON_RESPONSES_OUTPUT_DELTA_FLUSH_BYTES, "1024");
   assert.deepEqual(capture(replay), legacy);
+  const oldRelease = await compileReleaseFixture({
+    ...environment,
+    CREWON_RESPONSES_REQUEST_PROFILE: "responsesLite",
+    CREWON_RESPONSES_OUTPUT_DELTA_FLUSH_BYTES: "1024",
+  });
+  assert.equal(
+    oldRelease.bootstrapVersion.model.adapterVersion,
+    "1+responses-lite",
+  );
+  assert.deepEqual(await compileReleaseFixture(replay), oldRelease);
   const restoredCurrent = applyReplay(current, replay);
   assert.equal(
     Object.hasOwn(restoredCurrent, "CREWON_RESPONSES_OUTPUT_DELTA_FLUSH_BYTES"),
@@ -627,7 +652,7 @@ test("unsupported recovery leaves ordinary fake, gateway, and tool startup avail
     },
   );
   try {
-    assert.equal(gateway.adapterVersion, "1+responses-lite");
+    assert.equal(gateway.adapterVersion, "1");
   } finally {
     await gateway.close?.();
   }

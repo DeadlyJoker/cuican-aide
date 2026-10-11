@@ -39,23 +39,27 @@ const request: ModelRequest = {
   maxOutputBytes: 8192,
 };
 
-test("absent request-profile overrides retain official and gateway defaults", () => {
-  for (const endpoint of [officialEndpoint, gatewayEndpoint]) {
+test("absent request-profile overrides use Standard while preserving official and portable response policies", () => {
+  for (const endpoint of [
+    officialEndpoint,
+    gatewayEndpoint,
+    "http://127.0.0.1:4000/v1/responses",
+    "https://private.example/tenant/v1/responses",
+  ]) {
     const { config, websocket } = resolveResponsesRuntimeConfiguration({
       CREWON_RESPONSES_ENDPOINT: endpoint,
       CREWON_MODEL_ID: "model",
     });
     const official = endpoint === officialEndpoint;
-    assert.equal(
-      config.requestProfile,
-      official ? "standard" : "responsesLite",
-    );
+    assert.equal(config.requestProfile, "standard");
     assert.equal(config.sequencePolicy, official ? "required" : "whenPresent");
     assert.equal(
       config.identityPolicy,
       official ? "strict" : "terminalAuthoritative",
     );
     assert.equal(config.storeResponses, false);
+    assert.equal(config.idleTimeoutMs, 60000);
+    assert.equal(Object.hasOwn(config, "outputDeltaFlushBytes"), false);
     assert.equal(websocket, null);
   }
 });
@@ -103,7 +107,7 @@ test("invalid explicit profiles fail on gateways as well as official endpoints",
   }
 });
 
-for (const profile of ["standard", "responsesLite"] as const) {
+for (const profile of ["default", "standard", "responsesLite"] as const) {
   test(`configured gateway ${profile} reaches the transport as one POST without storage or retrieval`, async () => {
     const originalFetch = globalThis.fetch;
     const methods: string[] = [];
@@ -118,17 +122,19 @@ for (const profile of ["standard", "responsesLite"] as const) {
           { type: "response.created", response: { id: "created-response" } },
           { type: "response.output_text.delta", delta: "answer" },
           {
+            type: "response.output_item.done",
+            item: {
+              type: "message",
+              role: "assistant",
+              content: [{ type: "output_text", text: "answer" }],
+            },
+          },
+          {
             type: "response.completed",
             response: {
               id: "completed-response",
               status: "completed",
-              output: [
-                {
-                  type: "message",
-                  role: "assistant",
-                  content: [{ type: "output_text", text: "answer" }],
-                },
-              ],
+              output: [],
             },
           },
         ]
@@ -147,7 +153,9 @@ for (const profile of ["standard", "responsesLite"] as const) {
           {
             CREWON_RESPONSES_ENDPOINT: gatewayEndpoint,
             CREWON_MODEL_ID: "model",
-            CREWON_RESPONSES_REQUEST_PROFILE: profile,
+            ...(profile === "default"
+              ? {}
+              : { CREWON_RESPONSES_REQUEST_PROFILE: profile }),
             CREWON_RESPONSES_STORE: "true",
             CREWON_RESPONSES_WEBSOCKET_ENABLED: "true",
           },
@@ -159,7 +167,7 @@ for (const profile of ["standard", "responsesLite"] as const) {
     try {
       assert.equal(
         transport.adapterVersion,
-        profile === "standard" ? "1" : "1+responses-lite",
+        profile === "responsesLite" ? "1+responses-lite" : "1",
       );
       assert.equal(transport.supportsResponseRetrieve, false);
       const events = [];
@@ -170,6 +178,10 @@ for (const profile of ["standard", "responsesLite"] as const) {
         events.push(event);
       assert.deepEqual(events, [
         { type: "output.delta", delta: "answer" },
+        {
+          type: "output.item.completed",
+          item: { type: "message", role: "assistant", content: "answer" },
+        },
         { type: "completed", checkpoint: null },
       ]);
       assert.deepEqual(methods, ["POST"]);

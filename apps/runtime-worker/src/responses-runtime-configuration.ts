@@ -95,12 +95,12 @@ export function resolveResponsesRuntimeConfiguration(
   return Object.freeze({ config, websocket });
 }
 
-/** Third-party gateways use the portable Responses subset and may omit event sequence numbers. */
+/** Request format stays Standard unless explicitly selected; gateway response policy is separate. */
 export function responsesCompatibilityProfile(
   providerId: string | null | undefined,
   endpoint?: string,
 ): Readonly<{
-  requestProfile: "responsesLite";
+  requestProfile: "standard";
   sequencePolicy: "whenPresent";
 }> | null {
   if (endpoint !== undefined) {
@@ -110,9 +110,9 @@ export function responsesCompatibilityProfile(
         url.hostname === "api.openai.com" &&
         url.pathname.replace(/\/+$/u, "") === "/v1/responses"
         ? null
-        : { requestProfile: "responsesLite", sequencePolicy: "whenPresent" };
+        : { requestProfile: "standard", sequencePolicy: "whenPresent" };
     } catch {
-      return { requestProfile: "responsesLite", sequencePolicy: "whenPresent" };
+      return { requestProfile: "standard", sequencePolicy: "whenPresent" };
     }
   }
   return providerId === undefined ||
@@ -120,7 +120,7 @@ export function responsesCompatibilityProfile(
     providerId === "openai" ||
     providerId === "openai-api"
     ? null
-    : { requestProfile: "responsesLite", sequencePolicy: "whenPresent" };
+    : { requestProfile: "standard", sequencePolicy: "whenPresent" };
 }
 
 function parseBoolean(value: string, code: string): boolean {
