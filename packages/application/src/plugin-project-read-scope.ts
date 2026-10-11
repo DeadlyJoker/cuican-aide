@@ -105,6 +105,7 @@ export function capturePluginProjectConversationReadScope(
   if (
     ![
       PROJECT_CONVERSATIONS_METHOD_ACTIONS.createConversation,
+      PROJECT_CONVERSATIONS_METHOD_ACTIONS.getBinding,
       PROJECT_CONVERSATIONS_METHOD_ACTIONS.listConversations,
       PROJECT_CONVERSATIONS_METHOD_ACTIONS.openConversation,
       PROJECT_CONVERSATIONS_METHOD_ACTIONS.refreshSource,

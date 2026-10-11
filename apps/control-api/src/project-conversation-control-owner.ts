@@ -438,6 +438,7 @@ export class ProjectConversationControlOwner {
       this.#input.projectOwnership === "plugin-project-v1" &&
       [
         actions.createConversation,
+        actions.getBinding,
         actions.listConversations,
         actions.openConversation,
         actions.refreshSource,

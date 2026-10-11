@@ -65,6 +65,7 @@ export async function ownedConversationUiFixture(
     threadPreparations: 0,
     preparedThreadId: null as string | null,
     afterThreadPrepared: null as (() => void | Promise<void>) | null,
+    afterThreadRead: null as (() => void | Promise<void>) | null,
     taskCount: 0,
     context: null as PluginUiActionContext | null,
     beforeDispatch: null as (() => Promise<void> | void) | null,
@@ -109,7 +110,13 @@ export async function ownedConversationUiFixture(
         return prepared;
       },
     },
-    threadStore: f.parent,
+    threadStore: {
+      async loadThreadInSpace(input) {
+        const thread = await f.parent.loadThreadInSpace(input);
+        await state.afterThreadRead?.();
+        return thread;
+      },
+    },
     projects: {
       loadProject: projects.loadProject.bind(projects),
       loadBrief: projects.loadBrief.bind(projects),

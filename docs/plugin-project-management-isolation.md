@@ -130,3 +130,7 @@ PostgreSQL 原 Parent 现在也提供冻结的 Native 登记端口，共用原 p
 专项使用真实 PostgreSQL 单连接池和 genuine UI 生命周期，验证登记后原 Thread 创建、重放、复制与调用结束后的引用拒绝，以及四种持久归属不匹配。实际 INSERT 返回后撤销独立项目 policy 或 Host，原事务回滚；SQL 触发器在登记后归档项目时，namespace 与触发器修改一起回滚。Native 响应、初始 metadata 和包发现为命名 fixture，这些是原 SQL/会话服务证据，不是正式 Main、Web、桌面或供应商执行验收。没有启用业务插件或更新正式 App。
 
 相关 SQL、锁、旧读取快照与会话回归 73/73，加上 PostgreSQL genuine CreativeProject UI 的项目、需求及需求历史读取专项 1/1，共 74 项通过，无跳过。读取专项验证方法隔离和调用结束后的原/复制引用拒绝；初始 protected metadata 与包发现仍为命名 fixture，未证明 PostgreSQL 首次 UI 创建归属。Store/Control 类型检查、架构边界与格式检查通过。测试 PostgreSQL 为任务专属临时实例，验收后停止并清理。
+
+受保护 Conversation UI 的 getBinding 现在与其他 metadata 操作共用真实调用的项目视图，沿用原 Store 绑定读取和原 Thread 检查。调用仅含原 threadId；绑定所属 actor、profile、plugin、publisher 与当前来源必须匹配，版本与包摘要不作为稳定归属。返回前再复核独立项目 read 策略；不存在绑定的空结果也复核当前 Host 资格。原默认调用仍使用原 legacy reader，不以 UI 资格替代中央鉴权 GET 的接线。
+
+本轮 28/28 回归、零跳过，覆盖真实安装包 HTTP 的读取、跨插件拒绝、冷启动取得当前 revision，以及 SQLite/PostgreSQL genuine UI 的缺失绑定、复制上下文拒绝、项目/页面策略拒绝和 Thread 读取后撤权。关联与 Stage 的原路径回归保留，详情读取没有额外 Thread 或 Run。初始持久归属、包发现及 Host 策略部分测试仍为命名 fixture；结果不证明正式 Main 授权、完整 Web/桌面验收或目标全部完成。

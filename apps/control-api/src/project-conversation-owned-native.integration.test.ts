@@ -303,6 +303,22 @@ test(
     assert.equal(first.statusCode, 200, first.body);
     const binding = first.json().output.binding;
     assert.equal(binding.workspaceId, input.workspaceId);
+    const details = await invoke("getBinding", { threadId: binding.threadId });
+    assert.equal(details.statusCode, 200, details.body);
+    assert.deepEqual(details.json().output.binding, binding);
+    const foreignDetails = await h.request(
+      "POST",
+      `/api/v1/plugins/ui/mounts/${otherLease.mountRef}/actions`,
+      {
+        action: "crewon.project-conversations.v1.getBinding",
+        input: { threadId: binding.threadId },
+      },
+    );
+    assert.notEqual(foreignDetails.statusCode, 200, foreignDetails.body);
+    assert.equal(
+      foreignDetails.json().error.code,
+      "project_conversation_source_mismatch",
+    );
     const list = await invoke("listConversations", {
       projectId,
       afterThreadId: null,
@@ -372,6 +388,14 @@ test(
     assert.equal(cold.statusCode, 200, cold.body);
     assert.equal(cold.json().output.disposition, "replayed");
     assert.deepEqual(cold.json().output.binding, binding);
+    const coldDetails = await invoke("getBinding", {
+      threadId: binding.threadId,
+    });
+    assert.equal(coldDetails.statusCode, 200, coldDetails.body);
+    assert.deepEqual(
+      coldDetails.json().output.binding,
+      refreshed.json().output.binding,
+    );
     const coldRefresh = await invoke("refreshSource", refreshInput);
     assert.equal(coldRefresh.statusCode, 200, coldRefresh.body);
     assert.equal(coldRefresh.json().output.disposition, "replayed");

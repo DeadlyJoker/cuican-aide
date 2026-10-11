@@ -42,7 +42,10 @@ import { projectConversationReceipt } from "./project-conversation-receipt.ts";
 import type { PluginProjectReadScope } from "./plugin-project-read-scope.ts";
 import { projectConversationPublicBinding } from "./project-conversation-projection.ts";
 import { ownedConversationProjectWriteAuthority } from "./project-conversation-project-authority.ts";
-import { readConversationProject } from "./project-conversation-project-reader.ts";
+import {
+  readConversationProject,
+  authorizeConversationProject,
+} from "./project-conversation-project-reader.ts";
 import { changeProjectConversationBinding } from "./project-conversation-binding-change.ts";
 import { preparePluginProjectWorkspace } from "./plugin-project-workspace-preparation.ts";
 import { prepareNativeWorkspaceConversation } from "./project-conversation-native-workspace.ts";
@@ -63,6 +66,7 @@ import {
   assertProjectConversationActor,
 } from "./project-conversation-authority.ts";
 import { ApplicationError } from "./application-error.ts";
+import { readProjectConversationBinding } from "./project-conversation-binding-reader.ts";
 import { creativeOwner } from "./creative-project-application-support.ts";
 export type ProjectConversationApplicationDependencies = Readonly<{
   conversations: ProjectConversationStore;
@@ -141,6 +145,13 @@ export class ProjectConversationApplicationService {
       projects: this.#d.projects,
     });
     switch (view.request.action) {
+      case PROJECT_CONVERSATIONS_METHOD_ACTIONS.getBinding:
+        return this.#getBinding(
+          context.actor,
+          view.request.input,
+          authority,
+          view.projects,
+        );
       case PROJECT_CONVERSATIONS_METHOD_ACTIONS.listConversations:
         return this.#listConversations(
           context.actor,
@@ -293,33 +304,35 @@ export class ProjectConversationApplicationService {
     input: ProjectConversationsRequests["getBinding"],
     authority: ProjectConversationCommitAuthority,
   ): Promise<ProjectConversationsResponses["getBinding"]> {
+    return this.#getBinding(actor, input, authority, this.#d.projects);
+  }
+  async #getBinding(
+    actor: ActorContext,
+    input: ProjectConversationsRequests["getBinding"],
+    authority: ProjectConversationCommitAuthority,
+    projects: Pick<CreativeProjectStore, "loadProject">,
+  ): Promise<ProjectConversationsResponses["getBinding"]> {
     return projectConversationCall(async () => {
       const request = this.#input("getBinding", input),
         q = await this.#authority(actor, authority),
-        b = await this.#d.conversations.loadBinding({
-          actor: q.actor,
-          profileId: q.installation.profileId,
+        b = await readProjectConversationBinding({
+          authority: q,
           threadId: request.threadId,
+          conversations: this.#d.conversations,
+          readProject: (projectId) =>
+            this.#project(q, projectId, "creativeProject:read", projects),
+          readThread: (binding) => this.#thread(q, binding),
+          assertProjectCurrent: (projectId) =>
+            authorizeConversationProject({
+              authority: q,
+              projectId,
+              action: "creativeProject:read",
+              authorization: this.#d.authorization,
+            }),
         });
-      if (b === null) {
-        if (
-          await this.#d.conversations.hasThreadBinding({
-            tenantId: q.actor.tenantId,
-            spaceId: q.actor.spaceId,
-            threadId: request.threadId,
-          })
-        )
-          throw new ApplicationError(
-            "authorization",
-            "project_conversation_source_mismatch",
-          );
-        return this.#output("getBinding", request, { binding: null });
-      }
-      await this.#project(q, b.projectId, "creativeProject:read");
-      await this.#thread(q, b);
-      await q.assertCurrent();
-      q.assertActive();
-      return this.#output("getBinding", request, { binding: this.#public(b) });
+      return this.#output("getBinding", request, {
+        binding: b === null ? null : this.#public(b),
+      });
     });
   }
   async listConversations(

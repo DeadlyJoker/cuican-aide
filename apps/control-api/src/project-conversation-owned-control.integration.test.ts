@@ -246,6 +246,14 @@ for (const native of [false, true])
     };
     assert.equal(first.disposition, "committed");
     assert.equal(first.binding.workspaceId, input.workspaceId);
+    assert.deepEqual(
+      (
+        (await invoke(actions.getBinding, {
+          threadId: first.binding.threadId,
+        })) as { binding: unknown }
+      ).binding,
+      first.binding,
+    );
     const replay = (await invoke(
       actions.createConversation,
       input,
