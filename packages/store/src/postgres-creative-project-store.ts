@@ -1,4 +1,11 @@
 import {
+  readPostgresListProjects,
+  readPostgresListConceptAssets,
+  readPostgresLoadConceptRevision,
+  readPostgresListConceptRevisions,
+  type PostgresCreativeProjectPageReadPorts,
+} from "./postgres-creative-project-page-reads.ts";
+import {
   beginPostgresPlanResult,
   finishPostgresPlanResult,
 } from "./project-text-plan-tool.ts";
@@ -12,8 +19,8 @@ import {
 } from "./creative-project-run-commit-support.ts";
 import type { Pool, PoolClient } from "pg";
 import {
-  bindPostgresConversationProjectReads,
-  readPostgresOwnedConversationProject,
+  bindPostgresCreativeProjectReadView,
+  readPostgresOwnedCreativeProject,
 } from "./plugin-project-owned-read-postgres.ts";
 import type { PluginProjectReadCall } from "./plugin-project-owned-read-sqlite.ts";
 import type { PluginProjectReadScope } from "@crewon/application";
@@ -113,7 +120,7 @@ export class PostgresCreativeProjectStore implements CreativeProjectStore {
   }
 
   bindProjectReads(scope: PluginProjectReadScope) {
-    return bindPostgresConversationProjectReads(this, scope);
+    return bindPostgresCreativeProjectReadView(this, scope);
   }
   async loadProject(
     input: ReadInput<"loadProject">,
@@ -127,44 +134,25 @@ export class PostgresCreativeProjectStore implements CreativeProjectStore {
     );
   }
 
-  async listProjects(input: ReadInput<"listProjects">) {
+  async listProjects(
+    input: ReadInput<"listProjects">,
+    scope?: PluginProjectReadScope,
+  ) {
     const query = creativeReadInput("listProjects", input);
-    return this.#read(async (client, access) => {
-      const rows = await this.#query(
-        client,
-        `SELECT p.* FROM ${this.#prefix}creative_projects p
-       WHERE tenant_id=$1 AND space_id=$2 AND owner_principal_id=$3 AND ${access.predicate("p")}
-       AND ($4::text='all' OR state=$4)
-       AND ($5::text IS NULL OR updated_at<$5 OR
-         (updated_at=$5 AND project_id COLLATE "C"<$6 COLLATE "C"))
-       ORDER BY updated_at DESC,project_id COLLATE "C" DESC LIMIT $7`,
-        [
-          ...creativeOwnerValues(query.owner),
-          query.state,
-          query.after?.updatedAt ?? null,
-          query.after?.projectId ?? null,
-          query.limit + 1,
-        ],
-      );
-      const projects = Object.freeze(
-        rows.rows
-          .slice(0, query.limit)
-          .map((row) =>
-            this.#required(decodeCreativeProject(row, query.owner)),
+    return this.#read(
+      (client, access) =>
+        readPostgresListProjects(
+          query,
+          this.#pageReadPorts(
+            client,
+            access,
+            scope === undefined ? "legacy" : "protected",
           ),
-      );
-      const last = projects.at(-1);
-      return Object.freeze({
-        projects,
-        next:
-          rows.rows.length > query.limit && last !== undefined
-            ? Object.freeze({
-                updatedAt: last.updatedAt,
-                projectId: last.projectId,
-              })
-            : null,
-      });
-    });
+        ),
+      scope === undefined
+        ? undefined
+        : { scope, method: "listProjects", query },
+    );
   }
 
   async loadBrief(
@@ -217,94 +205,87 @@ export class PostgresCreativeProjectStore implements CreativeProjectStore {
     );
   }
 
-  async loadConceptAsset(input: ReadInput<"loadConceptAsset">) {
+  async loadConceptAsset(
+    input: ReadInput<"loadConceptAsset">,
+    scope?: PluginProjectReadScope,
+  ) {
     const query = creativeReadInput("loadConceptAsset", input);
-    return this.#read((client, access) =>
-      this.#asset(client, query.owner, query.projectId, query.assetId, access),
+    return this.#read(
+      (client, access) =>
+        this.#asset(
+          client,
+          query.owner,
+          query.projectId,
+          query.assetId,
+          access,
+        ),
+      scope === undefined
+        ? undefined
+        : { scope, method: "loadConceptAsset", query },
     );
   }
 
-  async listConceptAssets(input: ReadInput<"listConceptAssets">) {
+  async listConceptAssets(
+    input: ReadInput<"listConceptAssets">,
+    scope?: PluginProjectReadScope,
+  ) {
     const query = creativeReadInput("listConceptAssets", input);
-    return this.#read(async (client, access) => {
-      const rows = await this.#query(
-        client,
-        `${this.#childSelect("creative_concept_assets", "a")}
-       WHERE p.tenant_id=$1 AND p.space_id=$2 AND p.owner_principal_id=$3
-       AND p.project_id=$4 AND ${access.predicate("p")}
-       AND ($5::text IS NULL OR a.asset_id COLLATE "C">$5 COLLATE "C")
-       ORDER BY a.asset_id COLLATE "C" LIMIT $6`,
-        [
-          ...creativeOwnerValues(query.owner),
-          query.projectId,
-          query.afterAssetId,
-          query.limit,
-        ],
-      );
-      return Object.freeze(
-        rows.rows.map((row) =>
-          this.#required(
-            decodeCreativeAsset(row, query.owner, query.projectId),
+    return this.#read(
+      (client, access) =>
+        readPostgresListConceptAssets(
+          query,
+          this.#pageReadPorts(
+            client,
+            access,
+            scope === undefined ? "legacy" : "protected",
           ),
         ),
-      );
-    });
+      scope === undefined
+        ? undefined
+        : { scope, method: "listConceptAssets", query },
+    );
   }
 
-  async loadConceptRevision(input: ReadInput<"loadConceptRevision">) {
+  async loadConceptRevision(
+    input: ReadInput<"loadConceptRevision">,
+    scope?: PluginProjectReadScope,
+  ) {
     const query = creativeReadInput("loadConceptRevision", input);
-    return this.#read(async (client, access) => {
-      const rows = await this.#query(
-        client,
-        `${this.#childSelect("creative_concept_revisions", "r")}
-       WHERE p.tenant_id=$1 AND p.space_id=$2 AND p.owner_principal_id=$3
-       AND p.project_id=$4 AND ${access.predicate("p")} AND r.asset_id=$5 AND r.asset_revision=$6`,
-        [
-          ...creativeOwnerValues(query.owner),
-          query.projectId,
-          query.assetId,
-          query.assetRevision,
-        ],
-      );
-      return decodeCreativeRevision(
-        rows.rows[0],
-        query.owner,
-        query.projectId,
-        query.assetId,
-      );
-    });
-  }
-
-  async listConceptRevisions(input: ReadInput<"listConceptRevisions">) {
-    const query = creativeReadInput("listConceptRevisions", input);
-    return this.#read(async (client, access) => {
-      const rows = await this.#query(
-        client,
-        `${this.#childSelect("creative_concept_revisions", "r")}
-       WHERE p.tenant_id=$1 AND p.space_id=$2 AND p.owner_principal_id=$3
-       AND p.project_id=$4 AND ${access.predicate("p")} AND r.asset_id=$5 AND r.asset_revision>$6
-       ORDER BY r.asset_revision LIMIT $7`,
-        [
-          ...creativeOwnerValues(query.owner),
-          query.projectId,
-          query.assetId,
-          query.afterAssetRevision,
-          query.limit,
-        ],
-      );
-      return Object.freeze(
-        rows.rows.map((row) =>
-          this.#required(
-            decodeCreativeRevision(
-              row,
-              query.owner,
-              query.projectId,
-              query.assetId,
-            ),
+    return this.#read(
+      (client, access) =>
+        readPostgresLoadConceptRevision(
+          query,
+          this.#pageReadPorts(
+            client,
+            access,
+            scope === undefined ? "legacy" : "protected",
           ),
         ),
-      );
-    });
+      scope === undefined
+        ? undefined
+        : { scope, method: "loadConceptRevision", query },
+    );
+  }
+
+  async listConceptRevisions(
+    input: ReadInput<"listConceptRevisions">,
+    scope?: PluginProjectReadScope,
+  ) {
+    const query = creativeReadInput("listConceptRevisions", input);
+    return this.#read(
+      (client, access) =>
+        readPostgresListConceptRevisions(
+          query,
+          this.#pageReadPorts(
+            client,
+            access,
+            scope === undefined ? "legacy" : "protected",
+          ),
+        ),
+      scope === undefined
+        ? undefined
+        : { scope, method: "listConceptRevisions", query },
+    );
   }
 
   async loadMutationReceipt(
@@ -826,12 +807,26 @@ export class PostgresCreativeProjectStore implements CreativeProjectStore {
     }
   }
 
+  #pageReadPorts(
+    client: PoolClient,
+    access: PostgresCreativeProjectLegacyAccess,
+    mode: "legacy" | "protected",
+  ): PostgresCreativeProjectPageReadPorts {
+    return {
+      prefix: this.#prefix,
+      mode,
+      access,
+      query: (sql, values) => this.#query(client, sql, values),
+      childSelect: this.#childSelect.bind(this),
+      required: this.#required.bind(this),
+    };
+  }
   #read<T>(
     read: PostgresCreativeProjectLegacyRead<T>,
     call?: PluginProjectReadCall,
   ): Promise<T> {
     if (call !== undefined)
-      return readPostgresOwnedConversationProject(
+      return readPostgresOwnedCreativeProject(
         {
           pool: this.#pool,
           schema: this.#schema,

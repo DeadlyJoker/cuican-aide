@@ -3,6 +3,7 @@ import {
   qualifyPluginProjectReadScope,
   type PluginProjectReadScope,
   type CreativeProjectReadStore,
+  type PluginProjectReadMethod,
 } from "@crewon/application";
 import { parsePluginProjectWorkspaceOwner } from "@crewon/domain";
 import type { PluginProjectReadCall } from "./plugin-project-owned-read-sqlite.ts";
@@ -21,10 +22,9 @@ import { lockPostgresCreativeProjectLegacySchema } from "./creative-project-lega
 import type { PostgresCreativeProjectLegacyRead } from "./creative-project-postgres-legacy-read.ts";
 import { rollbackPostgres } from "./postgres-store-support.ts";
 
-type ConversationReadMethod = "loadProject" | "loadBrief" | "listBriefs";
-export function bindPostgresConversationProjectReads(
+export function bindPostgresCreativeProjectReadView(
   store: {
-    [K in ConversationReadMethod]: (
+    [K in PluginProjectReadMethod]: (
       input: Parameters<CreativeProjectReadStore[K]>[0],
       scope?: PluginProjectReadScope,
     ) => ReturnType<CreativeProjectReadStore[K]>;
@@ -32,24 +32,21 @@ export function bindPostgresConversationProjectReads(
   scope: PluginProjectReadScope,
 ): CreativeProjectReadStore {
   qualifyPluginProjectReadScope(scope);
-  const unavailable = () => {
-    throw new Error("plugin_project_read_store_unavailable");
-  };
   const view: CreativeProjectReadStore = {
     loadProject: (input) => store.loadProject(input, scope),
     loadBrief: (input) => store.loadBrief(input, scope),
     listBriefs: (input) => store.listBriefs(input, scope),
-    listProjects: unavailable,
-    loadConceptAsset: unavailable,
-    listConceptAssets: unavailable,
-    loadConceptRevision: unavailable,
-    listConceptRevisions: unavailable,
+    listProjects: (input) => store.listProjects(input, scope),
+    loadConceptAsset: (input) => store.loadConceptAsset(input, scope),
+    listConceptAssets: (input) => store.listConceptAssets(input, scope),
+    loadConceptRevision: (input) => store.loadConceptRevision(input, scope),
+    listConceptRevisions: (input) => store.listConceptRevisions(input, scope),
   };
   return Object.freeze(view);
 }
 
 /** Same parent pool and original queries; exact installation and protected ownership are checked in one transaction. */
-export async function readPostgresOwnedConversationProject<T>(
+export async function readPostgresOwnedCreativeProject<T>(
   input: Readonly<{ pool: Pool; schema: string; assertOpen(): void }>,
   call: PluginProjectReadCall,
   read: PostgresCreativeProjectLegacyRead<T>,
@@ -60,8 +57,19 @@ export async function readPostgresOwnedConversationProject<T>(
   for (const key of ["tenantId", "spaceId", "principalId"] as const)
     if (call.query.owner[key] !== source.scope[key])
       throw new Error("plugin_project_read_actor_mismatch");
-  const request = source.request.input as Readonly<Record<string, unknown>>;
-  for (const key of ["projectId", "briefRevision"] as const)
+  const originalRequest = source.request.input as Readonly<
+    Record<string, unknown>
+  >;
+  const request =
+    source.purpose === "mutation"
+      ? { ...(originalRequest.request as object), ...originalRequest }
+      : originalRequest;
+  for (const key of [
+    "projectId",
+    "assetId",
+    "briefRevision",
+    "assetRevision",
+  ] as const)
     if (
       call.query[key] !== undefined &&
       request[key] !== undefined &&
@@ -143,11 +151,16 @@ export async function readPostgresOwnedConversationProject<T>(
     source.assertActive();
     input.assertOpen();
     result = await read(c, Object.freeze({ predicate, assertProject }));
-    const items = Array.isArray(result)
-      ? result
-      : result === null
-        ? []
-        : [result];
+    const items =
+      result && typeof result === "object" && "projects" in result
+        ? result.projects
+        : Array.isArray(result)
+          ? result
+          : result === null
+            ? []
+            : [result];
+    if (!Array.isArray(items))
+      throw new Error("plugin_project_read_result_invalid");
     for (const item of items) {
       if (
         item === null ||

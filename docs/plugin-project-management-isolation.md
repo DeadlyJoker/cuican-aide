@@ -134,3 +134,7 @@ PostgreSQL 原 Parent 现在也提供冻结的 Native 登记端口，共用原 p
 受保护 Conversation UI 的 getBinding 现在与其他 metadata 操作共用真实调用的项目视图，沿用原 Store 绑定读取和原 Thread 检查。调用仅含原 threadId；绑定所属 actor、profile、plugin、publisher 与当前来源必须匹配，版本与包摘要不作为稳定归属。返回前再复核独立项目 read 策略；不存在绑定的空结果也复核当前 Host 资格。原默认调用仍使用原 legacy reader，不以 UI 资格替代中央鉴权 GET 的接线。
 
 本轮 28/28 回归、零跳过，覆盖真实安装包 HTTP 的读取、跨插件拒绝、冷启动取得当前 revision，以及 SQLite/PostgreSQL genuine UI 的缺失绑定、复制上下文拒绝、项目/页面策略拒绝和 Thread 读取后撤权。关联与 Stage 的原路径回归保留，详情读取没有额外 Thread 或 Run。初始持久归属、包发现及 Host 策略部分测试仍为命名 fixture；结果不证明正式 Main 授权、完整 Web/桌面验收或目标全部完成。
+
+PostgreSQL protected 读取视图现已覆盖原八个项目读取方法，补齐项目列表、概念素材列表/详情和版本列表/详情。所有入口使用原查询和解码器，检查真实调用允许的方法及 projectId、assetId、briefRevision、assetRevision；绑定视图本身不扩大调用资格。列表按完整稳定归属在 SQL 排序与 LIMIT 前过滤，并复核用于判断下一页的记录；额外较新的其他插件和 legacy 项目不占本插件页数，异常 lookahead 记录不发布游标。查询实现从原高频 Store 拆出到 focused module，保留原连接和生命周期，未增加管理系统或迁移流程。
+
+八方法、混合归属分页、详情目标篡改和异常 lookahead 使用真实 PostgreSQL/genuine UI 验证；额外项目的首次创建与归属记录、包发现和 Host 策略为明确 fixture。此专项与原项目 Store/legacy 访问回归 59/59，Native 登记/绑定/旧读取快照另组 22/22（其中一项读取专项重叠），均零跳过；不能相加为整仓验收。Main 授权与正式 Web/桌面接线仍待完成。
