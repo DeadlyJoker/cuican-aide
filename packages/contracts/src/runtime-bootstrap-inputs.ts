@@ -133,10 +133,10 @@ export function parseRuntimeBootstrapInputs(
     url.hostname === "api.openai.com" &&
     url.pathname.replace(/\/+$/u, "") === "/v1/responses"
   );
+  // A persisted request profile chooses serialization, not storage or protocol capabilities.
   if (
     portable
       ? model.storeResponses !== false ||
-        model.requestProfile !== "responsesLite" ||
         model.sequencePolicy !== "whenPresent" ||
         model.identityPolicy !== "terminalAuthoritative" ||
         (outputDeltaFlushBytes !== null && outputDeltaFlushBytes !== 1024) ||

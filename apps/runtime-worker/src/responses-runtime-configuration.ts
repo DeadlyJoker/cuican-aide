@@ -57,11 +57,11 @@ export function resolveResponsesRuntimeConfiguration(
         : "false",
       "CREWON_RESPONSES_STORE_invalid",
     ),
-    requestProfile:
-      compatibility?.requestProfile ??
-      parseResponsesRequestProfile(
-        environment.CREWON_RESPONSES_REQUEST_PROFILE ?? "standard",
-      ),
+    requestProfile: parseResponsesRequestProfile(
+      environment.CREWON_RESPONSES_REQUEST_PROFILE ??
+        compatibility?.requestProfile ??
+        "standard",
+    ),
     idleTimeoutMs: parsePositiveInteger(
       environment.CREWON_RESPONSES_IDLE_TIMEOUT_MS ?? "60000",
       "CREWON_RESPONSES_IDLE_TIMEOUT_MS_invalid",

@@ -26,7 +26,6 @@ import {
   environmentOr,
   parseNativeWorkspaceReadCatalog,
   requiredEnvironment,
-  responsesCompatibilityProfile,
 } from "./runtime-process-environment.ts";
 import { SystemApplicationClock } from "./standalone-adapters.ts";
 import {
@@ -206,17 +205,7 @@ try {
     if (bindingsPath === undefined) {
       throw new Error("CREWON_AGENT_VERSION_RUNTIME_BINDINGS_PATH_required");
     }
-    const endpoint = environmentOr(
-      "CREWON_RESPONSES_ENDPOINT",
-      "https://api.openai.com/v1/responses",
-      environment,
-    );
-    const compatibility = responsesCompatibilityProfile(
-      environment.CREWON_PROVIDER_ID,
-      endpoint,
-    );
-    const requestProfile = compatibility?.requestProfile ?? "standard";
-    const sequencePolicy = compatibility?.sequencePolicy ?? "required";
+    const resolved = resolveResponsesRuntimeConfiguration(environment).config;
     generatedBindings = developmentAgentRuntimeBindings({
       versions: [bootstrapVersion, ...additionalAgentVersions],
       profiles: [
@@ -227,11 +216,10 @@ try {
       tenantId: actor.tenantId,
       authorityId: route.authorityId,
       workspaceBindingId: route.workspaceBindingId,
-      endpoint,
-      requestProfile,
-      sequencePolicy,
-      idleTimeoutMs:
-        resolveResponsesRuntimeConfiguration(environment).config.idleTimeoutMs,
+      endpoint: resolved.endpoint,
+      requestProfile: resolved.requestProfile,
+      sequencePolicy: resolved.sequencePolicy,
+      idleTimeoutMs: resolved.idleTimeoutMs,
       mcpStdioConfigPath: ownsBindingsManifest
         ? null
         : environment.CREWON_MCP_STDIO_CONFIG_PATH?.trim() || null,

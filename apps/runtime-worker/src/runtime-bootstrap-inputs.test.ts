@@ -2,6 +2,7 @@ import assert from "node:assert/strict";
 import test from "node:test";
 
 import type { RuntimeBootstrapInputs } from "@crewon/contracts";
+import { InMemoryToolBroker } from "@crewon/tool-broker";
 import {
   replayRuntimeBootstrapInputs as sharedReplayRuntimeBootstrapInputs,
   RUNTIME_BOOTSTRAP_ENVIRONMENT_CLEAR_NAMES as SHARED_CLEAR_NAMES,
@@ -16,10 +17,7 @@ import {
   developmentAgentRuntimeBindings,
   parseDevelopmentAgentProfiles,
 } from "./development-agent-profiles.ts";
-import {
-  resolveResponsesRuntimeConfiguration,
-  responsesCompatibilityProfile,
-} from "./responses-runtime-configuration.ts";
+import { resolveResponsesRuntimeConfiguration } from "./responses-runtime-configuration.ts";
 import {
   captureRuntimeBootstrapInputs,
   replayRuntimeBootstrapInputs,
@@ -35,7 +33,10 @@ import {
   modelVariantAgentVersionId,
   runtimeModelCatalog,
 } from "./runtime-model-catalog.ts";
-import { agentVersionDeploymentCandidates } from "./runtime-binding-config.ts";
+import {
+  agentVersionDeploymentCandidates,
+  createAgentVersionRuntimeFactory,
+} from "./runtime-binding-config.ts";
 
 const BASE = Object.freeze({
   CREWON_MODEL_ID: "model-old",
@@ -145,7 +146,7 @@ test("the shared resolver preserves gateway overrides and ignores unused invalid
     CREWON_RESPONSES_ENDPOINT: "https://gateway.example/tenant/v1/responses",
     CREWON_RESPONSES_MAX_OUTPUT_TOKENS: "256",
     CREWON_RESPONSES_STORE: "invalid-unused",
-    CREWON_RESPONSES_REQUEST_PROFILE: "invalid-unused",
+    CREWON_RESPONSES_REQUEST_PROFILE: "responsesLite",
     CREWON_RESPONSES_SEQUENCE_POLICY: "invalid-unused",
     CREWON_RESPONSES_WEBSOCKET_ENABLED: "invalid-unused",
     CREWON_RESPONSES_WEBSOCKET_CONNECT_TIMEOUT_MS: "invalid-unused",
@@ -190,6 +191,136 @@ test("the shared resolver preserves gateway overrides and ignores unused invalid
     });
   } finally {
     await transport.close?.();
+  }
+});
+
+test("explicit gateway Standard survives capture, replay, release compilation and runtime materialization", async () => {
+  const environment = {
+    ...BASE,
+    CREWON_RESPONSES_ENDPOINT: "https://gateway.example/v1/responses",
+    CREWON_RESPONSES_REQUEST_PROFILE: "standard",
+    CREWON_MODEL_CREDENTIAL_REQUIRED: "0",
+    CREWON_MODEL_CATALOG_JSON: '["model-old","model-new"]',
+    CREWON_DEV_AGENT_PROFILES_JSON:
+      '[{"agentVersionId":"planner","instructions":"Plan carefully."}]',
+  };
+  const inputs = capture(environment);
+  assert.equal(inputs.model.requestProfile, "standard");
+  assert.equal(inputs.model.storeResponses, false);
+  assert.equal(inputs.model.sequencePolicy, "whenPresent");
+  assert.equal(inputs.model.identityPolicy, "terminalAuthoritative");
+  const replay = applyReplay(inputs, {
+    CREWON_RESPONSES_REQUEST_PROFILE: "responsesLite",
+  });
+  assert.deepEqual(capture(replay), inputs);
+  const before = await compileReleaseFixture(environment);
+  const after = await compileReleaseFixture(replay);
+  assert.deepEqual(after, before);
+  assert.equal(after.versions.length, 4);
+  for (const version of after.versions) {
+    assert.equal(version.model.adapterVersion, "1");
+    const binding = after.runtimeBindings.bindings.find(
+      (item) => item.agentVersionId === version.agentVersionId,
+    );
+    assert.ok(binding);
+    assert.equal(binding.contentDigest, version.contentDigest);
+    assert.equal(binding.provider.requestProfile, "standard");
+    assert.equal(binding.provider.storeResponses, false);
+    assert.equal(binding.provider.sequencePolicy, "whenPresent");
+  }
+  const lite = await compileReleaseFixture({
+    ...environment,
+    CREWON_RESPONSES_REQUEST_PROFILE: "responsesLite",
+  });
+  assert.notEqual(
+    after.bootstrapVersion.contentDigest,
+    lite.bootstrapVersion.contentDigest,
+  );
+  assert.notEqual(
+    after.deployments[1]?.materializationDigest,
+    lite.deployments[1]?.materializationDigest,
+  );
+
+  const originalFetch = globalThis.fetch;
+  const methods: string[] = [];
+  globalThis.fetch = async (_url, init) => {
+    methods.push(init?.method ?? "GET");
+    const body = JSON.parse(String(init?.body)) as Record<string, unknown>;
+    assert.equal(body.store, false);
+    assert.equal(Object.hasOwn(body, "reasoning"), false);
+    assert.equal(Object.hasOwn(body, "parallel_tool_calls"), false);
+    assert.equal(Object.hasOwn(body, "previous_response_id"), false);
+    return new Response(
+      [
+        { type: "response.created", response: { id: "response-profile" } },
+        { type: "response.output_text.delta", delta: "answer" },
+        {
+          type: "response.completed",
+          response: {
+            id: "response-profile",
+            status: "completed",
+            output: [
+              {
+                type: "message",
+                role: "assistant",
+                content: [{ type: "output_text", text: "answer" }],
+              },
+            ],
+          },
+        },
+      ]
+        .map((event) => `data: ${JSON.stringify(event)}\n\n`)
+        .join(""),
+      {
+        headers: { "content-type": "text/event-stream" },
+      },
+    );
+  };
+  try {
+    const factory = createAgentVersionRuntimeFactory({
+      config: after.runtimeBindings,
+      environment: replay,
+    }).bindSharedToolRuntime(new InMemoryToolBroker([]));
+    for (const version of after.versions) {
+      const runtime = await factory.create({ tenantId: "tenant-1", version });
+      try {
+        assert.deepEqual(runtime.kernel.modelIdentity, {
+          adapterName: version.model.adapterName,
+          adapterVersion: version.model.adapterVersion,
+          modelId: version.model.modelId,
+        });
+        const events = [];
+        for await (const event of runtime.kernel.runSegment(
+          {
+            schemaVersion: "crewon.agent-segment.v0",
+            purpose: "agent",
+            runId: `run-${version.agentVersionId}`,
+            segmentId: "segment-profile",
+            attempt: 1,
+            agentVersionId: version.agentVersionId,
+            policySnapshotId: version.policySnapshotId,
+            collaborationMode: "default",
+            allowedTools: null,
+            history: [{ type: "message", role: "user", content: "hello" }],
+            continuation: { kind: "manual" },
+            budget: { maxOutputBytes: 8192 },
+          },
+          new AbortController().signal,
+        ))
+          events.push(event);
+        assert.equal(events.at(-1)?.type, "segment.completed");
+        assert.equal(
+          events.filter((event) => event.type === "model.sampling.retry")
+            .length,
+          0,
+        );
+      } finally {
+        await runtime.close?.();
+      }
+    }
+    assert.deepEqual(methods, ["POST", "POST", "POST", "POST"]);
+  } finally {
+    globalThis.fetch = originalFetch;
   }
 });
 
@@ -664,21 +795,17 @@ async function compileReleaseFixture(environment: RuntimeEnvironment) {
           }),
     );
     const additionalAgentVersions = [...profileVersions, ...modelVersions];
-    const endpoint =
-      environment.CREWON_RESPONSES_ENDPOINT?.trim() ||
-      "https://api.openai.com/v1/responses";
-    const compatibility = responsesCompatibilityProfile(undefined, endpoint);
+    const resolved = resolveResponsesRuntimeConfiguration(environment).config;
     const bindings = developmentAgentRuntimeBindings({
       versions: [bootstrap, ...additionalAgentVersions],
       profiles: [undefined, ...profiles, ...modelVersions.map(() => undefined)],
       tenantId: common.runtimeTenantId,
       authorityId: route.authorityId,
       workspaceBindingId: route.workspaceBindingId,
-      endpoint,
-      requestProfile: compatibility?.requestProfile ?? "standard",
-      sequencePolicy: compatibility?.sequencePolicy ?? "required",
-      idleTimeoutMs:
-        resolveResponsesRuntimeConfiguration(environment).config.idleTimeoutMs,
+      endpoint: resolved.endpoint,
+      requestProfile: resolved.requestProfile,
+      sequencePolicy: resolved.sequencePolicy,
+      idleTimeoutMs: resolved.idleTimeoutMs,
       directApiKeyEnvironment:
         environment.CREWON_MODEL_CREDENTIAL_REQUIRED === "0"
           ? null
@@ -688,11 +815,14 @@ async function compileReleaseFixture(environment: RuntimeEnvironment) {
     const deployments = agentVersionDeploymentCandidates(bindings).filter(
       (deployment) => deployment.agentVersionId !== route.agentVersionId,
     );
-    return compileRuntimeAgentVersionRelease({
-      ...common,
-      additionalAgentVersions,
-      agentVersionDeployments: deployments,
-    });
+    return {
+      ...compileRuntimeAgentVersionRelease({
+        ...common,
+        additionalAgentVersions,
+        agentVersionDeployments: deployments,
+      }),
+      runtimeBindings: bindings,
+    };
   } finally {
     await transport.close?.();
   }

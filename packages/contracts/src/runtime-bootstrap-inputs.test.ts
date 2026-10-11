@@ -232,9 +232,22 @@ test("enforces effective gateway profile and native WebSocket settings", () => {
       .CREWON_RESPONSES_OUTPUT_DELTA_FLUSH_BYTES,
     "1024",
   );
+  const standard = parseRuntimeBootstrapInputs({
+    ...input,
+    model: { ...gateway, requestProfile: "standard" },
+  });
+  assert.equal(standard.model.requestProfile, "standard");
+  assert.equal(standard.model.storeResponses, false);
+  assert.equal(standard.model.sequencePolicy, "whenPresent");
+  assert.equal(standard.model.identityPolicy, "terminalAuthoritative");
+  assert.equal(standard.model.websocket, null);
+  assert.equal(
+    replayRuntimeBootstrapInputs(standard).CREWON_RESPONSES_REQUEST_PROFILE,
+    "standard",
+  );
   for (const change of [
     { storeResponses: true },
-    { requestProfile: "standard" },
+    { requestProfile: "unknown" },
     { sequencePolicy: "required" },
     { identityPolicy: "strict" },
     { outputDeltaFlushBytes: 0 },
