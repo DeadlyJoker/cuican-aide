@@ -1,0 +1,44 @@
+# 私有 Native 项目工作空间分配桥
+
+这轮实现是独立基础模块，尚未接入 Main / RuntimeSupervisor 启动、Control 业务服务、中央 Agent 或插件 UI。真实子进程测试确认可以在实际 Node IPC 测试子进程的通道上调用原 `LocalWorkspaceAuthority` / `LocalWorkspaceProjectAllocator`，没有新增工作空间管理系统、HTTP 服务或 renderer IPC。
+
+## 发行与请求边界
+
+- Main 的 `DesktopNativeProjectWorkspaceBridge` 只借用真实 Native authority factory 发行的对象、真实原工作空间 authority 和指定的活跃 IPC child。Native authority / policy 的复制对象、结构替身或另一个 bootstrap / dataDirectory 的 policy 均不能发行桥。
+- Main 内部 `prepare({ projectId, packageIdentity })` 仅接受这两个字段。package 四字段必须精确匹配当前固定 Native policy；`perAction` 包因本模块没有实际动作批准来源，明确拒绝。Main 根据真实 pin 派生 tenant / space / principal / actor / profile / plugin / publisher，projectId 由未来受信 Host 调用方签发。version / digest 是当前批准检查条件，不加入稳定空间 identity。
+- 一次性票据只授权这个固定 owner 的空 Native 工作空间分配。票据绑定具体 child 对象、桥 generation、Native authority ID 和 bootstrap epoch，默认有效期 5 秒，配置范围为 10–30000ms，最多 16 张未消费票据。
+- 私有 wire 仅接受严格三个字段：`schemaVersion / requestId / ticketId`。不能从 wire 准备票据、提供项目/包身份、owner、账号、路径、workspaceId 或 recover 动作。已知票据在字段验证和排队前消费；错误输入、失败、超时或发送错误均不恢复票据。
+- 排队前仅保留冻结的三段有界 ASCII 字符串，或无效请求的有界 requestId；不保留原 IPC JSON。最多 4 个请求/响应等待操作；超量撤回本桥。其他私有协议消息不读取、不消费其引用票据、不移除其监听器。Node IPC 自身的解码发生在模块之前；这里的边界是本模块捕获和排队的输入，不声明限制 Node 的通道总内存。
+
+Control 子进程身份仅证明 transport。Node 插件可能在所属进程中运行，故 child 身份不能证明用户、插件项目或 Agent 动作授权。未来产品接线必须从原真实 Host 请求或 Run / Tool receipt 取得项目资格，不能让插件/renderer 调用 Main prepare，不能用已有 Worker peer token 代替这里的票据。
+
+## 分配、撤回与恢复
+
+消费只调用原 allocator 的 `provision()`：沿用原 registry、真实目录、全程排他 lease、字节 CAS 和 Native pending/registered/failed journal。不激活新目录，不更改主会话当前工作空间，原文件读取 lease 保持有效。
+
+已 pending / failed 的 Native intent 只被观察，不隐式调用 recover。重放同一个 owner 的已注册空间沿用原 workspaceId 和文件；新票据必须由 Main 再次明确 prepare。后续恢复能力需独立受信资格，本模块没有恢复 wire。
+
+prepare、消费及发布末端复核真实 Native pin / scope / epoch、原工作空间 authority 和 child 状态。Native owner 的真实 withdraw、外部 signal、child disconnect / exit / error / close，以及本桥 withdraw 均同步撤回 unused tickets。文件 pin 变化在这些检查点失效。
+
+Native 文件提交和授权撤回不构成跨进程原子事务：授权可能在真实目录/registry 提交后失效。这时拒绝发布有效观察，保留真实 journal 和目录，不伪造回滚，也不使 consumed ticket 可重用。`registered` 只表示 Native 目录/registry 观察，不能证明 SQL namespace、metadata ownership、Thread / project binding、用户操作权限或 Agent 可用。
+
+响应与 send callback 有期限；`send()` 返回 false 只是背压，callback error / 超时撤回本桥。已交给 Node IPC 的字节无法在不关闭共享 child 的条件下撤销；未来 Control adapter 必须核对原活跃请求、票据关联和 deadline，且 SQL 提交仍需原事务资格，不能把迟到 Native 状态当作 grant。
+
+`close()` 撤回本桥、等待其有界请求/发送处理，移除自身 handlers；不会杀死/断开 Control、撤回共享 Native authority 或删除其他 owner 的文件和监听器。真实 child 与 Native authority 的物理退出/清理由原 supervisor 管理，本模块不接管它们。
+
+## 兼容性与验收范围
+
+原 Native policy / authority persisted DTO、workspace registry、allocation journal、HTTP / SDK / renderer contracts 均保持原 shape。唯一收紧是 Native authority 的内部 factory 要求同一真实 reader 发行的 policy，不能传结构替身、复制品、别的目录或别的 bootstrap。已核对全部生产/测试 factory callers；它们原本均使用同一真实 reader。
+
+测试使用实际 Node child IPC、真实 Native bootstrap / policy / authority producer、原工作空间 registry 和真实文件系统，覆盖一次消费、坏输入、大输入、其他协议、批准/perAction、结构替身、跨 child/generation、Native 撤回和 pin 变化、Native 提交后的拒绝发布、active workspace / file lease、原 registry stale-byte fence、失败不恢复、发送背压/错误/期限、请求超量和 close 的监听器/文件归属。
+
+固定 Node 24 的五文件兼容专项通过 148 / 148 项，无跳过；其中新 bridge 专项 46 项。实际 IPC disconnect / send error 场景的 fixture 清理等待真实 child `exit` 和各自拥有的 stdout / stderr pipe `close`，不依赖该场景可能缺失的 ChildProcess 聚合 `close`，没有放宽 hook timeout。
+
+```bash
+pnpm --filter @crewon/ui exec vitest run electron/desktopNativeProjectWorkspaceBridge.test.ts electron/desktopNativeInstalledPluginRuntime.test.ts electron/desktopPluginBootstrap.test.ts electron/localWorkspaceProjectAllocator.test.ts electron/localWorkspaceRegistry.test.ts
+pnpm --filter @crewon/ui exec tsc --noEmit -p electron/tsconfig.json
+pnpm crewon:boundary:check
+pnpm format
+```
+
+尚未完成：Main 实际启动桥与 Control child fd、真实 Host 项目请求/receipt → Main prepare、显式新 metadata ownership、SQL namespace + Thread/binding 同连接提交，以及中央 Agent provisioning。当前测试不能据此宣称产品项目创建闭环或插件 ready。

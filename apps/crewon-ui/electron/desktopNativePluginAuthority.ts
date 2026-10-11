@@ -45,6 +45,32 @@ export type NativePluginPolicy = Readonly<{
   networkGrants: readonly DesktopNativePluginNetworkGrant[];
   assertCurrent(): void;
 }>;
+type CapturedNativeAuthority = Readonly<{
+  authority: DesktopNativePluginAuthority;
+  dataDirectory: string;
+  authorityEpoch: string;
+  packages: NativePluginPolicy["packages"];
+  signal: AbortSignal;
+  assertCurrent(): void;
+}>;
+const issuedNativeAuthorities = new WeakMap<object, CapturedNativeAuthority>();
+const issuedNativePolicies = new WeakMap<
+  NativePluginPolicy,
+  Readonly<{ dataDirectory: string; bootstrap: DesktopPluginBootstrap }>
+>();
+
+/** Main-only issuance evidence. Copies and parsed authority documents lend no Native ownership. */
+export function captureDesktopNativePluginAuthorityOwner(
+  input: unknown,
+): CapturedNativeAuthority {
+  const captured =
+    input !== null && typeof input === "object"
+      ? issuedNativeAuthorities.get(input)
+      : undefined;
+  if (captured === undefined) invalid("native_owner_unissued");
+  captured.assertCurrent();
+  return captured;
+}
 const hash = (bytes: Buffer) =>
   `sha256:${createHash("sha256").update(bytes).digest("hex")}`;
 /** Only the host's explicit fixed private policy grants execution. Plugin discovery cannot supply it. */
@@ -127,13 +153,15 @@ export function captureDesktopNativePluginPolicy(
       invalid("bootstrap_changed");
   };
   assertCurrent();
-  return Object.freeze({
+  const policy = Object.freeze({
     policyPath: path,
     policyDigest: hash(readFileSync(path)),
     packages: Object.freeze(packages),
     networkGrants: proof.networkGrants,
     assertCurrent,
   });
+  issuedNativePolicies.set(policy, Object.freeze({ dataDirectory, bootstrap }));
+  return policy;
 }
 
 /** Private Main-issued authority, withdrawn before children terminate and cleaned only after their join. */
@@ -146,6 +174,12 @@ export function createDesktopNativePluginAuthority(
 ) {
   const { dataDirectory, bootstrap, policy } = input;
   const manifest = assertDesktopPluginBootstrapIssued(bootstrap);
+  const issuedPolicy = issuedNativePolicies.get(policy);
+  if (
+    issuedPolicy?.dataDirectory !== dataDirectory ||
+    issuedPolicy.bootstrap !== bootstrap
+  )
+    invalid("native_policy_unissued");
   policy.assertCurrent();
   const parent = captureDesktopInstalledPluginRuntimeDirectory(dataDirectory);
   const stat = lstatSync(dataDirectory);
@@ -174,6 +208,7 @@ export function createDesktopNativePluginAuthority(
   const withdrawalPath = join(directory, "withdrawn.json");
   let withdrawalFile: ReturnType<typeof capture> | null = null;
   let withdrawalError: unknown;
+  const lifetime = new AbortController();
   let withdrawn = false,
     closed = false;
   const authority = parseDesktopNativePluginAuthority({
@@ -222,6 +257,7 @@ export function createDesktopNativePluginAuthority(
   const withdraw = () => {
     if (withdrawn || closed) return;
     withdrawn = true;
+    lifetime.abort();
     // Logical revocation cannot block the supervisor from terminating children.
     try {
       parent.assertCurrent();
@@ -246,7 +282,7 @@ export function createDesktopNativePluginAuthority(
     }
   };
   assertCurrent();
-  return Object.freeze({
+  const owner = Object.freeze({
     path,
     authority: authority as DesktopNativePluginAuthority,
     assertCurrent,
@@ -272,4 +308,16 @@ export function createDesktopNativePluginAuthority(
       closed = true;
     },
   });
+  issuedNativeAuthorities.set(
+    owner,
+    Object.freeze({
+      authority,
+      dataDirectory,
+      authorityEpoch: manifest.authorityEpoch,
+      packages: policy.packages,
+      signal: lifetime.signal,
+      assertCurrent,
+    }),
+  );
+  return owner;
 }
