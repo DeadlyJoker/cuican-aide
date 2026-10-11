@@ -9,6 +9,7 @@ import type { ProviderCheckpoint } from "@crewon/contracts";
 import { protocolError, transportError } from "./responses-errors.ts";
 import { parseResponsesSse } from "./responses-sse.ts";
 import { coalesceResponsesOutputDeltas } from "./responses-output-delta-buffer.ts";
+import { ResponsesMessageOutput } from "./responses-message-output.ts";
 import {
   isPreviousResponseRejected,
   PREVIOUS_RESPONSE_REJECTED,
@@ -41,6 +42,7 @@ export class ResponsesProtocolDecoder {
   #created = false;
   #responseId: string | null = null;
   #output = "";
+  readonly #messageOutput = new ResponsesMessageOutput();
   #terminal = false;
   #completedHistoryItems: ModelInputItem[] = [];
   #reasoningBytes = 0;
@@ -100,6 +102,7 @@ export class ResponsesProtocolDecoder {
           MAX_OUTPUT_DELTA_BYTES,
           "responses_delta_invalid",
         );
+        this.#messageOutput.observeDelta(event.output_index, delta);
         if (delta.length === 0) return [];
         this.#output += delta;
         return [{ type: "output.delta", delta }];
@@ -195,9 +198,11 @@ export class ResponsesProtocolDecoder {
         );
         if (outputItem.type === "message") {
           const content = completedAssistantMessageContent(outputItem);
-          if (content !== this.#output) {
-            throw protocolError("responses_final_output_mismatch");
-          }
+          this.#messageOutput.complete(
+            event.output_index,
+            content,
+            this.#output,
+          );
           const item = {
             type: "message" as const,
             role: "assistant" as const,
