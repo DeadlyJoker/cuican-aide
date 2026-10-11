@@ -15,6 +15,35 @@ import { pluginSecurityRecord } from "./plugin-security-validation.ts";
 export type CreativeProjectPluginUiConfig = Readonly<{
   publications: readonly PluginCreativeProjectActionPublication[];
 }>;
+export type CreativeProjectManagementUiConfig = CreativeProjectPluginUiConfig &
+  Readonly<{ creationOwnership?: "plugin-project-v1" }>;
+
+/** Original metadata manager only. This opt-in never approves Foundation, workspace allocation or execution. */
+export function captureCreativeProjectManagementUiConfig(
+  input: unknown,
+): CreativeProjectManagementUiConfig | undefined {
+  if (input === undefined) return undefined;
+  const value = pluginSecurityRecord(input, [
+    "publications",
+    ...(Object.hasOwn(input as object, "creationOwnership")
+      ? ["creationOwnership"]
+      : []),
+  ]);
+  if (
+    Object.hasOwn(value, "creationOwnership") &&
+    value.creationOwnership !== "plugin-project-v1"
+  )
+    throw new Error("plugin_project_creation_mode_invalid");
+  const original = captureCreativeProjectPluginUiConfig({
+    publications: value.publications,
+  })!;
+  return Object.freeze({
+    ...original,
+    ...(value.creationOwnership === undefined
+      ? {}
+      : { creationOwnership: "plugin-project-v1" as const }),
+  });
+}
 
 /** Deployment approval is a bounded exact-package allowlist, never a user permission. */
 export function captureCreativeProjectPluginUiConfig(
@@ -73,18 +102,21 @@ export type CreativeProjectPluginUiRuntime = Readonly<{
 /** The installed module still needs its own UI policy and the project's current authorization. */
 export function createCreativeProjectPluginUiRuntime(
   input: Readonly<{
-    configuration: CreativeProjectPluginUiConfig;
+    configuration: CreativeProjectManagementUiConfig;
     projects: CreativeProjectApplicationService;
     authorization: PluginCreativeProjectActionAuthorizationPort;
   }>,
 ): CreativeProjectPluginUiRuntime {
-  const configuration = captureCreativeProjectPluginUiConfig(
+  const configuration = captureCreativeProjectManagementUiConfig(
     input.configuration,
   )!;
   const owner = new PluginCreativeProjectActionOwner({
     projects: input.projects,
     publications: configuration.publications,
     authorization: input.authorization,
+    ...(configuration.creationOwnership === undefined
+      ? {}
+      : { creationOwnership: configuration.creationOwnership }),
   });
   const hostUiServices: PluginUiHostServiceAvailabilityPort = Object.freeze({
     isAvailable: ({ candidate, requirement }) => {

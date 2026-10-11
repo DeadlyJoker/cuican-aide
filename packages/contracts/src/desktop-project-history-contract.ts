@@ -24,7 +24,8 @@ type Publications = Readonly<{
 }>;
 export type DesktopProjectHistoryConfiguration = Readonly<{
   version: typeof DESKTOP_PROJECT_HISTORY_VERSION;
-  pluginUi?: Publications;
+  pluginUi?: Publications &
+    Readonly<{ creationOwnership?: "plugin-project-v1" }>;
   textArtifacts?: Readonly<{ version: "crewon.project-text.v1" }>;
   textUi?: Publications;
   textRecovery?: Publications;
@@ -121,7 +122,7 @@ export function parseDesktopProjectHistoryConfiguration(
         ),
       };
     });
-    const pluginUi = publications(value.pluginUi, approved);
+    const pluginUi = metadataPublications(value.pluginUi, approved);
     const textUi = publications(value.textUi, approved);
     const textRecovery = publications(value.textRecovery, approved);
     const conversations = conversationPublications(
@@ -317,6 +318,33 @@ function publications(
   )
     invalid();
   return Object.freeze({ publications: Object.freeze(items) });
+}
+/** Explicit metadata creation mode; other service approvals remain strict publication-only records. */
+function metadataPublications(
+  input: unknown,
+  approved: readonly Readonly<{ pluginId: string; packageDigest: string }>[],
+): DesktopProjectHistoryConfiguration["pluginUi"] {
+  if (input === undefined) return undefined;
+  const value = pluginControlRecord(
+    input,
+    ["publications", "creationOwnership"],
+    { optional: ["creationOwnership"] },
+  );
+  if (
+    Object.hasOwn(value, "creationOwnership") &&
+    value.creationOwnership !== "plugin-project-v1"
+  )
+    invalid();
+  const original = publications(
+    { publications: value.publications },
+    approved,
+  )!;
+  return Object.freeze({
+    ...original,
+    ...(value.creationOwnership === undefined
+      ? {}
+      : { creationOwnership: "plugin-project-v1" as const }),
+  });
 }
 /** Select the original bound view explicitly; every publication and ordinary grant remains independently checked. */
 function conversationPublications(

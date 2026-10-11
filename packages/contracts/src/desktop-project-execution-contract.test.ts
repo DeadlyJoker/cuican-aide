@@ -422,3 +422,20 @@ test("Native v3 preserves the independent owned Conversation mode without issuin
   assert.equal(Object.hasOwn(parsed, "pluginGenerations"), false);
   assert.equal(Object.hasOwn(parsed, "pluginQueries"), false);
 });
+
+test("Native v3 carries owned metadata creation independently from Conversation and execution", () => {
+  const parsed = parseDesktopProjectExecutionConfiguration(
+    {
+      version: DESKTOP_PROJECT_EXECUTION_VERSION,
+      pluginUi: {
+        publications: [source],
+        creationOwnership: "plugin-project-v1",
+      },
+    },
+    options,
+  );
+  assert.equal(parsed.pluginUi!.creationOwnership, "plugin-project-v1");
+  assert.equal(Object.hasOwn(parsed, "conversations"), false);
+  assert.equal(Object.hasOwn(parsed, "pluginGenerations"), false);
+  assert.equal(Object.hasOwn(parsed, "pluginQueries"), false);
+});

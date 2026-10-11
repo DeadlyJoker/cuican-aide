@@ -6,7 +6,6 @@ import test from "node:test";
 import { InMemoryArtifactStore } from "@crewon/artifacts";
 import { parsePluginProjectWorkspaceNamespace } from "@crewon/domain";
 import { migrateSqlitePluginProjectMetadataOwners } from "../../../packages/store/src/plugin-project-metadata-owner-schema.ts";
-import { pluginProjectMetadataOwnerColumns } from "../../../packages/store/src/plugin-project-metadata-owner-records.ts";
 import { migrateSqlitePluginProjectWorkspaces } from "../../../packages/store/src/plugin-project-workspace-schema.ts";
 import {
   namespaceColumns,
@@ -22,7 +21,7 @@ import { composeDesktopProjectStartup } from "./desktop-project-startup.ts";
 import { createStandaloneControlApiWithPlugins } from "./standalone-composition.ts";
 
 // Actual private Native configuration, install/mount HTTP and original SQLite stores.
-// The persisted metadata+namespace below are explicit fixtures, not a shipped adoption or directory allocator.
+// Metadata is created through the actual installed UI; only the namespace is an explicit fixture, not a Native directory allocator.
 test(
   "Native explicit owned Conversation mode reaches the original management through installed HTTP, cold replays and never falls back to legacy",
   { timeout: 30000 },
@@ -43,6 +42,13 @@ test(
         runtimes.clear();
       },
     });
+    const other = await conversationPackage(t, {
+      source,
+      pluginId: "test.other-owned",
+      version: "2.0.0",
+    });
+    const packages = [pkg, other.pkg];
+    const allPublications = [...publications, ...other.publications];
     const databasePath = join(source.root, "owned-native.sqlite");
     const open = async (owned = true) => {
       const configuration = parseDesktopPluginConfiguration({
@@ -51,21 +57,22 @@ test(
         scope: { tenantId: actor.tenantId, spaceId: actor.spaceId, profileId },
         authorityEpoch: "owned-native-project-private-epoch-0001",
         installRoot: source.installRoot,
-        sources: [(({ descriptor: _d, ...p }) => p)(pkg)],
-        publications: [
-          {
-            pluginId: pkg.pluginId,
-            publisherId: pkg.publisherId,
-            packageDigest: pkg.packageDigest,
-            publicAssets: ["ui.mjs"],
-          },
-        ],
+        sources: packages.map(({ descriptor: _d, ...p }) => p),
+        publications: packages.map((p) => ({
+          pluginId: p.pluginId,
+          publisherId: p.publisherId,
+          packageDigest: p.packageDigest,
+          publicAssets: ["ui.mjs"],
+        })),
         projects: {
           version: "crewon.desktop-project-history.v1",
-          pluginUi: { publications },
+          pluginUi: {
+            publications: allPublications,
+            creationOwnership: "plugin-project-v1",
+          },
           textArtifacts: { version: "crewon.project-text.v1" },
           conversations: {
-            publications,
+            publications: allPublications,
             ...(owned ? { projectOwnership: "plugin-project-v1" } : {}),
           },
         },
@@ -94,6 +101,8 @@ test(
     });
     await h.install(pkg);
     let lease = await h.enable(pkg);
+    await h.install(other.pkg);
+    const otherLease = await h.enable(other.pkg);
     const importedAfterPreflight = await readFile(source.marker, "utf8");
     const created = await h.request(
       "POST",
@@ -102,60 +111,83 @@ test(
       "owned-native-project",
     );
     assert.equal(created.statusCode, 200, created.body);
-    const projectId = created.json().project.projectId;
+    const legacyProjectId = created.json().project.projectId;
+    const invoke = (method: string, body: object) =>
+      h.request("POST", `/api/v1/plugins/ui/mounts/${lease.mountRef}/actions`, {
+        action: `crewon.project-conversations.v1.${method}`,
+        input: body,
+      });
+    const noOwner = await invoke("createConversation", {
+      projectId: legacyProjectId,
+      workspaceId: "owned-native-workspace-fixture",
+      title: "原会话",
+      idempotencyKey: "owned-native-conversation",
+    });
+    assert.notEqual(noOwner.statusCode, 200, noOwner.body);
+    assert.equal(
+      noOwner.json().error.code,
+      "plugin_project_read_schema_required",
+    );
+    // Caller-owned DDL only: no metadata or namespace rows are fabricated here.
+    const migration = new DatabaseSync(databasePath);
+    try {
+      migration.exec("PRAGMA foreign_keys=ON; BEGIN IMMEDIATE");
+      migrateSqlitePluginProjectMetadataOwners(migration);
+      migrateSqlitePluginProjectWorkspaces(migration);
+      migration.exec("COMMIT");
+    } finally {
+      migration.close();
+    }
+    const createInput = {
+      request: { title: "实际 UI 创建项目", briefText: "实际项目首次创建归属" },
+      idempotencyKey: "owned-native-ui-project",
+    };
+    const project = await h.invoke(
+      lease,
+      "crewon.creative-projects.v1.createProject",
+      createInput,
+    );
+    const projectId = project.project.projectId;
+    assert.equal(project.disposition, "committed");
+    const projectReplay = await h.invoke(
+      lease,
+      "crewon.creative-projects.v1.createProject",
+      createInput,
+    );
+    assert.equal(projectReplay.disposition, "replayed");
+    assert.deepEqual(projectReplay.project, project.project);
+    const read = await h.invoke(
+      lease,
+      "crewon.creative-projects.v1.getProject",
+      { projectId },
+    );
+    assert.deepEqual(read.project, project.project);
     const input = {
       projectId,
       workspaceId: "owned-native-workspace-fixture",
       title: "原会话",
       idempotencyKey: "owned-native-conversation",
     };
-    const invoke = (method: string, body: object) =>
-      h.request("POST", `/api/v1/plugins/ui/mounts/${lease.mountRef}/actions`, {
-        action: `crewon.project-conversations.v1.${method}`,
-        input: body,
-      });
-    const noOwner = await invoke("createConversation", input);
-    assert.notEqual(noOwner.statusCode, 200, noOwner.body);
-    assert.equal(
-      noOwner.json().error.code,
-      "plugin_project_read_schema_required",
-    );
     const db = new DatabaseSync(databasePath);
     try {
-      db.exec("PRAGMA foreign_keys=ON; BEGIN IMMEDIATE");
-      migrateSqlitePluginProjectMetadataOwners(db);
-      migrateSqlitePluginProjectWorkspaces(db);
-      const owner = {
-        ...actor,
-        profileId,
-        pluginId: pkg.pluginId,
-        publisherId: pkg.publisherId,
-        projectId,
-      };
-      const createdAt = created.json().project.createdAt;
-      const namespace = parsePluginProjectWorkspaceNamespace({
-        schemaVersion: "crewon.plugin-project-workspace-namespace.v1",
-        owner,
-        workspaceId: input.workspaceId,
-        createdAt,
-      });
-      db.prepare(
-        `INSERT INTO plugin_project_metadata_owners(${pluginProjectMetadataOwnerColumns.join(",")}) VALUES(${pluginProjectMetadataOwnerColumns.map(() => "?").join(",")})`,
-      ).run(
-        ...namespaceValues(namespace).slice(0, 8),
-        createdAt,
-        JSON.stringify({
-          schemaVersion: "crewon.plugin-project-metadata-owner.v1",
-          owner,
-          createdAt,
-        }),
+      const row = db
+        .prepare(
+          "SELECT * FROM plugin_project_metadata_owners WHERE project_id=?",
+        )
+        .get(projectId)!;
+      assert.equal(row.actor_id, actor.actorId);
+      assert.equal(row.principal_id, actor.principalId);
+      assert.equal(row.profile_id, profileId);
+      assert.equal(row.plugin_id, pkg.pluginId);
+      assert.equal(row.publisher_id, pkg.publisherId);
+      assert.equal(
+        Number(
+          db
+            .prepare("SELECT COUNT(*) n FROM plugin_project_metadata_owners")
+            .get()!.n,
+        ),
+        1,
       );
-      db.prepare(
-        `INSERT INTO plugin_project_workspace_namespaces(${namespaceColumns}) VALUES(${namespaceColumns
-          .split(",")
-          .map(() => "?")
-          .join(",")})`,
-      ).run(...namespaceValues(namespace));
       assert.equal(
         Number(
           db
@@ -164,10 +196,79 @@ test(
         ),
         0,
       );
-      db.exec("COMMIT");
+      const owner = {
+        ...actor,
+        profileId,
+        pluginId: pkg.pluginId,
+        publisherId: pkg.publisherId,
+        projectId,
+      };
+      // Namespace remains an explicit fixture until the real Native allocator is composed.
+      const namespace = parsePluginProjectWorkspaceNamespace({
+        schemaVersion: "crewon.plugin-project-workspace-namespace.v1",
+        owner,
+        workspaceId: input.workspaceId,
+        createdAt: project.project.createdAt,
+      });
+      db.prepare(
+        `INSERT INTO plugin_project_workspace_namespaces(${namespaceColumns}) VALUES(${namespaceColumns
+          .split(",")
+          .map(() => "?")
+          .join(",")})`,
+      ).run(...namespaceValues(namespace));
     } finally {
       db.close();
     }
+    const otherProject = await h.invoke(
+      otherLease,
+      "crewon.creative-projects.v1.createProject",
+      createInput,
+    );
+    assert.notEqual(otherProject.project.projectId, projectId);
+    const projectList = await h.invoke(
+      lease,
+      "crewon.creative-projects.v1.listProjects",
+      { query: { state: "active", cursor: null, limit: 16 } },
+    );
+    assert.deepEqual(
+      projectList.projects.map((p) => p.projectId),
+      [projectId],
+    );
+    const otherList = await h.invoke(
+      otherLease,
+      "crewon.creative-projects.v1.listProjects",
+      { query: { state: "active", cursor: null, limit: 16 } },
+    );
+    assert.deepEqual(
+      otherList.projects.map((p) => p.projectId),
+      [otherProject.project.projectId],
+    );
+    const foreign = await h.request(
+      "POST",
+      `/api/v1/plugins/ui/mounts/${lease.mountRef}/actions`,
+      {
+        action: "crewon.creative-projects.v1.getProject",
+        input: { projectId: otherProject.project.projectId },
+      },
+    );
+    assert.equal(foreign.statusCode, 404, foreign.body);
+    assert.equal(foreign.json().error.code, "creative_project_not_found");
+    const contentConflict = await h.request(
+      "POST",
+      `/api/v1/plugins/ui/mounts/${lease.mountRef}/actions`,
+      {
+        action: "crewon.creative-projects.v1.createProject",
+        input: {
+          ...createInput,
+          request: { title: "changed", briefText: "changed" },
+        },
+      },
+    );
+    assert.equal(contentConflict.statusCode, 409, contentConflict.body);
+    assert.equal(
+      contentConflict.json().error.code,
+      "creative_project_idempotency_conflict",
+    );
     const first = await invoke("createConversation", input);
     assert.equal(first.statusCode, 200, first.body);
     const binding = first.json().output.binding;
@@ -191,6 +292,13 @@ test(
     runtime = await open();
     lease = await h.mount(pkg, 2);
     const importedAfterColdPreflight = await readFile(source.marker, "utf8");
+    const coldProject = await h.invoke(
+      lease,
+      "crewon.creative-projects.v1.createProject",
+      createInput,
+    );
+    assert.equal(coldProject.disposition, "replayed");
+    assert.deepEqual(coldProject.project, project.project);
     const cold = await invoke("createConversation", input);
     assert.equal(cold.statusCode, 200, cold.body);
     assert.equal(cold.json().output.disposition, "replayed");
@@ -213,6 +321,20 @@ test(
     );
     const observer = new DatabaseSync(databasePath);
     try {
+      assert.equal(
+        Number(
+          observer
+            .prepare("SELECT COUNT(*) n FROM plugin_project_metadata_owners")
+            .get()!.n,
+        ),
+        2,
+      );
+      assert.equal(
+        Number(
+          observer.prepare("SELECT COUNT(*) n FROM creative_projects").get()!.n,
+        ),
+        3,
+      );
       assert.equal(
         Number(observer.prepare("SELECT COUNT(*) n FROM threads").get()!.n),
         1,

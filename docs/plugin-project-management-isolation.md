@@ -38,9 +38,11 @@
 
 原可信部署配置的 `conversations.projectOwnership: "plugin-project-v1"` 现已增量接入 Desktop v2/v3 合同、原 CreativeProject composition 及 Desktop/production Conversation composer，保持不填该项的旧序列化与旧入口行为。该项仅选择已有三个 UI metadata 方法的原绑定读取视图，不开放项目创建、接管、目录分配或 Run/Tool。未知/显式 undefined/继承/getter 配置拒绝；批准的准确包和独立策略仍保留。后端缺少原 `bindProjectReads` 时在准备 Conversation 服务、启动其安装/Conversation 迁移前拒绝；PostgreSQL 目前属于不支持的新模式，旧部署可继续使用原路径。没有自动迁移 metadata owner 或 namespace。
 
-新增实际 Native HTTP 专项走原配置解析、bootstrap、安装、启用、真实 mount、Control 和原 Application/SQLite：缺少 owner schema 时明确拒绝，完整命名持久 metadata/namespace fixture 下创建、列表、打开及重开同键重放成功；切回旧配置仍拒绝 protected 项目，保留一个原 Thread/binding/receipt、零 Run。安装和启动预检允许加载原 Node 包，但这些 metadata 操作没有额外 Node 加载。fixture 在独立测试库显式提供归属和 workspaceId，未创建真实 Native 目录，也不证明受保护项目产品创建闭环。Web 浏览器交互、实际 Agent 执行和正式桌面仍未验收。 新部署配置、合同及原 Control/Native 联合回归 **46 passed、0 failed、0 skipped**；Contracts/Control typecheck、架构边界和格式检查通过。
+原可信部署配置的 `pluginUi.creationOwnership: "plugin-project-v1"` 现已接到 Desktop v2/v3、原 CreativeProject composition 和原 metadata UI runtime，交给已有 `PluginCreativeProjectActionOwner` 的创建、绑定读取与修改路径。不填该项时旧序列化与行为保持；其他 service 的 publications 不能带这个字段。准确包批准和独立项目策略继续检查；缺少原 owned-creation/read adapter 时拒绝。仍要求显式 caller-owned metadata owner 迁移，不在普通启动或 UI 操作中迁移、回填或接管项目。该模式不授权 Foundation、Native 目录分配或 Run/Tool，PostgreSQL 的新 owned-creation adapter 尚未实现。
 
-getBinding、refreshSource、setState、association、stage 源读取及生成 Run/Tool 的新归属视图、PostgreSQL 绑定读取、Native 目录与受保护项目创建的完整产品接线和真实 Web 闭环仍需接线。Native 目录注册、namespace 与 Conversation 不是整体原子提交，中央 Agent 执行与正式桌面仍未验收。
+Native HTTP 专项现已升级为真实受保护项目首次创建：原配置解析、bootstrap、安装、启用、真实 mount 和原 Application/SQLite 保存 project、initial brief、owner 与 receipt，不再人工插入 metadata owner。两个真实安装插件使用同一个外部创建 key 得到不同项目，列表仅返回各自项目，跨插件详情拒绝，更改创建内容仍报原幂等冲突，原项目与会话在重开后同键重放。切回旧 Conversation 配置仍拒绝 protected 项目；数据库保留两个独立 owned metadata 项目、一个 legacy 项目、一个原 Thread/binding/Conversation receipt、零 Run。安装和启动预检允许加载原 Node 包，metadata 操作没有额外 Node 加载。namespace 的 workspaceId 仍是独立测试库中的显式 fixture，尚未创建真实 Native 目录。Web 浏览器交互、真实 Native 分配、实际 Agent 执行和正式桌面仍未验收。新合同、配置、原 Control/Native 和 SQLite owned 创建/读写联合回归 **80 passed、0 failed、0 skipped**；Contracts/Control typecheck、架构边界和格式检查通过。
+
+getBinding、refreshSource、setState、association、stage 源读取及生成 Run/Tool 的新归属视图、PostgreSQL 绑定读取、Native 目录与项目/对话的完整产品绑定和真实 Web 闭环仍需接线。Native 目录注册、namespace 与 Conversation 不是整体原子提交，中央 Agent 执行与正式桌面仍未验收。
 
 任务服务也共用原管理器与运行实例。同一个 `crewon.tasks` 服务目录按各原 Bridge 私有签发的 invocation reference 分派，普通任务、项目生成、项目查询分别保留原提交资格；不存在由插件指定 owner 的通用入口。引用只能选择原 Bridge，不能代替 source publication、实际实例 identity、当前安装授权或事务末端复核。项目生成借用原 Profile 已启动的实际实例，不能在每次操作中另行 setup。
 

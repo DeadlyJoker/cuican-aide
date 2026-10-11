@@ -1,3 +1,4 @@
+import { assertOwnedCreativeProjectStoreReady } from "./creative-project-owned-store-readiness.ts";
 import {
   captureProjectFoundationCompositionConfig,
   prepareProjectFoundation,
@@ -47,6 +48,8 @@ import {
 } from "./project-text-plugin-ui-composition.ts";
 import {
   captureCreativeProjectPluginUiConfig,
+  captureCreativeProjectManagementUiConfig,
+  type CreativeProjectManagementUiConfig,
   type CreativeProjectPluginUiConfig,
 } from "./creative-project-plugin-ui-composition.ts";
 import {
@@ -110,7 +113,7 @@ export type CreativeProjectCompositionConfig = ProjectAssetCompositionConfig &
     conversations?: ProjectConversationConfiguration;
     mediaInputStages?: ProjectMediaInputStageConfiguration;
     textPlans?: CreativeProjectPluginUiConfig;
-    pluginUi?: CreativeProjectPluginUiConfig;
+    pluginUi?: CreativeProjectManagementUiConfig;
     pluginGenerations?: ProjectGenerationPluginConfiguration;
     pluginQueries?: ProjectQueryPluginConfiguration;
     historicalQueries?: ProjectHistoricalQueryPluginConfiguration;
@@ -135,7 +138,7 @@ export type PreparedCreativeProjects = ProjectAssetCompositionConfig &
     readonly planFoundation?: PreparedProjectTextPlans;
     readonly assetStageFoundation?: PreparedProjectAssetStages;
     readonly mediaInputStageFoundation?: PreparedProjectMediaInputStages;
-    readonly pluginUi?: CreativeProjectPluginUiConfig;
+    readonly pluginUi?: CreativeProjectManagementUiConfig;
     readonly generationReads?: ProjectGenerationReadConfiguration;
     readonly generationReadUi?: ProjectGenerationReadPluginUiConfig;
     readonly generationReadStore?: ProjectGenerationReadStore;
@@ -317,7 +320,9 @@ export function captureCreativeProjectCompositionConfig(
     (!Object.hasOwn(pluginUiField, "value") || !pluginUiField.enumerable)
   )
     throw new Error("creative_project_configuration_invalid");
-  const pluginUi = captureCreativeProjectPluginUiConfig(pluginUiField?.value);
+  const pluginUi = captureCreativeProjectManagementUiConfig(
+    pluginUiField?.value,
+  );
   const planField = fields.textPlans;
   if (
     planField !== undefined &&
@@ -484,6 +489,8 @@ export async function prepareCreativeProjects(
       ? await prepareProjectGenerationReadStore(owner)
       : undefined;
   const store = owner.creativeProjectStore();
+  if (configuration.pluginUi?.creationOwnership === "plugin-project-v1")
+    assertOwnedCreativeProjectStoreReady(store);
   await store.migrate();
   const foundation = await prepareProjectFoundation(owner, {
     configuration: configuration.foundation,

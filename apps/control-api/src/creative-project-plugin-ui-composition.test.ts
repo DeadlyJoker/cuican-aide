@@ -2,6 +2,7 @@ import assert from "node:assert/strict";
 import test from "node:test";
 import {
   captureCreativeProjectPluginUiConfig,
+  captureCreativeProjectManagementUiConfig,
   assertCreativeProjectPluginPublications,
 } from "./creative-project-plugin-ui-composition.ts";
 
@@ -129,4 +130,59 @@ test("deployment approval must match the exact plugin and digest and never subst
       /creative_project_plugin_publication_unapproved/u,
     );
   }
+});
+
+test("owned metadata creation mode is detached and explicit while generic publication approvals remain unchanged", () => {
+  assert.deepEqual(
+    captureCreativeProjectManagementUiConfig({ publications: [publication] }),
+    { publications: [publication] },
+  );
+  const input = {
+    publications: [{ ...publication }],
+    creationOwnership: "plugin-project-v1",
+  };
+  const actual = captureCreativeProjectManagementUiConfig(input)!;
+  input.publications[0]!.pluginId = "changed";
+  assert.equal(actual.publications[0]!.pluginId, publication.pluginId);
+  assert.equal(actual.creationOwnership, "plugin-project-v1");
+  assert.ok(Object.isFrozen(actual));
+  assert.throws(() =>
+    captureCreativeProjectPluginUiConfig({
+      publications: [publication],
+      creationOwnership: "plugin-project-v1",
+    }),
+  );
+});
+test("owned metadata mode rejects missing, unknown, getter and caller-owner fields without invoking hooks", () => {
+  for (const creationOwnership of [
+    undefined,
+    null,
+    true,
+    "plugin-project-v2",
+    {},
+  ])
+    assert.throws(() =>
+      captureCreativeProjectManagementUiConfig({
+        publications: [publication],
+        creationOwnership,
+      }),
+    );
+  let reads = 0;
+  assert.throws(() =>
+    captureCreativeProjectManagementUiConfig({
+      publications: [publication],
+      get creationOwnership() {
+        reads++;
+        return "plugin-project-v1";
+      },
+    }),
+  );
+  assert.equal(reads, 0);
+  assert.throws(() =>
+    captureCreativeProjectManagementUiConfig({
+      publications: [publication],
+      creationOwnership: "plugin-project-v1",
+      actor: {},
+    }),
+  );
 });

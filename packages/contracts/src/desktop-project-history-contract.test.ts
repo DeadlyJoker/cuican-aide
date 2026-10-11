@@ -510,3 +510,69 @@ test("Native conversation ownership is explicit detached approval and cannot lea
   );
   assert.equal(reads, 0);
 });
+
+test("Native metadata ownership applies only to its exact approved original creation lane", () => {
+  const parsed = parseDesktopProjectHistoryConfiguration(
+    {
+      version: DESKTOP_PROJECT_HISTORY_VERSION,
+      pluginUi: { ...grant, creationOwnership: "plugin-project-v1" },
+    },
+    options,
+  );
+  assert.equal(parsed.pluginUi!.creationOwnership, "plugin-project-v1");
+  for (const creationOwnership of [
+    undefined,
+    null,
+    true,
+    "plugin-project-v2",
+    {},
+  ])
+    assert.throws(() =>
+      parseDesktopProjectHistoryConfiguration(
+        {
+          version: DESKTOP_PROJECT_HISTORY_VERSION,
+          pluginUi: { ...grant, creationOwnership },
+        },
+        options,
+      ),
+    );
+  for (const field of ["textUi", "conversations", "textPlans"])
+    assert.throws(() =>
+      parseDesktopProjectHistoryConfiguration(
+        {
+          version: DESKTOP_PROJECT_HISTORY_VERSION,
+          [field]: { ...grant, creationOwnership: "plugin-project-v1" },
+        },
+        options,
+      ),
+    );
+  assert.throws(() =>
+    parseDesktopProjectHistoryConfiguration(
+      {
+        version: DESKTOP_PROJECT_HISTORY_VERSION,
+        pluginUi: {
+          publications: [{ ...source, pluginId: "unapproved" }],
+          creationOwnership: "plugin-project-v1",
+        },
+      },
+      options,
+    ),
+  );
+  let reads = 0;
+  assert.throws(() =>
+    parseDesktopProjectHistoryConfiguration(
+      {
+        version: DESKTOP_PROJECT_HISTORY_VERSION,
+        pluginUi: {
+          ...grant,
+          get creationOwnership() {
+            reads++;
+            return "plugin-project-v1";
+          },
+        },
+      },
+      options,
+    ),
+  );
+  assert.equal(reads, 0);
+});
