@@ -380,6 +380,8 @@ export class DirectResponsesTransport implements ModelTransportPort {
         call?.httpFailure({ reason: "controlSinkError" });
         throw controlSinkFailure.value;
       }
+      // A classified permanent rejection must not become a new generation
+      // attempt because reading or canceling its error body expired idle.
       const failure = signal.aborted
         ? transportError(
             "canceled",
@@ -388,23 +390,25 @@ export class DirectResponsesTransport implements ModelTransportPort {
             undefined,
             signal.reason,
           )
-        : idle.expired
-          ? transportError(
-              "timeout",
-              "responses_idle_timeout",
-              true,
-              undefined,
-              error,
-            )
-          : error instanceof ModelTransportError
-            ? error
-            : transportError(
-                "unavailable",
-                "responses_transport_unavailable",
+        : error instanceof ModelTransportError && !error.retryable
+          ? error
+          : idle.expired
+            ? transportError(
+                "timeout",
+                "responses_idle_timeout",
                 true,
                 undefined,
                 error,
-              );
+              )
+            : error instanceof ModelTransportError
+              ? error
+              : transportError(
+                  "unavailable",
+                  "responses_transport_unavailable",
+                  true,
+                  undefined,
+                  error,
+                );
       const usage = modelTransportFailureUsage(error);
       if (usage !== null) {
         const observed = call?.event(usage) ?? usage;
@@ -414,14 +418,18 @@ export class DirectResponsesTransport implements ModelTransportPort {
       call?.httpFailure({
         reason: signal.aborted
           ? "canceled"
-          : idle.expired
-            ? "idleTimeout"
-            : responseStatus !== null &&
-                (responseStatus < 200 || responseStatus >= 300)
-              ? "httpError"
-              : failure.category === "protocol"
-                ? "protocolError"
-                : "transportError",
+          : !failure.retryable &&
+              responseStatus !== null &&
+              (responseStatus < 200 || responseStatus >= 300)
+            ? "httpError"
+            : idle.expired
+              ? "idleTimeout"
+              : responseStatus !== null &&
+                  (responseStatus < 200 || responseStatus >= 300)
+                ? "httpError"
+                : failure.category === "protocol"
+                  ? "protocolError"
+                  : "transportError",
         code: failure.code,
         ...(signal.aborted ? {} : { cause: error }),
       });
