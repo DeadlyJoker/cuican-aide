@@ -58,6 +58,16 @@ import {
 import { verifyPostgresProjectOutlineSourceEvidence } from "./project-outline-source-evidence.ts";
 import { assertPostgresProjectTextUiCommit } from "./project-text-ui-commit-support.ts";
 import {
+  capturePostgresCreativeProjectLegacyAccess,
+  lockPostgresCreativeProjectLegacySchema,
+  type PostgresCreativeProjectLegacyAccess,
+} from "./creative-project-legacy-access.ts";
+import {
+  assertPostgresLegacyTextReceipt,
+  readPostgresLegacyText,
+  textLegacyScope,
+} from "./project-text-legacy-access.ts";
+import {
   projectOutlineUiCommitQualification,
   assertProjectOutlineUiPrepared,
 } from "./project-outline-ui-commit-support.ts";
@@ -80,40 +90,56 @@ export class PostgresStructuredOutlineStorage {
   }
   async loadRevision(input: StructuredTextInput<"loadStructuredRevision">) {
     const q = textRead("loadRevision", input);
-    return this.#revision(
-      this.#pool,
-      q.owner,
-      q.projectId,
-      q.artifactId,
-      q.contentRevision,
+    return readPostgresLegacyText(
+      { pool: this.#pool, schema: this.#schema, assertOpen: this.#assertOpen },
+      textLegacyScope(q.owner, q.projectId),
+      (client) =>
+        this.#revision(
+          client,
+          q.owner,
+          q.projectId,
+          q.artifactId,
+          q.contentRevision,
+        ),
+      null,
     );
   }
   async listRevisions(input: StructuredTextInput<"listStructuredRevisions">) {
     const q = textRead("listRevisions", input);
-    const rows = (
-      await this.#query(
-        this.#pool,
-        `SELECT c.*,p.owner_principal_id FROM project_text_revisions c ${join} WHERE ${filter} AND c.artifact_id=? AND c.content_revision>? ORDER BY c.content_revision ASC LIMIT ?`,
-        [
-          ...creativeOwnerValues(q.owner),
-          q.projectId,
-          q.artifactId,
-          q.afterContentRevision,
-          q.limit + 1,
-        ],
-      )
-    ).rows;
-    const items = rows.map((row) =>
-      textRequired(
-        decodeStoredTextRevision(row, q.owner, q.projectId, q.artifactId),
-      ),
+    return readPostgresLegacyText(
+      { pool: this.#pool, schema: this.#schema, assertOpen: this.#assertOpen },
+      textLegacyScope(q.owner, q.projectId),
+      async (client) => {
+        const rows = (
+          await this.#query(
+            client,
+            `SELECT c.*,p.owner_principal_id FROM project_text_revisions c ${join} WHERE ${filter} AND c.artifact_id=? AND c.content_revision>? ORDER BY c.content_revision ASC LIMIT ?`,
+            [
+              ...creativeOwnerValues(q.owner),
+              q.projectId,
+              q.artifactId,
+              q.afterContentRevision,
+              q.limit + 1,
+            ],
+          )
+        ).rows;
+        const items = rows.map((row) =>
+          textRequired(
+            decodeStoredTextRevision(row, q.owner, q.projectId, q.artifactId),
+          ),
+        );
+        const revisions = Object.freeze(items.slice(0, q.limit));
+        return Object.freeze({
+          revisions,
+          nextContentRevision:
+            items.length > q.limit ? revisions.at(-1)!.contentRevision : null,
+        });
+      },
+      Object.freeze({
+        revisions: Object.freeze([]),
+        nextContentRevision: null,
+      }),
     );
-    const revisions = Object.freeze(items.slice(0, q.limit));
-    return Object.freeze({
-      revisions,
-      nextContentRevision:
-        items.length > q.limit ? revisions.at(-1)!.contentRevision : null,
-    });
   }
   async receipt(
     input: StructuredTextInput<"loadStructuredMutationReceipt">,
@@ -121,7 +147,7 @@ export class PostgresStructuredOutlineStorage {
   ) {
     const identity = textIdentity(input);
     const authority = structuredTextAuthority(options);
-    projectOutlineUiCommitQualification(
+    const q = projectOutlineUiCommitQualification(
       authority,
       identity.actor,
       identity.kind as "save-outline" | "select-revision",
@@ -137,52 +163,68 @@ export class PostgresStructuredOutlineStorage {
     if (authority?.outlineRunTransaction || authority?.planTransaction)
       await assertCreativeProjectCommitTransactionCurrent(authority);
     this.#active(authority);
-    if (rq || authority?.planTransaction) {
-      const client = await this.#pool.connect();
-      try {
-        await client.query("BEGIN");
-        await assertPostgresProjectOutlineRunCommit(
-          client,
-          this.#schema,
-          rq,
-          "receipt-publication",
+    const client = await this.#pool.connect();
+    let result: StoredProjectTextMutationResult | null = null;
+    try {
+      await client.query("BEGIN ISOLATION LEVEL READ COMMITTED");
+      await lockPostgresCreativeProjectLegacySchema(client, this.#schema);
+      const access = await capturePostgresCreativeProjectLegacyAccess(
+        client,
+        this.#schema,
+      );
+      await assertPostgresProjectTextUiCommit(client, this.#schema, q);
+      await assertPostgresProjectOutlineRunCommit(
+        client,
+        this.#schema,
+        rq,
+        "receipt-publication",
+      );
+      await beginPostgresPlanResult(client, this.#schema, rq);
+      const pq = planSelectionQualification(
+        authority,
+        identity.actor,
+        identity.kind,
+        identity.receipt,
+        "structured-outline",
+      );
+      await beginPostgresPlanSelection(client, this.#schema, pq);
+      result = await this.#receipt(client, identity, access, "read");
+      const current = await capturePostgresCreativeProjectLegacyAccess(
+        client,
+        this.#schema,
+      );
+      if (result !== null)
+        await current.assertProject(
+          textLegacyScope(result.artifact, result.artifact.projectId),
         );
-        await beginPostgresPlanResult(client, this.#schema, rq);
-        const pq = planSelectionQualification(
-          authority,
-          identity.actor,
-          identity.kind,
-          identity.receipt,
-          "structured-outline",
-        );
-        await beginPostgresPlanSelection(client, this.#schema, pq);
-        const result = await this.#receipt(client, identity);
+      if (authority?.outlineUiTransaction)
+        await authority.outlineUiTransaction.assertCurrent();
+      else if (authority?.outlineRunTransaction || authority?.planTransaction)
         await assertCreativeProjectCommitTransactionCurrent(authority);
-        this.#active(authority);
-        await assertPostgresProjectOutlineRunCommit(
-          client,
-          this.#schema,
-          rq,
-          "receipt-publication",
-        );
-        await client.query("COMMIT");
-        return result;
-      } catch (error) {
-        try {
-          await client.query("ROLLBACK");
-        } catch {
-          /* Preserve original failure. */
-        }
-        throw error;
-      } finally {
-        client.release();
+      await assertPostgresProjectTextUiCommit(client, this.#schema, q);
+      await assertPostgresProjectOutlineRunCommit(
+        client,
+        this.#schema,
+        rq,
+        "receipt-publication",
+      );
+      this.#active(authority);
+      await client.query("COMMIT");
+    } catch (error) {
+      try {
+        await client.query("ROLLBACK");
+      } catch {
+        /* Preserve original failure. */
       }
+      throw error;
+    } finally {
+      client.release();
     }
-    const result = await this.#receipt(this.#pool, identity);
-    await assertCreativeProjectCommitCurrent(authority);
-    if (authority?.outlineRunTransaction || authority?.planTransaction)
-      await assertCreativeProjectCommitTransactionCurrent(authority);
-    this.#active(authority);
+    // Complete UI/ordinary fences can borrow this same pool; run them after release.
+    if (!rq && !authority?.planTransaction) {
+      await assertCreativeProjectCommitCurrent(authority);
+      this.#active(authority);
+    }
     return result;
   }
   async candidate(
@@ -236,7 +278,17 @@ export class PostgresStructuredOutlineStorage {
       projectId: prepared.project.projectId,
     };
     try {
-      await client.query("BEGIN");
+      await client.query("BEGIN ISOLATION LEVEL READ COMMITTED");
+      await lockPostgresCreativeProjectLegacySchema(client, this.#schema);
+      const access = await capturePostgresCreativeProjectLegacyAccess(
+        client,
+        this.#schema,
+      );
+      const scope = textLegacyScope(
+        prepared.project,
+        prepared.project.projectId,
+      );
+      await access.assertProject(scope);
       await assertPostgresProjectTextUiCommit(client, this.#schema, q);
       await assertPostgresProjectOutlineRunCommit(
         client,
@@ -269,7 +321,7 @@ export class PostgresStructuredOutlineStorage {
         this.#schema,
         planSelection,
       );
-      const replay = await this.#receipt(client, identity);
+      const replay = await this.#receipt(client, identity, access, "mutation");
       let result: StoredProjectTextMutationResult;
       if (replay !== null) result = replay;
       else {
@@ -421,11 +473,6 @@ export class PostgresStructuredOutlineStorage {
           prepared.receipt,
           result,
         );
-      // This callback is policy-only, matching the original store; it must not borrow this pool.
-      await assertCreativeProjectCommitCurrent(authority);
-      if (authority?.outlineRunTransaction || authority?.planTransaction)
-        await assertCreativeProjectCommitTransactionCurrent(authority);
-      this.#active(authority);
       if (foundation !== undefined)
         await assertPostgresProjectFoundationDownstreamUnchanged(
           client,
@@ -433,7 +480,18 @@ export class PostgresStructuredOutlineStorage {
           locator,
           foundation,
         );
-      this.#assertOpen();
+      const current = await capturePostgresCreativeProjectLegacyAccess(
+        client,
+        this.#schema,
+      );
+      await current.assertProject(scope);
+      await current.assertProject(
+        textLegacyScope(result.artifact, result.artifact.projectId),
+      );
+      // All new SQL precedes the original policy and physical qualification fence.
+      await assertCreativeProjectCommitCurrent(authority);
+      if (authority?.outlineRunTransaction || authority?.planTransaction)
+        await assertCreativeProjectCommitTransactionCurrent(authority);
       await assertPostgresProjectTextUiCommit(client, this.#schema, q);
       await assertPostgresProjectOutlineRunCommit(
         client,
@@ -443,6 +501,7 @@ export class PostgresStructuredOutlineStorage {
           ? "receipt-publication"
           : "fresh-candidate",
       );
+      this.#active(authority);
       await client.query("COMMIT");
       return result;
     } catch (error) {
@@ -511,22 +570,34 @@ export class PostgresStructuredOutlineStorage {
       artifactId,
     );
   }
-  async #receipt(client: Pool | PoolClient, identity: TextIdentity) {
-    const result = decodeStoredTextReceipt(
-      (
-        await this.#query(
-          client,
-          "SELECT * FROM project_text_mutation_receipts WHERE tenant_id=? AND space_id=? AND principal_id=? AND actor_id=? AND kind=? AND idempotency_key=?",
-          [
-            ...creativeOwnerValues(identity.owner),
-            identity.actor.actorId,
-            identity.kind,
-            identity.receipt.idempotencyKey,
-          ],
-        )
-      ).rows[0],
-      identity,
-    );
+  async #receipt(
+    client: PoolClient,
+    identity: TextIdentity,
+    access: PostgresCreativeProjectLegacyAccess,
+    mode: "read" | "mutation",
+  ) {
+    const row = (
+      await this.#query(
+        client,
+        "SELECT * FROM project_text_mutation_receipts WHERE tenant_id=? AND space_id=? AND principal_id=? AND actor_id=? AND kind=? AND idempotency_key=?",
+        [
+          ...creativeOwnerValues(identity.owner),
+          identity.actor.actorId,
+          identity.kind,
+          identity.receipt.idempotencyKey,
+        ],
+      )
+    ).rows[0];
+    if (
+      !(await assertPostgresLegacyTextReceipt(
+        access,
+        identity.owner,
+        row,
+        mode,
+      ))
+    )
+      return null;
+    const result = decodeStoredTextReceipt(row, identity);
     if (
       result !== null &&
       (await this.#project(
