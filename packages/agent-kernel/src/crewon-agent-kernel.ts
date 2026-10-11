@@ -1,4 +1,5 @@
-import { observeModelUsage } from "./model-usage-observer.ts";
+import { normalizeModelUsage, observeModelUsage } from "./model-usage-observer.ts";
+import { modelTransportFailureUsage } from "./model-transport-failure-usage.ts";
 import { SamplingWorkBudget } from "./sampling-work-budget.ts";
 import {
   parseCanonicalAgentEvent,
@@ -376,17 +377,8 @@ export class CrewONAgentKernel implements AgentKernelPort {
                 if (usageSeen) {
                   throw new AgentKernelError("model_usage_duplicate", false);
                 }
-                validateUsage(event);
+                const usage = normalizeModelUsage(event);
                 usageSeen = true;
-                const usage = {
-                  inputTokens: event.inputTokens,
-                  cachedInputTokens: event.cachedInputTokens ?? 0,
-                  cachedInputTokensReported:
-                    event.cachedInputTokensReported ??
-                    event.cachedInputTokens !== undefined,
-                  outputTokens: event.outputTokens,
-                  totalTokens: event.totalTokens,
-                };
                 try {
                   await observeModelUsage({
                     sink: options?.usageSink,
@@ -601,6 +593,21 @@ export class CrewONAgentKernel implements AgentKernelPort {
             const failure = controlSinkFailure.value;
             controlSinkFailure = { failed: false, value: undefined };
             throw failure;
+          }
+          const privateUsage = modelTransportFailureUsage(error);
+          if (privateUsage !== null && !usageSeen) {
+            const usage = normalizeModelUsage(privateUsage);
+            usageSeen = true;
+            // A failed stream's accounting is durable without releasing its
+            // withheld terminal, successful output or public usage event.
+            // Persistence failures leave this catch directly: never resample.
+            await observeModelUsage({
+              sink: options?.usageSink,
+              contract,
+              model: this.modelIdentity,
+              event: privateUsage,
+              usage,
+            });
           }
           const kernelError = normalizeSamplingError(error, signal);
           if (!kernelError.retryable) {
@@ -1180,39 +1187,6 @@ function validateReasoningDelta(delta: string, index: number): void {
 function validateReasoningIndex(index: number): void {
   if (!Number.isSafeInteger(index) || index < 0) {
     throw new AgentKernelError("model_reasoning_index_invalid", false);
-  }
-}
-
-function validateUsage(
-  event: Extract<ModelTransportEvent, { type: "usage" }>,
-): void {
-  if (
-    (event.cachedInputTokens !== undefined &&
-      !Number.isSafeInteger(event.cachedInputTokens)) ||
-    (event.cachedInputTokensReported !== undefined &&
-      typeof event.cachedInputTokensReported !== "boolean") ||
-    (event.cachedInputTokensReported === true &&
-      event.cachedInputTokens === undefined) ||
-    (event.cachedInputTokensReported === false &&
-      (event.cachedInputTokens ?? 0) !== 0)
-  ) {
-    throw new AgentKernelError("model_usage_cache_reporting_invalid", false);
-  }
-  for (const value of [
-    event.inputTokens,
-    event.cachedInputTokens ?? 0,
-    event.outputTokens,
-    event.totalTokens,
-  ]) {
-    if (!Number.isSafeInteger(value) || value < 0) {
-      throw new AgentKernelError("model_usage_invalid", false);
-    }
-  }
-  if (event.totalTokens !== event.inputTokens + event.outputTokens) {
-    throw new AgentKernelError("model_usage_total_mismatch", false);
-  }
-  if ((event.cachedInputTokens ?? 0) > event.inputTokens) {
-    throw new AgentKernelError("model_usage_cached_input_exceeds_input", false);
   }
 }
 

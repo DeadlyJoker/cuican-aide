@@ -1,4 +1,9 @@
-import type { ModelInputItem, ModelTransportEvent } from "@crewon/agent-kernel";
+import {
+  ModelTransportError,
+  retainModelTransportFailureUsage,
+  type ModelInputItem,
+  type ModelTransportEvent,
+} from "@crewon/agent-kernel";
 import type { ProviderCheckpoint } from "@crewon/contracts";
 
 import { protocolError, transportError } from "./responses-errors.ts";
@@ -394,27 +399,38 @@ async function* decodeResponsesProtocolEvents(
 ): AsyncIterable<ModelTransportEvent> {
   const decoder = new ResponsesProtocolDecoder(options);
   let terminalEvents: readonly ModelTransportEvent[] = [];
-  for await (const item of parseResponsesSse(body, {
-    onActivity: options.onActivity,
-    stopAfterBufferedFrames: () => decoder.terminal,
-    ...(options.onReadClosed === undefined
-      ? {}
-      : { onReadClosed: options.onReadClosed }),
-    ...(signal === undefined ? {} : { signal }),
-  })) {
-    if (item.kind === "done") {
-      if (!decoder.terminal) {
-        throw protocolError("responses_done_before_terminal");
+  try {
+    for await (const item of parseResponsesSse(body, {
+      onActivity: options.onActivity,
+      stopAfterBufferedFrames: () => decoder.terminal,
+      ...(options.onReadClosed === undefined
+        ? {}
+        : { onReadClosed: options.onReadClosed }),
+      ...(signal === undefined ? {} : { signal }),
+    })) {
+      if (item.kind === "done") {
+        if (!decoder.terminal) {
+          throw protocolError("responses_done_before_terminal");
+        }
+        continue;
       }
-      continue;
+      const events = decoder.accept(item.value);
+      // Public terminal/usage wait until the received tail passes validation.
+      if (decoder.terminal) terminalEvents = events;
+      else for (const event of events) yield event;
     }
-    const events = decoder.accept(item.value);
-    // Withhold terminal/usage until all frames in this received chunk pass validation.
-    // A same-chunk post-terminal event is still rejected by decoder.accept().
-    if (decoder.terminal) terminalEvents = events;
-    else for (const event of events) yield event;
+    decoder.finish();
+  } catch (error) {
+    // A valid provider usage report remains an accounting fact even when its
+    // received tail invalidates the answer. It must never become a public event.
+    const usage = terminalEvents.find(
+      (event): event is Extract<ModelTransportEvent, { type: "usage" }> =>
+        event.type === "usage",
+    );
+    if (error instanceof ModelTransportError && usage !== undefined)
+      retainModelTransportFailureUsage(error, usage);
+    throw error;
   }
-  decoder.finish();
   for (const event of terminalEvents) yield event;
 }
 

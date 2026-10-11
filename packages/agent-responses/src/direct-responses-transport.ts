@@ -4,6 +4,8 @@ import { parseResponsesOutputTokenLimit } from "./responses-output-budget.ts";
 import {
   ModelTransportError,
   beginModelCall,
+  modelTransportFailureUsage,
+  retainModelTransportFailureUsage,
   type ModelInputItem,
   type ModelRequest,
   type ModelTransportStreamOptions,
@@ -401,6 +403,12 @@ export class DirectResponsesTransport implements ModelTransportPort {
                 undefined,
                 error,
               );
+      const usage = modelTransportFailureUsage(error);
+      if (usage !== null) {
+        const observed = call?.event(usage) ?? usage;
+        if (observed.type === "usage")
+          retainModelTransportFailureUsage(failure, observed);
+      }
       call?.httpFailure({
         reason: signal.aborted
           ? "canceled"

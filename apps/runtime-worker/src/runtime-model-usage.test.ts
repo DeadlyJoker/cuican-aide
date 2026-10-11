@@ -143,46 +143,75 @@ for (const backend of ["sqlite", "postgres"] as const) {
     },
   );
 
-  test(
-    `${backend}: reported usage survives a stream error after the response terminal without committing a successful answer`,
-    options,
-    async (context) => {
-      const fixture = await createFixture(context, {
-        backend,
-        storeResponses: false,
-        crashAfterCommit: false,
-        modelResponseEvents: () => [
-          ...events(completed("response-failed-stream")),
-          {
-            type: "response.output_text.delta",
-            sequence_number: 3,
-            delta: "invalid late output",
-          },
-        ],
-      });
-      assert.equal((await fixture.worker().wake()).kind, "failed");
-      assert.equal((await fixture.usageRecords()).length, 1);
-      assert.equal(
-        (await fixture.events()).filter(
-          (event) => event.type === "usage.recorded",
-        ).length,
-        0,
-      );
-      assert.equal(
-        (await fixture.history()).filter(
-          (item) => item.type === "message" && item.role === "assistant",
-        ).length,
-        0,
-      );
-      await fixture.reopen();
-      assert.equal(
-        (await fixture.usageRecords())[0]?.record.observation.usage
-          .cachedInputTokens,
-        80,
-      );
-      assert.equal(fixture.requests.length, 1);
-    },
-  );
+  for (const status of ["completed", "failed", "incomplete"] as const) {
+    test(
+      `${backend}: ${status} usage survives a rejected stream tail without committing a successful answer`,
+      options,
+      async (context) => {
+        const response = {
+          ...completed("response-failed-stream"),
+          status,
+          ...(status === "failed"
+            ? { error: { code: "invalid_prompt" } }
+            : status === "incomplete"
+              ? { incomplete_details: { reason: "max_output_tokens" } }
+              : {}),
+        };
+        const fixture = await createFixture(context, {
+          backend,
+          storeResponses: false,
+          crashAfterCommit: false,
+          modelResponseEvents: () => [
+            ...events(response),
+            {
+              type: "response.output_text.delta",
+              sequence_number: 3,
+              delta: "invalid late output",
+            },
+          ],
+        });
+        assert.equal((await fixture.worker().wake()).kind, "failed");
+        assert.equal((await fixture.usageRecords()).length, 1);
+        const usage = (await fixture.usageRecords())[0]!.record.observation;
+        assert.equal(usage.providerResponseId, response.id);
+        assert.equal(
+          usage.responseStatus,
+          status === "completed" ? null : status,
+        );
+        assert.equal(usage.usage.totalTokens, 110);
+        assert.equal(
+          (await fixture.events()).some((event) =>
+            [
+              "model.sampling.retry",
+              "segment.completed",
+              "message.completed",
+              "run.completed",
+            ].includes(event.type),
+          ),
+          false,
+        );
+        assert.equal(
+          (await fixture.events()).filter(
+            (event) => event.type === "usage.recorded",
+          ).length,
+          0,
+        );
+        assert.equal(
+          (await fixture.history()).filter(
+            (item) => item.type === "message" && item.role === "assistant",
+          ).length,
+          0,
+        );
+        await fixture.reopen();
+        assert.equal(
+          (await fixture.usageRecords())[0]?.record.observation.usage
+            .cachedInputTokens,
+          80,
+        );
+        assert.equal(fixture.requests.length, 1);
+      },
+    );
+  }
 
   test(
     `${backend}: failed sampling usage and successful retry are counted independently without changing the request prefix`,
