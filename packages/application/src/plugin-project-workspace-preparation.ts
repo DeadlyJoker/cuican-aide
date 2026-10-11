@@ -21,6 +21,7 @@ export type PluginProjectWorkspacePreparation = Readonly<{
   version: "crewon.plugin-project-workspace-preparation.v1";
 }>;
 type Qualified = Readonly<{
+  invocationFingerprint: string;
   commit: ProjectConversationCommitAuthority;
   owner: PluginProjectWorkspaceOwner;
   packageIdentity: DesktopNativePluginPackageIdentity;
@@ -90,6 +91,7 @@ export async function preparePluginProjectWorkspace(
   };
   await current();
   const qualified: Qualified = Object.freeze({
+    invocationFingerprint: source.snapshot.fingerprint,
     commit: q,
     owner,
     expectedWorkspaceId,

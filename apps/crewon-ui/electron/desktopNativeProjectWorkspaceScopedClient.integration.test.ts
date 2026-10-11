@@ -56,16 +56,23 @@ process.on("message", async value => {
         try{await f.recordObservation({...reference});}catch(error){copyRejected=error.code === "plugin_project_workspace_native_observation_unavailable";}
         const recorded=await f.recordObservation(reference);
         const replay=await f.recordObservation(reference,"2026-10-12T00:00:00.000Z");
+        if(value.create) {
+          const otherInvocationRejected=await f.rejectOtherInvocation(reference);
+          const registrationGetterRejected=await f.rejectRegistrationGetter(reference);
+          const conversation=await f.createConversation(reference);
+          const conversationReplay=await f.createConversation(reference);
+          return {recorded,replay,copyRejected,conversation,conversationReplay,otherInvocationRejected,registrationGetterRejected};
+        }
         return {recorded,replay,copyRejected};
       }
       return output;
     };
     try {
       const output=await f.invoke();
-      process.send({kind:"fixture.completed", output, namespaceCount:f.namespaceCount(), projectState:f.projectState()});
+      process.send({kind:"fixture.completed", output, namespaceCount:f.namespaceCount(), projectState:f.projectState(), threadCount:f.threadCount()});
     } catch(error) {
       process.send({kind:"fixture.completed", error:error.code ?? error.message, cause:error.cause?.message,
-        namespaceCount:f.namespaceCount(), projectState:f.projectState()});
+        namespaceCount:f.namespaceCount(), projectState:f.projectState(), threadCount:f.threadCount()});
     }
   } else if(value?.kind === "fixture.ticket") giveTicket?.(value.ticket);
   else if(value?.kind === "fixture.revoke") f.state.policyAllowed=false;
@@ -122,7 +129,11 @@ afterEach(async () => {
 });
 async function start(
   f: Fixture,
-  options: Readonly<{ register?: boolean; failure?: string }> = {},
+  options: Readonly<{
+    register?: boolean;
+    failure?: string;
+    create?: boolean;
+  }> = {},
 ) {
   const prepared = waitMessage(f.control, (v) => v.kind === "fixture.prepared");
   const completed = waitMessage(
@@ -133,6 +144,46 @@ async function start(
   return { preparation: await prepared, completed };
 }
 describe("genuine project preparation and actual Native allocation", () => {
+  it("continues through the original project conversation recipe and receipt with the actual owned directory without a second Thread", async () => {
+    const f = await fixture(),
+      bridge = f.bridge();
+    const { preparation, completed } = await start(f, {
+      register: true,
+      create: true,
+    });
+    const next = waitMessage(
+      f.control,
+      (v) => v.kind === "fixture.next-ticket",
+    );
+    f.control.send({
+      kind: "fixture.ticket",
+      ticket: f.prepare(bridge, preparation.owner.projectId),
+    });
+    await next;
+    f.control.send({
+      kind: "fixture.ticket",
+      ticket: f.prepare(bridge, preparation.owner.projectId),
+    });
+    const result = await completed;
+    expect(result.error).toBeUndefined();
+    expect(result.threadCount).toBe(1);
+    expect(result.namespaceCount).toBe(1);
+    expect(result.output.conversation.disposition).toBe("committed");
+    expect(result.output.otherInvocationRejected).toBe(true);
+    expect(result.output.registrationGetterRejected).toBe(true);
+    expect(result.output.conversation.binding.workspaceId).toBe(
+      preparation.expectedWorkspaceId,
+    );
+    expect(result.output.conversationReplay.disposition).toBe("replayed");
+    expect(result.output.conversationReplay.binding).toEqual(
+      result.output.conversation.binding,
+    );
+    expect(f.workspaces.root()).toBe(f.ordinary);
+    expect(
+      new LocalWorkspaceProjectAllocationJournal(f.dataDirectory).read().state
+        .allocations,
+    ).toHaveLength(1);
+  });
   for (const failure of [
     "archive",
     "schema",

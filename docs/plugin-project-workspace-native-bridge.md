@@ -66,6 +66,14 @@ Control 的 `observeForProject` 现将已核验、属于同一 owner 的 registe
 
 新旧 Native scoped/client/bridge 专项 **62 passed**；原 namespace、metadata fence 及 owned Conversation UI 的 SQLite/PostgreSQL 兼容专项 **50 passed**，联合 **112 passed、0 failed、0 skipped**。PostgreSQL 18.6 专属测试实例随后停止清理，验证的是原兼容入口，不代表新 Native 登记已支持 PostgreSQL。Application/Store/Control/Electron 类型检查、边界与格式检查通过；正式 App 未更新。
 
+### 原会话创建的宿主组合入口
+
+原 Application 现有内部 `createConversationFromNativeObservation({ context, authority, observation, registration })`，先确认真实 UI、独立 Conversation Host 权限与 Native 观察来自同一个完整 invocation fingerprint，原 createConversation 输入 workspaceId 必须等于宿主派生 ID。另一个相同 owner/project 的 UI 调用也不能借用该观察。登记端口只捕获 data method，不执行 getter；随后调用原 Parent 登记、重查项目资格，再沿用原 createConversation 私有配方、完整回执范围和原 Thread/binding/receipt 交易。
+
+公开请求、响应和原 nullable workspace 校验没有变；此入口没有将 null 请求改写为另一个 workspaceId，也没有制造 UI invocation 或重写既有 Thread。实际 child 测试沿用已有协议明确提供宿主派生 ID，验证真实 Native 目录、Parent namespace、一个原 Thread 及同键回放，观察借给其他 invocation 或 getter 登记端口时拒绝。初始 metadata、Host 策略和包发现仍为命名 fixture，Main prepare 仍由受信测试调用方执行；这是内部组成链路，不是完整产品安装或 Web 验收。
+
+组合 Native 专项 **63 passed**，原 installed HTTP 创建/关联/升级 **5 passed**，联合 **68 passed、0 failed、0 skipped**。类型、边界与格式检查通过；此次初始化失败产生的 23 个专属 fixture 目录已核对并清理，初始化失败与 child 退出路径也增加清理。产品 dispatcher 和 Main/Control bootstrap 仍未调用这个组合入口，中央 Agent、PostgreSQL 新模式及正式 Web/桌面未验收。
+
 原 Native policy / authority persisted DTO、workspace registry、allocation journal、HTTP / SDK / renderer contracts 均保持原 shape。唯一收紧是 Native authority 的内部 factory 要求同一真实 reader 发行的 policy，不能传结构替身、复制品、别的目录或别的 bootstrap。已核对全部生产/测试 factory callers；它们原本均使用同一真实 reader。
 
 测试使用实际 Node child IPC、真实 Native bootstrap / policy / authority producer、原工作空间 registry 和真实文件系统，覆盖一次消费、坏输入、大输入、其他协议、批准/perAction、结构替身、跨 child/generation、Native 撤回和 pin 变化、Native 提交后的拒绝发布、active workspace / file lease、原 registry stale-byte fence、失败不恢复、发送背压/错误/期限、请求超量和 close 的监听器/文件归属。

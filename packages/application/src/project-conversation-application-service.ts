@@ -45,6 +45,9 @@ import { ownedConversationProjectWriteAuthority } from "./project-conversation-p
 import { readConversationProject } from "./project-conversation-project-reader.ts";
 import { changeProjectConversationBinding } from "./project-conversation-binding-change.ts";
 import { preparePluginProjectWorkspace } from "./plugin-project-workspace-preparation.ts";
+import { prepareNativeWorkspaceConversation } from "./project-conversation-native-workspace.ts";
+import type { PluginProjectWorkspaceNativeObservation } from "./plugin-project-workspace-native-observation.ts";
+import type { PluginProjectWorkspaceNativeRegistrationStore } from "./plugin-project-workspace-store-port.ts";
 import { conversationUiProjectReader } from "./project-conversation-ui-project-reader.ts";
 import type { ProjectTextStore } from "./project-text-store-port.ts";
 import type { ExtensionTaskApplicationService } from "./extension-task-application-service.ts";
@@ -103,6 +106,29 @@ export class ProjectConversationApplicationService {
         authorization: this.#d.authorization,
       }),
     );
+  }
+  /** Explicit Host opt-in, using only the genuine original UI invocation and its independent Conversation authority. */
+  createConversationFromNativeObservation(
+    input: Readonly<{
+      context: PluginUiActionContext;
+      authority: ProjectConversationCommitAuthority;
+      observation: PluginProjectWorkspaceNativeObservation;
+      registration: PluginProjectWorkspaceNativeRegistrationStore;
+    }>,
+  ) {
+    return projectConversationCall(async () => {
+      const prepared = await prepareNativeWorkspaceConversation({
+        ...input,
+        projects: this.#d.projects,
+        createdAt: this.#d.clock.now(),
+      });
+      return this.#createConversation(
+        input.context.actor,
+        prepared.request,
+        input.authority,
+        { store: prepared.projects, readScope: prepared.readScope },
+      );
+    });
   }
   /** Explicit Host opt-in, using only the genuine original UI invocation and its independent Conversation authority. */
   async metadataFromPluginUi(

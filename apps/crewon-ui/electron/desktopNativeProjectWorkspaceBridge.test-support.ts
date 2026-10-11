@@ -106,7 +106,15 @@ export async function nativeProjectWorkspaceBridgeFixture(
     await waitMessage(child, (value) => value.kind === "fixture.ready");
     return child;
   }
-  const control = await spawnControl();
+  let control: ChildProcess;
+  try {
+    control = await spawnControl();
+  } catch (error) {
+    native.close();
+    await bootstrap.cleanup();
+    rmSync(f.directory, { recursive: true, force: true });
+    throw error;
+  }
   const signal = new AbortController();
   function bridge(
     options: Partial<
