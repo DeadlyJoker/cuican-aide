@@ -49,8 +49,55 @@ type Dependencies = Readonly<{
  */
 export class DesktopPluginInstanceCompositionOwner {
   readonly #input: Dependencies;
+  #projection: Readonly<{
+    source: PluginCompositionLock;
+    node: PluginCompositionLock;
+  }> | null = null;
   constructor(input: Dependencies) {
     this.#input = Object.freeze({ ...input });
+  }
+
+  /** Read-only proof of the graph already published by this actual owner.
+   * Does not synchronize, prepare packages or acquire the management queue.
+   */
+  currentNodeLock(actor: ActorContext): PluginCompositionLock | null {
+    const input = this.#input;
+    input.signal.throwIfAborted();
+    const source = input.metadata.currentLock(actor);
+    const projection = this.#projection;
+    if (source === null || projection === null) return null;
+    if (source.lockDigest !== projection.source.lockDigest)
+      denied("plugin_composition_source_changed");
+    input.owner.store.compositionStore().assertCurrentLock({
+      scope: input.configuration.scope,
+      lockDigest: source.lockDigest,
+    });
+    const snapshot = input.owner.snapshot();
+    const enabled = snapshot.selections.filter(
+      (entry) => entry.state === "enabled",
+    );
+    if (enabled.length !== source.nodes.length)
+      denied("plugin_composition_selection_changed");
+    for (const node of source.nodes) {
+      const selection = enabled.find(
+        (entry) => entry.pluginId === node.pluginId,
+      );
+      const pkg = snapshot.selectedPackages.find(
+        (entry) => entry.pluginId === node.pluginId,
+      );
+      if (
+        selection?.revision !== node.selectionRevision ||
+        selection.publisherId !== node.publisherId ||
+        selection.selectedPackageDigest !== node.packageDigest ||
+        pkg?.version !== node.version ||
+        pkg.packageDigest !== node.packageDigest ||
+        pkg.publisherId !== node.publisherId ||
+        input.registry.authorizeIdentity(pkg) !== "allow"
+      )
+        denied("plugin_composition_selection_changed");
+    }
+    input.signal.throwIfAborted();
+    return projection.node;
   }
 
   async observeSelection(
@@ -58,6 +105,8 @@ export class DesktopPluginInstanceCompositionOwner {
     result: SelectPluginPackageResult,
   ): Promise<void> {
     if (result.mutation.disposition !== "committed") return;
+    // No stale proof crosses the first await of a new durable selection.
+    this.#projection = null;
     try {
       await this.#applySelection(actor, result);
     } catch {
@@ -197,6 +246,11 @@ export class DesktopPluginInstanceCompositionOwner {
           return "allow";
         },
       },
+    });
+    assertCurrent();
+    this.#projection = Object.freeze({
+      source,
+      node: projection.privateLock,
     });
   }
 }

@@ -15,6 +15,8 @@ import {
   extensionCanonicalJson,
   pluginInstallationNamespaceId,
   pluginInstallationOpaqueId,
+  pluginInstallationDigest,
+  parsePluginProfileScope,
 } from "@crewon/domain";
 import { SqliteRunStore } from "@crewon/store";
 import {
@@ -31,7 +33,11 @@ import {
 } from "./desktop-plugin-source-registry.ts";
 import { DesktopPluginAuthority } from "./desktop-plugin-authority.ts";
 import { installationSame } from "./production-plugin-installation-runtime-support.ts";
-import { DesktopInstallationProfile } from "./desktop-plugin-installation-profile.ts";
+import {
+  DesktopInstallationProfile,
+  type DesktopPluginNodeBorrowInput,
+  type DesktopPluginNodeBorrow,
+} from "./desktop-plugin-installation-profile.ts";
 import { DesktopInstalledPluginActivationOwner } from "./desktop-installed-plugin-activation-owner.ts";
 import { canonicalDesktopPluginConfiguration } from "./desktop-plugin-configuration-canonical.ts";
 import type { DesktopPluginCompositionMetadataState } from "./desktop-plugin-composition-metadata-owner.ts";
@@ -65,6 +71,8 @@ export type DesktopPluginInstallationRuntime = Readonly<{
   bindActivation(owner: DesktopInstalledPluginActivationOwner): void;
   compositionState(actor: ActorContext): DesktopPluginCompositionMetadataState;
   compositionStatus: PluginCompositionStatusControlService;
+  /** Internal Host borrowing only; not an HTTP/SDK operation or a restoration request. */
+  borrowNode(input: DesktopPluginNodeBorrowInput): DesktopPluginNodeBorrow;
   close(): Promise<void>;
 }>;
 const runtimes = new WeakMap<
@@ -327,6 +335,30 @@ export async function createDesktopPluginInstallationRuntime(
   });
   const runtime = Object.freeze({
     service,
+    borrowNode: (input: DesktopPluginNodeBorrowInput) => {
+      available();
+      const value = pluginSecurityRecord(input, [
+        "actor",
+        "scope",
+        "pluginId",
+        "packageDigest",
+        "authorizeBorrow",
+      ]);
+      if (typeof value.authorizeBorrow !== "function")
+        throw new ApplicationError(
+          "validation",
+          "plugin_node_borrow_policy_invalid",
+        );
+      return initialProfile.borrowNode({
+        actor: pluginSecurityActor(value.actor),
+        scope: parsePluginProfileScope(value.scope),
+        pluginId: pluginInstallationNamespaceId(value.pluginId),
+        packageDigest: pluginInstallationDigest(value.packageDigest),
+        authorizeBorrow: value.authorizeBorrow.bind(
+          input,
+        ) as DesktopPluginNodeBorrowInput["authorizeBorrow"],
+      });
+    },
     compositionStatus: Object.freeze({
       listStatus: (
         actorInput: ActorContext,

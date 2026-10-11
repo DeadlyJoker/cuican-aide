@@ -22,6 +22,7 @@ import {
   type PluginActivationCandidate,
   type PluginNodeCommitCandidate,
   type PluginUiHostServiceAvailabilityPort,
+  type PluginNodeLease,
 } from "@crewon/plugin-host";
 import type {
   SqlitePluginInstallationStore,
@@ -90,6 +91,21 @@ type ProfileDependencies = Readonly<{
   ): Promise<DesktopPreparedBusinessCandidate | null>;
 }>;
 
+export type DesktopPluginNodeBorrowInput = Readonly<{
+  actor: ActorContext;
+  scope: PluginProfileScope;
+  pluginId: string;
+  packageDigest: string;
+  /** Existing Host identity/package/PDP policy; borrowing never grants task permission. */
+  authorizeBorrow(identity: PluginNodeLease["identity"]): "allow" | "deny";
+}>;
+export type DesktopPluginNodeBorrow = Readonly<{
+  /** The actual NodeHost-issued lease, without copying its identity or its private brand. */
+  lease: PluginNodeLease;
+  /** Releases both the actual lease and this Profile's physical-work join. */
+  release(): void;
+}>;
+
 export class DesktopInstallationProfile {
   readonly #dependencies: ProfileDependencies;
   readonly #executionServices = new DesktopPluginExecutionServiceOwner();
@@ -105,6 +121,7 @@ export class DesktopInstallationProfile {
   readonly #queue = new DesktopPluginProfileOperationQueue(() =>
     this.#available(),
   );
+  readonly #borrows = new Set<Promise<void>>();
   #closed = false;
   #recovered = false;
   #closing: Promise<void> | null = null;
@@ -317,6 +334,54 @@ export class DesktopInstallationProfile {
     return this.#compositionMetadata.state(actor);
   }
 
+  /** Borrows an existing shared instance. Business work never holds the operation queue. */
+  borrowNode(input: DesktopPluginNodeBorrowInput): DesktopPluginNodeBorrow {
+    this.#available();
+    if (this.#borrows.size >= 128)
+      conflict("plugin_node_borrow_capacity_exceeded");
+    if (!installationSame(input.scope, this.#dependencies.scope))
+      denied("plugin_composition_scope_conflict");
+    this.assertOwnership(input.actor);
+    const lock = this.#instances.currentNodeLock(input.actor);
+    if (lock === null) conflict("plugin_composition_node_unobserved");
+    const check = () => {
+      this.assertOwnership(input.actor);
+      if (
+        this.#instances.currentNodeLock(input.actor)?.lockDigest !==
+        lock.lockDigest
+      )
+        denied("plugin_composition_source_changed");
+    };
+    const lease = this.#node.acquireScopedCurrent({
+      scope: lock.scope,
+      lockDigest: lock.lockDigest,
+      pluginId: input.pluginId,
+      authorizeBorrow: (identity) => {
+        check();
+        if (identity.packageDigest !== input.packageDigest) return "deny";
+        const decision = input.authorizeBorrow(identity);
+        check();
+        return decision;
+      },
+    });
+    let complete!: () => void;
+    const physical = new Promise<void>((resolve) => {
+      complete = resolve;
+    });
+    this.#borrows.add(physical);
+    let released = false;
+    return Object.freeze({
+      lease,
+      release: () => {
+        if (released) return;
+        lease.release();
+        released = true;
+        this.#borrows.delete(physical);
+        complete();
+      },
+    });
+  }
+
   /** Observe the actual held SQLite claim, including its file and directory pins. */
   assertOwnership(actor: ActorContext): void {
     this.#available();
@@ -350,6 +415,7 @@ export class DesktopInstallationProfile {
     this.withdraw();
     return (this.#closing = (async () => {
       await this.#queue.drain();
+      await Promise.all([...this.#borrows]);
       const failures: unknown[] = [];
       try {
         await this.#node.close();

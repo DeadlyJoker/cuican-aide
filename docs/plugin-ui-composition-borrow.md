@@ -21,7 +21,7 @@ Task Application 在最后的异步授权与内容校验完成后签发内部 op
 当前 `InstalledPluginTaskActionOwner` 仍按包创建单独 NodeHost。下一步产品接线需要：
 
 1. 原 Task Core 提供唯一、作用域受控的 bridge，服务注册和 UI action 共用它；不把每个 action bridge 的 invocation map 混用。
-2. 原 Profile 提供只读、当前 owner 验证的 Node graph 借用入口；UI-only 节点的公开 metadata digest 不能代替私有 Node graph digest。实例借用完成后释放管理队列，业务调用不持有该队列。
+2. 原 Profile 的[只读实例借用](plugin-profile-node-borrow.md)已经接线并验证，UI-only 节点的公开 metadata digest 不代替私有 Node graph digest。接入 Bridge 时保持原 claim/head/全部 selection 的同步检查及物理借用 join；业务调用不持有管理队列。
 3. 移除该路径的单包 setup；保留原安装批准、文件核验、PDP、scope/epoch、mount 和任务回执检查。启动装配必须先完成原 Task Core 与 profile service 的绑定，再开放调用入口。
 4. 实际 Web 验证安装、启用、UI/Agent 调用、停用提供者、恢复、升级/回滚、卸载和冷启动；通过后再更新正式桌面。
 
