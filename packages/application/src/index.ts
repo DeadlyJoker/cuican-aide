@@ -348,3 +348,9 @@ export {
   derivePluginProjectCreationReceipt,
   type PluginProjectCreationEntryPoint,
 } from "./plugin-project-creation-receipt.ts";
+
+export {
+  qualifyPluginProjectCreationScope,
+  deriveQualifiedPluginProjectCreationReceipt,
+  type PluginProjectCreationScope,
+} from "./plugin-project-creation-scope.ts";

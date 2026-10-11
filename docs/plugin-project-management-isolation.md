@@ -58,6 +58,8 @@ qualified 列表在 SQL 的排序、游标和 LIMIT 前按完整 owner 过滤；
 
 创建回执的内部派生规则已实现为 Application 的 `derivePluginProjectCreationReceipt`：七字段稳定归属、原创建入口和外部 key 一同进入版本化摘要，输出不超过原 128 字符上限；请求内容摘要保持原值。因此两个插件或两个创建入口不会因相同外部 key 使用同一内部 key，同一范围内更改内容仍交由原 Store 报幂等冲突。新准备的 projectId 不加入键，否则服务端重试生成不同 ID 会失去回放身份。外部 key 在派生结果中保留；版本、包摘要和 epoch 不进入稳定范围，升级不会改键。这是数据派生，不是创建、接管或读取授权；当前尚未接入两个原创建事务，也未改写任何 legacy/Run receipt。后续须由真实 Host 资格提供范围，并在读取原回执后核对其实际 metadata owner，不能仅凭这个可计算的 key 放行。
 
+Application 已补内部 `PluginProjectCreationScope` 来源引用。私有发行器先核对原 UI invocation 的实际 membership，再分别捕获 CreativeProject 和 Foundation 的原创建 pin、安装快照与生命周期检查；入口不匹配、普通读取、复制 context/引用和调用结束均拒绝。公开消费者只能核验已发行对象或从这个对象派生回执，不能填写 owner；引用不包含 projectId，未签发创建、接管或项目读取权限。原 Application 的 `creativeProject:create`、Host publication、同连接安装检查和事务末端撤权仍必须执行，SQL 回放也须独立核对 sidecar。来源与派生测试走真实 Application/PluginUI 服务上的命名内存 fixture，不能证明 Native、SQLite/PostgreSQL 创建或 Web 已接通；生产 dispatcher 和两个原创建事务尚未启用这个引用。
+
 ### 3. 原工作空间与项目对话
 
 metadata 归属明确后，原 Native allocator 创建目录并非激活追加原 registry，保持当前 workspace 和活动读取。Main 与 Control 使用私有、真实子进程绑定的分配桥，不增加 renderer 分配 API；准备票据不接受 caller root、workspaceId 或 actor。
