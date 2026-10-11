@@ -1,6 +1,6 @@
 #!/usr/bin/env node
 
-import { spawn, spawnSync } from "node:child_process";
+import { spawnSync } from "node:child_process";
 import { createHash, randomBytes } from "node:crypto";
 import {
   chmodSync,
@@ -14,6 +14,21 @@ import {
 import { homedir } from "node:os";
 import { basename, dirname, extname, join, resolve } from "node:path";
 import { fileURLToPath, pathToFileURL } from "node:url";
+import {
+  spawnDevelopmentChild,
+  stopDevelopmentChildren,
+  superviseDevelopmentChildren,
+  waitDevelopmentChildExit,
+  withDevelopmentChildLifecycle,
+} from "./crewon-development-processes.mjs";
+
+export {
+  spawnDevelopmentChild,
+  stopDevelopmentChildren,
+  superviseDevelopmentChildren,
+  waitDevelopmentChildExit,
+  withDevelopmentChildLifecycle,
+};
 
 const repositoryRoot = resolve(dirname(fileURLToPath(import.meta.url)), "..");
 const runtimeSource = join(repositoryRoot, "apps", "runtime-worker", "src");
@@ -199,38 +214,6 @@ function extensionHostOrigin(value) {
   } catch {
     throw new Error("development_extension_host_identity_invalid");
   }
-}
-
-/** Unwind partial startup before returning a failure to the launcher. */
-export async function stopDevelopmentChildren(children) {
-  await Promise.allSettled(
-    children.map(
-      ({ child }) =>
-        new Promise((resolveStopped) => {
-          if (
-            child.pid === undefined ||
-            child.exitCode !== null ||
-            child.signalCode !== null
-          ) {
-            resolveStopped();
-            return;
-          }
-          let timer;
-          const stopped = () => {
-            clearTimeout(timer);
-            child.off("exit", stopped);
-            child.off("close", stopped);
-            child.off("error", stopped);
-            resolveStopped();
-          };
-          child.once("exit", stopped);
-          child.once("close", stopped);
-          child.once("error", stopped);
-          timer = setTimeout(() => child.kill("SIGKILL"), 5_000);
-          child.kill("SIGTERM");
-        }),
-    ),
-  );
 }
 
 export function developmentRuntimeWorkerEnvironment(
@@ -471,62 +454,6 @@ function runRelease(environment) {
   }
 }
 
-function spawnManaged(name, command, args, options) {
-  const child = spawn(command, args, options);
-  child.once("error", (error) => {
-    process.stderr.write(`${name} failed to start: ${error.message}\n`);
-  });
-  return { child, name };
-}
-
-/** Includes an exit that happened between readiness and supervisor registration. */
-export function waitDevelopmentChildExit({ child, name }) {
-  if (child.exitCode !== null || child.signalCode !== null) {
-    return Promise.resolve({
-      code: child.exitCode,
-      name,
-      signal: child.signalCode,
-    });
-  }
-  if (child.pid === undefined) {
-    return Promise.resolve({ code: 1, name, signal: null });
-  }
-  return new Promise((resolveExit) => {
-    const finish = (code, signal) => {
-      child.off("exit", exited);
-      child.off("error", failed);
-      resolveExit({ code, name, signal });
-    };
-    const exited = (code, signal) => finish(code, signal);
-    const failed = () => finish(1, null);
-    child.once("exit", exited);
-    child.once("error", failed);
-  });
-}
-
-async function supervise(children) {
-  let shuttingDown = false;
-  const shutdown = () => {
-    if (shuttingDown) return;
-    shuttingDown = true;
-    for (const { child } of children) {
-      if (child.exitCode === null && child.signalCode === null) {
-        child.kill("SIGTERM");
-      }
-    }
-  };
-  process.once("SIGINT", shutdown);
-  process.once("SIGTERM", shutdown);
-  const exit = await Promise.race(children.map(waitDevelopmentChildExit));
-  shutdown();
-  await Promise.allSettled(children.map(waitDevelopmentChildExit));
-  if (!shuttingDown || (exit.code !== 0 && exit.signal === null)) {
-    throw new Error(
-      `${exit.name} exited unexpectedly (${exit.signal ?? exit.code ?? "unknown"})`,
-    );
-  }
-}
-
 export async function main() {
   loadLocalEnvironment();
   const runtimeWorkerCount = developmentRuntimeWorkerCount(
@@ -608,7 +535,7 @@ export async function main() {
   const children = [];
   const startControl = () =>
     children.push(
-      spawnManaged(
+      spawnDevelopmentChild(
         "Control API",
         process.execPath,
         ["--experimental-strip-types", join(controlSource, "main.ts")],
@@ -617,7 +544,7 @@ export async function main() {
     );
   const runtimeMainUrl = pathToFileURL(join(runtimeSource, "main.ts")).href;
   const startWorker = (workerIndex, options) => {
-    const managed = spawnManaged(
+    const managed = spawnDevelopmentChild(
       `Runtime Worker ${workerIndex + 1}/${runtimeWorkerCount}`,
       process.execPath,
       [
@@ -635,54 +562,52 @@ export async function main() {
     children.push(managed);
     return managed;
   };
-  try {
-    if (extensionsEnabled) {
-      const startup = new AbortController();
-      const cancelStartup = () => startup.abort();
-      process.once("SIGINT", cancelStartup);
-      process.once("SIGTERM", cancelStartup);
-      try {
+  await withDevelopmentChildLifecycle({
+    children,
+    start: async ({ signal }) => {
+      if (extensionsEnabled) {
         const worker = startWorker(0, { stdout: "pipe" });
         worker.child.stdout.pipe(process.stdout, { end: false });
         environment.CREWON_EXTENSION_HOST_ORIGIN =
           await waitForDevelopmentExtensionHost({
             child: worker.child,
             environment,
-            signal: startup.signal,
+            signal,
           });
         startControl();
-      } finally {
-        process.off("SIGINT", cancelStartup);
-        process.off("SIGTERM", cancelStartup);
+      } else {
+        startControl();
+        for (
+          let workerIndex = 0;
+          workerIndex < runtimeWorkerCount;
+          workerIndex += 1
+        ) {
+          startWorker(workerIndex, { stdout: "inherit" });
+        }
       }
-    } else {
-      startControl();
-      for (
-        let workerIndex = 0;
-        workerIndex < runtimeWorkerCount;
-        workerIndex += 1
-      ) {
-        startWorker(workerIndex, { stdout: "inherit" });
+      if (!process.argv.includes("--runtime-only")) {
+        children.push(
+          spawnDevelopmentChild(
+            "CrewON UI",
+            process.platform === "win32" ? "pnpm.cmd" : "pnpm",
+            [
+              "exec",
+              "vite",
+              "--host",
+              "127.0.0.1",
+              "--port",
+              String(uiPort),
+              "--strictPort",
+            ],
+            { cwd: uiRoot, env: environment, stdio: "inherit" },
+          ),
+        );
       }
-    }
-    if (!process.argv.includes("--runtime-only")) {
-      children.push(
-        spawnManaged(
-          "CrewON UI",
-          process.platform === "win32" ? "pnpm.cmd" : "pnpm",
-          ["exec", "vite", "--host", "127.0.0.1", "--port", String(uiPort)],
-          { cwd: uiRoot, env: environment, stdio: "inherit" },
-        ),
+      process.stdout.write(
+        `CrewON TypeScript stack readying on http://127.0.0.1:${uiPort} (${agentVersionId})\n`,
       );
-    }
-    process.stdout.write(
-      `CrewON TypeScript stack readying on http://127.0.0.1:${uiPort} (${agentVersionId})\n`,
-    );
-    await supervise(children);
-  } catch (error) {
-    await stopDevelopmentChildren(children);
-    throw error;
-  }
+    },
+  });
 }
 
 if (

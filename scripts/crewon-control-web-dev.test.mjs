@@ -1,8 +1,12 @@
 import assert from "node:assert/strict";
 import { spawn } from "node:child_process";
 import { EventEmitter } from "node:events";
+import { createRequire } from "node:module";
+import { connect, createServer } from "node:net";
+import { dirname, join } from "node:path";
 import { PassThrough } from "node:stream";
 import test from "node:test";
+import { fileURLToPath } from "node:url";
 
 import {
   createControlDevEnvironment,
@@ -12,9 +16,12 @@ import {
   developmentRuntimeWorkerCount,
   developmentRuntimeWorkerEnvironment,
   responsesEndpoint,
+  spawnDevelopmentChild,
   stopDevelopmentChildren,
+  superviseDevelopmentChildren,
   waitDevelopmentChildExit,
   waitForDevelopmentExtensionHost,
+  withDevelopmentChildLifecycle,
 } from "./crewon-control-web-dev.mjs";
 
 test("uses the existing desktop development data directory on macOS", () => {
@@ -398,3 +405,385 @@ test("gives each local worker a unique owner and only one probe listener", () =>
     /development_runtime_worker_index_invalid/u,
   );
 });
+
+function listeningGrandchildCode({
+  ignoreTermination = false,
+  terminateAfterMs = 0,
+} = {}) {
+  return `
+    import { createServer } from "node:net";
+    ${ignoreTermination ? 'process.on("SIGTERM", () => {});' : ""}
+    ${terminateAfterMs > 0 ? `process.on("SIGTERM", () => setTimeout(() => process.exit(0), ${terminateAfterMs}));` : ""}
+    const listener = createServer((socket) => socket.end());
+    listener.listen(0, "127.0.0.1", () => {
+      console.log(JSON.stringify({ pid: process.pid, port: listener.address().port }));
+    });
+  `;
+}
+
+function wrapperCode({
+  exitAfterReady = false,
+  ignoreTermination = false,
+  terminateAfterMs = 0,
+} = {}) {
+  const grandchild = listeningGrandchildCode({
+    ignoreTermination,
+    terminateAfterMs,
+  });
+  return `
+    import { spawn } from "node:child_process";
+    const grandchild = spawn(process.execPath,
+      ["--input-type=module", "--eval", ${JSON.stringify(grandchild)}],
+      { env: {}, stdio: ["ignore", "pipe", "inherit"] });
+    grandchild.stdout.on("data", (chunk) => {
+      process.stdout.write(chunk);
+      ${exitAfterReady ? "process.exit(0);" : ""}
+    });
+    setInterval(() => {}, 1000);
+  `;
+}
+
+function waitFixtureListener(child) {
+  return new Promise((resolve, reject) => {
+    let buffered = "";
+    const finish = (error, value) => {
+      clearTimeout(timer);
+      child.stdout.off("data", received);
+      child.off("exit", exited);
+      child.off("error", failed);
+      if (error) reject(error);
+      else resolve(value);
+    };
+    const received = (chunk) => {
+      buffered += chunk.toString();
+      const end = buffered.indexOf("\n");
+      if (end >= 0) {
+        try {
+          finish(null, JSON.parse(buffered.slice(0, end)));
+        } catch (error) {
+          finish(error);
+        }
+      }
+    };
+    const exited = () => finish(new Error("fixture_exited_before_ready"));
+    const failed = (error) => finish(error);
+    const timer = setTimeout(
+      () => finish(new Error("fixture_ready_timeout")),
+      5000,
+    );
+    child.stdout.on("data", received);
+    child.once("exit", exited);
+    child.once("error", failed);
+  });
+}
+
+function fixturePortAcceptsConnections(port) {
+  return new Promise((resolve, reject) => {
+    const socket = connect({ host: "127.0.0.1", port });
+    socket.once("connect", () => {
+      socket.destroy();
+      resolve(true);
+    });
+    socket.once("error", (error) => {
+      socket.destroy();
+      if (error.code === "ECONNREFUSED") resolve(false);
+      else reject(error);
+    });
+    socket.setTimeout(1000, () => {
+      socket.destroy();
+      reject(new Error("fixture_connection_timeout"));
+    });
+  });
+}
+
+async function fixtureListener(t) {
+  const listener = createServer((socket) => socket.end());
+  await new Promise((resolve, reject) => {
+    listener.once("error", reject);
+    listener.listen(0, "127.0.0.1", resolve);
+  });
+  t.after(() => new Promise((resolve) => listener.close(resolve)));
+  return listener.address().port;
+}
+
+// POSIX child groups include descendants. Windows deliberately retains direct-child cleanup.
+test(
+  "an unregistered process-group flag never grants permission to signal a group",
+  { timeout: 8000 },
+  async (t) => {
+    const child = spawn(
+      process.execPath,
+      ["--input-type=module", "--eval", listeningGrandchildCode()],
+      { env: {}, stdio: ["ignore", "pipe", "ignore"] },
+    );
+    const managed = { child, name: "unregistered flag", processGroup: true };
+    t.after(() => stopDevelopmentChildren([managed], { graceMs: 75 }));
+    const ready = await waitFixtureListener(child);
+    await stopDevelopmentChildren([managed], { graceMs: 75 });
+    assert.equal(await fixturePortAcceptsConnections(ready.port), false);
+  },
+);
+
+test(
+  "owned POSIX group cleanup kills a TERM-resistant grandchild without touching another listener",
+  { skip: process.platform === "win32", timeout: 8000 },
+  async (t) => {
+    const unrelatedPort = await fixtureListener(t);
+    const managed = spawnDevelopmentChild(
+      "owned wrapper",
+      process.execPath,
+      [
+        "--input-type=module",
+        "--eval",
+        wrapperCode({ ignoreTermination: true }),
+      ],
+      { env: {}, stdio: ["ignore", "pipe", "ignore"] },
+    );
+    t.after(() => stopDevelopmentChildren([managed], { graceMs: 75 }));
+    const ready = await waitFixtureListener(managed.child);
+    assert.equal(managed.processGroup, true);
+    assert.equal(await fixturePortAcceptsConnections(ready.port), true);
+    await stopDevelopmentChildren([managed], { graceMs: 75 });
+    assert.equal(await fixturePortAcceptsConnections(ready.port), false);
+    assert.equal(await fixturePortAcceptsConnections(unrelatedPort), true);
+    // A second cleanup is safe even after the recorded group no longer exists.
+    await stopDevelopmentChildren([managed], { graceMs: 75 });
+  },
+);
+
+test(
+  "owned POSIX descendants are cleaned even after the pnpm-like wrapper exited",
+  { skip: process.platform === "win32", timeout: 8000 },
+  async (t) => {
+    const managed = spawnDevelopmentChild(
+      "exited wrapper",
+      process.execPath,
+      ["--input-type=module", "--eval", wrapperCode({ exitAfterReady: true })],
+      { env: {}, stdio: ["ignore", "pipe", "ignore"] },
+    );
+    t.after(() => stopDevelopmentChildren([managed], { graceMs: 75 }));
+    const ready = await waitFixtureListener(managed.child);
+    assert.equal((await waitDevelopmentChildExit(managed)).code, 0);
+    assert.equal(await fixturePortAcceptsConnections(ready.port), true);
+    await stopDevelopmentChildren([managed], { graceMs: 75 });
+    assert.equal(await fixturePortAcceptsConnections(ready.port), false);
+  },
+);
+
+test(
+  "repeated SIGTERM of the launcher waits for its owned service descendants to release their port",
+  { skip: process.platform === "win32", timeout: 10000 },
+  async (t) => {
+    const helper = new URL(
+      "./crewon-development-processes.mjs",
+      import.meta.url,
+    ).href;
+    const fixture = `
+      import { spawnDevelopmentChild, superviseDevelopmentChildren } from ${JSON.stringify(helper)};
+      const managed = spawnDevelopmentChild("service wrapper", process.execPath,
+        ["--input-type=module", "--eval", ${JSON.stringify(wrapperCode({ terminateAfterMs: 150 }))}],
+        { env: {}, stdio: ["ignore", "pipe", "ignore"] });
+      managed.child.stdout.pipe(process.stdout, { end: false });
+      await superviseDevelopmentChildren([managed]);
+    `;
+    const child = spawn(
+      process.execPath,
+      ["--input-type=module", "--eval", fixture],
+      { env: {}, stdio: ["ignore", "pipe", "pipe"] },
+    );
+    let errorText = "";
+    child.stderr.on("data", (chunk) => {
+      errorText += chunk.toString();
+    });
+    const launcher = { child, name: "test launcher" };
+    t.after(() => stopDevelopmentChildren([launcher]));
+    const ready = await waitFixtureListener(child);
+    assert.equal(await fixturePortAcceptsConnections(ready.port), true);
+    child.kill("SIGTERM");
+    await new Promise((resolve) => setTimeout(resolve, 25));
+    child.kill("SIGTERM");
+    assert.equal((await waitDevelopmentChildExit(launcher)).code, 0, errorText);
+    assert.equal(await fixturePortAcceptsConnections(ready.port), false);
+  },
+);
+
+test(
+  "a service startup failure closes all owned listeners and unregisters signal handlers",
+  { timeout: 8000 },
+  async (t) => {
+    const managed = spawnDevelopmentChild(
+      "running service",
+      process.execPath,
+      ["--input-type=module", "--eval", listeningGrandchildCode()],
+      { env: {}, stdio: ["ignore", "pipe", "ignore"] },
+    );
+    t.after(() => stopDevelopmentChildren([managed], { graceMs: 75 }));
+    const ready = await waitFixtureListener(managed.child);
+    const failed = spawnDevelopmentChild(
+      "failed service",
+      process.execPath,
+      ["--eval", "process.exit(2)"],
+      { env: {}, stdio: "ignore" },
+    );
+    t.after(() => stopDevelopmentChildren([failed], { graceMs: 75 }));
+    const before = [
+      process.listenerCount("SIGINT"),
+      process.listenerCount("SIGTERM"),
+    ];
+    await assert.rejects(
+      superviseDevelopmentChildren([managed, failed]),
+      /failed service exited unexpectedly \(2\)/u,
+    );
+    assert.deepEqual(
+      [process.listenerCount("SIGINT"), process.listenerCount("SIGTERM")],
+      before,
+    );
+    assert.equal(await fixturePortAcceptsConnections(ready.port), false);
+  },
+);
+
+test(
+  "repeated SIGTERM during startup readiness protects descendant cleanup",
+  { skip: process.platform === "win32", timeout: 10000 },
+  async (t) => {
+    const entry = new URL("./crewon-control-web-dev.mjs", import.meta.url).href;
+    const fixture = `
+      import { spawnDevelopmentChild, withDevelopmentChildLifecycle,
+        waitForDevelopmentExtensionHost } from ${JSON.stringify(entry)};
+      const children = [];
+      try {
+        await withDevelopmentChildLifecycle({ children, start: async ({ signal }) => {
+          const managed = spawnDevelopmentChild("starting service", process.execPath,
+            ["--input-type=module", "--eval", ${JSON.stringify(wrapperCode({ terminateAfterMs: 150 }))}],
+            { env: {}, stdio: ["ignore", "pipe", "ignore"] });
+          children.push(managed);
+          managed.child.stdout.pipe(process.stdout, { end: false });
+          await waitForDevelopmentExtensionHost({ child: managed.child,
+            environment: { CREWON_EXTENSION_HOST_PORT: "0" }, signal, deadlineMs: 4000 });
+        }});
+      } catch (error) {
+        if (error.message !== "development_extension_startup_cancelled") throw error;
+      }
+    `;
+    const child = spawn(
+      process.execPath,
+      ["--input-type=module", "--eval", fixture],
+      { env: {}, stdio: ["ignore", "pipe", "pipe"] },
+    );
+    let errorText = "";
+    child.stderr.on("data", (chunk) => {
+      errorText += chunk.toString();
+    });
+    const launcher = { child, name: "starting test launcher" };
+    t.after(() => stopDevelopmentChildren([launcher]));
+    const ready = await waitFixtureListener(child);
+    child.kill("SIGTERM");
+    await new Promise((resolve) => setTimeout(resolve, 25));
+    child.kill("SIGTERM");
+    assert.equal((await waitDevelopmentChildExit(launcher)).code, 0, errorText);
+    assert.equal(await fixturePortAcceptsConnections(ready.port), false);
+  },
+);
+
+test(
+  "an already cancelled readiness handoff closes services without waiting for another signal",
+  { timeout: 8000 },
+  async (t) => {
+    const managed = spawnDevelopmentChild(
+      "cancelled handoff",
+      process.execPath,
+      ["--input-type=module", "--eval", listeningGrandchildCode()],
+      { env: {}, stdio: ["ignore", "pipe", "ignore"] },
+    );
+    t.after(() => stopDevelopmentChildren([managed], { graceMs: 75 }));
+    const ready = await waitFixtureListener(managed.child);
+    const controller = new AbortController();
+    controller.abort();
+    await superviseDevelopmentChildren([managed], {
+      signal: controller.signal,
+    });
+    assert.equal(await fixturePortAcceptsConnections(ready.port), false);
+  },
+);
+
+test(
+  "partial startup cleanup preserves its failure and unregisters lifecycle handlers",
+  { timeout: 8000 },
+  async (t) => {
+    const children = [];
+    t.after(() => stopDevelopmentChildren(children, { graceMs: 75 }));
+    const before = [
+      process.listenerCount("SIGINT"),
+      process.listenerCount("SIGTERM"),
+    ];
+    let port;
+    const startupError = new Error("fixture_startup_failed");
+    await assert.rejects(
+      withDevelopmentChildLifecycle({
+        children,
+        start: async () => {
+          const managed = spawnDevelopmentChild(
+            "partial service",
+            process.execPath,
+            ["--input-type=module", "--eval", listeningGrandchildCode()],
+            { env: {}, stdio: ["ignore", "pipe", "ignore"] },
+          );
+          children.push(managed);
+          port = (await waitFixtureListener(managed.child)).port;
+          throw startupError;
+        },
+      }),
+      (error) => error === startupError,
+    );
+    assert.equal(await fixturePortAcceptsConnections(port), false);
+    assert.deepEqual(
+      [process.listenerCount("SIGINT"), process.listenerCount("SIGTERM")],
+      before,
+    );
+  },
+);
+
+test(
+  "the real Vite configuration fails on an occupied UI port without moving to another port",
+  { timeout: 15000 },
+  async (t) => {
+    const occupiedPort = await fixtureListener(t);
+    const uiRoot = fileURLToPath(
+      new URL("../apps/crewon-ui/", import.meta.url),
+    );
+    const uiRequire = createRequire(
+      new URL("../apps/crewon-ui/package.json", import.meta.url),
+    );
+    const viteCli = join(
+      dirname(uiRequire.resolve("vite/package.json")),
+      "bin",
+      "vite.js",
+    );
+    const managed = spawnDevelopmentChild(
+      "occupied Vite",
+      process.execPath,
+      [
+        viteCli,
+        "--host",
+        "127.0.0.1",
+        "--port",
+        String(occupiedPort),
+        "--mode",
+        "test",
+      ],
+      { cwd: uiRoot, env: {}, stdio: ["ignore", "ignore", "pipe"] },
+    );
+    t.after(() => stopDevelopmentChildren([managed], { graceMs: 75 }));
+    let errorText = "";
+    managed.child.stderr.on("data", (chunk) => {
+      errorText += chunk.toString();
+    });
+    const exit = await waitDevelopmentChildExit(managed);
+    assert.equal(exit.code, 1);
+    assert.match(
+      errorText,
+      new RegExp(`Port ${occupiedPort} is already in use`, "u"),
+    );
+    assert.equal(await fixturePortAcceptsConnections(occupiedPort), true);
+  },
+);
