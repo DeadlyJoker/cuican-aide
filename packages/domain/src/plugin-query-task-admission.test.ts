@@ -260,3 +260,93 @@ test("legacy query admissions cannot downgrade an original composed Run into a p
     /plugin_query_composition_unsupported/,
   );
 });
+
+test("composed query retains the exact original graph despite a different current query epoch and package", () => {
+  const composed = createExtensionRunBinding(
+    {
+      ...original,
+      schemaVersion: "crewon.extension-run-binding.v1",
+      composition: {
+        profileId: pin.profileId,
+        authorityEpoch: pin.authorityEpoch,
+        revision: 1,
+        lockDigest: digest,
+      },
+    },
+    digester,
+  );
+  const composedSource = parsePluginTaskAdmission({
+    ...source,
+    extensionBindingDigest: composed.bindingDigest,
+  });
+  const queried = createExtensionRunBinding(
+    {
+      ...binding,
+      schemaVersion: "crewon.extension-run-binding.v1",
+      composition:
+        composed.schemaVersion === "crewon.extension-run-binding.v1"
+          ? composed.composition
+          : assert.fail(),
+      source: {
+        runId: composed.runId,
+        bindingDigest: composed.bindingDigest,
+        operationId,
+      },
+    },
+    digester,
+  );
+  const admission = parsePluginQueryTaskAdmission({
+    ...input,
+    source: composedSource,
+    extensionBindingDigest: queried.bindingDigest,
+  });
+  assert.deepEqual(
+    assertPluginQueryTaskAdmission(
+      { admission, binding: queried, sourceBinding: composed, receipt },
+      digester,
+    ),
+    admission,
+  );
+  assert.throws(
+    () =>
+      assertPluginTaskAdmission(
+        {
+          admission: effectivePluginQueryTaskAdmission(admission),
+          binding: queried,
+          receipt,
+        },
+        digester,
+      ),
+    /plugin_task_admission_binding_mismatch/u,
+  );
+  assert.equal(queried.schemaVersion, "crewon.extension-run-binding.v1");
+  if (queried.schemaVersion !== "crewon.extension-run-binding.v1")
+    assert.fail();
+  for (const change of [
+    { profileId: "other-profile" },
+    { authorityEpoch: "current-epoch" },
+    { revision: 2 },
+    { lockDigest: digester.sha256("new-head") },
+  ]) {
+    const changed = createExtensionRunBinding(
+      { ...queried, composition: { ...queried.composition, ...change } },
+      digester,
+    );
+    assert.throws(
+      () =>
+        assertPluginQueryTaskAdmission(
+          {
+            admission: {
+              ...admission,
+              extensionBindingDigest: changed.bindingDigest,
+            },
+            binding: changed,
+            sourceBinding: composed,
+            receipt,
+          },
+          digester,
+        ),
+      /plugin_query_composition_source_mismatch/u,
+    );
+  }
+});

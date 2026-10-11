@@ -312,7 +312,12 @@ export class PluginQueryTaskApplicationService {
         throw new ApplicationError("conflict", "extension_thread_goal_active");
       const binding = createExtensionRunBinding(
         {
-          schemaVersion: "crewon.extension-run-binding.v0",
+          ...(source.binding.schemaVersion === "crewon.extension-run-binding.v1"
+            ? {
+                schemaVersion: "crewon.extension-run-binding.v1" as const,
+                composition: source.binding.composition,
+              }
+            : { schemaVersion: "crewon.extension-run-binding.v0" as const }),
           ...scope,
           actorId: actor.actorId,
           threadId: command.threadId,

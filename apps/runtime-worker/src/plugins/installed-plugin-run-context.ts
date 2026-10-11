@@ -270,7 +270,8 @@ export class InstalledPluginRunContext {
     if (saved === undefined) fail("installed_plugin_context_snapshot_invalid");
     if (saved.composition === null)
       fail("installed_plugin_composition_missing");
-    const purpose = checkedPurpose(purposeInput),
+    const requestedPurpose = checkedPurpose(purposeInput),
+      purpose = saved.query === null ? requestedPurpose : "observe",
       signal = checkedSignal(signalInput);
     const pkg = await authorizeInstalledPluginCompositionNode({
       lock: saved.composition,
@@ -587,6 +588,7 @@ export class InstalledPluginRunContext {
     const composition = await readInstalledPluginRunComposition({
       binding,
       admission,
+      query,
       compositions: this.#dependencies.compositions,
       signal,
       fail,

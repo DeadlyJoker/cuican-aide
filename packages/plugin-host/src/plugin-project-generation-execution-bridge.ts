@@ -1,3 +1,4 @@
+import { ownsTaskInvocationReference } from "./plugin-task-invocation-reference.ts";
 import {
   projectExecutionHostAccess,
   projectExecutionBorrowerAccess,
@@ -118,6 +119,16 @@ export class PluginProjectGenerationExecutionBridge {
       fields.ids as PluginUiOpaqueIdPort,
       "nextId",
     );
+  }
+
+  static isOwner(
+    input: unknown,
+  ): input is PluginProjectGenerationExecutionBridge {
+    return input !== null && typeof input === "object" && #invocations in input;
+  }
+
+  ownsInvocation(input: unknown): boolean {
+    return ownsTaskInvocationReference(input, this.#invocations, this.#closed);
   }
 
   hostService(): PluginHostService {

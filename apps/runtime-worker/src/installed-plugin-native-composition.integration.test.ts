@@ -44,6 +44,12 @@ test(
     assert.equal(original.scope.authorityEpoch, f.bootstrap.authorityEpoch);
     assert.deepEqual(original.hostServices, [
       PLUGIN_EXECUTION_REGISTRY_COMPOSITION_SERVICE,
+      ...(["1", "2"] as const).map((apiVersion) => ({
+        service: "crewon.tasks",
+        apiVersion,
+        implementationId: "crewon.desktop-task-core-binding.v1",
+        implementationRevision: 1,
+      })),
     ]);
     assert.ok(
       original.nodes.some(

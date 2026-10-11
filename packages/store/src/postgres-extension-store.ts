@@ -4,7 +4,10 @@ import {
   readPostgresRunComposition,
   assertRunCompositionConfiguration,
 } from "./plugin-run-composition-store-support.ts";
-import type { PreparedPluginTaskModelSelection } from "@crewon/application";
+import {
+  admitPostgresQueryRunComposition,
+  type ExtensionCompositionAdmissionOptions,
+} from "./plugin-query-run-composition-store-support.ts";
 import { loadPostgresMediaInputStage } from "./project-media-input-stage-markers.ts";
 import { PostgresProjectMediaGenerationArchive } from "./project-media-generation-archive.ts";
 import { PostgresProjectMediaResultStore } from "./project-media-result-store.ts";
@@ -707,8 +710,8 @@ export class PostgresExtensionStore implements ExtensionStore {
           this.#saveReceipt(client, scope, kind, receipt, result),
         assertCreditLink: (client, admission) =>
           this.#assertCreditLink(client, admission),
-        admit: (client, binding, revision, selection) =>
-          this.#admit(client, binding, revision, selection),
+        admit: (client, binding, revision, options) =>
+          this.#admit(client, binding, revision, options),
         commitTurn: (client, turn) =>
           this.#host.commitTurnWithinTransaction(client, turn),
       },
@@ -764,13 +767,16 @@ export class PostgresExtensionStore implements ExtensionStore {
     client: PoolClient,
     binding: ExtensionRunBinding,
     expectedActivationRevision: number,
-    selection?: PreparedPluginTaskModelSelection,
+    options: ExtensionCompositionAdmissionOptions = {},
   ) {
-    const composition = await admitPostgresRunComposition(
-      client,
-      this.#schemaName,
-      binding,
-    );
+    const composition = await (options.queryAdmission === undefined
+      ? admitPostgresRunComposition(client, this.#schemaName, binding)
+      : admitPostgresQueryRunComposition(
+          client,
+          this.#schemaName,
+          binding,
+          options.queryAdmission,
+        ));
     const configuration = await this.#configuration(
       client,
       binding,
@@ -782,7 +788,7 @@ export class PostgresExtensionStore implements ExtensionStore {
       await this.#activation(client, binding),
       expectedActivationRevision,
       configuration,
-      selection,
+      options.modelSelection,
     );
     await this.#assertDeployment(client, binding.tenantId, binding.target);
     if (binding.source !== null) {

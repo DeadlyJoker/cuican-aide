@@ -6,6 +6,8 @@ import {
   type PluginQueryHostPort,
 } from "@crewon/application";
 import { parsePluginTaskAdmissionPin } from "@crewon/domain";
+import { createPluginCompositionLock } from "@crewon/contracts/plugins";
+import { extensionStoreDigester } from "./extension-store-records.ts";
 import {
   actor,
   activateCommand,
@@ -24,6 +26,7 @@ export { actor, scope };
 export async function pluginQueryFixture(
   t: TestContext,
   backend: "sqlite" | "postgres",
+  options: Readonly<{ composition?: boolean }> = {},
 ) {
   const f = await configurationServiceFixture(t, backend);
   await f.seedDeployment();
@@ -60,6 +63,9 @@ export async function pluginQueryFixture(
     credits: "100",
   });
   let quoteCalls = 0;
+  const compositions = options.composition
+    ? installations.compositionStore!()
+    : null;
   const create = (
     extensionStore = f.first.store,
     runStore = f.first.parent,
@@ -82,6 +88,7 @@ export async function pluginQueryFixture(
         },
       },
       ...(pluginQueryHost === undefined ? {} : { pluginQueryHost }),
+      ...(compositions === null ? {} : { pluginCompositions: compositions }),
     });
   const pin = parsePluginTaskAdmissionPin({
     ...actor,
@@ -95,6 +102,75 @@ export async function pluginQueryFixture(
     action: "image.generate",
     authorityEpoch: "query-epoch",
   });
+  const provider =
+    compositions === null
+      ? null
+      : await installations.recordInstalledPackage(
+          installationRecipe("query-composed-provider", {
+            scope: profile,
+            actor,
+            pluginId: "test.query-source",
+          }),
+        );
+  const providerSelection =
+    provider === null
+      ? null
+      : await installations.commitSelection(
+          selectionRecipe(
+            provider.selection,
+            "query-composed-provider-enable",
+            { actor },
+          ),
+        );
+  const lock =
+    compositions === null || provider === null || providerSelection === null
+      ? null
+      : createPluginCompositionLock(
+          {
+            schemaVersion: "crewon.plugin-composition-lock.v1",
+            scope: { ...profile, authorityEpoch: pin.authorityEpoch },
+            revision: 1,
+            hostServices: [],
+            nodes: [
+              {
+                pluginId: pin.pluginId,
+                publisherId: pin.publisherId,
+                version: pin.version,
+                packageDigest: pin.packageDigest,
+                selectionRevision: pin.selectionRevision,
+                hostApi: "crewon.plugin-host.v1",
+                requires: [
+                  {
+                    service: "test.query-source",
+                    apiVersion: "1",
+                    optional: false,
+                  },
+                ],
+                provides: [],
+              },
+              {
+                pluginId: provider.package.pluginId,
+                publisherId: provider.package.publisherId,
+                version: provider.package.version,
+                packageDigest: provider.package.packageDigest,
+                selectionRevision: providerSelection.selection.revision,
+                hostApi: "crewon.plugin-host.v1",
+                requires: [],
+                provides: [{ service: "test.query-source", apiVersion: "1" }],
+              },
+            ],
+          },
+          extensionStoreDigester,
+        );
+  if (compositions !== null && lock !== null) {
+    await compositions.migrate();
+    await compositions.commit({
+      scope: lock.scope,
+      actor,
+      lock,
+      expectedRevision: null,
+    });
+  }
   const generationThread = "query-generation";
   await seedThread(f.first.parent, { ...actor, threadId: generationThread });
   const generation = await create().createTaskFromPlugin(
@@ -173,5 +249,8 @@ export async function pluginQueryFixture(
     host,
     create,
     quoteCalls: () => quoteCalls,
+    compositions,
+    lock,
+    providerSelection,
   };
 }

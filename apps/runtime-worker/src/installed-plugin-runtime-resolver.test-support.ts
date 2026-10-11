@@ -514,6 +514,7 @@ ${options.close === false ? "" : "async close(){f.records.push('runtime-close');
     installations,
     authorization: f.dependencies.authorization,
     resolveActor: async () => actor,
+    operations: f.operations,
     ...(compositions ? { compositions } : {}),
   });
   const resolvers: InstalledPluginRuntimeResolver[] = [];

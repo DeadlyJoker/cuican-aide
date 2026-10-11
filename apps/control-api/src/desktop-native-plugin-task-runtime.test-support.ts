@@ -15,12 +15,13 @@ import { verifyLocalPluginPackage } from "@crewon/plugin-host";
 import { SqliteRunStore } from "@crewon/store";
 import { productionSourceFixture } from "./production-plugin-source.test-support.ts";
 import {
-  nativeConfigurationManifest as manifest,
+  nativeConfigurationManifest as defaultManifest,
   nativeConfigurationSave as save,
 } from "./desktop-plugin-configuration.test-support.ts";
 import { activationTarget as defaultTarget } from "./desktop-installed-plugin-activation.test-support.ts";
 import type { AgentVersionAsset } from "@crewon/application";
 import type {
+  ExtensionManifest,
   ExtensionConfiguration,
   ExtensionExecutionTarget,
 } from "@crewon/domain";
@@ -65,6 +66,9 @@ export async function nativeTaskRuntimeFixture(
   retainedApproval?: "approved" | "unapproved",
   options: Readonly<{
     modelSiblings?: boolean;
+    projectExecution?: boolean;
+    businessManifest?: ExtensionManifest;
+    tasksApiVersion?: "1" | "2";
     composition?: boolean;
     nodeSource?: string;
     executionTarget?: ExtensionExecutionTarget;
@@ -96,6 +100,7 @@ export async function nativeTaskRuntimeFixture(
     }>;
   }> = {},
 ) {
+  const manifest = options.businessManifest ?? defaultManifest;
   let target = options.executionTarget ?? defaultTarget;
   let runtime:
       | Awaited<ReturnType<typeof createDesktopPluginRuntime>>
@@ -138,7 +143,25 @@ export async function nativeTaskRuntimeFixture(
     businessManifestPath: "business.json",
     requires: [
       { service: "crewon.execution", apiVersion: "1", optional: true },
-      { service: "crewon.tasks", apiVersion: "1", optional: true },
+      {
+        service: "crewon.tasks",
+        apiVersion: options.tasksApiVersion ?? "1",
+        optional: true,
+      },
+      ...(options.projectExecution
+        ? [
+            {
+              service: "crewon.project-generations",
+              apiVersion: "1",
+              optional: true,
+            },
+            {
+              service: "crewon.project-generation-queries",
+              apiVersion: "1",
+              optional: true,
+            },
+          ]
+        : []),
       ...(options.provider === undefined
         ? []
         : [
@@ -306,7 +329,7 @@ export async function nativeTaskRuntimeFixture(
   };
   const raw = {
     schemaVersion:
-      retained || options.composition
+      retained || options.composition || options.projectExecution
         ? "crewon.desktop-plugin-bootstrap.v3"
         : "crewon.desktop-plugin-bootstrap.v1",
     actor,
@@ -322,7 +345,9 @@ export async function nativeTaskRuntimeFixture(
         packageDigest,
         publicAssets: ["ui.mjs"],
       })),
-    ...(retained || options.composition ? { projects } : {}),
+    ...(retained || options.composition || options.projectExecution
+      ? { projects }
+      : {}),
     ...(options.composition
       ? {
           pluginComposition: {
@@ -599,14 +624,33 @@ export async function nativeTaskRuntimeFixture(
         })),
       });
     if (
+      input.operation === "queryResolveRegistration" &&
+      options.projectExecution
+    ) {
+      assert.equal(
+        input.expectedSource.admission.packageDigest,
+        source.packageDigest,
+      );
+      assert.deepEqual(input.expectedSource.binding.target, target);
+      return Response.json({
+        ...common,
+        expectedSource: input.expectedSource,
+        registration: { identity: entry.identity, manifest },
+      });
+    }
+    if (
       input.operation === "prepareCandidate" ||
-      input.operation === "readiness"
+      input.operation === "readiness" ||
+      (input.operation === "queryReadiness" && options.projectExecution)
     )
       return Response.json({
         ...common,
         identity: input.identity,
         configurationDigest: input.configuration.contentDigest,
         expectedTarget: input.expectedTarget,
+        ...(input.operation === "queryReadiness"
+          ? { expectedSource: input.expectedSource }
+          : {}),
         ...(input.operation === "prepareCandidate"
           ? { expectedSelectionRevision: input.expectedSelectionRevision }
           : {}),
@@ -620,13 +664,14 @@ export async function nativeTaskRuntimeFixture(
       });
     throw new Error("named_native_peer_operation_unexpected");
   };
-  const startup = retained
-    ? composeDesktopProjectStartup({
-        configuration: bootstrap,
-        actor,
-        nativeControl,
-      })
-    : undefined;
+  const startup =
+    retained || options.projectExecution
+      ? composeDesktopProjectStartup({
+          configuration: bootstrap,
+          actor,
+          nativeControl,
+        })
+      : undefined;
   const prepared = startup
     ? await prepareCreativeProjects(originalStore, startup.creativeProjects, {
         financialMode: "unmetered",
@@ -741,6 +786,7 @@ export async function nativeTaskRuntimeFixture(
   };
   return {
     actual,
+    prepared,
     originalStore,
     policyPath,
     invoke,
@@ -757,8 +803,19 @@ export async function nativeTaskRuntimeFixture(
     reopen: async () => {
       await runtime?.close();
       runtime = await createDesktopPluginRuntime(
-        { configuration: bootstrap, nativeControl },
-        { store: originalStore, identity, clock, digester: sha, fetch },
+        {
+          configuration: bootstrap,
+          nativeControl,
+          ...(startup?.uiRecovery ? { uiRecovery: startup.uiRecovery } : {}),
+        },
+        {
+          store: originalStore,
+          identity,
+          clock,
+          digester: sha,
+          fetch,
+          ...(prepared ? { creativeProjects: prepared } : {}),
+        },
       );
       return runtime;
     },

@@ -1,14 +1,20 @@
 import {
   ApplicationError,
+  capturePluginUiInvocationCommitAuthority,
   type PluginUiActionContext,
 } from "@crewon/application";
-import { extensionCanonicalJson } from "@crewon/domain";
+import {
+  extensionCanonicalJson,
+  parsePluginTaskAdmissionPin,
+} from "@crewon/domain";
 import {
   capturePluginNodeHostServiceCatalog,
   PluginTaskActionBridge,
+  PluginTaskInvocationRouter,
   type PluginActivationCandidate,
   type PluginNodeHostServiceCatalog,
   type PluginNodeLease,
+  type PluginProjectExecutionBorrower,
 } from "@crewon/plugin-host";
 import { SqliteRunStore } from "@crewon/store";
 import { DesktopPluginAuthority } from "./desktop-plugin-authority.ts";
@@ -51,6 +57,7 @@ export class DesktopPluginTaskServiceBinding {
   #installation: DesktopPluginInstallationRuntime | null = null;
   #core: InstalledPluginTaskRuntimeCore | null = null;
   #bridge: PluginTaskActionBridge | null = null;
+  #router: PluginTaskInvocationRouter | null = null;
   #startup: Promise<void> | null = null;
   #closed = false;
 
@@ -97,11 +104,8 @@ export class DesktopPluginTaskServiceBinding {
             lifecycle: BindingContext,
           ) => {
             this.#current();
-            const service = (
-              apiVersion === "1"
-                ? this.#bridge!.hostService()
-                : this.#bridge!.hostServiceV2()
-            ).bindForPlugin!(identity, lifecycle) as TaskPort;
+            const service = this.#router!.hostService(apiVersion as "1" | "2")
+              .bindForPlugin!(identity, lifecycle) as TaskPort;
             return Object.freeze({
               createTask: (input: unknown) => {
                 this.#current();
@@ -152,6 +156,17 @@ export class DesktopPluginTaskServiceBinding {
     const bridge = core.owner.sharedBridge(this);
     if (!PluginTaskActionBridge.isOwner(bridge)) unavailable();
     this.#bridge = bridge;
+    this.#router = new PluginTaskInvocationRouter({
+      ordinary: bridge,
+      projects: [
+        ...(core.projectGenerations
+          ? [core.projectGenerations.sharedExecution(this)]
+          : []),
+        ...(core.projectQueries
+          ? [core.projectQueries.sharedExecution(this)]
+          : []),
+      ],
+    });
     this.#core = core;
   }
 
@@ -202,6 +217,29 @@ export class DesktopPluginTaskServiceBinding {
     });
   }
 
+  borrowProject(
+    input: Parameters<PluginProjectExecutionBorrower["borrow"]>[0],
+  ): ReturnType<PluginProjectExecutionBorrower["borrow"]> {
+    this.#current();
+    capturePluginUiInvocationCommitAuthority(input.context).assertActive();
+    const pin = parsePluginTaskAdmissionPin(input.executionPin);
+    if (
+      extensionCanonicalJson(input.context.scope) !==
+        extensionCanonicalJson(this.#source.configuration.scope) ||
+      pin.tenantId !== input.context.scope.tenantId ||
+      pin.spaceId !== input.context.scope.spaceId ||
+      pin.profileId !== input.context.scope.profileId
+    )
+      unavailable();
+    return this.#installation!.borrowNode({
+      actor: input.context.actor,
+      scope: input.context.scope,
+      pluginId: pin.pluginId,
+      packageDigest: pin.packageDigest,
+      authorizeBorrow: input.authorizeBorrow,
+    });
+  }
+
   close(): void {
     this.#closed = true;
   }
@@ -211,6 +249,7 @@ export class DesktopPluginTaskServiceBinding {
       this.#closed ||
       this.#core === null ||
       this.#bridge === null ||
+      this.#router === null ||
       this.#installation === null
     )
       unavailable();

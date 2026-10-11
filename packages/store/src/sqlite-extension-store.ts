@@ -4,7 +4,10 @@ import {
   readSqliteRunComposition,
   assertRunCompositionConfiguration,
 } from "./plugin-run-composition-store-support.ts";
-import type { PreparedPluginTaskModelSelection } from "@crewon/application";
+import {
+  admitSqliteQueryRunComposition,
+  type ExtensionCompositionAdmissionOptions,
+} from "./plugin-query-run-composition-store-support.ts";
 import { loadSqliteMediaInputStage } from "./project-media-input-stage-markers.ts";
 import { SqliteProjectMediaGenerationArchive } from "./project-media-generation-archive.ts";
 import { SqliteProjectMediaResultStore } from "./project-media-result-store.ts";
@@ -616,8 +619,8 @@ export class SqliteExtensionStore implements ExtensionStore {
         transaction: (body, hooks) => this.#transaction(body, hooks),
         receipt: (scope, kind, receipt) => this.#receipt(scope, kind, receipt),
         verifyCreditReceipt: (result) => this.#verifyCreditReceipt(result),
-        admit: (binding, revision, selection) =>
-          this.#admit(binding, revision, selection),
+        admit: (binding, revision, options) =>
+          this.#admit(binding, revision, options),
         commitTurn: (recipe) => this.#host.commitTurnWithinTransaction(recipe),
         saveCreditAdmission: (admission) =>
           this.#saveCreditAdmission(admission),
@@ -692,9 +695,16 @@ export class SqliteExtensionStore implements ExtensionStore {
   #admit(
     binding: ExtensionRunBinding,
     expectedActivationRevision: number,
-    selection?: PreparedPluginTaskModelSelection,
+    options: ExtensionCompositionAdmissionOptions = {},
   ) {
-    const composition = admitSqliteRunComposition(this.#db, binding);
+    const composition =
+      options.queryAdmission === undefined
+        ? admitSqliteRunComposition(this.#db, binding)
+        : admitSqliteQueryRunComposition(
+            this.#db,
+            binding,
+            options.queryAdmission,
+          );
     const configuration = this.#configuration(
       binding,
       binding.configurationRevision,
@@ -705,7 +715,7 @@ export class SqliteExtensionStore implements ExtensionStore {
       this.#activation(binding),
       expectedActivationRevision,
       configuration,
-      selection,
+      options.modelSelection,
     );
     this.#assertDeployment(binding.tenantId, binding.target);
     if (binding.source !== null) {

@@ -77,6 +77,8 @@ export async function openInstalledPluginCompositionRuntime(
   }>,
 ) {
   const { prepared, contexts } = input;
+  const executionPurpose =
+    prepared.snapshot.context.run.source === null ? input.purpose : "observe";
   const lock = contexts.verifiedComposition(prepared.snapshot);
   if (!lock) fail("installed_plugin_composition_missing");
   const candidates = new Map<string, PluginActivationCandidate>();
@@ -125,7 +127,7 @@ export async function openInstalledPluginCompositionRuntime(
     lock,
     expectedScope: {
       ...prepared.scope,
-      authorityEpoch: prepared.admission.authorityEpoch,
+      authorityEpoch: lock.scope.authorityEpoch,
     },
     rootPluginId: prepared.admission.pluginId,
     installRoot: input.installRoot,
@@ -141,21 +143,21 @@ export async function openInstalledPluginCompositionRuntime(
     }),
     authority: {
       authorizePreparation: async ({ candidate }) => {
-        await authorize(candidate, input.purpose, input.signal);
+        await authorize(candidate, executionPurpose, input.signal);
         candidates.set(candidate.descriptor.pluginId, candidate);
         return "allow" as const;
       },
       beforePublication: async ({ node }) => {
         const candidate = candidates.get(node.pluginId);
         if (!candidate) fail("installed_plugin_runtime_candidate_missing");
-        await authorize(candidate, input.purpose, input.signal);
+        await authorize(candidate, executionPurpose, input.signal);
         published.add(node.pluginId);
       },
       authorizePublication: ({ node, candidate }) => {
         input.assertOpen(input.signal);
         contexts.assertCompositionAuthorityCurrent(
           prepared.snapshot,
-          input.purpose,
+          executionPurpose,
         );
         const original = candidates.get(node.pluginId);
         return published.has(node.pluginId) &&

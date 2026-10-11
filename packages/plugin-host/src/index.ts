@@ -164,3 +164,5 @@ export { appendProjectMediaGenerationUiServiceAvailability } from "./plugin-proj
 export { appendProjectMediaResultUiServiceAvailability } from "./plugin-project-media-result-host-service-availability.ts";
 
 export type { PluginProjectExecutionBorrower } from "./plugin-project-execution-borrower.ts";
+
+export { PluginTaskInvocationRouter } from "./plugin-task-invocation-router.ts";

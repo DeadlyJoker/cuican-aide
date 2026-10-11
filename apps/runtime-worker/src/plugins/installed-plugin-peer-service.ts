@@ -167,6 +167,20 @@ export class InstalledPluginPeerService {
             extensions: input.store.extensionStore(),
             runs: input.store,
             operations: input.store.externalOperationStore(),
+            ...(this.#execution.compositionExecution === undefined
+              ? {}
+              : {
+                  compositions:
+                    input.store.pluginInstallationStore().compositionStore!(),
+                  ...(this.#execution.compositionExecution
+                    .assertCurrentAuthority === undefined
+                    ? {}
+                    : {
+                        compositionAuthority:
+                          this.#execution.compositionExecution
+                            .assertCurrentAuthority,
+                      }),
+                }),
           }),
         }),
       );

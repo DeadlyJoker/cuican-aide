@@ -12,6 +12,7 @@ import type {
   RunStore,
   ExtensionRegistration,
   ExtensionReadiness,
+  PluginCompositionStore,
 } from "@crewon/application";
 import { loadPluginQuerySource } from "@crewon/application";
 import { parseExtensionHostActor } from "@crewon/contracts";
@@ -39,6 +40,11 @@ import { StoreBackedAgentVersionRuntimeResolver } from "../store-backed-agent-ve
 import { extensionToolDefinitions } from "../extensions/extension-tool-catalog.ts";
 import { parseRuntimeExtensionMaterialization } from "../extensions/extension-runtime-proof.ts";
 import { readInstalledPluginAgentRuntimeScope } from "./installed-plugin-agent-runtime-factory-proof.ts";
+import { readInstalledPluginRunComposition } from "./installed-plugin-run-composition.ts";
+import {
+  assertInstalledPluginCompositionAuthority,
+  type InstalledPluginCompositionAuthority,
+} from "./installed-plugin-composition-authority.ts";
 import {
   loadInstalledPluginBusinessRegistration,
   validateInstalledPluginConfiguration,
@@ -49,6 +55,8 @@ const digester = {
     `sha256:${createHash("sha256").update(value).digest("hex")}`,
 };
 export type InstalledPluginQueryHostDependencies = Readonly<{
+  compositions?: Pick<PluginCompositionStore, "loadLock">;
+  compositionAuthority?: InstalledPluginCompositionAuthority;
   executionReadiness?: InstalledPluginExecutionReadinessPort;
   scope: PluginProfileScope;
   installRoot: string;
@@ -110,6 +118,13 @@ export class InstalledPluginQueryHost implements PluginQueryHostPort {
       resolveActor: input.resolveActor.bind(input),
       resolveProfile: input.resolveProfile.bind(input),
       authorizePackage: input.authorizePackage.bind(input),
+      ...(input.compositions === undefined
+        ? {}
+        : {
+            compositions: Object.freeze({
+              loadLock: input.compositions.loadLock.bind(input.compositions),
+            }),
+          }),
       ...(input.executionReadiness === undefined
         ? {}
         : {
@@ -177,7 +192,10 @@ export class InstalledPluginQueryHost implements PluginQueryHostPort {
       binding: parseExtensionRunBinding(rawSource.binding, digester),
       operationId: rawSource.operationId,
     });
-    if (source.binding.schemaVersion === "crewon.extension-run-binding.v1")
+    if (
+      source.binding.schemaVersion === "crewon.extension-run-binding.v1" &&
+      this.#d.compositions === undefined
+    )
       throw new Error("installed_plugin_composition_query_unavailable");
     return Object.freeze({ actor, source });
   }
@@ -233,6 +251,20 @@ export class InstalledPluginQueryHost implements PluginQueryHostPort {
     s.throwIfAborted();
     if (!same(actual, input.source))
       throw new Error("installed_plugin_query_source_changed");
+    const composition = await readInstalledPluginRunComposition({
+      binding: actual.binding,
+      admission: actual.admission,
+      compositions: d.compositions,
+      signal: s,
+      fail(code) {
+        throw new Error(code);
+      },
+    });
+    assertInstalledPluginCompositionAuthority(
+      d.compositionAuthority,
+      composition,
+      "observe",
+    );
     const before = await this.#facts(input.source);
     for (const action of ["extension:query", "extension:read"] as const) {
       const decision = await d.authorization.authorize({
@@ -264,6 +296,11 @@ export class InstalledPluginQueryHost implements PluginQueryHostPort {
     s.throwIfAborted();
     if (versionDecision.outcome !== "allow")
       throw new Error("installed_plugin_query_forbidden");
+    assertInstalledPluginCompositionAuthority(
+      d.compositionAuthority,
+      composition,
+      "observe",
+    );
   }
   async #facts(source: PluginQuerySource) {
     const raw = await this.#d.extensions.loadExtensionActivation(

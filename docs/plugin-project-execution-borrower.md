@@ -1,5 +1,7 @@
 # 项目任务的共享实例执行通道
 
+后续接线更新：下文保留最初 Bridge-only 阶段的范围与证据。原 generation/current-query Owner 现已接入同一实际 Profile，真实 Native 生成、查询、重放、重开正例通过；historical-query Owner 的旧实例借用仍未接通。完整 Worker 回归暴露实际任务服务目录恢复缺口，未部署 Web/App。当前交付判断见[组合查询协议及剩余项](./plugin-query-composition-inheritance.md)。
+
 2026-10-12。普通 TaskOwner 已接原 Profile，但项目 generation、query、historical-query 三个 Owner 仍为每次调用建立自己的 Node Host。不能仅把它们的 `crewon.tasks` 服务改名后接普通任务桥：它们拥有不同的原 invocation、publication、项目关联、原 Run 与提交权限。
 
 本轮在原三个 Project ExecutionBridge 中增加 Host-only `executeFromBorrower`，复用原执行算法和原 invocation map。它捕获真实源 UI capability、原目标 pin、publication、saved command、事务与提交回调；只把目标实例获取和物理释放换成 Host 提供的共享借用。原 `execute(NodeHost, input)` 保持旧获取/释放路径，未修改 SDK、HTTP、数据库、任务/Run 或项目管理器。

@@ -112,11 +112,15 @@ export function assertPluginQueryTaskAdmission(
   const admission = parsePluginQueryTaskAdmission(input.admission);
   const binding = parseExtensionRunBinding(input.binding, digester);
   const source = parseExtensionRunBinding(input.sourceBinding, digester);
-  if (
-    binding.schemaVersion === "crewon.extension-run-binding.v1" ||
-    source.schemaVersion === "crewon.extension-run-binding.v1"
-  )
+  if (binding.schemaVersion !== source.schemaVersion)
     throw new Error("plugin_query_composition_unsupported");
+  if (
+    binding.schemaVersion === "crewon.extension-run-binding.v1" &&
+    source.schemaVersion === "crewon.extension-run-binding.v1" &&
+    extensionCanonicalJson(binding.composition) !==
+      extensionCanonicalJson(source.composition)
+  )
+    throw new Error("plugin_query_composition_source_mismatch");
   assertPluginTaskAdmission(
     {
       admission: admission.source,

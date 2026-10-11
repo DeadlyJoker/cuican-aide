@@ -1,3 +1,4 @@
+import { ownsTaskInvocationReference } from "./plugin-task-invocation-reference.ts";
 import { parsePluginUiJsonValue } from "@crewon/contracts/plugins";
 import {
   extensionCanonicalJson,
@@ -98,6 +99,10 @@ export class PluginTaskActionBridge {
 
   constructor(dependencies: Dependencies) {
     this.#dependencies = dependencies;
+  }
+
+  ownsInvocation(input: unknown): boolean {
+    return ownsTaskInvocationReference(input, this.#invocations, this.#closed);
   }
 
   hostService(): PluginHostService {

@@ -10,10 +10,7 @@ import {
   capturePluginTaskModelSelectionOption,
   assertPluginTaskModelSelectionTurn,
 } from "./plugin-task-model-selection-commit.ts";
-import {
-  assertPluginTaskModelSelectionAdmission,
-  type PreparedPluginTaskModelSelection,
-} from "@crewon/application";
+import { assertPluginTaskModelSelectionAdmission } from "@crewon/application";
 import {
   attachPostgresFoundationRun,
   assertPostgresFoundationTurnCurrent,
@@ -554,7 +551,10 @@ export async function commitPostgresExtensionTurn(
         client,
         binding,
         frozenInput.expectedActivationRevision,
-        selectedModel.selection,
+        {
+          modelSelection: selectedModel.selection,
+          queryAdmission: pluginQuery,
+        },
       );
       const mediaLink =
         media === null

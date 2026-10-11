@@ -1,14 +1,12 @@
 import { assertProjectStageTurnCurrent } from "./project-stage-turn-current.ts";
+import type { ExtensionCompositionAdmissionOptions } from "./plugin-query-run-composition-store-support.ts";
 import { assertPluginTaskCommitActive } from "@crewon/application";
 import { capturePluginTaskCommitAuthorityOption } from "./plugin-task-commit-authority-option.ts";
 import {
   capturePluginTaskModelSelectionOption,
   assertPluginTaskModelSelectionTurn,
 } from "./plugin-task-model-selection-commit.ts";
-import {
-  assertPluginTaskModelSelectionAdmission,
-  type PreparedPluginTaskModelSelection,
-} from "@crewon/application";
+import { assertPluginTaskModelSelectionAdmission } from "@crewon/application";
 import {
   attachSqliteFoundationRun,
   assertSqliteFoundationTurnCurrent,
@@ -182,7 +180,7 @@ type SqliteExtensionTurnHost = Readonly<{
   admit(
     binding: ExtensionRunBinding,
     expectedRevision: number,
-    selection?: PreparedPluginTaskModelSelection,
+    options: ExtensionCompositionAdmissionOptions,
   ): void;
   commitTurn(input: CommitTurnStartInput): CommitTurnStartResult;
   saveCreditAdmission(admission: ExtensionCreditAdmission): void;
@@ -492,11 +490,10 @@ export async function commitSqliteExtensionTurn(
               input,
               pluginQuery!,
             );
-      host.admit(
-        binding,
-        input.expectedActivationRevision,
-        selectedModel.selection,
-      );
+      host.admit(binding, input.expectedActivationRevision, {
+        modelSelection: selectedModel.selection,
+        queryAdmission: pluginQuery,
+      });
       const mediaLink =
         media === null
           ? null

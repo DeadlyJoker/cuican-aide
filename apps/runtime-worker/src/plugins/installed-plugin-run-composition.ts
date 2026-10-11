@@ -4,7 +4,12 @@ import {
   parsePluginCompositionLock,
   type PluginCompositionLock,
 } from "@crewon/contracts/plugins";
-import type { ExtensionRunBinding, PluginTaskAdmission } from "@crewon/domain";
+import {
+  parsePluginQueryTaskAdmission,
+  type ExtensionRunBinding,
+  type PluginTaskAdmission,
+  type PluginQueryTaskAdmission,
+} from "@crewon/domain";
 
 const digester = {
   sha256: (body: string) =>
@@ -15,6 +20,7 @@ export async function readInstalledPluginRunComposition(
   input: Readonly<{
     binding: ExtensionRunBinding;
     admission: PluginTaskAdmission;
+    query?: PluginQueryTaskAdmission | null;
     compositions: Pick<PluginCompositionStore, "loadLock"> | undefined;
     signal: AbortSignal;
     fail(code: string): never;
@@ -24,18 +30,32 @@ export async function readInstalledPluginRunComposition(
   if (binding.schemaVersion === "crewon.extension-run-binding.v0") return null;
   if (!input.compositions)
     return fail("installed_plugin_composition_execution_unavailable");
-  if (binding.source !== null)
+  const query =
+    input.query == null ? null : parsePluginQueryTaskAdmission(input.query);
+  if ((binding.source !== null) !== (query !== null))
     fail("installed_plugin_composition_query_unavailable");
+  // The caller has checked the query against the stored source Run and operation.
+  // Graph identity belongs to that source, while admission retains today's query authority.
+  const graphAdmission = query?.source ?? admission;
+  if (
+    query !== null &&
+    (query.runId !== binding.runId ||
+      query.extensionBindingDigest !== binding.bindingDigest ||
+      query.source.runId !== binding.source?.runId ||
+      query.source.extensionBindingDigest !== binding.source?.bindingDigest ||
+      query.operationId !== binding.source?.operationId)
+  )
+    fail("installed_plugin_composition_query_source_conflict");
   const reference = binding.composition;
   if (
-    reference.profileId !== admission.profileId ||
-    reference.authorityEpoch !== admission.authorityEpoch
+    reference.profileId !== graphAdmission.profileId ||
+    reference.authorityEpoch !== graphAdmission.authorityEpoch
   )
     fail("installed_plugin_composition_reference_conflict");
   const scope = Object.freeze({
     tenantId: binding.tenantId,
     spaceId: binding.spaceId,
-    profileId: admission.profileId,
+    profileId: graphAdmission.profileId,
   });
   signal.throwIfAborted();
   const raw = await input.compositions.loadLock({
@@ -57,10 +77,10 @@ export async function readInstalledPluginRunComposition(
   const root = lock.nodes.find((node) => node.pluginId === binding.pluginId);
   if (
     !root ||
-    root.publisherId !== admission.publisherId ||
-    root.version !== admission.version ||
-    root.packageDigest !== admission.packageDigest ||
-    root.selectionRevision !== admission.selectionRevision
+    root.publisherId !== graphAdmission.publisherId ||
+    root.version !== graphAdmission.version ||
+    root.packageDigest !== graphAdmission.packageDigest ||
+    root.selectionRevision !== graphAdmission.selectionRevision
   )
     fail("installed_plugin_composition_root_conflict");
   return lock;

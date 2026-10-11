@@ -263,6 +263,18 @@ export function composeInstalledPluginQueryHost(
     resolveActor: config.resolveActor,
     resolveProfile: query.resolveProfile,
     authorizePackage: config.authorizePackage,
+    ...(config.compositionExecution === undefined
+      ? {}
+      : {
+          compositions:
+            input.store.pluginInstallationStore().compositionStore!(),
+          ...(config.compositionExecution.assertCurrentAuthority === undefined
+            ? {}
+            : {
+                compositionAuthority:
+                  config.compositionExecution.assertCurrentAuthority,
+              }),
+        }),
     ...(input.executionReadiness === undefined
       ? {}
       : { executionReadiness: input.executionReadiness }),

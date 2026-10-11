@@ -5,8 +5,8 @@ import type {
   CommitTurnStartInput,
   CommitTurnStartResult,
   ExtensionMutationReceipt,
-  PreparedPluginTaskModelSelection,
 } from "@crewon/application";
+import type { ExtensionCompositionAdmissionOptions } from "./plugin-query-run-composition-store-support.ts";
 import type { ExtensionScope, ExtensionCreditAdmission } from "@crewon/domain";
 export type PostgresExtensionTurnHost = Readonly<{
   projectMediaGenerationsEnabled: boolean;
@@ -42,7 +42,7 @@ export type PostgresExtensionTurnHost = Readonly<{
     client: PoolClient,
     scope: CommitExtensionTurnInput["binding"],
     expectedRevision: number,
-    selection?: PreparedPluginTaskModelSelection,
+    options: ExtensionCompositionAdmissionOptions,
   ): Promise<void>;
   commitTurn(
     client: PoolClient,

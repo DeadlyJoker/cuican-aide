@@ -2,6 +2,8 @@
 
 日期：2026-10-11。目标仍是先稳定基础能力，完成可独立开发、安装和恢复的插件体系，再恢复业务插件建设。本页更新交付判断；[2026-10-09 审计](./dsh-plugin-foundation-review-20261009.md)保留各次历史版本、验收结果和限制。
 
+2026-10-12 当前增量补齐原组合查询锁继承，原 Native 项目生成/查询使用同一真实 Profile 实例，生成、查询、重放与重开正例通过。SQLite/PostgreSQL 查询保留原两包锁，真实 Worker resolver 恢复原依赖且拒绝生成，实际 query host 升级后预检原包并在撤权后拒绝。Domain/Application/Store 回归 142/142，Control/Host 121/121，均零跳过；Worker 87/90，三项原 Native 组合执行失败，暴露共享任务服务已进入原 lock 而 Worker 的实际目录尚未提供对应实现。完整 Worker 尚未通过，不能宣布插件闭环完成；没有更新 Web/桌面。详见[协议、证据和下一步目录缺口](./plugin-query-composition-inheritance.md)。
+
 2026-10-12 后续源码修正纯服务 provider 缺少 UI publication 时导致原插件目录整页拒绝的问题。仍复用原目录、安装和任务管理，只过滤经过真实字节/来源核验且没有 UI 的包，不给服务包授予 UI 权限。最终 UI/Host/Control 265/265、零跳过，类型与边界检查通过；未部署 Web 或正式桌面，详见[纯服务目录过滤](./plugin-node-catalog-exclusion.md)。
 
 随后原三个项目 ExecutionBridge 增加共享目标借用入口，保留各自原 source invocation、publication、事务提交和 durable result；真实 Host 生成包连续调用只 setup 一次，复制/释放/getter lease 与提交前撤回被拒绝。Host 32/32、原 Control SQLite 专项 31/31，正式项目 Owner 尚未接入，未运行 PG 或 Web/App。历史查询的旧包不能冒充当前 graph，仍需原历史锁证明。范围见[项目执行借用](./plugin-project-execution-borrower.md)。

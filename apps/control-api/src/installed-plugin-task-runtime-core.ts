@@ -654,6 +654,9 @@ export async function createInstalledPluginTaskRuntimeCore(
       projectGenerations = new InstalledPluginProjectGenerationOwner(
         {
           ...common,
+          ...(input.sharedBinding === undefined
+            ? {}
+            : { sharedBinding: input.sharedBinding }),
           publications: generations.publications,
           projects: generations.store,
           taskOwner: owner,
@@ -668,6 +671,9 @@ export async function createInstalledPluginTaskRuntimeCore(
       projectQueries = new InstalledPluginProjectQueryOwner(
         {
           ...common,
+          ...(input.sharedBinding === undefined
+            ? {}
+            : { sharedBinding: input.sharedBinding }),
           publications: queries.publications,
           generationReads: projectGenerationReads!,
           taskOwner: owner,

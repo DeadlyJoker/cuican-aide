@@ -1,3 +1,4 @@
+import { DesktopPluginTaskServiceBinding } from "./desktop-plugin-task-service-binding.ts";
 import {
   ApplicationError,
   ExtensionTaskApplicationService,
@@ -36,6 +37,7 @@ import {
   type PluginNodePreparedActivation,
   type PluginProjectGenerationDispatchPort,
   type PluginProjectGenerationExecutionResult,
+  type PluginProjectGenerationExecutionInput,
   type PluginUiHostServiceAvailabilityPort,
 } from "@crewon/plugin-host";
 import {
@@ -89,6 +91,7 @@ export type InstalledPluginProjectGenerationDependencies = Readonly<{
   ids: PluginUiOpaqueIdPort;
   digester: ContentDigester;
   maximumInvocations?: number;
+  sharedBinding?: DesktopPluginTaskServiceBinding;
 }>;
 type Dispatch = Parameters<PluginProjectGenerationDispatchPort["generate"]>[0];
 const owners = new WeakSet<object>();
@@ -119,6 +122,8 @@ export class InstalledPluginProjectGenerationOwner
   readonly #maximum: number;
   readonly #submit: ExtensionTaskApplicationService["createPublishedProjectTaskFromPlugin"];
   readonly #readiness: ExtensionTaskApplicationService["getPublishedProjectGenerationReadiness"];
+  readonly #sharedBinding: DesktopPluginTaskServiceBinding | null;
+  readonly #sharedExecution: PluginProjectGenerationExecutionBridge | null;
   #closing: Promise<void> | null = null;
 
   constructor(
@@ -141,6 +146,7 @@ export class InstalledPluginProjectGenerationOwner
       "clock",
       "ids",
       "digester",
+      ...(Object.hasOwn(provided, "sharedBinding") ? ["sharedBinding"] : []),
       ...(Object.hasOwn(provided, "maximumInvocations")
         ? ["maximumInvocations"]
         : []),
@@ -157,6 +163,12 @@ export class InstalledPluginProjectGenerationOwner
       throw new Error(
         "installed_plugin_project_generation_configuration_invalid",
       );
+    if (input.sharedBinding !== undefined) {
+      if (!DesktopPluginTaskServiceBinding.isOwner(input.sharedBinding))
+        throw new Error("installed_plugin_project_shared_binding_invalid");
+      input.taskOwner.sharedBridge(input.sharedBinding);
+    }
+    this.#sharedBinding = input.sharedBinding ?? null;
     const maximum = input.maximumInvocations ?? 32;
     if (!Number.isSafeInteger(maximum) || maximum < 1 || maximum > 128)
       throw new Error(
@@ -217,6 +229,13 @@ export class InstalledPluginProjectGenerationOwner
       }),
       maximumInvocations: maximum,
     });
+    this.#sharedExecution =
+      this.#sharedBinding === null
+        ? null
+        : new PluginProjectGenerationExecutionBridge({
+            clock: this.#dependencies.clock,
+            ids: this.#dependencies.ids,
+          });
     this.#bridge = new PluginProjectGenerationActionBridge({
       publications: this.#dependencies.publications,
       generation: {
@@ -323,9 +342,19 @@ export class InstalledPluginProjectGenerationOwner
     return work;
   }
 
+  sharedExecution(
+    binding: DesktopPluginTaskServiceBinding,
+  ): PluginProjectGenerationExecutionBridge {
+    this.#available();
+    if (binding !== this.#sharedBinding || this.#sharedExecution === null)
+      throw new Error("installed_plugin_project_shared_binding_invalid");
+    return this.#sharedExecution;
+  }
+
   close(): Promise<void> {
     if (this.#closing !== null) return this.#closing;
     this.#lifetime.abort();
+    this.#sharedExecution?.close();
     this.#bridge.close();
     this.#contexts.close();
     for (const execution of this.#executions) execution.close();
@@ -563,6 +592,40 @@ export class InstalledPluginProjectGenerationOwner
       { sourcePin, executionPin, request: parsed.input, prompt },
       this.#dependencies.digester,
     );
+    const executionInput: PluginProjectGenerationExecutionInput = {
+      context,
+      publication,
+      sourcePin,
+      executionPin,
+      request: parsed.input,
+      targetCandidate,
+      command,
+      authority: executionAuthority,
+      commit: ({
+        command: capturedCommand,
+        executionPin: capturedPin,
+        authority: capturedAuthority,
+      }) =>
+        observe("generation.task-commit", () =>
+          this.#submit({
+            actor,
+            command: capturedCommand,
+            reference: parsed.input.reference,
+            publication,
+            sourcePin,
+            executionPin: capturedPin,
+            authority: capturedAuthority,
+          }),
+        ),
+    };
+    if (this.#sharedBinding !== null && this.#sharedExecution !== null) {
+      await this.#sharedBinding.whenReady();
+      await current();
+      return this.#sharedExecution.executeFromBorrower(
+        { borrow: (input) => this.#sharedBinding!.borrowProject(input) },
+        executionInput,
+      );
+    }
     const bridge = new PluginProjectGenerationExecutionBridge({
       clock: this.#dependencies.clock,
       ids: this.#dependencies.ids,
@@ -602,32 +665,7 @@ export class InstalledPluginProjectGenerationOwner
       });
       committed = true;
       output = await observe("generation.node-execute", () =>
-        bridge.execute(host, {
-          context,
-          publication,
-          sourcePin,
-          executionPin,
-          request: parsed.input,
-          targetCandidate,
-          command,
-          authority: executionAuthority,
-          commit: ({
-            command: capturedCommand,
-            executionPin: capturedPin,
-            authority: capturedAuthority,
-          }) =>
-            observe("generation.task-commit", () =>
-              this.#submit({
-                actor,
-                command: capturedCommand,
-                reference: parsed.input.reference,
-                publication,
-                sourcePin,
-                executionPin: capturedPin,
-                authority: capturedAuthority,
-              }),
-            ),
-        }),
+        bridge.execute(host, executionInput),
       );
     } catch (error) {
       failure = error;
