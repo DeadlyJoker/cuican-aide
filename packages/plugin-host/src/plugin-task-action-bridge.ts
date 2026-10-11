@@ -32,7 +32,12 @@ import {
   type PluginTaskServiceV2,
   type PluginQueryTaskRequest,
 } from "@crewon/plugin-sdk/node";
-import { PluginNodeHost, type PluginHostService } from "./plugin-node-host.ts";
+import {
+  PluginNodeHost,
+  type PluginHostService,
+  type PluginNodeLease,
+} from "./plugin-node-host.ts";
+import { PluginCompositionCoordinator } from "./plugin-composition-coordinator.ts";
 import {
   bridgeAction,
   bridgeFailure,
@@ -67,7 +72,15 @@ type Invocation = {
   request: string | null;
   pending: Promise<PluginTaskReceipt> | null;
   committed: PluginUiCommittedTaskOutcome | null;
+  assertInstanceCurrent: (() => Promise<void>) | null;
+  assertInstanceCurrentSync: (() => void) | null;
 };
+type ActionLeaseAccess = Readonly<{
+  prepareLease(
+    invocation: Invocation,
+  ): (() => PluginNodeLease) | Promise<() => PluginNodeLease>;
+  assertCurrent?(invocation: Invocation): Promise<void>;
+}>;
 
 /** Host-only bridge. Plugins receive a per-instance task port and an ephemeral invocation reference. */
 export class PluginTaskActionBridge {
@@ -119,9 +132,82 @@ export class PluginTaskActionBridge {
   }
 
   actions(nodeHost: PluginNodeHost): PluginUiActionPort {
+    const access: ActionLeaseAccess = {
+      prepareLease: (invocation) => () =>
+        nodeHost.acquire({
+          pluginId: invocation.pin.pluginId,
+          packageDigest: invocation.pin.packageDigest,
+          purpose: "newOperation",
+          authorizeBorrow: (identity) =>
+            this.#authorizeBorrow(invocation, identity),
+        }),
+    };
     return Object.freeze({
-      invoke: (context: PluginUiActionContext) =>
-        this.#invoke(nodeHost, context),
+      invoke: (context: PluginUiActionContext) => this.#invoke(access, context),
+    });
+  }
+
+  /** Host-only borrowing of an existing graph; never creates, activates or repairs an instance. */
+  actionsFromComposition(
+    input: Readonly<{
+      coordinator: PluginCompositionCoordinator;
+      /** Fresh owner-validated Node graph digest, without synchronizing or changing selection. */
+      currentLock(
+        context: PluginUiActionContext,
+      ): string | null | Promise<string | null>;
+    }>,
+  ): PluginUiActionPort {
+    const coordinator = input.coordinator;
+    if (
+      !PluginCompositionCoordinator.isOwner(coordinator) ||
+      typeof input.currentLock !== "function"
+    )
+      bridgeFailure("plugin_action_composition_owner_invalid");
+    const currentLock = input.currentLock.bind(input);
+    const acquire = PluginCompositionCoordinator.prototype.acquireScopedCurrent;
+    const prepareLease = async (
+      invocation: Invocation,
+    ): Promise<() => PluginNodeLease> => {
+      this.#available(invocation);
+      const lockDigest = await currentLock(invocation.context);
+      this.#available(invocation);
+      if (typeof lockDigest !== "string" || lockDigest.length === 0)
+        bridgeFailure("plugin_action_composition_unavailable");
+      const borrow = () =>
+        acquire.call(coordinator, {
+          scope: {
+            ...invocation.context.scope,
+            authorityEpoch: invocation.pin.authorityEpoch,
+          },
+          lockDigest,
+          pluginId: invocation.pin.pluginId,
+          authorizeBorrow: (identity) =>
+            this.#authorizeBorrow(invocation, identity),
+        });
+      invocation.assertInstanceCurrentSync = () => {
+        const current = borrow();
+        try {
+          if (
+            invocation.instance !== null &&
+            current.identity !== invocation.instance
+          )
+            bridgeFailure("plugin_action_composition_instance_changed");
+        } finally {
+          current.release();
+        }
+      };
+      return borrow;
+    };
+    const access: ActionLeaseAccess = {
+      prepareLease,
+      assertCurrent: async (invocation) => {
+        if (invocation.instance === null) return;
+        await prepareLease(invocation);
+        invocation.assertInstanceCurrentSync?.();
+      },
+    };
+    return Object.freeze({
+      invoke: (context: PluginUiActionContext) => this.#invoke(access, context),
     });
   }
 
@@ -151,6 +237,26 @@ export class PluginTaskActionBridge {
       }),
       invocation.pin,
     );
+  }
+
+  #authorizeBorrow(
+    invocation: Invocation,
+    identity: PluginIdentity,
+  ): "allow" | "deny" {
+    this.#available(invocation);
+    return identity.pluginId === invocation.pin.pluginId &&
+      identity.version === invocation.pin.version &&
+      identity.packageDigest === invocation.pin.packageDigest &&
+      this.#selected(invocation)
+      ? "allow"
+      : "deny";
+  }
+
+  #assertCurrentSync(invocation: Invocation): void {
+    this.#available(invocation);
+    if (!this.#selected(invocation))
+      bridgeFailure("plugin_invocation_authority_changed");
+    invocation.assertInstanceCurrentSync?.();
   }
 
   async #assertCurrent(invocation: Invocation): Promise<void> {
@@ -183,6 +289,10 @@ export class PluginTaskActionBridge {
       bridgeFailure("plugin_invocation_authority_changed");
     await assertPluginUiInvocationCurrent(context);
     this.#available(invocation);
+    if (invocation.assertInstanceCurrent !== null) {
+      await invocation.assertInstanceCurrent();
+      this.#available(invocation);
+    }
     if (!this.#selected(invocation))
       bridgeFailure("plugin_invocation_authority_changed");
   }
@@ -243,6 +353,7 @@ export class PluginTaskActionBridge {
     invocation.request = request;
     invocation.pending = (async () => {
       await this.#assertCurrent(invocation);
+      this.#assertCurrentSync(invocation);
       const create = query
         ? this.#dependencies.tasks.createQueryTaskFromPlugin
         : this.#dependencies.tasks.createTaskFromPlugin;
@@ -263,6 +374,17 @@ export class PluginTaskActionBridge {
             )
               bridgeFailure("plugin_invocation_owner_mismatch");
             await this.#assertCurrent(invocation);
+            this.#assertCurrentSync(invocation);
+          },
+          assertActive: ({ actor, pin }) => {
+            if (
+              extensionCanonicalJson(actor) !==
+                extensionCanonicalJson(invocation.context.actor) ||
+              extensionCanonicalJson(pin) !==
+                extensionCanonicalJson(invocation.pin)
+            )
+              bridgeFailure("plugin_invocation_owner_mismatch");
+            this.#assertCurrentSync(invocation);
           },
         },
       );
@@ -287,7 +409,7 @@ export class PluginTaskActionBridge {
     return invocation.pending;
   }
 
-  async #invoke(nodeHost: PluginNodeHost, context: PluginUiActionContext) {
+  async #invoke(access: ActionLeaseAccess, context: PluginUiActionContext) {
     if (this.#closed) bridgeFailure("plugin_invocation_unavailable");
     if (this.#invocations.size >= 128) bridgeFailure("plugin_invocation_limit");
     const pin = bridgePin(context);
@@ -311,26 +433,21 @@ export class PluginTaskActionBridge {
       request: null,
       pending: null,
       committed: null,
+      assertInstanceCurrent: null,
+      assertInstanceCurrentSync: null,
     };
+    if (access.assertCurrent)
+      invocation.assertInstanceCurrent = () =>
+        access.assertCurrent!(invocation);
     this.#invocations.set(ref, invocation);
-    let lease: ReturnType<PluginNodeHost["acquire"]> | undefined;
+    let lease: PluginNodeLease | undefined;
     try {
       await this.#assertCurrent(invocation);
-      lease = nodeHost.acquire({
-        pluginId: pin.pluginId,
-        packageDigest: pin.packageDigest,
-        purpose: "newOperation",
-        authorizeBorrow: (identity) => {
-          this.#available(invocation);
-          return identity.pluginId === pin.pluginId &&
-            identity.version === pin.version &&
-            identity.packageDigest === pin.packageDigest &&
-            this.#selected(invocation)
-            ? "allow"
-            : "deny";
-        },
-      });
+      const prepared = access.prepareLease(invocation);
+      const acquire = prepared instanceof Promise ? await prepared : prepared;
+      lease = acquire();
       invocation.instance = lease.identity;
+      this.#assertCurrentSync(invocation);
       // The service name is the declared plugin ID, never an arbitrary action string.
       const service = lease.getService<PluginActionsService>(pin.pluginId, "1");
       const fields = bridgeFields(service, ["actions", "invoke"]);
@@ -345,6 +462,7 @@ export class PluginTaskActionBridge {
         | Readonly<{ kind: "returned"; output: PluginUiJsonValue }>
         | Readonly<{ kind: "failed"; error: unknown }>;
       try {
+        this.#assertCurrentSync(invocation);
         const output = await invoke(
           Object.freeze({
             invocationRef: ref,
@@ -361,6 +479,7 @@ export class PluginTaskActionBridge {
       if (invocation.committed !== null) return invocation.committed;
       if (dispatched.kind === "failed") throw dispatched.error;
       await this.#assertCurrent(invocation);
+      this.#assertCurrentSync(invocation);
       return parsePluginUiJsonValue(dispatched.output);
     } finally {
       invocation.open = false;

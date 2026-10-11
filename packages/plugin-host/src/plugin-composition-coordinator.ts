@@ -97,6 +97,10 @@ export class PluginCompositionCoordinator {
   #closed = false;
   #installation: LocalPluginInstallationHost | null = null;
 
+  static isOwner(input: unknown): input is PluginCompositionCoordinator {
+    return input !== null && typeof input === "object" && #host in input;
+  }
+
   constructor(
     input: Readonly<{
       scope: PluginCompositionScope;
@@ -293,6 +297,41 @@ export class PluginCompositionCoordinator {
   }
 
   acquireCurrent(
+    input: Readonly<{
+      lockDigest: string;
+      pluginId: string;
+      authorizeBorrow: Parameters<
+        PluginNodeHost["acquire"]
+      >[0]["authorizeBorrow"];
+    }>,
+  ): PluginNodeLease {
+    return this.#acquireCurrent(input);
+  }
+
+  /** A borrowed current graph belongs to this exact profile and authority epoch. */
+  acquireScopedCurrent(
+    input: Readonly<{
+      scope: PluginCompositionScope;
+      lockDigest: string;
+      pluginId: string;
+      authorizeBorrow: Parameters<
+        PluginNodeHost["acquire"]
+      >[0]["authorizeBorrow"];
+    }>,
+  ): PluginNodeLease {
+    const scope = input.scope;
+    if (
+      !scope ||
+      scope.tenantId !== this.#scope.tenantId ||
+      scope.spaceId !== this.#scope.spaceId ||
+      scope.profileId !== this.#scope.profileId ||
+      scope.authorityEpoch !== this.#scope.authorityEpoch
+    )
+      fail("plugin_composition_scope_conflict");
+    return this.#acquireCurrent(input);
+  }
+
+  #acquireCurrent(
     input: Readonly<{
       lockDigest: string;
       pluginId: string;

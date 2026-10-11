@@ -46,6 +46,13 @@ import { PluginNodeHost } from "./plugin-node-host.ts";
 import { PluginTaskActionBridge } from "./plugin-task-action-bridge.ts";
 import { createPluginTaskHostServiceRegistrations } from "./plugin-core-node-host-services.ts";
 import { capturePluginNodeHostServiceCatalog } from "./plugin-node-host-service-catalog.ts";
+import { PluginCompositionCoordinator } from "./plugin-composition-coordinator.ts";
+import { publishInstalledPluginComposition } from "./installed-plugin-composition-publisher.ts";
+import {
+  installLifecycleProvider,
+  lifecycleProviderId,
+  sharedLifecycleService,
+} from "./plugin-task-action-composition.test-support.ts";
 
 export { actor };
 export const threadId = "installed-plugin-paid-thread";
@@ -93,9 +100,13 @@ export async function taskActionFixture(
   options: Readonly<{
     queryTasks?: boolean;
     nodeServiceCatalog?: "versioned";
+    composition?: true;
+    backend?: "sqlite" | "postgres";
   }> = {},
 ) {
-  const f = await configurationServiceFixture(t, "sqlite");
+  const f = await configurationServiceFixture(t, options.backend ?? "sqlite", {
+    maxPoolSize: 1,
+  });
   await f.seedDeployment();
   await f.service.saveConfiguration(actor, saveCommand);
   await f.service.setActivation(actor, activateCommand);
@@ -140,6 +151,7 @@ export async function taskActionFixture(
     accepted: [] as CommitExtensionTurnResult[],
     queryGate: null as Promise<void> | null,
     queryEntered: null as (() => void) | null,
+    compositionDigestOverride: undefined as string | null | undefined,
   };
   const tasksFor = (storage: typeof f.first) =>
     new ExtensionTaskApplicationService({
@@ -240,32 +252,75 @@ export async function taskActionFixture(
       },
     },
   };
+  const catalog = capturePluginNodeHostServiceCatalog([
+    ...createPluginTaskHostServiceRegistrations(bridge),
+    {
+      metadata: {
+        service: fixtureLifecycle.service,
+        apiVersion: fixtureLifecycle.apiVersion,
+        implementationId: "fixture.lifecycle.v1",
+        implementationRevision: 1,
+      },
+      implementation: fixtureLifecycle,
+    },
+  ]);
   const services =
-    options.nodeServiceCatalog === "versioned"
-      ? capturePluginNodeHostServiceCatalog([
-          ...createPluginTaskHostServiceRegistrations(bridge),
-          {
-            metadata: {
-              service: fixtureLifecycle.service,
-              apiVersion: fixtureLifecycle.apiVersion,
-              implementationId: "fixture.lifecycle.v1",
-              implementationRevision: 1,
-            },
-            implementation: fixtureLifecycle,
-          },
-        ]).implementations
+    options.nodeServiceCatalog === "versioned" || options.composition
+      ? catalog.implementations
       : [
           bridge.hostService(),
           ...(options.queryTasks ? [bridge.hostServiceV2()] : []),
           fixtureLifecycle,
         ];
-  const nodeHost = new PluginNodeHost({
-    services,
-  });
+  const nodeHost = options.composition
+    ? null
+    : new PluginNodeHost({
+        services,
+      });
+  const coordinator = options.composition
+    ? new PluginCompositionCoordinator({
+        scope: { ...profile, authorityEpoch: state.epoch },
+        installRoot,
+        services: catalog.registrations,
+      })
+    : null;
+  const compositions = ledger.compositionStore();
+  if (coordinator) await compositions.migrate();
+  const provider = coordinator
+    ? await installLifecycleProvider({
+        root,
+        installRoot,
+        ledger,
+        actor,
+        profile,
+      })
+    : null;
+  const synchronize = async () => {
+    assert.ok(coordinator);
+    const publication = await publishInstalledPluginComposition({
+      scope: { ...profile, authorityEpoch: state.epoch },
+      actor,
+      installRoot,
+      hostServices: catalog.metadata,
+      installations: ledger,
+      compositions,
+      signal: new AbortController().signal,
+      authorizeSnapshot: async () => "allow",
+    });
+    const result = await coordinator.synchronize({
+      lock: publication.lock,
+      authority: {
+        authorizePreparation: () => "allow",
+        authorizePublication: () => "allow",
+      },
+    });
+    assert.deepEqual(result.failures, []);
+    return publication.lock;
+  };
   t.after(async () => {
     bridge.close();
     try {
-      await nodeHost.close();
+      await (coordinator ?? nodeHost)!.close();
     } finally {
       await removeOwnedTree(root);
     }
@@ -277,7 +332,7 @@ export async function taskActionFixture(
 import { definePlugin, CREWON_TASKS_SERVICE, CREWON_TASKS_API_VERSION, CREWON_TASKS_V2_API_VERSION, type PluginTaskServiceV2, type PluginActionsService } from '@crewon/plugin-sdk/node';
 export default definePlugin({apiVersion:'crewon.plugin-host.v1',pluginId:${JSON.stringify(scope.pluginId)},setup(context){
   const tasks = context.services.get<PluginTaskServiceV2>(CREWON_TASKS_SERVICE,${options.queryTasks ? "CREWON_TASKS_V2_API_VERSION" : "CREWON_TASKS_API_VERSION"});
-  const lifecycle = context.services.get<{read():Promise<{value:string}>}>('fixture.lifecycle','1');
+  const lifecycle = context.services.get<{read():Promise<{value:string}>}>('${options.composition ? sharedLifecycleService : "fixture.lifecycle"}','1');
   const actions:PluginActionsService = {
     actions:[{contributionId:'workbench',action:'image.generate',kind:'generateTask'},{contributionId:'workbench',action:'image.read',kind:'read'}${options.queryTasks ? ",{contributionId:'workbench',action:'image.query',kind:'queryTask'}" : ""}],
     async invoke({invocationRef,action,input}){
@@ -338,7 +393,13 @@ export default definePlugin({apiVersion:'crewon.plugin-host.v1',pluginId:${JSON.
           apiVersion: options.queryTasks ? "2" : "1",
           optional: false,
         },
-        { service: "fixture.lifecycle", apiVersion: "1", optional: false },
+        {
+          service: options.composition
+            ? sharedLifecycleService
+            : "fixture.lifecycle",
+          apiVersion: "1",
+          optional: false,
+        },
       ],
       provides: [{ service: scope.pluginId, apiVersion: "1" }],
       contributions: [
@@ -372,12 +433,14 @@ export default definePlugin({apiVersion:'crewon.plugin-host.v1',pluginId:${JSON.
   );
   state.selection = enabled.selection;
   await rm(source, { recursive: true, force: true });
-  await nodeHost.activate({
-    installRoot,
-    expectedPluginId: scope.pluginId,
-    expectedPackageDigest: installed.packageDigest,
-    authorizeActivation: () => "allow",
-  });
+  if (coordinator) await synchronize();
+  else
+    await nodeHost!.activate({
+      installRoot,
+      expectedPluginId: scope.pluginId,
+      expectedPackageDigest: installed.packageDigest,
+      authorizeActivation: () => "allow",
+    });
   const packages = new LocalPluginUiPackageReader({
     profile,
     installRoot,
@@ -388,7 +451,16 @@ export default definePlugin({apiVersion:'crewon.plugin-host.v1',pluginId:${JSON.
     profiles,
     authorization,
     packages,
-    actions: bridge.actions(nodeHost),
+    actions: coordinator
+      ? bridge.actionsFromComposition({
+          coordinator,
+          currentLock: async () =>
+            state.compositionDigestOverride === undefined
+              ? ((await compositions.loadCurrent({ scope: profile }))
+                  ?.lockDigest ?? null)
+              : state.compositionDigestOverride,
+        })
+      : bridge.actions(nodeHost!),
     committedTasks: authority,
     clock: { now: () => state.now },
     ids: { nextId: () => randomBytes(32).toString("base64url") },
@@ -420,7 +492,8 @@ export default definePlugin({apiVersion:'crewon.plugin-host.v1',pluginId:${JSON.
       }),
     );
     state.selection = result.selection;
-    nodeHost.deactivate(scope.pluginId);
+    coordinator?.revoke(scope.pluginId);
+    nodeHost?.deactivate(scope.pluginId);
     assert.deepEqual(
       await ledger.loadSelection({ scope: profile, pluginId: scope.pluginId }),
       state.selection,
@@ -431,6 +504,9 @@ export default definePlugin({apiVersion:'crewon.plugin-host.v1',pluginId:${JSON.
     extensionState: f.state,
     bridge,
     nodeHost,
+    coordinator,
+    provider,
+    synchronize,
     authority,
     service,
     ledger,
