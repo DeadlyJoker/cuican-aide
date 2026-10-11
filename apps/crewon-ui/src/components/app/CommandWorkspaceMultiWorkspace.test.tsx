@@ -119,6 +119,27 @@ it("keeps every conversation under its persisted owner when adding and activatin
       container.querySelector('[data-workspace-id="workspace-empty"]')
         ?.textContent,
     ).toContain("Empty project");
+    const emptyWorkspace = container.querySelector(
+      '[data-workspace-id="workspace-empty"]',
+    )!;
+    expect(
+      emptyWorkspace.querySelectorAll("[data-linked-thread-id]"),
+    ).toHaveLength(0);
+    expect(
+      emptyWorkspace.querySelector(".sidebar-empty-hint")?.textContent,
+    ).toBe("暂无任务");
+    expect(
+      container.querySelectorAll(
+        ".standalone-thread-list [data-linked-thread-id]",
+      ),
+    ).toHaveLength(1);
+    expect(
+      container
+        .querySelector(
+          '.standalone-thread-list [data-linked-thread-id="thread-old"]',
+        )
+        ?.closest("[data-workspace-id]"),
+    ).toBeNull();
   };
   try {
     await render("workspace-a");
@@ -145,6 +166,19 @@ it("keeps every conversation under its persisted owner when adding and activatin
         .click(),
     );
     expect(onOpen).toHaveBeenCalledExactlyOnceWith("thread-a");
+    assertOwnership();
+    expect(
+      container
+        .querySelector(".space-node.current")
+        ?.getAttribute("data-workspace-id"),
+    ).toBe("workspace-b");
+    expect(threads.map(({ id, workspaceId }) => ({ id, workspaceId }))).toEqual(
+      [
+        { id: "thread-a", workspaceId: "workspace-a" },
+        { id: "thread-b", workspaceId: "workspace-b" },
+        { id: "thread-old", workspaceId: undefined },
+      ],
+    );
     expect(container.querySelector(".space-tree")?.outerHTML).toMatchSnapshot();
   } finally {
     await act(async () => root.unmount());

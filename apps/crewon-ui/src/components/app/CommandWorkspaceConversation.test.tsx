@@ -1,6 +1,6 @@
 import type { Thread } from "@crewon/app-server-protocol/v2/Thread";
 import { renderToStaticMarkup } from "react-dom/server";
-import { describe, expect, it } from "vitest";
+import { afterEach, describe, expect, it, vi } from "vitest";
 
 import {
   createStreamingTextBuffer,
@@ -11,9 +11,12 @@ import { createDemoTurn, createDraftDemoThread } from "../../lib/demo/demoData";
 import {
   presentControlRunTerminal,
   clearControlRunSynchronization,
+  controlThreadHasPendingCanonicalSync,
 } from "../../lib/control-runtime/controlRunTerminalPresentation";
 
 describe("CommandThreadRoom", () => {
+  afterEach(() => vi.restoreAllMocks());
+
   it("stops thinking on a trusted terminal receipt while retaining output and blocking replay until canonical sync", () => {
     const thread = createDraftDemoThread({
       locale: "zh",
@@ -70,13 +73,15 @@ describe("CommandThreadRoom", () => {
   });
 
   it("retains an unsynchronized terminal reply when the next Run owns the live stream", () => {
+    const firstTurnAt = Date.parse("2026-10-10T00:00:00Z");
+    vi.spyOn(Date, "now").mockReturnValue(firstTurnAt + 5_000);
     const value = createDraftDemoThread({
       locale: "zh",
       newDraftPreview: "",
       newDraftThread: "连续对话",
     });
     value.turns = [
-      createDemoTurn({ text: "第一轮", responseText: "", nowMs: 1000 }),
+      createDemoTurn({ text: "第一轮", responseText: "", nowMs: firstTurnAt }),
     ];
     value.turns[0]!.id = "older";
     const thread = presentControlRunTerminal(value, "older", {
@@ -92,10 +97,12 @@ describe("CommandThreadRoom", () => {
     const next = createDemoTurn({
       text: "下一轮",
       responseText: "",
-      nowMs: 2000,
+      nowMs: firstTurnAt + 4_000,
     });
     next.id = "newer";
     next.status = "inProgress";
+    next.completedAt = null;
+    next.durationMs = null;
     thread.turns.push(next);
     const markup = renderToStaticMarkup(
       <CommandThreadRoom
@@ -113,6 +120,23 @@ describe("CommandThreadRoom", () => {
     expect(markup.match(/新一轮实时输出/g)).toHaveLength(1);
     expect(markup).toContain('data-local-preview="pending-reply:older"');
     expect(markup).not.toContain("message-edit-pending-reply:older");
+    expect(controlThreadHasPendingCanonicalSync(thread)).toBe(true);
+    expect(thread.turns[0]!.items).toEqual(value.turns[0]!.items);
+    expect(thread.turns[1]!.status).toBe("inProgress");
+    expect(markup).toContain('aria-busy="true"');
+    expect(markup).toContain(
+      'data-status="inProgress" aria-label="正在处理 2"',
+    );
+    expect(markup).toContain("Agent 正在执行");
+    expect(markup).not.toContain('data-message-id="pending-reply:older"');
+    const editButtons = [
+      ...markup.matchAll(/<button[^>]*aria-label="编辑消息"[^>]*>/gu),
+    ];
+    expect(editButtons).toHaveLength(2);
+    expect(
+      editButtons.every(([button]) => button.includes('disabled=""')),
+    ).toBe(true);
+    expect(markup).toContain("刚刚");
     expect(markup).toMatchSnapshot();
   });
 

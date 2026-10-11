@@ -101,6 +101,18 @@ describe("CrewON resource catalog MVP", () => {
       />,
     );
 
+    expect(markup).toContain('role="group" aria-label="账号登录与注册"');
+    expect(markup).toContain('aria-pressed="true" type="button">登录</button>');
+    expect(markup).toContain(
+      'aria-pressed="false" type="button">注册</button>',
+    );
+    const password = markup.match(/<input[^>]*name="password"[^>]*>/)?.[0];
+    expect(password).toContain('type="password"');
+    expect(password).toContain('autoComplete="current-password"');
+    expect(password).toContain('required=""');
+    expect(markup).not.toContain('name="email"');
+    expect(markup).not.toContain('name="confirmPassword"');
+    expect(markup).toContain("使用企业微信登录");
     expect(markup).toMatchSnapshot();
   });
 
@@ -126,6 +138,28 @@ describe("CrewON resource catalog MVP", () => {
       </>,
     );
 
+    expect(markup).toContain(
+      'aria-pressed="false" type="button">登录</button>',
+    );
+    expect(markup).toContain('aria-pressed="true" type="button">注册</button>');
+    const form = markup.match(
+      /<form class="crewon-auth-form">([\s\S]*?)<\/form>/,
+    )?.[1];
+    expect(form).toBeDefined();
+    expect(form).toContain('name="username"');
+    expect(form).toContain('name="email"');
+    expect(form).toContain('autoComplete="new-password"');
+    const confirmation = form!.match(
+      /<input[^>]*name="confirmPassword"[^>]*>/,
+    )?.[0];
+    expect(confirmation).toContain('type="password"');
+    expect(confirmation).toContain('minLength="8"');
+    expect(confirmation).toContain('required=""');
+    expect(markup).toContain("使用企业邮箱注册 CrewON 账号");
+    expect(markup).not.toContain("agent-platform user 表");
+    expect(markup).not.toContain("使用企业微信登录");
+    expect(markup).toContain('role="dialog"');
+    expect(markup).toContain('name="newPassword"');
     expect(markup).toMatchSnapshot();
   });
 
