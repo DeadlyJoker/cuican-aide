@@ -16,6 +16,7 @@ import {
 
 import { useStreamingTextState } from "../thread/useStreamingTextState";
 import { usePendingThreadSubmissions } from "../thread/usePendingThreadSubmissions";
+import { initialThreadRouteSelection } from "./appThreadRoute";
 
 export function useAppThreadState() {
   const [showArchivedThreads, setShowArchivedThreads] = useState(false);
@@ -31,7 +32,10 @@ export function useAppThreadState() {
   const [collection, dispatch] = useReducer(
     reducerRef.current,
     undefined,
-    initialThreadCollection,
+    () => ({
+      ...initialThreadCollection(),
+      selectedThreadId: initialThreadRouteSelection(),
+    }),
   );
   const threads = useMemo(() => materializeThreads(collection), [collection]);
   const { selectedThreadId, activeTurnByThread } = collection;
