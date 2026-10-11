@@ -76,6 +76,8 @@ CrewON 继续使用现有 Node、Run、Tool、Store 与 SSE 路径。业务插�
 
 插件项目仍使用同一套宿主 Workspace/Thread 能力。新增[持久 namespace 与事务隔离](./plugin-project-workspace-isolation.md)按真实账号、profile、插件、发布者与项目绑定不透明 workspaceId，原普通 create/fork 和项目 binding 写入使用同事务 fence；归属不随包升级变动，也不能收养旧会话占用的空间。后续已堵住空/普通 workspace、关联已有会话及第二个已安装插件冒领同一项目的绕行；同账号/profile/project 预留锁与 workspace 锁共同保护首次 namespace 创建和所有 binding 写入，历史不重新归属。[原 Native 分配器](./plugin-project-workspace-native-allocation.md)已能创建可信项目目录并向原 v2 registry 非激活追加，保持当前文件读取与活动 workspace，支持稳定 ID、实际进程 CAS、排他 lease 和明确恢复。两部分尚未产品接线，中央 Agent/Node provisioning、旧 CreativeProject 查询的插件范围和文件面板仍缺失。不能仅凭 namespace 或 Native registered 宣称 SQL 已提交、中央会话已绑定、全部项目查询已隔离或用户已经拥有执行权限。
 
+后续只读审计确认，旧 metadata 与产物的 principal 范围、两条项目创建路径及 UI receipt 仍有插件隔离缺口。workspace namespace 不能充当 metadata 创建归属证明。按[同一套项目管理的隔离接线](./plugin-project-management-isolation.md)先建立新项目的明确归属与完整读写/replay fence，再接原目录分配和 Conversation；旧项目不收编，公开 v0 形状不变。这是已确定的实施顺序，尚未实现或发布该新项目协议。
+
 本轮源码验证使用 Node 24.19.0，证据分别限定为：
 
 - **Control 专项：** 100 项通过，4 项 PostgreSQL 条件跳过；覆盖实际 owner 状态路由、Profile 自动实例协调及相关原路径，不能当成真实 PG 验收。
