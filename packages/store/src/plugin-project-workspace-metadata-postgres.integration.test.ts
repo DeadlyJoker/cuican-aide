@@ -5,6 +5,11 @@ import { workspaceNamespaceFixture } from "./plugin-project-workspace.test-suppo
 import { creationRecipe } from "./creative-project-store.test-support.ts";
 import { migratePostgresPluginProjectMetadataOwners } from "./plugin-project-metadata-owner-schema.ts";
 import { pluginProjectMetadataOwnerColumns } from "./plugin-project-metadata-owner-records.ts";
+import { parsePluginProjectWorkspaceNamespace } from "@crewon/domain";
+import {
+  namespaceColumns,
+  namespaceValues,
+} from "./plugin-project-workspace-store-support.ts";
 
 for (const matching of [true, false]) {
   test(
@@ -76,11 +81,68 @@ for (const matching of [true, false]) {
               error.cause.message ===
                 "plugin_project_workspace_metadata_owner_conflict",
           );
+          // Persisted stale registration fixture: the production writer above correctly refused it.
+          const stale = parsePluginProjectWorkspaceNamespace({
+            schemaVersion: "crewon.plugin-project-workspace-namespace.v1",
+            owner,
+            workspaceId: input.workspaceId,
+            createdAt,
+          });
+          await c.query(
+            `INSERT INTO ${schema}.plugin_project_workspace_namespaces(${namespaceColumns}) VALUES(${Array.from({ length: 11 }, (_, i) => `$${i + 1}`).join(",")})`,
+            [...namespaceValues(stale)],
+          );
+        }
+        const reads = f.parent.pluginProjectWorkspaceNamespaces();
+        const { projectId: _, ...scope } = owner;
+        if (matching) {
+          assert.equal(
+            (await reads.loadNamespace({ owner }))!.workspaceId,
+            input.workspaceId,
+          );
+          assert.equal(
+            (
+              await reads.listNamespaces({
+                owner: scope,
+                afterProjectId: null,
+                limit: 1,
+              })
+            ).namespaces[0]!.workspaceId,
+            input.workspaceId,
+          );
+          await c.query(
+            `DROP TABLE ${schema}.plugin_project_metadata_owner_schema_version`,
+          );
+          await assert.rejects(
+            reads.loadNamespace({ owner }),
+            /plugin_project_metadata_owner_schema_invalid/,
+          );
+          await assert.rejects(
+            reads.listNamespaces({
+              owner: scope,
+              afterProjectId: null,
+              limit: 1,
+            }),
+            /plugin_project_metadata_owner_schema_invalid/,
+          );
+        } else {
+          await assert.rejects(
+            reads.loadNamespace({ owner }),
+            /plugin_project_workspace_metadata_owner_conflict/,
+          );
+          await assert.rejects(
+            reads.listNamespaces({
+              owner: scope,
+              afterProjectId: null,
+              limit: 1,
+            }),
+            /plugin_project_workspace_metadata_owner_conflict/,
+          );
         }
         const count = await c.query(
           `SELECT COUNT(*) AS n FROM ${schema}.plugin_project_workspace_namespaces`,
         );
-        assert.equal(Number(count.rows[0].n), matching ? 1 : 0);
+        assert.equal(Number(count.rows[0].n), 1);
       } finally {
         c.release();
         await pool.end();

@@ -65,7 +65,7 @@ export class PostgresPluginProjectWorkspaceStore
     return this.#transaction(async (c) => {
       if (!(await hasPostgresPluginProjectWorkspaceSchema(c, this.#schema)))
         return null;
-      return decodeNamespace(
+      const namespace = decodeNamespace(
         (
           await c.query(
             `SELECT * FROM ${this.#prefix}${PLUGIN_PROJECT_WORKSPACE_TABLE} WHERE ${parameters(namespaceOwnerWhere)} AND project_id=$8`,
@@ -74,6 +74,13 @@ export class PostgresPluginProjectWorkspaceStore
         ).rows[0],
         owner,
       );
+      if (namespace !== null)
+        await assertPostgresPluginProjectWorkspaceMetadata(
+          c,
+          this.#schema,
+          namespace.owner,
+        );
+      return namespace;
     });
   }
   async listNamespaces(
@@ -97,6 +104,12 @@ export class PostgresPluginProjectWorkspaceStore
         )
       ).rows;
       const all = rows.map((row) => decodeNamespace(row, v.owner)!);
+      for (const namespace of all)
+        await assertPostgresPluginProjectWorkspaceMetadata(
+          c,
+          this.#schema,
+          namespace.owner,
+        );
       const namespaces = Object.freeze(all.slice(0, v.limit));
       return Object.freeze({
         namespaces,

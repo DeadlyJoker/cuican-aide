@@ -44,48 +44,57 @@ export class SqlitePluginProjectWorkspaceStore
     });
   }
   async migrate(): Promise<void> {
-    this.#transaction(() => migrateSqlitePluginProjectWorkspaces(this.#db));
+    this.#transaction("write", () =>
+      migrateSqlitePluginProjectWorkspaces(this.#db),
+    );
   }
   async loadNamespace(
     input: Parameters<PluginProjectWorkspaceReadStore["loadNamespace"]>[0],
   ) {
     const owner = namespaceLoad(input);
-    this.#open();
-    if (!hasSqlitePluginProjectWorkspaceSchema(this.#db)) return null;
-    return decodeNamespace(
-      this.#db
-        .prepare(
-          `SELECT * FROM ${table} WHERE ${namespaceOwnerWhere} AND project_id=?`,
-        )
-        .get(...namespaceOwnerValues(owner), owner.projectId),
-      owner,
-    );
+    return this.#transaction("read", () => {
+      if (!hasSqlitePluginProjectWorkspaceSchema(this.#db)) return null;
+      const namespace = decodeNamespace(
+        this.#db
+          .prepare(
+            `SELECT * FROM ${table} WHERE ${namespaceOwnerWhere} AND project_id=?`,
+          )
+          .get(...namespaceOwnerValues(owner), owner.projectId),
+        owner,
+      );
+      if (namespace !== null)
+        assertSqlitePluginProjectWorkspaceMetadata(this.#db, namespace.owner);
+      return namespace;
+    });
   }
   async listNamespaces(
     input: Parameters<PluginProjectWorkspaceReadStore["listNamespaces"]>[0],
   ) {
     const v = namespaceList(input);
-    this.#open();
-    if (!hasSqlitePluginProjectWorkspaceSchema(this.#db))
+    return this.#transaction("read", () => {
+      if (!hasSqlitePluginProjectWorkspaceSchema(this.#db))
+        return Object.freeze({
+          namespaces: Object.freeze([]),
+          nextProjectId: null,
+        });
+      const rows = this.#db
+        .prepare(
+          `SELECT * FROM ${table} WHERE ${namespaceOwnerWhere} ${v.afterProjectId === null ? "" : "AND project_id COLLATE BINARY>?"} ORDER BY project_id COLLATE BINARY LIMIT ?`,
+        )
+        .all(
+          ...namespaceOwnerValues(v.owner),
+          ...(v.afterProjectId === null ? [] : [v.afterProjectId]),
+          v.limit + 1,
+        );
+      const all = rows.map((row) => decodeNamespace(row, v.owner)!);
+      for (const namespace of all)
+        assertSqlitePluginProjectWorkspaceMetadata(this.#db, namespace.owner);
+      const namespaces = Object.freeze(all.slice(0, v.limit));
       return Object.freeze({
-        namespaces: Object.freeze([]),
-        nextProjectId: null,
+        namespaces,
+        nextProjectId:
+          all.length > v.limit ? namespaces.at(-1)!.owner.projectId : null,
       });
-    const rows = this.#db
-      .prepare(
-        `SELECT * FROM ${table} WHERE ${namespaceOwnerWhere} ${v.afterProjectId === null ? "" : "AND project_id COLLATE BINARY>?"} ORDER BY project_id COLLATE BINARY LIMIT ?`,
-      )
-      .all(
-        ...namespaceOwnerValues(v.owner),
-        ...(v.afterProjectId === null ? [] : [v.afterProjectId]),
-        v.limit + 1,
-      );
-    const all = rows.map((row) => decodeNamespace(row, v.owner)!);
-    const namespaces = Object.freeze(all.slice(0, v.limit));
-    return Object.freeze({
-      namespaces,
-      nextProjectId:
-        all.length > v.limit ? namespaces.at(-1)!.owner.projectId : null,
     });
   }
   /** Only an original live installed UI invocation can enter this internal write path today. */
@@ -99,6 +108,7 @@ export class SqlitePluginProjectWorkspaceStore
     await q.assertTransactionCurrent();
     q.assertActive();
     return this.#transaction(
+      "write",
       () => {
         if (!hasSqlitePluginProjectWorkspaceSchema(this.#db))
           throw new Error("plugin_project_workspace_schema_missing");
@@ -161,9 +171,13 @@ export class SqlitePluginProjectWorkspaceStore
       },
     );
   }
-  #transaction<T>(run: () => T, beforeCommit: () => void = () => {}): T {
+  #transaction<T>(
+    mode: "read" | "write",
+    run: () => T,
+    beforeCommit: () => void = () => {},
+  ): T {
     this.#open();
-    this.#db.exec("BEGIN IMMEDIATE");
+    this.#db.exec(mode === "read" ? "BEGIN" : "BEGIN IMMEDIATE");
     try {
       const result = run();
       beforeCommit();

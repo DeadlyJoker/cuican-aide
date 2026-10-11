@@ -8,6 +8,10 @@
 
 “独立管理”指同一套管理能力中的归属隔离，不是每个插件复制一个管理系统。隔离在原服务和存储入口执行，右栏只投影该插件获准访问的项目与产物。即使插件绕过页面过滤直接调用接口，也不能跨归属读取或修改。
 
+工作空间 namespace 的原 SQLite/PostgreSQL 读取接口也复用写入时的 metadata 归属核验：返回登记前，检查完整八字段和原项目 principal；列表连同用于判断下一页的行一起检查，发现不匹配或部分归属 schema 时拒绝整次读取，不返回目录 ID 或游标。SQLite 使用原连接的只读事务取得一致快照，不为读取占用 `BEGIN IMMEDIATE` 写锁；PostgreSQL 在原事务内复核。旧 legacy 分支保持原行为，仍不构成新项目授权。这是内部原 Store 的防护，不是允许插件提交 owner 的公开接口，也没有签发目录操作或 Agent 执行权限。
+
+该读取补充与原 namespace、Conversation 绑定及 PostgreSQL 占用锁回归联合 **43 passed、0 failed、0 skipped**，使用任务专属 PostgreSQL 18.6 实例，随后停止并清理。Store 类型检查、架构边界和文档格式检查通过。SQLite 正例由真实 UI 创建 protected metadata；旧登记冲突与 PostgreSQL protected metadata 为命名持久 fixture。这些结果不替代真实 Native 目录、Web 或正式桌面验收。
+
 | 管理对象 | 继续复用                                  | 隔离边界                                                               |
 | -------- | ----------------------------------------- | ---------------------------------------------------------------------- |
 | 项目     | 原创建、列表、详情、归档与恢复            | Host 绑定完整归属，SQL 分页前过滤；详情和写入再次校验                  |
@@ -90,7 +94,7 @@ Application 已补内部 `PluginProjectCreationScope` 来源引用。私有发�
 
 metadata 归属明确后，原 Native allocator 创建目录并非激活追加原 registry，保持当前 workspace 和活动读取。Main 与 Control 使用私有、真实子进程绑定的分配桥，不增加 renderer 分配 API；准备票据不接受 caller root、workspaceId 或 actor。
 
-随后原 Conversation 事务一次写入 namespace、Thread、binding 与 receipt。Native 文件系统提交、metadata 创建和 Conversation SQL 是不同阶段：保存各自回执，失败明确恢复同一 ID，不声称跨进程整体原子性。Native registered 不代表 SQL 已提交，更不代表 Agent 执行已授权。打开项目只读状态，不自动恢复失败分配或重发外部操作。
+namespace 登记与原 Conversation 写入目前是独立事务；原 Conversation 在自己的事务内复核 namespace，再写入 Thread、binding 与 receipt。Native 文件系统提交、metadata 创建、namespace 登记和 Conversation SQL 是不同阶段：保存各自回执，失败明确恢复同一 ID，不声称跨进程整体原子性。Native registered 不代表 SQL 已提交，更不代表 Agent 执行已授权。打开项目只读状态，不自动恢复失败分配或重发外部操作。
 
 ### 4. 中央 Agent 与正式交付
 
