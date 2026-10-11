@@ -1,3 +1,10 @@
+import type { CreativeProjectScope } from "@crewon/domain";
+import {
+  assetLegacyProjectScope,
+  assertSqliteAssetReceiptLegacyAccess,
+} from "./project-asset-legacy-access.ts";
+import { captureSqliteCreativeProjectLegacyAccess } from "./creative-project-legacy-access.ts";
+import { readSqliteLegacyCreativeProject } from "./creative-project-sqlite-legacy-read.ts";
 import { assertSqliteAssetVtwoRecoverySchema } from "./project-asset-vtwo-recovery-schema.ts";
 import {
   captureSqliteProjectFoundationDownstream,
@@ -23,6 +30,7 @@ import {
   type ProjectAssetReferenceImageStore,
   type ProjectAssetCommitAuthority,
   type ProjectAssetCommitOptions,
+  type ProjectAssetMutationIdentity,
 } from "@crewon/application";
 import {
   assetHead,
@@ -106,7 +114,10 @@ export class SqliteProjectAssetStore
   }
   async loadAsset(input: AssetInput<"loadAsset">) {
     const q = captureAssetRead(input, ["assetId"]);
-    return this.#read(assetHead(this.#d, q.owner, q.projectId, q.assetId!));
+    return this.#read(
+      assetHead(this.#d, q.owner, q.projectId, q.assetId!),
+      assetLegacyProjectScope(q.owner, q.projectId),
+    );
   }
   async loadReferenceImageSource(
     input: Parameters<
@@ -118,6 +129,7 @@ export class SqliteProjectAssetStore
       () =>
         this.#execute(loadAssetReferenceImagePlan(this.#d, q, this.#verifier)),
       undefined,
+      { projectScope: assetLegacyProjectScope(q.actor, q.query.projectId) },
     );
   }
   async loadRevision(input: AssetInput<"loadRevision">) {
@@ -130,6 +142,7 @@ export class SqliteProjectAssetStore
         q.assetId!,
         q.contentRevision!,
       ),
+      assetLegacyProjectScope(q.owner, q.projectId),
     );
   }
   async loadReferenceRevision(input: AssetInput<"loadReferenceRevision">) {
@@ -142,11 +155,15 @@ export class SqliteProjectAssetStore
         q.assetId!,
         q.referenceRevision!,
       ),
+      assetLegacyProjectScope(q.owner, q.projectId),
     );
   }
   async listAssets(input: AssetInput<"listAssets">) {
     const q = captureAssetRead(input, ["kind", "afterAssetId", "limit"]);
-    return this.#read(assetPage(this.#d, q));
+    return this.#read(
+      assetPage(this.#d, q),
+      assetLegacyProjectScope(q.owner, q.projectId),
+    );
   }
   async listRevisions(input: AssetInput<"listRevisions">) {
     const q = captureAssetRead(input, [
@@ -154,7 +171,10 @@ export class SqliteProjectAssetStore
       "afterContentRevision",
       "limit",
     ]);
-    return this.#read(assetContentPage(this.#d, q));
+    return this.#read(
+      assetContentPage(this.#d, q),
+      assetLegacyProjectScope(q.owner, q.projectId),
+    );
   }
   async listReferences(input: AssetInput<"listReferences">) {
     const q = captureAssetRead(input, [
@@ -162,7 +182,10 @@ export class SqliteProjectAssetStore
       "afterReferenceRevision",
       "limit",
     ]);
-    return this.#read(assetReferencePage(this.#d, q));
+    return this.#read(
+      assetReferencePage(this.#d, q),
+      assetLegacyProjectScope(q.owner, q.projectId),
+    );
   }
   async loadMutationReceipt(
     input: AssetInput<"loadMutationReceipt">,
@@ -184,6 +207,7 @@ export class SqliteProjectAssetStore
           authority,
         ),
       authority,
+      { receiptIdentity: identity },
     );
   }
 
@@ -210,6 +234,13 @@ export class SqliteProjectAssetStore
           },
         ),
       authority,
+      {
+        projectScope: assetLegacyProjectScope(
+          prepared.actor,
+          prepared.command.projectId,
+        ),
+        receiptIdentity: prepared,
+      },
       () => {
         if (downstream !== undefined)
           assertSqliteProjectFoundationDownstreamUnchanged(
@@ -220,10 +251,16 @@ export class SqliteProjectAssetStore
       },
     );
   }
-  #read<T>(plan: AssetPlan<T>): T {
+  #read<T>(plan: AssetPlan<T>, scope: CreativeProjectScope): T {
     this.#open();
-    assertSqliteProjectAssetSchema(this.#db);
-    return this.#execute(plan);
+    return readSqliteLegacyCreativeProject(this.#db, (access) => {
+      assertSqliteProjectAssetSchema(this.#db);
+      access.assertProject(scope);
+      const result = this.#execute(plan);
+      access.assertProject(scope);
+      this.#open();
+      return result;
+    });
   }
   #execute<T>(
     plan: AssetCommitPlan<T>,
@@ -264,6 +301,10 @@ export class SqliteProjectAssetStore
   async #transaction<T>(
     body: () => T,
     authority: ProjectAssetCommitAuthority | undefined,
+    isolation: Readonly<{
+      projectScope?: CreativeProjectScope;
+      receiptIdentity?: ProjectAssetMutationIdentity;
+    }>,
     checkDownstream?: () => void,
   ): Promise<T> {
     this.#open();
@@ -274,10 +315,23 @@ export class SqliteProjectAssetStore
     this.#db.exec("BEGIN IMMEDIATE");
     try {
       assertSqliteProjectAssetSchema(this.#db);
+      const access = captureSqliteCreativeProjectLegacyAccess(this.#db);
+      const assertLegacy = () => {
+        if (isolation.projectScope)
+          access.assertProject(isolation.projectScope);
+        if (isolation.receiptIdentity)
+          assertSqliteAssetReceiptLegacyAccess(
+            this.#db,
+            access,
+            isolation.receiptIdentity,
+          );
+      };
+      assertLegacy();
       assertSqliteProjectAssetQualification(this.#db, authority);
       const result = body();
-      assertSqliteProjectAssetQualification(this.#db, authority);
       checkDownstream?.();
+      assertLegacy();
+      assertSqliteProjectAssetQualification(this.#db, authority);
       assertProjectAssetCommitActive(authority);
       this.#open();
       this.#db.exec("COMMIT");
