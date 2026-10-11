@@ -28,6 +28,8 @@
 
 ## 已核实的缺口
 
+后续已实现原 CreativeProject 的可选 SQLite 受保护创建与回放：项目、initial brief、完整 owner 和范围回执在同一个原交易提交，保留独立项目策略和实际安装核验。默认与生产配置未启用；Foundation、PostgreSQL、完整 CRUD 和真实 Web/桌面仍未接通。[当前实现及边界](./plugin-project-owned-creation.md)。下文保留此前基础阶段和未完成项，不能据此把两入口都视为已完成。
+
 后续 Worker 已支持可信部署注入原 Core 的真实端口，原 Native 组合测试在同进程实际共享 Core 时通过；保留缺少实现的拒绝对照与跨实例调用引用负例。正式 Control/Worker 跨进程接线仍未完成，不能将同进程回归当作生产验收。详见[实际端口接线](./plugin-worker-shared-host-services.md)。
 
 `CreativeProjectOwnerScope` 目前只有 tenant、space、principal；metadata 主键是 tenant、space、projectId。`createdByActorId` 是历史作者，不是插件归属证明。UI 和 Worker 的实时安装、Run、Tool 与策略校验不能补上这项持久归属。
@@ -56,9 +58,9 @@ qualified 列表在 SQL 的排序、游标和 LIMIT 前按完整 owner 过滤；
 
 新 UI qualified 路径使用稳定的内部 receipt 范围，保留用户输入的外部 key。旧 Run 的 Tool 派生 key 不改写；每次 replay 返回前也要核对真实 owner。原安装、Run、Tool、revision、取消及事务末端授权检查继续保留。
 
-创建回执的内部派生规则已实现为 Application 的 `derivePluginProjectCreationReceipt`：七字段稳定归属、原创建入口和外部 key 一同进入版本化摘要，输出不超过原 128 字符上限；请求内容摘要保持原值。因此两个插件或两个创建入口不会因相同外部 key 使用同一内部 key，同一范围内更改内容仍交由原 Store 报幂等冲突。新准备的 projectId 不加入键，否则服务端重试生成不同 ID 会失去回放身份。外部 key 在派生结果中保留；版本、包摘要和 epoch 不进入稳定范围，升级不会改键。这是数据派生，不是创建、接管或读取授权；当前尚未接入两个原创建事务，也未改写任何 legacy/Run receipt。后续须由真实 Host 资格提供范围，并在读取原回执后核对其实际 metadata owner，不能仅凭这个可计算的 key 放行。
+创建回执的内部派生规则已实现为 Application 的 `derivePluginProjectCreationReceipt`：七字段稳定归属、原创建入口和外部 key 一同进入版本化摘要，输出不超过原 128 字符上限；请求内容摘要保持原值。因此两个插件或两个创建入口不会因相同外部 key 使用同一内部 key，同一范围内更改内容仍交由原 Store 报幂等冲突。新准备的 projectId 不加入键，否则服务端重试生成不同 ID 会失去回放身份。外部 key 在派生结果中保留；版本、包摘要和 epoch 不进入稳定范围，升级不会改键。这是数据派生，不是创建、接管或读取授权；目前已接入原 CreativeProject 的可选 SQLite 创建事务，并在读取原回执后核对实际 metadata owner；Foundation 和 PostgreSQL 仍未接入。legacy/Run receipt 不改写，不能仅凭这个可计算的 key 放行。
 
-Application 已补内部 `PluginProjectCreationScope` 来源引用。私有发行器先核对原 UI invocation 的实际 membership，再分别捕获 CreativeProject 和 Foundation 的原创建 pin、安装快照与生命周期检查；入口不匹配、普通读取、复制 context/引用和调用结束均拒绝。公开消费者只能核验已发行对象或从这个对象派生回执，不能填写 owner；引用不包含 projectId，未签发创建、接管或项目读取权限。原 Application 的 `creativeProject:create`、Host publication、同连接安装检查和事务末端撤权仍必须执行，SQL 回放也须独立核对 sidecar。来源与派生测试走真实 Application/PluginUI 服务上的命名内存 fixture，不能证明 Native、SQLite/PostgreSQL 创建或 Web 已接通；生产 dispatcher 和两个原创建事务尚未启用这个引用。
+Application 已补内部 `PluginProjectCreationScope` 来源引用。私有发行器先核对原 UI invocation 的实际 membership，再分别捕获 CreativeProject 和 Foundation 的原创建 pin、安装快照与生命周期检查；入口不匹配、普通读取、复制 context/引用和调用结束均拒绝。公开消费者只能核验已发行对象或从这个对象派生回执，不能填写 owner；引用不包含 projectId，未签发创建、接管或项目读取权限。原 Application 的 `creativeProject:create`、Host publication、同连接安装检查和事务末端撤权仍必须执行，SQL 回放也须独立核对 sidecar。来源与派生测试走真实 Application/PluginUI 服务上的命名内存 fixture；新增原 SQLite 创建/回放专项覆盖真实安装和项目 Store。二者都不能证明 Native、PostgreSQL 或 Web 已接通；生产 dispatcher 尚未启用这个引用。
 
 ### 3. 原工作空间与项目对话
 
@@ -72,7 +74,7 @@ metadata 归属明确后，原 Native allocator 创建目录并非激活追加�
 
 用最小验收插件在 Web 覆盖真实安装、授权、项目创建、对话执行、产物读写、跨归属拒绝与恢复。通过后再核对桌面候选和正式包。业务插件仍保持卸载。
 
-上述第 1 步的存储基础和第 3 步的独立 Native 分配/私有 transport 已有源码与专项证据。2026-10-12 已提交原 CreativeProject、Foundation、公开 Asset/Text v1 Store，以及 SourceUpload、保存来源与原 Foundation Run 冷恢复的普通入口负向隔离，复用同一数据库与事务，保护实际保存回执，并保留原最终授权与租约检查。原显式 DDL 迁移保持独立，不因不完整的可选 owner 被拦截或自动修复它，数据访问继续严格拒绝。详见[已接线范围与回归](./plugin-project-legacy-access.md)。新创建原交易、其他产物与关联入口、完整管理方法 fence、Main/Control 产品接线和第 4 步真实 Web 闭环仍未完成。具体交付范围见[整体状态](./plugin-foundation-status-20261011.md)。
+上述第 1 步的存储基础和第 3 步的独立 Native 分配/私有 transport 已有源码与专项证据。2026-10-12 已提交原 CreativeProject、Foundation、公开 Asset/Text v1 Store，以及 SourceUpload、保存来源与原 Foundation Run 冷恢复的普通入口负向隔离，复用同一数据库与事务，保护实际保存回执，并保留原最终授权与租约检查。原显式 DDL 迁移保持独立，不因不完整的可选 owner 被拦截或自动修复它，数据访问继续严格拒绝。详见[已接线范围与回归](./plugin-project-legacy-access.md)。Foundation/PostgreSQL 新创建原交易、其他产物与关联入口、完整管理方法 fence、Main/Control 产品接线和第 4 步真实 Web 闭环仍未完成。具体交付范围见[整体状态](./plugin-foundation-status-20261011.md)。
 
 ## 最小验收范围
 

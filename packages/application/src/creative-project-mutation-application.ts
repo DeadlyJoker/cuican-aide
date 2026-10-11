@@ -8,6 +8,7 @@ import type {
   CreativeProjectMutationReceipt,
   CreativeProjectMutationResult,
   CreativeProjectStore,
+  OwnedCreativeProjectCreationStore,
 } from "./creative-project-store-port.ts";
 import {
   assertCreativeProjectCommitCurrent,
@@ -33,7 +34,7 @@ type PreparedCreativeMutation = Readonly<{
 }>;
 
 type CreativeMutationDependencies = Readonly<{
-  store: CreativeProjectStore;
+  store: CreativeProjectStore & Partial<OwnedCreativeProjectCreationStore>;
   digester: ContentDigester;
   authorize(
     actor: ActorContext,
@@ -58,7 +59,17 @@ export function executeCreativeProjectMutation(
   options?: CreativeProjectCommitOptions,
 ): Promise<CreativeProjectMutationResult> {
   return creativeProjectUseCase(async () => {
-    let authority = captureCreativeProjectCommitAuthority(options);
+    let authority = captureCreativeProjectCommitAuthority(options, {
+      allowTextUiTransaction: false,
+      allowCreationScope: kind === "create-project",
+    });
+    const creationScope = options?.creationScope;
+    if (
+      creationScope !== undefined &&
+      (typeof dependencies.store.loadOwnedCreationReceipt !== "function" ||
+        typeof dependencies.store.commitOwnedProjectCreation !== "function")
+    )
+      throw new Error("plugin_project_owned_creation_unavailable");
     const actor = creativeActor(actorInput);
     const command = creativeMutationCommand(kind, input);
     assertCreativeProjectRunMutationCommand(
@@ -76,8 +87,31 @@ export function executeCreativeProjectMutation(
     authority = bindProjectRunCommitPolicy(authority, () =>
       dependencies.authorize(actor, action, projectId),
     );
+    if (creationScope !== undefined && authority?.transaction !== undefined) {
+      const sourceAuthority = authority;
+      const transaction = sourceAuthority.transaction!;
+      authority = Object.freeze({
+        ...sourceAuthority,
+        assertCurrent: async () => {
+          await assertCreativeProjectCommitCurrent(sourceAuthority);
+          await dependencies.authorize(actor, action, projectId);
+        },
+        transaction: Object.freeze({
+          ...transaction,
+          assertCurrent: async () => {
+            await transaction.assertCurrent();
+            await dependencies.authorize(actor, action, projectId);
+          },
+        }),
+      });
+    }
     const commitOptions =
-      authority === undefined ? undefined : Object.freeze({ authority });
+      authority === undefined && creationScope === undefined
+        ? undefined
+        : Object.freeze({
+            authority,
+            ...(creationScope === undefined ? {} : { creationScope }),
+          });
     const receipt = creativeReceipt(
       actor,
       kind,
@@ -87,10 +121,16 @@ export function executeCreativeProjectMutation(
     await dependencies.authorize(actor, action, projectId);
     if (authority !== undefined)
       await assertCreativeProjectCommitCurrent(authority);
-    const previous = await dependencies.store.loadMutationReceipt(
-      { actor, kind, receipt },
-      commitOptions,
-    );
+    const previous =
+      creationScope === undefined
+        ? await dependencies.store.loadMutationReceipt(
+            { actor, kind, receipt },
+            commitOptions,
+          )
+        : await dependencies.store.loadOwnedCreationReceipt!(
+            { actor, receipt, creationScope },
+            commitOptions,
+          );
     if (authority !== undefined)
       await assertCreativeProjectCommitCurrent(authority);
     if (previous !== null) {

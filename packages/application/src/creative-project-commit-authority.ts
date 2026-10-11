@@ -17,6 +17,7 @@ import {
 } from "@crewon/domain";
 import type { ProjectGenerationExecutionAuthority } from "./project-generation-execution-authority.ts";
 import { captureCreativeProjectRunCommitTransaction } from "./creative-project-run-commit-authority.ts";
+import { qualifyPluginProjectCreationScope } from "./plugin-project-creation-scope.ts";
 
 /** Capture distinct complete and transaction-safe fences before any await or lock acquisition. */
 export function captureCreativeProjectTransactionAuthority(
@@ -57,12 +58,17 @@ export function captureCreativeProjectCommitAuthority(
     allowPlanTransaction?: boolean;
     allowOutlineUiTransaction?: boolean;
     allowOutlineRunTransaction?: boolean;
+    allowCreationScope?: boolean;
   }> = {
     allowTextUiTransaction: false,
   },
 ): CreativeProjectCommitAuthority | undefined {
   if (options === undefined) return undefined;
-  const fields = ownDataFields(options, ["authority"]);
+  const fields = ownDataFields(options, ["authority", "creationScope"]);
+  if (fields.creationScope !== undefined) {
+    if (mode.allowCreationScope !== true) invalid();
+    qualifyPluginProjectCreationScope(fields.creationScope as never);
+  }
   const authority = fields.authority;
   if (authority === undefined) return undefined;
   const methods = ownDataFields(authority, [

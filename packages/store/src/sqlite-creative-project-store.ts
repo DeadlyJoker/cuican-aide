@@ -18,7 +18,14 @@ import {
   type CreativeProjectMutationResult,
   type CreativeProjectOwnerScope,
   type CreativeProjectStore,
+  type OwnedCreativeProjectCreationInput,
+  type OwnedCreativeProjectCreationReceiptInput,
 } from "@crewon/application";
+import {
+  prepareOwnedCreativeCreation,
+  readOwnedCreativeCreationReceipt,
+  commitOwnedCreativeCreationRecords,
+} from "./plugin-project-owned-creation-sqlite.ts";
 import type {
   ConceptAsset,
   ConceptAssetRevision,
@@ -297,6 +304,40 @@ export class SqliteCreativeProjectStore implements CreativeProjectStore {
             projectId: result.project.projectId,
           });
       },
+    );
+  }
+
+  async loadOwnedCreationReceipt(
+    input: OwnedCreativeProjectCreationReceiptInput,
+    options?: CreativeProjectCommitOptions,
+  ) {
+    this.#assertOpen();
+    const owned = await prepareOwnedCreativeCreation(input, options);
+    return this.#transaction(
+      () => readOwnedCreativeCreationReceipt(this.#database, owned),
+      owned.authority,
+      undefined,
+      owned.source.assertActive,
+    );
+  }
+
+  async commitOwnedProjectCreation(
+    input: OwnedCreativeProjectCreationInput,
+    options?: CreativeProjectCommitOptions,
+  ) {
+    this.#assertOpen();
+    const owned = await prepareOwnedCreativeCreation(input, options, "commit");
+    return this.#transaction(
+      () =>
+        commitOwnedCreativeCreationRecords(this.#database, owned, {
+          insertProject: (project) => this.#insertProject(project),
+          insertBrief: (brief) => this.#insertBrief(brief),
+          saveReceipt: (identity, result) =>
+            this.#saveReceipt(identity, result),
+        }),
+      owned.authority,
+      undefined,
+      owned.source.assertActive,
     );
   }
 

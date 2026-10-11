@@ -23,6 +23,10 @@ import type {
   CreativeProjectMutationResult,
 } from "./creative-project-store-port.ts";
 import { capturePluginUiInvocationCommitAuthority } from "./plugin-ui-invocation-authority.ts";
+import {
+  capturePluginProjectCreationScope,
+  type PluginProjectCreationScope,
+} from "./plugin-project-creation-scope.ts";
 import type {
   PluginUiActionContext,
   PluginUiActionPort,
@@ -65,6 +69,7 @@ export type PluginCreativeProjectActionOwnerDependencies = Readonly<{
   projects: CreativeProjectApplicationService;
   publications: readonly PluginCreativeProjectActionPublication[];
   authorization: PluginCreativeProjectActionAuthorizationPort;
+  creationOwnership?: "plugin-project-v1";
 }>;
 type VerifiedMetadata = Readonly<{
   context: PluginUiActionContext;
@@ -95,6 +100,7 @@ export class PluginCreativeProjectActionOwner {
   readonly #publications: readonly PluginCreativeProjectActionPublication[];
   readonly #authorize: PluginCreativeProjectActionAuthorizationPort["authorize"];
   readonly #projects: ReturnType<typeof captureProjects>;
+  readonly #ownsCreatedProjects: boolean;
   readonly #outcomes = new WeakMap<object, VerifiedMetadata>();
   #closed = false;
   #pending = 0;
@@ -107,7 +113,17 @@ export class PluginCreativeProjectActionOwner {
         "projects",
         "publications",
         "authorization",
+        ...(Object.hasOwn(dependencies, "creationOwnership")
+          ? ["creationOwnership"]
+          : []),
       ]);
+      if (
+        value.creationOwnership !== undefined &&
+        value.creationOwnership !== "plugin-project-v1"
+      )
+        throw new Error("plugin_project_creation_mode_invalid");
+      this.#ownsCreatedProjects =
+        value.creationOwnership === "plugin-project-v1";
       this.#projects = captureProjects(value.projects);
       this.#publications = capturePublications(value.publications);
       this.#authorize = captureAuthorization(value.authorization);
@@ -234,6 +250,10 @@ export class PluginCreativeProjectActionOwner {
         snapshot.context,
         request,
         authority,
+        this.#ownsCreatedProjects &&
+          request.action === "crewon.creative-projects.v1.createProject"
+          ? capturePluginProjectCreationScope(invocation)
+          : undefined,
       );
       if (dispatched.kind === "read") await authority.assertCurrent();
       // A mutation Service returns only after confirmed COMMIT (or a checked durable replay).
@@ -333,9 +353,13 @@ export class PluginCreativeProjectActionOwner {
     context: PluginUiActionContext,
     request: CreativeProjectUiActionRequest,
     authority: CreativeProjectCommitAuthority,
+    creationScope?: PluginProjectCreationScope,
   ): Promise<DispatchResult> {
     const actor = context.actor;
-    const options = Object.freeze({ authority });
+    const options = Object.freeze({
+      authority,
+      ...(creationScope === undefined ? {} : { creationScope }),
+    });
     switch (request.action) {
       case "crewon.creative-projects.v1.createProject":
         return {

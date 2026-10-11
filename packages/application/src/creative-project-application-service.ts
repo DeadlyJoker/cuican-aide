@@ -45,6 +45,7 @@ import type {
   CreativeProjectCommitOptions,
   CreativeProjectCommitAuthority,
   CreativeProjectStore,
+  OwnedCreativeProjectCreationStore,
 } from "./creative-project-store-port.ts";
 import { assertCreativeProjectCommitCurrent } from "./creative-project-commit-authority.ts";
 import {
@@ -68,7 +69,7 @@ import {
 } from "./creative-project-application-support.ts";
 
 export type CreativeProjectApplicationDependencies = Readonly<{
-  store: CreativeProjectStore;
+  store: CreativeProjectStore & Partial<OwnedCreativeProjectCreationStore>;
   authorization: CreativeProjectAuthorizationPort;
   clock: ApplicationClock;
   ids: ApplicationIdGenerator;
@@ -473,14 +474,24 @@ export class CreativeProjectApplicationService {
         this.#dependencies.digester,
       );
       return prepareCreativeMutation(created, () =>
-        this.#dependencies.store.commitProjectCreation(
-          {
-            ...identity,
-            project: created.project,
-            initialBrief: created.brief,
-          },
-          options,
-        ),
+        options?.creationScope === undefined
+          ? this.#dependencies.store.commitProjectCreation(
+              {
+                ...identity,
+                project: created.project,
+                initialBrief: created.brief,
+              },
+              options,
+            )
+          : this.#dependencies.store.commitOwnedProjectCreation!(
+              {
+                ...identity,
+                project: created.project,
+                initialBrief: created.brief,
+                creationScope: options.creationScope,
+              },
+              options,
+            ),
       );
     }
     const checked = command as Exclude<

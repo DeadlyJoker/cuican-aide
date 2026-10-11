@@ -2,6 +2,7 @@ import type { ProjectTextUiCommitTransactionAuthority } from "./project-text-ui-
 import type { ProjectOutlineUiCommitTransactionAuthority } from "./project-outline-ui-commit-authority.ts";
 import type { ProjectOutlineRunCommitTransactionAuthority } from "./project-outline-run-commit-authority.ts";
 import type { ProjectTextPlanSelectionCommitAuthority } from "./project-text-plan-store-port.ts";
+import type { PluginProjectCreationScope } from "./plugin-project-creation-scope.ts";
 import type {
   CreativeProject,
   ProjectBriefRevision,
@@ -96,7 +97,20 @@ export type CreativeProjectCommitAuthority = Readonly<{
 
 export type CreativeProjectCommitOptions = Readonly<{
   authority?: CreativeProjectCommitAuthority;
+  /** Separate qualified creation path; ordinary Store methods must reject this option. */
+  creationScope?: PluginProjectCreationScope;
 }>;
+
+export type OwnedCreativeProjectCreationInput = MutationIdentity &
+  Readonly<{
+    creationScope: PluginProjectCreationScope;
+    project: CreativeProject;
+    initialBrief: ProjectBriefRevision;
+  }>;
+export type OwnedCreativeProjectCreationReceiptInput = MutationIdentity &
+  Readonly<{
+    creationScope: PluginProjectCreationScope;
+  }>;
 
 /**
  * Trusted internal persistence recipes, not a public owner or write-authority API.
@@ -108,6 +122,17 @@ export type CreativeProjectCommitOptions = Readonly<{
  * Optional per-call authority also gates replay publication and must be rechecked
  * before COMMIT dispatch. Confirmed commits are not rejected by later withdrawal.
  */
+export interface OwnedCreativeProjectCreationStore {
+  loadOwnedCreationReceipt(
+    input: OwnedCreativeProjectCreationReceiptInput,
+    options?: CreativeProjectCommitOptions,
+  ): Promise<CreateCreativeProjectResult | null>;
+  commitOwnedProjectCreation(
+    input: OwnedCreativeProjectCreationInput,
+    options?: CreativeProjectCommitOptions,
+  ): Promise<CreateCreativeProjectResult>;
+}
+
 export interface CreativeProjectStore {
   loadProject(input: {
     owner: CreativeProjectOwnerScope;

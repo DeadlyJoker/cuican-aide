@@ -6,6 +6,7 @@ import {
 } from "@crewon/contracts/plugins";
 import { PluginUiApplicationService } from "./plugin-ui-application-service.ts";
 import { PluginCreativeProjectActionOwner } from "./plugin-creative-project-action-owner.ts";
+import type { CreativeProjectApplicationService } from "./creative-project-application-service.ts";
 import type {
   PluginUiActionContext,
   PluginUiActionPort,
@@ -29,6 +30,8 @@ export function creativeActionFixture(
   options: Readonly<{
     descriptor?: PluginPackageDescriptor;
     packageDigest?: string;
+    projectService?: CreativeProjectApplicationService;
+    creationOwnership?: "plugin-project-v1";
   }> = {},
 ) {
   const projects = createFixture();
@@ -76,7 +79,10 @@ export function creativeActionFixture(
     },
   ];
   const owner = new PluginCreativeProjectActionOwner({
-    projects: projects.service,
+    projects: options.projectService ?? projects.service,
+    ...(options.creationOwnership === undefined
+      ? {}
+      : { creationOwnership: options.creationOwnership }),
     publications,
     authorization: {
       async authorize(context) {
