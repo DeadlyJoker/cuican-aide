@@ -1,6 +1,6 @@
 # 原 Profile 借用当前插件实例
 
-本增量在原 `DesktopPluginInstallationRuntime`、`DesktopInstallationProfile` 和 `DesktopPluginInstanceCompositionOwner` 内增加 Host 私有借用入口。继续使用同一个 SQLite profile claim、安装 ledger、服务目录和 `PluginCompositionCoordinator`，没有新数据库或实例管理器。该入口尚未接入正式 UI TaskOwner，不能当成 Web/桌面交付。
+本增量在原 `DesktopPluginInstallationRuntime`、`DesktopInstallationProfile` 和 `DesktopPluginInstanceCompositionOwner` 内增加 Host 私有借用入口。继续使用同一个 SQLite profile claim、安装 ledger、服务目录和 `PluginCompositionCoordinator`，没有新数据库或实例管理器。该入口已在后续源码接入正式普通 UI TaskOwner，见[原 Task Core 启动绑定](plugin-shared-task-core-binding.md)，不能当成 Web/桌面交付。
 
 ## 当前状态与生命周期
 
@@ -16,4 +16,4 @@
 
 固定 Node 24.19.0，实际安装包、源文件、原 Native 配置、文件型 SQLite claim 与原生产构造函数：七个 Control 文件 61/61、零跳过，其中新增八项。覆盖共享服务对象与一次 setup、混合 UI 图、外国账号/profile/包/拒绝策略、冷启动/receipt 不恢复、provider 撤下与真实新 identity、Native 文件失效、实际 head 损坏、借用期间管理操作继续，以及关闭等待真实 lease 释放。关闭负例修复前实际返回 `plugin_host_has_live_leases`，修复后成功等待释放。损坏 head 使用自有数据库的明确负例，不是第二个获权 writer。
 
-Control 类型检查通过。上述是原服务链与 SQLite 行为证据，不包含 PostgreSQL、外部模型、完整任务执行或真实浏览器验收。正式 TaskOwner 仍按包初始化独立 NodeHost；下一步将唯一 Task Core bridge 的 tasks 1/2 与 UI 操作接到原 Profile 实例，完成绑定前拒绝与发布门禁，再做 Web 全流程，最后更新桌面。服务注册和 Worker 能力必须由真实实现提供，不能因 Control 有目录便推断 Worker 可执行。
+Control 类型检查通过。上述是原服务链与 SQLite 行为证据，不包含 PostgreSQL、外部模型、完整任务执行或真实浏览器验收。正式普通 TaskOwner 的共享 Bridge、tasks 1/2、原 Profile 借用、启动门禁与冷恢复已接线；后续十一文件回归 89/89、零跳过，见上述绑定文档。专用项目 owner、必需业务服务与 Worker 全流程仍需接线，再做 Web 验收，最后更新桌面。服务注册和 Worker 能力必须由真实实现提供，不能因 Control 有目录便推断 Worker 可执行。

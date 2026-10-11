@@ -74,6 +74,7 @@ export function assertDesktopNativePluginTaskComposition(
 export async function createDesktopNativePluginTaskRuntime(
   input: DesktopNativePluginTaskBinding,
   dependencies: Readonly<{
+    sharedBinding?: import("./desktop-plugin-task-service-binding.ts").DesktopPluginTaskServiceBinding;
     clock: ApplicationClock;
     digester: ContentDigester;
     creativeProjects?: PreparedCreativeProjects;
@@ -100,6 +101,9 @@ export async function createDesktopNativePluginTaskRuntime(
         });
       },
       store: input.store,
+      ...(dependencies.sharedBinding === undefined
+        ? {}
+        : { sharedBinding: dependencies.sharedBinding }),
       requests: authority.requests,
       installRoot: input.configuration.installRoot,
       maximumPackages: 32,

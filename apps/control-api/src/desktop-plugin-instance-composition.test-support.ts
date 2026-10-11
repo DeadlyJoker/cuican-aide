@@ -21,6 +21,7 @@ import {
   type DesktopPluginInstallationRuntime,
 } from "./desktop-plugin-installation-runtime.ts";
 import { StandaloneIdentity } from "./standalone-adapters.ts";
+import { DesktopPluginTaskServiceBinding } from "./desktop-plugin-task-service-binding.ts";
 import { productionSourceFixture } from "./production-plugin-source.test-support.ts";
 
 export const actor = {
@@ -59,6 +60,8 @@ type Spec = {
   kind: "provider" | "consumer" | "independent" | "ui" | "actionConsumer";
   pluginId?: string;
   version?: string;
+  requiresTasks?: "1" | "2";
+  taskOptional?: boolean;
 };
 type Source = Readonly<{
   sourceId: string;
@@ -87,6 +90,7 @@ export async function fixture(
     | undefined;
   let store: SqliteRunStore | undefined;
   let authority: DesktopPluginAuthority | undefined;
+  let taskBinding: DesktopPluginTaskServiceBinding | undefined;
   const key = `crewon-instance-fixture-${randomUUID()}`;
   const globals = globalThis as unknown as Record<string, unknown>;
   const probe: Probe = {
@@ -151,6 +155,15 @@ export async function fixture(
           ? []
           : [
               { service: "crewon.execution", apiVersion: "1", optional: false },
+              ...(spec.requiresTasks
+                ? [
+                    {
+                      service: "crewon.tasks",
+                      apiVersion: spec.requiresTasks,
+                      optional: spec.taskOptional === true,
+                    },
+                  ]
+                : []),
               ...(spec.kind === "consumer" || spec.kind === "actionConsumer"
                 ? [{ ...dependency, optional: false }]
                 : []),
@@ -272,7 +285,14 @@ export async function fixture(
       assert.ok(authority);
       return authority;
     },
-    async open(mode: "full" | "installation" = "full") {
+    get taskBinding() {
+      assert.ok(taskBinding);
+      return taskBinding;
+    },
+    async open(
+      mode: "full" | "installation" = "full",
+      options: Readonly<{ bindTasks?: true }> = {},
+    ) {
       assert.equal(runtime, undefined);
       store = new SqliteRunStore(databasePath);
       if (mode === "full")
@@ -296,9 +316,16 @@ export async function fixture(
         await ledger.compositionStore().migrate();
         authority = new DesktopPluginAuthority(configuration);
         const registry = await createDesktopPluginSourceRegistry(configuration);
+        if (options.bindTasks)
+          taskBinding = new DesktopPluginTaskServiceBinding({
+            configuration,
+            registry,
+            authority,
+            store,
+          });
         runtime = await createDesktopPluginInstallationRuntime(
           { configuration, registry, authority },
-          { store, clock, digester },
+          { store, clock, digester, ...(taskBinding ? { taskBinding } : {}) },
         );
       }
     },
@@ -308,6 +335,8 @@ export async function fixture(
       await store?.close();
       store = undefined;
       authority = undefined;
+      taskBinding?.close();
+      taskBinding = undefined;
     },
     install(source: (typeof sources)[number], revision: number | null = null) {
       return service().install(actor, {

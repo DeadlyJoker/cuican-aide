@@ -62,6 +62,11 @@ export class DesktopPluginCompositionMetadataOwner {
       });
       return;
     }
+    await this.publishCurrent(actor);
+  }
+
+  /** Explicit Host startup/management publication, never a read or receipt replay. */
+  async publishCurrent(actor: ActorContext): Promise<void> {
     try {
       this.#assertOwner(actor);
       const { configuration, registry, authority, owner, signal } = this.#input;

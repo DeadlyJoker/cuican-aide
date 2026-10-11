@@ -35,6 +35,7 @@ import {
   pluginSecurityActor,
   pluginSecurityRecord,
 } from "./plugin-security-validation.ts";
+import { DesktopPluginTaskServiceBinding } from "./desktop-plugin-task-service-binding.ts";
 
 export type InstalledPluginTaskActionOwnerDependencies = Readonly<{
   installRoot: string;
@@ -59,6 +60,7 @@ export type InstalledPluginTaskActionOwnerDependencies = Readonly<{
   clock: ApplicationClock;
   ids: PluginUiOpaqueIdPort;
   maximumPackages?: number;
+  sharedBinding?: DesktopPluginTaskServiceBinding;
 }>;
 type Request = Readonly<{
   context: PluginUiActionContext;
@@ -69,7 +71,7 @@ type Request = Readonly<{
 }>;
 type Entry = {
   request: Request;
-  host: PluginNodeHost;
+  host: PluginNodeHost | null;
   bridge: PluginTaskActionBridge;
   actions: PluginUiActionPort;
   candidate: PluginActivationCandidate | null;
@@ -119,6 +121,9 @@ export class InstalledPluginTaskActionOwner {
   readonly #entries = new Map<string, Entry>();
   readonly #pending = new Set<Promise<unknown>>();
   readonly #maximum: number;
+  readonly #sharedBinding: DesktopPluginTaskServiceBinding | null;
+  readonly #sharedBridge: PluginTaskActionBridge | null;
+  readonly #selections = new Map<string, PluginSelection>();
   #closed = false;
   #closing: Promise<void> | null = null;
 
@@ -138,6 +143,12 @@ export class InstalledPluginTaskActionOwner {
     if (!Number.isSafeInteger(maximum) || maximum < 1 || maximum > 32)
       fail("installed_plugin_task_action_configuration_invalid");
     this.#maximum = maximum;
+    if (
+      input.sharedBinding !== undefined &&
+      !DesktopPluginTaskServiceBinding.isOwner(input.sharedBinding)
+    )
+      fail("installed_plugin_task_action_configuration_invalid");
+    this.#sharedBinding = input.sharedBinding ?? null;
     this.#dependencies = Object.freeze({
       installRoot: input.installRoot,
       installations: Object.freeze({
@@ -163,6 +174,41 @@ export class InstalledPluginTaskActionOwner {
     this.actions = Object.freeze({
       invoke: (context: PluginUiActionContext) => this.#run(context),
     });
+    this.#sharedBridge =
+      this.#sharedBinding === null
+        ? null
+        : new PluginTaskActionBridge({
+            tasks: this.#dependencies.tasks,
+            committedTasks: this.#dependencies.committedTasks,
+            profiles: {
+              resolve: async (actor) => {
+                await this.#actor(actor);
+                return this.#dependencies.profiles.resolve(actor);
+              },
+            },
+            authorization: {
+              authorize: (input) => {
+                const entry = this.#entries.get(
+                  extensionCanonicalJson([
+                    {
+                      tenantId: input.resource.tenantId,
+                      spaceId: input.resource.spaceId,
+                      profileId: input.resource.profileId,
+                    },
+                    input.resource.pluginId,
+                    input.resource.packageDigest,
+                  ]),
+                );
+                if (!entry) deny("installed_plugin_task_action_not_ready");
+                return this.#authorizeBridge(input, entry);
+              },
+            },
+            currentSelection: ({ scope, pluginId }) =>
+              this.#selections.get(extensionCanonicalJson([scope, pluginId])) ??
+              null,
+            clock: this.#dependencies.clock,
+            ids: this.#dependencies.ids,
+          });
     owners.add(this);
     ownerBindings.set(
       this,
@@ -174,11 +220,23 @@ export class InstalledPluginTaskActionOwner {
     Object.freeze(this);
   }
 
+  /** Private Host wiring; a structural owner or another binding cannot obtain this bridge. */
+  sharedBridge(
+    binding: DesktopPluginTaskServiceBinding,
+  ): PluginTaskActionBridge {
+    this.#available();
+    if (binding !== this.#sharedBinding || this.#sharedBridge === null)
+      fail("installed_plugin_task_action_configuration_invalid");
+    return this.#sharedBridge;
+  }
+
   close(): Promise<void> {
     if (this.#closing !== null) return this.#closing;
     this.#closed = true;
     this.#lifetime.abort();
-    for (const entry of this.#entries.values()) entry.bridge.close();
+    this.#sharedBridge?.close();
+    for (const entry of this.#entries.values())
+      if (entry.host !== null) entry.bridge.close();
     this.#closing = (async () => {
       // Logical withdrawal does not prove that an already started task or setup has stopped.
       await Promise.allSettled([...this.#pending]);
@@ -220,6 +278,11 @@ export class InstalledPluginTaskActionOwner {
     // Only the actual live Application invocation may enter this owner, never an equivalent DTO.
     await assertPluginUiInvocationCurrent(context);
     this.#available();
+    if (this.#sharedBinding !== null) {
+      await this.#sharedBinding.whenReady();
+      await assertPluginUiInvocationCurrent(context);
+      this.#available();
+    }
     const value = pluginSecurityRecord(context, [
       "actor",
       "scope",
@@ -320,9 +383,17 @@ export class InstalledPluginTaskActionOwner {
         deny("installed_plugin_task_action_package_changed");
       // The synchronous projection is replaced only with a successful actual storage read.
       if (entry !== null) entry.selection = selection;
+      if (entry !== null)
+        this.#selections.set(
+          extensionCanonicalJson([request.scope, request.package.pluginId]),
+          selection,
+        );
     } catch (error) {
       // A pending refresh is not revocation. Failed reads do withdraw the last confirmed projection.
       if (entry !== null) entry.selection = null;
+      this.#selections.delete(
+        extensionCanonicalJson([request.scope, request.package.pluginId]),
+      );
       throw error;
     }
   }
@@ -426,60 +497,39 @@ export class InstalledPluginTaskActionOwner {
         fail("installed_plugin_task_action_capacity_exceeded");
       // Every bridge keeps its own exact Node identity and scoped confirmed selection projection.
       let created!: Entry;
-      const bridge = new PluginTaskActionBridge({
-        tasks: this.#dependencies.tasks,
-        committedTasks: this.#dependencies.committedTasks,
-        profiles: { resolve: (actor) => this.#profile(actor, request.scope) },
-        authorization: {
-          authorize: async (input) => {
-            if (
-              input.action !== "invoke" ||
-              !sameScope(input.resource, request.scope) ||
-              input.resource.pluginId !== request.package.pluginId ||
-              input.resource.packageDigest !== request.package.packageDigest ||
-              input.resource.selectionRevision === null
-            )
-              deny("installed_plugin_task_action_scope_changed");
-            const current = Object.freeze({
-              ...request,
-              actor: pluginSecurityActor(input.actor),
-            });
-            await this.#profile(current.actor, request.scope);
-            await this.#refreshSelection(
-              current,
-              input.resource.selectionRevision,
-              created,
-            );
-            const decision =
-              await this.#dependencies.authorization.authorize(input);
-            this.#available();
-            if (created.candidate === null)
-              fail("installed_plugin_task_action_not_ready");
-            await this.#package(current, created.candidate);
-            await this.#profile(current.actor, request.scope);
-            await this.#refreshSelection(
-              current,
-              input.resource.selectionRevision,
-              created,
-            );
-            return decision;
+      const bridge =
+        this.#sharedBridge ??
+        new PluginTaskActionBridge({
+          tasks: this.#dependencies.tasks,
+          committedTasks: this.#dependencies.committedTasks,
+          profiles: { resolve: (actor) => this.#profile(actor, request.scope) },
+          authorization: {
+            authorize: (input) => this.#authorizeBridge(input, created),
           },
-        },
-        currentSelection: ({ scope, pluginId }) =>
-          same(scope, request.scope) && pluginId === request.package.pluginId
-            ? created.selection
-            : null,
-        clock: this.#dependencies.clock,
-        ids: this.#dependencies.ids,
-      });
-      const host = new PluginNodeHost({
-        services: [bridge.hostService(), bridge.hostServiceV2()],
-      });
+          currentSelection: ({ scope, pluginId }) =>
+            same(scope, request.scope) && pluginId === request.package.pluginId
+              ? created.selection
+              : null,
+          clock: this.#dependencies.clock,
+          ids: this.#dependencies.ids,
+        });
+      const host =
+        this.#sharedBinding === null
+          ? new PluginNodeHost({
+              services: [bridge.hostService(), bridge.hostServiceV2()],
+            })
+          : null;
       created = {
         request,
         host,
         bridge,
-        actions: bridge.actions(host),
+        actions:
+          host === null
+            ? bridge.actionsFromBorrower({
+                borrow: (context, authorizeBorrow) =>
+                  this.#sharedBinding!.borrow(context, authorizeBorrow),
+              })
+            : bridge.actions(host),
         candidate: null,
         selection: null,
         loading: Promise.resolve(),
@@ -499,6 +549,22 @@ export class InstalledPluginTaskActionOwner {
   async #load(key: string, entry: Entry): Promise<void> {
     let prepared: PluginNodePreparedActivation | null = null;
     try {
+      if (entry.host === null) {
+        const verified = await verifyLocalPluginPackage({
+          directory: join(
+            this.#dependencies.installRoot,
+            "packages",
+            entry.request.package.packageDigest.slice(7),
+          ),
+          signal: this.#lifetime.signal,
+        });
+        entry.candidate = Object.freeze({
+          descriptor: verified.descriptor,
+          packageDigest: verified.packageDigest,
+        });
+        await this.#check(entry.request, entry.candidate, entry);
+        return;
+      }
       prepared = await entry.host.prepare({
         installRoot: this.#dependencies.installRoot,
         expectedPluginId: entry.request.package.pluginId,
@@ -559,8 +625,8 @@ export class InstalledPluginTaskActionOwner {
 
   #dispose(key: string, entry: Entry): Promise<void> {
     if (entry.cleanup !== null) return entry.cleanup;
-    entry.bridge.close();
-    entry.cleanup = entry.host.close().then(
+    if (entry.host !== null) entry.bridge.close();
+    entry.cleanup = (entry.host?.close() ?? Promise.resolve()).then(
       () => {
         if (this.#entries.get(key) === entry) this.#entries.delete(key);
       },
@@ -570,6 +636,43 @@ export class InstalledPluginTaskActionOwner {
       },
     );
     return entry.cleanup;
+  }
+
+  async #authorizeBridge(
+    input: Parameters<PluginUiAuthorizationPort["authorize"]>[0],
+    entry: Entry,
+  ) {
+    const request = entry.request;
+    if (
+      input.action !== "invoke" ||
+      !sameScope(input.resource, request.scope) ||
+      input.resource.pluginId !== request.package.pluginId ||
+      input.resource.packageDigest !== request.package.packageDigest ||
+      input.resource.selectionRevision === null
+    )
+      deny("installed_plugin_task_action_scope_changed");
+    const current = Object.freeze({
+      ...request,
+      actor: pluginSecurityActor(input.actor),
+    });
+    await this.#profile(current.actor, request.scope);
+    await this.#refreshSelection(
+      current,
+      input.resource.selectionRevision,
+      entry,
+    );
+    const decision = await this.#dependencies.authorization.authorize(input);
+    this.#available();
+    if (entry.candidate === null)
+      fail("installed_plugin_task_action_not_ready");
+    await this.#package(current, entry.candidate);
+    await this.#profile(current.actor, request.scope);
+    await this.#refreshSelection(
+      current,
+      input.resource.selectionRevision,
+      entry,
+    );
+    return decision;
   }
 }
 

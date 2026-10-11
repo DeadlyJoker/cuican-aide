@@ -22,11 +22,11 @@ Task Application 在最后的异步授权与内容校验完成后签发内部 op
 
 固定 Node.js 24.19.0、真实 SQLite 与自有 PostgreSQL 18.6：Host 七文件回归 63/63、零跳过，其中新组合测试 18/18。四项通过真实 UI 操作，在原 generation/query admission INSERT 已成功之后撤下实际 provider，确认整个提交回滚、没有新任务或额外扣费；这些负例修复前曾失败。Task Application/Store 的独立回归 207/207、零跳过，另覆盖 opaque 对象伪造、异步 active 拒绝、旧 Host 兼容与已确认回执重放。组间重叠，不相加。它们是原服务链与数据库行为证据，尚未在正式产品页面操作。
 
-当前 `InstalledPluginTaskActionOwner` 仍按包创建单独 NodeHost。下一步产品接线需要：
+正式 Native/个人积分 Runtime 的普通 `InstalledPluginTaskActionOwner` 已在源码借用原共享实例，并完成启动绑定与冷恢复，见[原 Task Core 绑定及 89 项回归](plugin-shared-task-core-binding.md)。专用项目 owner 与没有原 Native Profile 的兼容路径仍有包 Host；普通入口的接通不代表所有项目或 Worker 已接通。剩余产品接线需要：
 
-1. 原 Task Core 提供唯一、作用域受控的 bridge，服务注册和 UI action 共用它；不把每个 action bridge 的 invocation map 混用。
+1. 专用项目 generation/query/historical-query owner 接入原项目能力与共享实例，保留独立批准；普通 Core 已使用唯一 bridge，不能把专用 owner 的 invocation map 混用。
 2. 原 Profile 的[只读实例借用](plugin-profile-node-borrow.md)及 Bridge 物理释放适配已接线并验证，UI-only 节点的公开 metadata digest 不代替私有 Node graph digest。正式 owner 接入继续保持原 claim/head/全部 selection 的同步检查及物理借用 join；业务调用不持有管理队列。
-3. 移除该路径的单包 setup；保留原安装批准、文件核验、PDP、scope/epoch、mount 和任务回执检查。启动装配必须先完成原 Task Core 与 profile service 的绑定，再开放调用入口。
+3. 完成业务 registration 与 Worker 的必需服务实现/恢复适配；不能因为 Control 目录可用便放宽原执行拒绝。普通任务路径已移除单包 setup，启动时先完成原 Task Core 与 profile service 绑定，再显式恢复与开放入口。
 4. 实际 Web 验证安装、启用、UI/Agent 调用、停用提供者、恢复、升级/回滚、卸载和冷启动；通过后再更新正式桌面。
 
 本轮不安装业务插件、不改变中央 Agent 对话框或基础 UI、不部署、不开放新项目归属 writer。原管理入口隔离的范围和剩余路径分别见[已接线入口](plugin-project-legacy-access.md)与[剩余清单](plugin-project-isolation-remaining-entrypoints.md)。

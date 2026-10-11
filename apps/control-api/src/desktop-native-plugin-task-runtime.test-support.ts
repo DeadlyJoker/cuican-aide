@@ -92,6 +92,7 @@ export async function nativeTaskRuntimeFixture(
       pluginId: string;
       service: string;
       nodeSource: string;
+      requiresTasks?: "1" | "2";
     }>;
   }> = {},
 ) {
@@ -192,7 +193,15 @@ export async function nativeTaskRuntimeFixture(
         pluginId: options.provider.pluginId,
         entrypoints: { node: "node.mjs", ui: null },
         businessManifestPath: null,
-        requires: [],
+        requires: options.provider.requiresTasks
+          ? [
+              {
+                service: "crewon.tasks",
+                apiVersion: options.provider.requiresTasks,
+                optional: false,
+              },
+            ]
+          : [],
         provides: [{ service: options.provider.service, apiVersion: "1" }],
         contributions: [],
         files: [

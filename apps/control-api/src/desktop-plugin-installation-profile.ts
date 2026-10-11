@@ -23,7 +23,10 @@ import {
   type PluginNodeCommitCandidate,
   type PluginUiHostServiceAvailabilityPort,
   type PluginNodeLease,
+  capturePluginNodeHostServiceCatalog,
+  type PluginNodeHostServiceCatalog,
 } from "@crewon/plugin-host";
+import type { DesktopPluginTaskServiceBinding } from "./desktop-plugin-task-service-binding.ts";
 import type {
   SqlitePluginInstallationStore,
   SqlitePluginInstallationProfileOwner,
@@ -31,11 +34,7 @@ import type {
 import type { DesktopPluginConfiguration } from "./desktop-plugin-configuration.ts";
 import type { DesktopPluginSourceRegistry } from "./desktop-plugin-source-registry.ts";
 import type { DesktopPluginAuthority } from "./desktop-plugin-authority.ts";
-import {
-  installationSame,
-  orderInstallationRecoveries,
-  type InstallationRecoveryRecord,
-} from "./production-plugin-installation-runtime-support.ts";
+import { installationSame } from "./production-plugin-installation-runtime-support.ts";
 import { verifyDesktopInstalledPackage } from "./desktop-plugin-runtime-support.ts";
 import type { DesktopPreparedBusinessCandidate } from "./desktop-installed-plugin-activation-owner.ts";
 import { DesktopPluginCompositionMetadataOwner } from "./desktop-plugin-composition-metadata-owner.ts";
@@ -51,6 +50,7 @@ import {
   refreshDesktopPluginInstallationAuthority,
   type DesktopPluginAuthorityRequest,
 } from "./desktop-plugin-installation-authority-refresh.ts";
+import { recoverDesktopPluginProfile } from "./desktop-plugin-profile-recovery.ts";
 import type {
   PluginCompositionStatusResponse,
   PluginSelectionListQuery,
@@ -85,6 +85,7 @@ type ProfileDependencies = Readonly<{
   digester: ContentDigester;
   scope: PluginProfileScope;
   hostUiServices?: PluginUiHostServiceAvailabilityPort;
+  taskBinding?: DesktopPluginTaskServiceBinding;
   prepareBusinessCandidate?(
     input: PluginInstallationPrepareSelectionInput,
     signal: AbortSignal,
@@ -110,6 +111,7 @@ export class DesktopInstallationProfile {
   readonly #dependencies: ProfileDependencies;
   readonly #executionServices = new DesktopPluginExecutionServiceOwner();
   readonly #node: PluginCompositionCoordinator;
+  readonly #catalog: PluginNodeHostServiceCatalog;
   readonly #removeAuthorityObserver: () => void;
   readonly #lifetime = new AbortController();
   #owner!: SqlitePluginInstallationProfileOwner;
@@ -133,13 +135,17 @@ export class DesktopInstallationProfile {
         dependencies.hostUiServices,
       ),
     });
+    this.#catalog = capturePluginNodeHostServiceCatalog([
+      ...this.#executionServices.catalog.registrations,
+      ...(dependencies.taskBinding?.catalog.registrations ?? []),
+    ]);
     this.#node = new PluginCompositionCoordinator({
       scope: {
         ...dependencies.scope,
         authorityEpoch: dependencies.configuration.authorityEpoch,
       },
       installRoot: dependencies.configuration.installRoot,
-      services: this.#executionServices.catalog.registrations,
+      services: this.#catalog.registrations,
     });
     this.#removeAuthorityObserver =
       dependencies.authority.registerWithdrawalObserver(() => this.withdraw());
@@ -188,7 +194,7 @@ export class DesktopInstallationProfile {
       authority: dependencies.authority,
       owner: this.#owner,
       signal: this.#lifetime.signal,
-      hostServices: this.#executionServices.catalog.metadata,
+      hostServices: this.#catalog.metadata,
     });
     this.#instances = new DesktopPluginInstanceCompositionOwner({
       configuration: dependencies.configuration,
@@ -196,7 +202,9 @@ export class DesktopInstallationProfile {
       owner: this.#owner,
       metadata: this.#compositionMetadata,
       nodes: this.#node,
-      catalog: this.#executionServices.catalog,
+      catalog: this.#catalog,
+      assertNodeServices: (candidate) =>
+        dependencies.taskBinding?.assertCandidate(candidate),
       hostUiServices: dependencies.hostUiServices,
       signal: this.#lifetime.signal,
       assertOperation: (actor, scope) => {
@@ -224,6 +232,8 @@ export class DesktopInstallationProfile {
         assertAvailable: () => this.#available(),
         refreshAuthority: (request) => this.#fresh(request),
         checkUiServices: (candidate) => this.#checkUiServices(candidate),
+        assertNodeServices: (candidate) =>
+          dependencies.taskBinding?.assertCandidate(candidate),
         authorizeCommit: (selection, candidate) =>
           this.#consume(selection, candidate),
       }),
@@ -306,6 +316,26 @@ export class DesktopInstallationProfile {
             packageDigest: null,
           }),
       }),
+    );
+  }
+
+  restoreTaskInstancesForStartup(): Promise<void> {
+    return this.#runOperation(
+      this.#dependencies.configuration.actor,
+      async () => {
+        if (!this.#dependencies.taskBinding)
+          conflict("desktop_plugin_task_service_unavailable");
+        if (
+          !this.#owner
+            .snapshot()
+            .selections.some((selection) => selection.state === "enabled")
+        )
+          return;
+        await this.#recover(this.#dependencies.configuration.actor);
+        await this.#instances.restoreForStartup(
+          this.#dependencies.configuration.actor,
+        );
+      },
     );
   }
 
@@ -632,6 +662,8 @@ export class DesktopInstallationProfile {
         this.#checkDependencies(dependencies);
         const uiCandidate =
           candidate?.descriptor.entrypoints.node === null ? candidate : null;
+        if (candidate !== null)
+          this.#dependencies.taskBinding?.assertCandidate(candidate);
         this.#checkUiServices(uiCandidate);
         const epoch = await this.#fresh({
           actor: input.actor,
@@ -700,6 +732,8 @@ export class DesktopInstallationProfile {
     )
       return "deny";
     this.#checkUiServices(stamp.uiCandidate);
+    if (candidate !== null)
+      this.#dependencies.taskBinding?.assertCandidate(candidate);
     if (candidate === null) return stamp.identity === null ? "allow" : "deny";
     if (
       candidate.identity !== stamp.identity ||
@@ -748,117 +782,40 @@ export class DesktopInstallationProfile {
 
   async #recover(actor: ActorContext): Promise<void> {
     const original = this.#operation;
-    const snapshot = this.#owner.snapshot();
-    const records: InstallationRecoveryRecord[] = [];
-    for (const selection of snapshot.selections) {
-      this.#operation = {
-        actor,
-        scope: snapshot.scope,
-        epoch: null,
-        stamp: null,
-      };
-      const epoch = await this.#fresh({
-        actor,
-        scope: snapshot.scope,
-        action: "pluginInstallation:select",
-        pluginId: selection.pluginId,
-        packageDigest: selection.selectedPackageDigest,
-      });
-      const pkg = this.#owner.currentSelectedPackage({
-        scope: snapshot.scope,
-        pluginId: selection.pluginId,
-      });
-      const descriptor =
-        pkg === null
-          ? null
-          : await verifyDesktopInstalledPackage({
-              installRoot: this.#dependencies.configuration.installRoot,
-              package: pkg,
-              registry: this.#dependencies.registry,
-              signal: this.#lifetime.signal,
-              hostUiServices: this.#dependencies.hostUiServices,
-            });
-      records.push(
-        Object.freeze({ selection, package: pkg, descriptor, epoch }),
-      );
-    }
-    const published: PluginNodeCommitCandidate["identity"][] = [];
     try {
-      for (const record of orderInstallationRecoveries(
-        records,
-        this.#node,
-        this.#dependencies.hostUiServices,
-      )) {
-        const operation: Operation = {
-          actor,
-          scope: snapshot.scope,
-          epoch: record.epoch,
-          stamp: null,
-        };
-        this.#operation = operation;
-        const handle = await this.#local.prepareRecovery(
-          {
+      await recoverDesktopPluginProfile({
+        actor,
+        owner: this.#owner,
+        nodes: this.#node,
+        local: this.#local,
+        hostUiServices: this.#dependencies.hostUiServices,
+        bindOperation: (scope, epoch) => {
+          const operation: Operation = { actor, scope, epoch, stamp: null };
+          this.#operation = operation;
+          return operation;
+        },
+        isCurrent: (operation) =>
+          !this.#closed && this.#operation === operation,
+        confirmed: (selection) => this.#confirmed(selection),
+        refresh: (selection, scope) =>
+          this.#fresh({
             actor,
-            scope: snapshot.scope,
-            selection: record.selection,
-            package: record.package,
-          },
-          {
-            authorizeCurrent: ({ selection }) =>
-              !this.#closed &&
-              this.#operation === operation &&
-              operation.epoch === record.epoch &&
-              this.#confirmed(selection)
-                ? "allow"
-                : "deny",
-            validateCompatibility: async () => {
-              if (record.package !== null)
-                await verifyDesktopInstalledPackage({
-                  installRoot: this.#dependencies.configuration.installRoot,
-                  package: record.package,
-                  registry: this.#dependencies.registry,
-                  signal: this.#lifetime.signal,
-                  hostUiServices: this.#dependencies.hostUiServices,
-                });
-            },
-          },
-        );
-        const wrapped = this.#wrap(handle, {
-          actor,
-          scope: snapshot.scope,
-          nextSelection: record.selection,
-        });
-        try {
-          await wrapped.prepareCommit!({ selection: record.selection });
-          wrapped.commit({ selection: record.selection });
-          const current = this.#node
-            .snapshot()
-            .find(
-              (value) =>
-                value.phase === "accepting" &&
-                value.identity.pluginId === record.selection.pluginId,
-            );
-          if (current !== undefined) published.push(current.identity);
-        } catch (error) {
-          await wrapped.abort();
-          throw error;
-        }
-      }
+            scope,
+            action: "pluginInstallation:select",
+            pluginId: selection.pluginId,
+            packageDigest: selection.selectedPackageDigest,
+          }),
+        verify: (pkg) =>
+          verifyDesktopInstalledPackage({
+            installRoot: this.#dependencies.configuration.installRoot,
+            package: pkg,
+            registry: this.#dependencies.registry,
+            signal: this.#lifetime.signal,
+            hostUiServices: this.#dependencies.hostUiServices,
+          }),
+        wrap: (handle, selection) => this.#wrap(handle, selection),
+      });
       this.#recovered = true;
-    } catch (error) {
-      for (const identity of published.reverse()) {
-        if (
-          this.#node
-            .snapshot()
-            .some(
-              (value) =>
-                value.identity === identity && value.phase === "accepting",
-            )
-        )
-          this.#node.revoke(identity.pluginId);
-      }
-      await this.#node.drain();
-      throw error;
     } finally {
       this.#operation = original;
     }

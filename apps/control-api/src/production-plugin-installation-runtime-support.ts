@@ -82,7 +82,7 @@ export type InstallationRecoveryRecord = Readonly<{
   epoch: string;
 }>;
 
-/** Full preflight before setup; required providers precede consumers, never latest-package fallback. */
+/** Full preflight before setup; present declared providers precede consumers, never latest-package fallback. */
 export function orderInstallationRecoveries(
   records: readonly InstallationRecoveryRecord[],
   node: Pick<PluginNodeHost, "serviceIdentities">,
@@ -93,18 +93,24 @@ export function orderInstallationRecoveries(
     string,
     Readonly<{ apiVersion: string; record: InstallationRecoveryRecord | null }>
   >();
+  const serviceKey = (service: string, apiVersion: string) =>
+    `${service}\u0000${apiVersion}`;
   for (const value of node.serviceIdentities())
     if (value.provider === null || !replacing.has(value.provider.pluginId))
-      available.set(value.service, {
+      available.set(serviceKey(value.service, value.apiVersion), {
         apiVersion: value.apiVersion,
         record: null,
       });
   for (const record of records) {
     if (record.selection.state !== "enabled") continue;
     for (const service of record.descriptor!.provides) {
-      if (available.has(service.service))
+      if (
+        [...available.keys()].some((key) =>
+          key.startsWith(`${service.service}\u0000`),
+        )
+      )
         throw new ApplicationError("conflict", "plugin_service_conflict");
-      available.set(service.service, {
+      available.set(serviceKey(service.service, service.apiVersion), {
         apiVersion: service.apiVersion,
         record,
       });
@@ -134,8 +140,10 @@ export function orderInstallationRecoveries(
         continue;
       }
       for (const requirement of record.descriptor!.requires) {
-        if (requirement.optional) continue;
-        const provider = available.get(requirement.service);
+        const provider = available.get(
+          serviceKey(requirement.service, requirement.apiVersion),
+        );
+        if (requirement.optional && provider === undefined) continue;
         if (provider?.apiVersion !== requirement.apiVersion)
           throw new ApplicationError(
             "conflict",

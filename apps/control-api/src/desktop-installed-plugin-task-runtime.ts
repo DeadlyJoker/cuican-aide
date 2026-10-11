@@ -132,6 +132,7 @@ export function assertDesktopInstalledPluginTaskComposition(
 export async function createDesktopInstalledPluginTaskRuntime(
   input: ConstructorParameters<typeof DesktopInstalledPluginTaskAuthority>[0],
   dependencies: Readonly<{
+    sharedBinding?: import("./desktop-plugin-task-service-binding.ts").DesktopPluginTaskServiceBinding;
     clock: ApplicationClock;
     digester: ContentDigester;
     creativeProjects?: PreparedCreativeProjects;
@@ -153,6 +154,9 @@ export async function createDesktopInstalledPluginTaskRuntime(
   let core: InstalledPluginTaskRuntimeCore | undefined;
   try {
     core = await createInstalledPluginTaskRuntimeCore({
+      ...(dependencies.sharedBinding === undefined
+        ? {}
+        : { sharedBinding: dependencies.sharedBinding }),
       store: input.store,
       requests: authority.requests,
       installRoot: input.configuration.installRoot,

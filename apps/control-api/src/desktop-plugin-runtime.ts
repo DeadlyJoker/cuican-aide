@@ -43,6 +43,7 @@ import {
   createDesktopPluginInstallationRuntime,
   type DesktopPluginInstallationRuntime,
 } from "./desktop-plugin-installation-runtime.ts";
+import { DesktopPluginTaskServiceBinding } from "./desktop-plugin-task-service-binding.ts";
 import type {
   PluginInstallationControlService,
   PluginSourceControlService,
@@ -264,6 +265,15 @@ export async function createDesktopPluginRuntime(
     tasks === undefined && nativeControl === undefined
       ? undefined
       : createDeferredPluginUiHostServiceAvailability();
+  const taskBinding =
+    tasks === undefined && nativeControl === undefined
+      ? undefined
+      : new DesktopPluginTaskServiceBinding({
+          configuration,
+          registry,
+          authority,
+          store: dependencies.store,
+        });
   const hostUiServices: PluginUiHostServiceAvailabilityPort = Object.freeze({
     isAvailable: (input) =>
       (
@@ -335,6 +345,7 @@ export async function createDesktopPluginRuntime(
         clock: dependencies.clock,
         digester: dependencies.digester,
         hostUiServices: deferredServices?.port ?? hostUiServices,
+        taskBinding,
       },
     );
     if (activationConfiguration !== undefined) {
@@ -530,6 +541,15 @@ export async function createDesktopPluginRuntime(
     let closed = false;
     let closing: Promise<void> | null = null;
     const physical = new Set<Promise<unknown>>();
+    if (taskBinding !== undefined) {
+      const restore = installation.restoreTaskInstancesForStartup();
+      taskBinding.bindStartup(restore);
+      physical.add(restore);
+      void restore.then(
+        () => physical.delete(restore),
+        () => physical.delete(restore),
+      );
+    }
     const available = () => {
       if (closed)
         throw new ApplicationError("conflict", "desktop_plugin_runtime_closed");
@@ -679,6 +699,7 @@ export async function createDesktopPluginRuntime(
         if (closing !== null) return closing;
         closed = true;
         deferredServices?.close();
+        taskBinding?.close();
         authority.withdraw();
         return (closing = closeAll([
           () => conversations?.close(),
@@ -702,6 +723,7 @@ export async function createDesktopPluginRuntime(
     });
   } catch (error) {
     deferredServices?.close();
+    taskBinding?.close();
     authority.withdraw();
     try {
       await closeAll([
@@ -759,6 +781,7 @@ export async function createDesktopPluginRuntime(
         {
           clock: dependencies.clock,
           digester: dependencies.digester,
+          sharedBinding: taskBinding,
           creativeProjects: dependencies.creativeProjects,
           ...(dependencies.projectMaterialStorage === undefined
             ? {}
@@ -768,6 +791,7 @@ export async function createDesktopPluginRuntime(
             : { metadataHostUiServices }),
         },
       );
+      taskBinding?.bindCore(taskRuntime.core);
       return;
     }
     if (
@@ -791,6 +815,7 @@ export async function createDesktopPluginRuntime(
       {
         clock: dependencies.clock,
         digester: dependencies.digester,
+        sharedBinding: taskBinding,
         creativeProjects: dependencies.creativeProjects,
         fetch: dependencies.fetch,
         ...(metadataHostUiServices === undefined
@@ -798,5 +823,6 @@ export async function createDesktopPluginRuntime(
           : { metadataHostUiServices }),
       },
     );
+    taskBinding?.bindCore(taskRuntime.core);
   }
 }

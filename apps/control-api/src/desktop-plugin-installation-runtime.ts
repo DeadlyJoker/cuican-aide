@@ -46,6 +46,7 @@ import {
   capturePluginUiHostServiceAvailability,
   type PluginUiHostServiceAvailabilityPort,
 } from "@crewon/plugin-host";
+import { DesktopPluginTaskServiceBinding } from "./desktop-plugin-task-service-binding.ts";
 
 type Method =
   | "install"
@@ -73,6 +74,8 @@ export type DesktopPluginInstallationRuntime = Readonly<{
   compositionStatus: PluginCompositionStatusControlService;
   /** Internal Host borrowing only; not an HTTP/SDK operation or a restoration request. */
   borrowNode(input: DesktopPluginNodeBorrowInput): DesktopPluginNodeBorrow;
+  /** Explicit original Native boot after actual Task Core and services bind; not an HTTP operation. */
+  restoreTaskInstancesForStartup(): Promise<void>;
   close(): Promise<void>;
 }>;
 const runtimes = new WeakMap<
@@ -113,6 +116,7 @@ export function assertDesktopPluginInstallationRuntime(
     );
 }
 type Dependencies = Readonly<{
+  taskBinding?: DesktopPluginTaskServiceBinding;
   store: SqliteRunStore;
   clock: ApplicationClock;
   digester: ContentDigester;
@@ -157,6 +161,16 @@ export async function createDesktopPluginInstallationRuntime(
   )
     throw new Error("desktop_plugin_installation_dependencies_invalid");
   const registry = input.registry;
+  if (dependencies.taskBinding !== undefined) {
+    if (!DesktopPluginTaskServiceBinding.isOwner(dependencies.taskBinding))
+      throw new Error("desktop_plugin_task_binding_invalid");
+    dependencies.taskBinding.assertSource({
+      configuration,
+      registry,
+      authority: input.authority,
+      store: dependencies.store,
+    });
+  }
   const hostUiServices = capturePluginUiHostServiceAvailability(
     dependencies.hostUiServices,
   );
@@ -189,6 +203,7 @@ export async function createDesktopPluginInstallationRuntime(
     scope: initialScope,
     prepareBusinessCandidate,
     hostUiServices,
+    taskBinding: dependencies.taskBinding,
   });
   profiles.set(
     extensionCanonicalJson(initialScope),
@@ -225,6 +240,7 @@ export async function createDesktopPluginInstallationRuntime(
         scope,
         prepareBusinessCandidate,
         hostUiServices,
+        taskBinding: dependencies.taskBinding,
       }).then((current) => {
         resolvedProfiles.add(current);
         if (closed) current.withdraw();
@@ -402,6 +418,12 @@ export async function createDesktopPluginInstallationRuntime(
       available();
       return initialProfile.compositionState(pluginSecurityActor(actorInput));
     },
+    restoreTaskInstancesForStartup: () => {
+      available();
+      if (dependencies.taskBinding === undefined)
+        throw new Error("desktop_plugin_task_service_unavailable");
+      return track(initialProfile.restoreTaskInstancesForStartup());
+    },
     assertProfileOwnership: (actorInput: ActorContext) => {
       available();
       const actor = pluginSecurityActor(actorInput);
@@ -463,6 +485,7 @@ export async function createDesktopPluginInstallationRuntime(
     runtime,
     Object.freeze({ configuration, registry, authority, store }),
   );
+  dependencies.taskBinding?.bindInstallation(runtime);
   return runtime;
 }
 

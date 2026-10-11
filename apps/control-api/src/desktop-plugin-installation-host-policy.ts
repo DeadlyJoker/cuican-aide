@@ -36,6 +36,7 @@ export function createDesktopPluginInstallationHostPolicy(
       }>,
     ): Promise<string>;
     checkUiServices(candidate: PluginActivationCandidate): void;
+    assertNodeServices?(candidate: PluginActivationCandidate): void;
     authorizeCommit(
       selection: Parameters<
         LocalPluginInstallationHostDependencies["authorizeCommit"]
@@ -63,6 +64,8 @@ export function createDesktopPluginInstallationHostPolicy(
       pluginId: value.candidate.descriptor.pluginId,
       packageDigest: value.candidate.packageDigest,
     });
+    if (action === "pluginInstallation:select")
+      input.assertNodeServices?.(value.candidate);
     return "allow" as const;
   };
   return Object.freeze({
@@ -91,6 +94,10 @@ export function createDesktopPluginInstallationHostPolicy(
         value.nextSelection.state === "enabled" &&
         value.descriptor !== null
       ) {
+        input.assertNodeServices?.({
+          descriptor: value.descriptor,
+          packageDigest: value.package!.packageDigest,
+        });
         if (value.descriptor.entrypoints.node === null)
           input.checkUiServices({
             descriptor: value.descriptor,

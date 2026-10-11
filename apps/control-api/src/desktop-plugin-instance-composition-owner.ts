@@ -13,6 +13,7 @@ import type {
   PluginNodeCommitCandidate,
   PluginNodeHostServiceCatalog,
   PluginUiHostServiceAvailabilityPort,
+  PluginActivationCandidate,
 } from "@crewon/plugin-host";
 import type { SqlitePluginInstallationProfileOwner } from "@crewon/store";
 import type { DesktopPluginConfiguration } from "./desktop-plugin-configuration.ts";
@@ -36,6 +37,7 @@ type Dependencies = Readonly<{
   catalog: PluginNodeHostServiceCatalog;
   hostUiServices?: PluginUiHostServiceAvailabilityPort;
   signal: AbortSignal;
+  assertNodeServices?(candidate: PluginActivationCandidate): void;
   assertOperation(actor: ActorContext, scope: PluginProfileScope): void;
   refreshAuthority(
     actor: ActorContext,
@@ -130,6 +132,18 @@ export class DesktopPluginInstanceCompositionOwner {
       input.nodes.revoke(result.mutation.selection.pluginId);
     await input.metadata.observeSelection(actor, result);
     if (result.projection.outcome !== "applied") return;
+    await this.#synchronize(actor);
+  }
+
+  /** Explicit Native boot only; original graph/scope/package policies remain authoritative. */
+  async restoreForStartup(actor: ActorContext): Promise<void> {
+    this.#projection = null;
+    await this.#input.metadata.publishCurrent(actor);
+    await this.#synchronize(actor);
+  }
+
+  async #synchronize(actor: ActorContext): Promise<void> {
+    const input = this.#input;
     const source = input.metadata.currentLock(actor);
     if (source === null) return;
     const snapshot = input.owner.snapshot();
@@ -206,6 +220,7 @@ export class DesktopPluginInstanceCompositionOwner {
           stamp = null;
           assertPrivateBinding(lock, source, projection.privateLock);
           await refresh(node);
+          input.assertNodeServices?.(candidate);
           return input.registry.authorizeCandidate(candidate);
         },
         beforePublication: async ({
@@ -230,6 +245,7 @@ export class DesktopPluginInstanceCompositionOwner {
           const proof = stamp;
           stamp = null;
           assertCurrent();
+          input.assertNodeServices?.(candidate);
           assertPrivateBinding(lock, source, projection.privateLock);
           if (
             proof === null ||
