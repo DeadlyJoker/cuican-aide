@@ -7,11 +7,8 @@ import {
 } from "./desktop-plugin-ui-runtime.ts";
 import { createDesktopProjectAssetV2PluginRuntime } from "./desktop-project-asset-v2-plugin-runtime.ts";
 import { composeDesktopProjectMediaResultUi } from "./desktop-project-media-result-ui-composition.ts";
-import type { InstalledProjectMediaResultRuntime } from "./installed-project-media-result-runtime.ts";
 import { composeDesktopProjectMediaGenerationUi } from "./desktop-project-media-generation-ui-composition.ts";
-import type { ProjectMediaInputStageControlOwner } from "./project-media-input-stage-control-owner.ts";
 import { composeDesktopProjectMediaInputUi } from "./desktop-project-media-input-ui-composition.ts";
-import type { ProjectAssetStageControlOwner } from "./project-asset-stage-control-owner.ts";
 import { randomBytes } from "node:crypto";
 import {
   ApplicationError,
@@ -42,11 +39,6 @@ import {
   type DesktopPluginInstallationRuntime,
 } from "./desktop-plugin-installation-runtime.ts";
 import { DesktopPluginTaskServiceBinding } from "./desktop-plugin-task-service-binding.ts";
-import type {
-  PluginInstallationControlService,
-  PluginSourceControlService,
-  PluginUiControlService,
-} from "./plugin-control-route.ts";
 import { StandaloneIdentity } from "./standalone-adapters.ts";
 import { DesktopInstalledPluginActivationOwner } from "./desktop-installed-plugin-activation-owner.ts";
 import type { DesktopInstalledPluginActivationConfig } from "./desktop-installed-plugin-activation-environment.ts";
@@ -77,37 +69,11 @@ import {
   createDesktopInstalledPluginTaskRuntime,
   type DesktopInstalledPluginTaskRuntime,
 } from "./desktop-installed-plugin-task-runtime.ts";
-import type { InstalledPluginTaskRuntimeCore } from "./installed-plugin-task-runtime-core.ts";
 import { createDesktopProjectConversationRuntime } from "./desktop-project-conversation-runtime.ts";
-import type { ThreadApplicationService } from "@crewon/application";
-import type { ProjectConversationControlOwner } from "./project-conversation-control-owner.ts";
-import type { RunLifecycleEvent } from "@crewon/domain";
 import type { DesktopProjectMaterialStorage } from "@crewon/media-runtime/desktop-project-material-archive";
-import type { InstalledProjectMediaGenerationRuntime } from "./installed-project-media-generation-runtime.ts";
 
-export type DesktopPluginRuntime = Readonly<{
-  /** Trusted in-process deployment wiring only; not exposed by HTTP or UI props. */
-  taskHostServices?: DesktopPluginTaskServiceBinding["catalog"]["registrations"];
-  installation: PluginInstallationControlService;
-  compositionState: DesktopPluginInstallationRuntime["compositionState"];
-  compositionStatus: DesktopPluginInstallationRuntime["compositionStatus"];
-  sources: PluginSourceControlService;
-  ui: PluginUiControlService;
-  configuration: DesktopPluginConfigurationRuntime;
-  tasks?: InstalledPluginTaskRuntimeCore;
-  projectMediaGenerations?: InstalledProjectMediaGenerationRuntime;
-  projectMediaResults?: InstalledProjectMediaResultRuntime;
-  bindProjectConversations?(
-    threads: ThreadApplicationService,
-  ): ProjectConversationControlOwner | undefined;
-  projectMediaInputStages?(): ProjectMediaInputStageControlOwner | undefined;
-  projectAssetStages?(): ProjectAssetStageControlOwner | undefined;
-  startProjectTextPlans?(): void;
-  consumeProjectTextPlanRunEvents?(
-    events: readonly RunLifecycleEvent[],
-  ): Promise<void>;
-  close(): Promise<void>;
-}>;
+import type { DesktopPluginRuntime } from "./desktop-plugin-runtime-contract.ts";
+export type { DesktopPluginRuntime } from "./desktop-plugin-runtime-contract.ts";
 
 /** Native metadata/history and independent task opt-in; this factory never funds accounts. */
 import {
@@ -648,7 +614,11 @@ export async function createDesktopPluginRuntime(
       sources: ownedInstallation.service,
       ...(taskBinding === undefined || taskRuntime === undefined
         ? {}
-        : { taskHostServices: taskBinding.catalog.registrations }),
+        : {
+            taskHostServices: taskBinding.catalog.registrations,
+            assertTaskHostServicesOwner:
+              taskBinding.assertWorkerOwner.bind(taskBinding),
+          }),
       ui,
       configuration: ownedConfiguration,
       ...(taskRuntime === undefined ? {} : { tasks: taskRuntime.core }),

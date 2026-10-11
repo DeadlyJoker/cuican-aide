@@ -269,7 +269,12 @@ export async function nativeCompositionFixture(
     { mode: 0o600 },
   );
   const workers: { close(): Promise<void> }[] = [];
-  async function openWorker(options: { sharedTaskServices?: boolean } = {}) {
+  async function openWorker(
+    options: {
+      sharedTaskServices?: boolean;
+      afterPackageAuthorization?: () => Promise<void>;
+    } = {},
+  ) {
     const config = loadInstalledPluginAuthorityConfig(workerPath, {});
     const authority = createInstalledPluginWorkerAuthority(config);
     const registration = await loadInstalledPluginBusinessRegistration({
@@ -307,6 +312,15 @@ export async function nativeCompositionFixture(
       extensions: f.originalStore.extensionStore(),
       config: {
         ...authority.installedPluginExecution,
+        authorizePackage: async (input, inputSignal) => {
+          const outcome =
+            await authority.installedPluginExecution.authorizePackage(
+              input,
+              inputSignal,
+            );
+          if (outcome === "allow") await options.afterPackageAuthorization?.();
+          return outcome;
+        },
         ...(authority.installedPluginExecution.compositionExecution ===
           undefined || options.sharedTaskServices === false
           ? {}
@@ -319,6 +333,7 @@ export async function nativeCompositionFixture(
                   ...f.taskHostServices()!.map((entry) => entry.metadata),
                 ],
                 hostServices: f.taskHostServices()!,
+                hostServicesOwner: f.taskHostServicesOwner,
               },
             }),
       },

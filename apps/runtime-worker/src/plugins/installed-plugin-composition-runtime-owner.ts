@@ -20,8 +20,12 @@ import type {
   InstalledPluginRuntimePrepared,
   InstalledPluginRuntimePackageOwner,
 } from "./installed-plugin-runtime-resident.ts";
-import type { InstalledPluginRuntimeResolverDependencies } from "./installed-plugin-runtime-resolver-dependencies.ts";
+import type {
+  InstalledPluginRuntimeResolverDependencies,
+  InstalledPluginSharedHostServicesOwner,
+} from "./installed-plugin-runtime-resolver-dependencies.ts";
 import { captureInstalledPluginCompositionAuthority } from "./installed-plugin-composition-authority.ts";
+import { captureInstalledPluginSharedHostServicesOwner } from "./installed-plugin-shared-host-services-owner.ts";
 
 /** Capture explicit deployment versions before any asynchronous storage or package loading. */
 export function captureInstalledPluginCompositionExecution(
@@ -42,12 +46,14 @@ export function captureInstalledPluginCompositionExecution(
           "hostServiceMetadata",
           "assertCurrentAuthority",
           "hostServices",
+          "hostServicesOwner",
         ].includes(key as string),
     ) ||
     (services !== undefined && (!services.enumerable || !("value" in services)))
   )
     fail("installed_plugin_composition_configuration_invalid");
   const authority = captureInstalledPluginCompositionAuthority(input);
+  const servicesOwner = captureInstalledPluginSharedHostServicesOwner(input);
   const hostServiceMetadata = createPluginCompositionLock(
     {
       schemaVersion: "crewon.plugin-composition-lock.v1",
@@ -70,6 +76,8 @@ export function captureInstalledPluginCompositionExecution(
     services === undefined
       ? undefined
       : capturePluginNodeHostServiceCatalog(services.value);
+  if (catalog?.registrations.length && servicesOwner === undefined)
+    fail("installed_plugin_composition_host_service_owner_missing");
   for (const registration of catalog?.registrations ?? []) {
     const declared = hostServiceMetadata.find(
       (entry) =>
@@ -87,6 +95,9 @@ export function captureInstalledPluginCompositionExecution(
     ...(authority === undefined ? {} : { assertCurrentAuthority: authority }),
     hostServiceMetadata,
     ...(catalog === undefined ? {} : { hostServices: catalog.registrations }),
+    ...(servicesOwner === undefined
+      ? {}
+      : { hostServicesOwner: servicesOwner }),
   });
 }
 
@@ -99,6 +110,7 @@ export async function openInstalledPluginCompositionRuntime(
     installRoot: string;
     hostServices: readonly PluginHostService[];
     hostServiceMetadata: readonly PluginCompositionHostService[];
+    hostServicesOwner?: InstalledPluginSharedHostServicesOwner;
     authorizePackage: InstalledPluginRuntimeResolverDependencies["authorizePackage"];
     purpose: "submit" | "observe";
     signal: AbortSignal;
@@ -106,10 +118,27 @@ export async function openInstalledPluginCompositionRuntime(
   }>,
 ) {
   const { prepared, contexts } = input;
+  const assertServicesOwner = () =>
+    input.hostServicesOwner?.(
+      Object.freeze({
+        actor: Object.freeze({
+          tenantId: prepared.scope.tenantId,
+          spaceId: prepared.scope.spaceId,
+          principalId: prepared.admission.principalId,
+          actorId: prepared.admission.actorId,
+        }),
+        scope: prepared.scope,
+      }),
+    );
   const executionPurpose =
     prepared.snapshot.context.run.source === null ? input.purpose : "observe";
   const lock = contexts.verifiedComposition(prepared.snapshot);
   if (!lock) fail("installed_plugin_composition_missing");
+  contexts.assertCompositionAuthorityCurrent(
+    prepared.snapshot,
+    executionPurpose,
+  );
+  assertServicesOwner();
   const candidates = new Map<string, PluginActivationCandidate>();
   const published = new Set<string>();
   const authorize = async (
@@ -118,6 +147,8 @@ export async function openInstalledPluginCompositionRuntime(
     signal: AbortSignal,
   ) => {
     input.assertOpen(signal);
+    contexts.assertCompositionAuthorityCurrent(prepared.snapshot, purpose);
+    assertServicesOwner();
     const pkg = await contexts.assertCompositionNodeCurrent(
       prepared.snapshot,
       candidate.descriptor.pluginId,
@@ -151,6 +182,7 @@ export async function openInstalledPluginCompositionRuntime(
       signal,
     );
     input.assertOpen(signal);
+    assertServicesOwner();
   };
   const owner = await PluginExecutionComposition.open({
     lock,
@@ -188,6 +220,7 @@ export async function openInstalledPluginCompositionRuntime(
           prepared.snapshot,
           executionPurpose,
         );
+        assertServicesOwner();
         const original = candidates.get(node.pluginId);
         return published.has(node.pluginId) &&
           original &&
@@ -240,6 +273,7 @@ export async function openInstalledPluginCompositionRuntime(
         if ((await readSelection(pluginId)) !== selection)
           fail("installed_plugin_selection_changed");
       contexts.assertCompositionAuthorityCurrent(prepared.snapshot, purpose);
+      assertServicesOwner();
     },
   };
 }

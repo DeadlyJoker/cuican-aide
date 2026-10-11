@@ -787,6 +787,11 @@ export async function nativeTaskRuntimeFixture(
   return {
     actual,
     taskHostServices: () => runtime?.taskHostServices,
+    taskHostServicesOwner: (
+      input: Parameters<
+        NonNullable<typeof actual.assertTaskHostServicesOwner>
+      >[0],
+    ) => runtime!.assertTaskHostServicesOwner!(input),
     prepared,
     originalStore,
     policyPath,

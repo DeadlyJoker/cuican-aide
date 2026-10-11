@@ -9,6 +9,55 @@ const metadata = Object.freeze({
   implementationRevision: 1,
 });
 
+test("actual shared ports require a live owner qualifier, which cannot be asynchronous or data-only", async () => {
+  const implementation = {
+    service: metadata.service,
+    apiVersion: metadata.apiVersion,
+    value: Object.freeze({}),
+  };
+  const base = {
+    hostServiceMetadata: [metadata],
+    hostServices: [{ metadata, implementation }],
+  };
+  assert.throws(
+    () => captureInstalledPluginCompositionExecution(base),
+    /installed_plugin_composition_host_service_owner_missing/,
+  );
+  const owner = {
+    actor: { tenantId: "t", spaceId: "s", principalId: "p", actorId: "a" },
+    scope: { tenantId: "t", spaceId: "s", profileId: "profile" },
+  };
+  for (const callback of [
+    () => true,
+    () => Promise.resolve(),
+    () => Promise.reject(new Error("async_not_approval")),
+  ]) {
+    const captured = captureInstalledPluginCompositionExecution({
+      ...base,
+      hostServicesOwner: callback,
+    });
+    assert.throws(
+      () => captured.hostServicesOwner!(owner),
+      /installed_plugin_composition_host_service_owner_invalid/,
+    );
+  }
+  let reads = 0;
+  const accessor = Object.defineProperty(base, "hostServicesOwner", {
+    enumerable: true,
+    get() {
+      reads++;
+      return () => {};
+    },
+  });
+  assert.throws(
+    () => captureInstalledPluginCompositionExecution(accessor),
+    /installed_plugin_composition_configuration_invalid/,
+  );
+  assert.equal(reads, 0);
+  // Rejected native Promise from a bad trusted callback has been observed, not treated as permission.
+  await new Promise<void>((resolve) => setImmediate(resolve));
+});
+
 test("deployment captures paired actual ports without rebinding their source owner or adding grants", () => {
   const identity = Object.freeze({
     pluginId: "test.consumer",
@@ -36,6 +85,7 @@ test("deployment captures paired actual ports without rebinding their source own
   const captured = captureInstalledPluginCompositionExecution({
     hostServiceMetadata: [metadata],
     hostServices: input,
+    hostServicesOwner() {},
   });
   input.length = 0;
   assert.ok(Object.isFrozen(captured.hostServices));
@@ -66,6 +116,7 @@ test("an implementation must match its explicitly approved deployment identity",
         captureInstalledPluginCompositionExecution({
           hostServiceMetadata: declarations,
           hostServices: [{ metadata, implementation }],
+          hostServicesOwner() {},
         }),
       /installed_plugin_composition_host_service_identity_conflict/,
     );

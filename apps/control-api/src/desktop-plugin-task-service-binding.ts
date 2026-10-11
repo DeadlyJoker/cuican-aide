@@ -2,6 +2,7 @@ import {
   ApplicationError,
   capturePluginUiInvocationCommitAuthority,
   type PluginUiActionContext,
+  type ActorContext,
 } from "@crewon/application";
 import {
   extensionCanonicalJson,
@@ -141,6 +142,17 @@ export class DesktopPluginTaskServiceBinding {
 
   assertStore(store: unknown): void {
     if (this.#closed || store !== this.#source.store) unavailable();
+  }
+
+  /** A shared service must belong to the actual persisted Run owner, not just match a service/version label. */
+  assertWorkerOwner(
+    input: Readonly<{
+      actor: ActorContext;
+      scope: Source["configuration"]["scope"];
+    }>,
+  ): void {
+    this.#current();
+    this.#source.authority.assertScope(input.actor, input.scope);
   }
 
   bindInstallation(installation: DesktopPluginInstallationRuntime): void {

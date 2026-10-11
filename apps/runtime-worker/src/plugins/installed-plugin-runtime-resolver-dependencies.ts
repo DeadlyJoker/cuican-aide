@@ -1,4 +1,7 @@
-import type { PluginInstallationStore } from "@crewon/application";
+import type {
+  ActorContext,
+  PluginInstallationStore,
+} from "@crewon/application";
 import type { PluginProfileScope } from "@crewon/domain";
 import type { PluginCompositionHostService } from "@crewon/contracts/plugins";
 import type {
@@ -14,6 +17,13 @@ import type { InstalledPluginProjectFoundationToolsDependencies } from "./instal
 import type { InstalledPluginProjectOutlineToolsDependencies } from "./installed-plugin-project-outline-tools.ts";
 import type { InstalledPluginProjectMediaInputToolsDependencies } from "./installed-plugin-project-media-input-tools.ts";
 import type { InstalledPluginCompositionAuthority } from "./installed-plugin-composition-authority.ts";
+
+export type InstalledPluginSharedHostServicesOwner = (
+  input: Readonly<{
+    actor: ActorContext;
+    scope: PluginProfileScope;
+  }>,
+) => void;
 
 export type InstalledPluginRuntimeResolverDependencies = Readonly<{
   contexts: InstalledPluginRunContext;
@@ -43,6 +53,8 @@ export type InstalledPluginRuntimeResolverDependencies = Readonly<{
     hostServiceMetadata: readonly PluginCompositionHostService[];
     /** Actual trusted Host ports, paired with deployment metadata; never package/request declarations. */
     hostServices?: readonly PluginNodeHostServiceRegistration[];
+    /** Actual source owner verifies persisted Run ownership and stays live; metadata alone cannot substitute. */
+    hostServicesOwner?: InstalledPluginSharedHostServicesOwner;
     /** Actual live deployment authority. Absence preserves existing non-Native host contracts. */
     assertCurrentAuthority?: InstalledPluginCompositionAuthority;
   }>;

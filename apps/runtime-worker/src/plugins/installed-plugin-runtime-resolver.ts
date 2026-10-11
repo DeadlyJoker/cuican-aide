@@ -14,7 +14,6 @@ import {
 import {
   PluginExecutionPackage,
   pluginExecutionPackageFailureOwner,
-  type PluginExecutionPackageFailureOwner,
   type PluginActivationCandidate,
   type PluginNodeCommitCandidate,
 } from "@crewon/plugin-host";
@@ -56,7 +55,6 @@ import {
   canRetireInstalledPluginRuntimeResident,
   closeInstalledPluginRuntimeResident,
   type InstalledPluginRuntimePrepared as Prepared,
-  type InstalledPluginRuntimeResidentLifetime,
 } from "./installed-plugin-runtime-resident.ts";
 
 import {
@@ -68,26 +66,10 @@ import type { InstalledPluginRuntimeResolverDependencies } from "./installed-plu
 export type { InstalledPluginRuntimeResolverDependencies } from "./installed-plugin-runtime-resolver-dependencies.ts";
 
 type Acquire = Parameters<InstalledPluginRunRuntimeResolverPort["acquire"]>[0];
-type Resident = InstalledPluginRuntimeResidentLifetime & {
-  compositionAuthorization:
-    | ((purpose: "submit" | "observe", signal: AbortSignal) => Promise<void>)
-    | null;
-  candidate: PluginActivationCandidate;
-  prepared: Prepared;
-  projectTools: InstalledPluginProjectServices | null;
-  io: PluginExecutionIoOwner | null;
-};
-type Entry = {
-  key: string;
-  ready: Promise<Resident> | null;
-  resident: Resident | null;
-  failureOwner: PluginExecutionPackageFailureOwner | null;
-  users: number;
-  published: boolean;
-  closing: boolean;
-  closeTask: Promise<void> | null;
-  waitForUsers: (() => void) | null;
-};
+import type {
+  Resident,
+  Entry,
+} from "./installed-plugin-runtime-resolver-state.ts";
 
 /** Exact installed ESM execution owners; no latest-version fallback and no ownership of borrowed base tools. */
 export class InstalledPluginRuntimeResolver
@@ -549,6 +531,14 @@ export class InstalledPluginRuntimeResolver
               hostServices: openInput.hostServices ?? [],
               hostServiceMetadata:
                 this.#dependencies.compositionExecution!.hostServiceMetadata,
+              ...(this.#dependencies.compositionExecution!.hostServicesOwner ===
+              undefined
+                ? {}
+                : {
+                    hostServicesOwner:
+                      this.#dependencies.compositionExecution!
+                        .hostServicesOwner,
+                  }),
               authorizePackage: this.#dependencies.authorizePackage,
               purpose: input.purpose,
               signal: input.signal,
