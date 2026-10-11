@@ -1,6 +1,7 @@
 import type { ThreadCatalogNavigation } from "../../lib/thread/threadCatalogNavigation";
 import type { RecordedTaskChanges } from "../../lib/task-detail/recordedTaskChanges";
 import { useCommandSidebarCollapse } from "./useCommandSidebarCollapse";
+import { useCommandThreadModelSelection } from "./useCommandThreadModelSelection";
 import { Plus, ShieldCheck } from "lucide-react";
 import { createPortal } from "react-dom";
 import {
@@ -1013,8 +1014,14 @@ export function CommandWorkspace({
     setSceneMode("auto");
     persistThreadScene(selectedThreadId, nextScene);
   }, [newTaskDraft, selectedThreadId]);
-  const [model, setModel] = useState(fallbackCommandModelOptions[0].value);
-  const [modelSelectionTouched, setModelSelectionTouched] = useState(false);
+  const { model, selectModel } = useCommandThreadModelSelection({
+    threadId:
+      activeView === "assist"
+        ? assistantThread?.id ?? null
+        : selectedThreadId,
+    draft: activeView !== "assist" && newTaskDraft,
+    modelOptions,
+  });
   const [selectedReasoningEffort, setSelectedReasoningEffort] = useState<
     string | null
   >(null);
@@ -1718,23 +1725,6 @@ export function CommandWorkspace({
 
   const effectiveModelOptions =
     modelOptions.length > 0 ? modelOptions : fallbackCommandModelOptions;
-
-  useEffect(() => {
-    const defaultModel = effectiveModelOptions.find(
-      (option) => option.isDefault,
-    )?.value;
-    if (!effectiveModelOptions.some((option) => option.value === model)) {
-      setModel(
-        defaultModel ??
-          effectiveModelOptions[0]?.value ??
-          fallbackCommandModelOptions[0].value,
-      );
-      return;
-    }
-    if (!modelSelectionTouched && defaultModel && model !== defaultModel) {
-      setModel(defaultModel);
-    }
-  }, [effectiveModelOptions, model, modelSelectionTouched]);
 
   useEffect(() => {
     onComposerModelSelectionChange?.(
@@ -3225,8 +3215,7 @@ export function CommandWorkspace({
       setSelectedReasoningEffort(nextEffort);
       return;
     }
-    setModelSelectionTouched(true);
-    setModel(nextValue);
+    selectModel(nextValue);
   }
   const composerSendLabel = commandThreadRunning
     ? locale === "zh"

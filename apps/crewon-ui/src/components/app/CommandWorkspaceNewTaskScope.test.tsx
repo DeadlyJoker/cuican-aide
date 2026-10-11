@@ -103,7 +103,7 @@ describe("CommandWorkspace new-task execution scope", () => {
       commandComposer().querySelector('[data-action="stop"]'),
     ).not.toBeNull();
 
-    await click(container.querySelector('[data-nav-key="command"]'));
+    await click(container.querySelector('[data-action="new-task"]'));
     expect(select).toHaveBeenCalledWith(null);
     // The parent intentionally retains the original Thread/Run. A draft must
     // derive its own execution scope rather than relying on a parent refresh.
@@ -156,7 +156,7 @@ describe("CommandWorkspace new-task execution scope", () => {
     expect(
       pane().querySelector('[data-od-id="composer-progress-pill"]'),
     ).not.toBeNull();
-    await click(container.querySelector('[data-nav-key="command"]'));
+    await click(container.querySelector('[data-action="new-task"]'));
     await render(renderProps);
     expect(
       pane().querySelector('[data-od-id="composer-tool-approval"]'),
@@ -223,7 +223,7 @@ describe("CommandWorkspace new-task execution scope", () => {
     expect(
       readThreadExecutionTarget(window.localStorage, "background-thread"),
     ).toBe("agent:background-agent");
-    await click(container.querySelector('[data-nav-key="command"]'));
+    await click(container.querySelector('[data-action="new-task"]'));
     await render(renderProps);
     const trigger = commandComposer().querySelector(
       '[role="combobox"][aria-label="执行主体"]',
@@ -276,7 +276,7 @@ describe("CommandWorkspace new-task execution scope", () => {
       onSendNewThread: sendNew,
       onStop: stop,
     });
-    await click(container.querySelector('[data-nav-key="command"]'));
+    await click(container.querySelector('[data-action="new-task"]'));
     await render({
       ...props,
       composerValue: "独立的新会话请求",
@@ -322,7 +322,7 @@ describe("CommandWorkspace new-task execution scope", () => {
       );
       await render(props);
       if (entry === "sidebar") {
-        await click(container.querySelector('[data-nav-key="command"]'));
+        await click(container.querySelector('[data-action="new-task"]'));
       } else {
         await click(container.querySelector('[data-nav-key="projects"]'));
         await click(

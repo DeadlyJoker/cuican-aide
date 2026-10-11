@@ -1,4 +1,8 @@
 import { ControlProjectMediaInputStageTurn } from "./controlProjectMediaInputStageTurn";
+import {
+  readThreadModelSelection,
+  writeThreadModelSelection,
+} from "../thread/threadModelSelection";
 import { startPresentedProjectMediaInputStageTurn } from "./controlProjectMediaInputStagePresentation";
 import { ControlProjectAssetStageTurn } from "./controlProjectAssetStageTurn";
 import { startPresentedProjectAssetStageTurn } from "./controlProjectAssetStagePresentation";
@@ -1391,6 +1395,8 @@ export class ControlThreadRuntime {
     presentation?: ThreadTurnPresentation,
   ): Promise<TurnStartResponse> {
     validateSupportedTurnInput(mentions, settings, images);
+    const initialModelSelectionId =
+      readThreadModelSelection(threadId)?.selectionId ?? null;
     if (settings?.projectMediaInputStage !== undefined)
       return startPresentedProjectMediaInputStageTurn({
         threadId, text, settings,
@@ -1703,6 +1709,15 @@ export class ControlThreadRuntime {
       started,
       executionIntent,
     );
+    if (
+      started.thread.threadId === threadId &&
+      started.message.threadId === threadId &&
+      started.run.threadId === threadId
+    ) {
+      writeThreadModelSelection(threadId, agentVersion.model.modelId, {
+        expectedSelectionId: initialModelSelectionId,
+      });
+    }
     const turn = projectedTurn(started.message, null, started.run, [], false);
     this.#callbacks.onTurnStarted?.(threadId, turn);
     this.#ensureEventStream(
