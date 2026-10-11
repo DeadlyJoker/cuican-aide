@@ -68,6 +68,9 @@ export async function nativeCompositionFixture(
   const key = `native-composition-${randomUUID()}`;
   const state = {
     records: [] as string[],
+    taskPorts: [] as { createTask(input: unknown): unknown }[],
+    invocationGate: null as Promise<void> | null,
+    invocationEntered: null as ((ref: string) => void) | null,
     contexts: [] as unknown[],
     commands: [] as ToolExecutionCommand[],
     receiptPath: "",
@@ -80,7 +83,7 @@ export async function nativeCompositionFixture(
   });
   let entry: InstalledPluginAgentRuntimeEntry | undefined;
   const providerSource = `const f=globalThis[${JSON.stringify(key)}];export default {apiVersion:'crewon.plugin-host.v1',pluginId:${JSON.stringify(providerId)},setup(ctx){f.records.push('A:setup');ctx.services.provide(${JSON.stringify(providerService)},'1',{read(){f.records.push('A:read');return 'captured-native-A'}});return {dispose(){f.records.push('A:dispose')}}}};`;
-  const nodeSource = `import {readFileSync,writeFileSync} from "node:fs";const f=globalThis[${JSON.stringify(key)}];export default {apiVersion:'crewon.plugin-host.v1',pluginId:${JSON.stringify(manifest.pluginId)},setup(ctx){f.records.push('B:setup');const tasks=ctx.services.getOptional('crewon.tasks','1');const execution=ctx.services.getOptional('crewon.execution','1');const source=ctx.services.getOptional(${JSON.stringify(providerService)},'1');ctx.services.provide(${JSON.stringify(manifest.pluginId)},'1',{actions:[{contributionId:'workbench',action:'image.generate',kind:'generateTask'}],invoke({input,invocationRef}){return tasks.createTask({...input,invocationRef})}});if(execution)execution.register({create(context){if(!source)throw new Error('native_worker_original_provider_missing');f.records.push('B:factory');f.contexts.push(context);return {definitions(){return ${JSON.stringify(extensionToolDefinitions(manifest))}},executionPolicy(){return ${JSON.stringify(toolPolicy)}},async execute(command){f.records.push('B:execute');f.commands.push(command);const completed={status:'completed',executionId:command.executionId,providerReceiptId:'native-fixture/'+command.executionId,result:{schemaVersion:'crewon.tool-result.v0',callId:command.callId,output:source.read(),isError:false,artifactRef:null}};f.receipts.set(command.executionId,completed);writeFileSync(f.receiptPath,JSON.stringify(completed));return completed},async reconcile(command){f.records.push('B:reconcile');try{const saved=JSON.parse(readFileSync(f.receiptPath,'utf8'));if(saved.executionId===command.executionId)return saved}catch(error){if(error.code!=='ENOENT')throw error}return {status:'unknownOutcome',executionId:command.executionId,providerReceiptId:null}},async cancel(command){f.records.push('B:cancel');return f.receipts.get(command.executionId)??{status:'unknownOutcome',executionId:command.executionId,providerReceiptId:null}},canRetire(){return true},async close(){f.records.push('B:close')}}}});return {dispose(){f.records.push('B:dispose')}}}};`;
+  const nodeSource = `import {readFileSync,writeFileSync} from "node:fs";const f=globalThis[${JSON.stringify(key)}];export default {apiVersion:'crewon.plugin-host.v1',pluginId:${JSON.stringify(manifest.pluginId)},setup(ctx){f.records.push('B:setup');const tasks=ctx.services.getOptional('crewon.tasks','1');if(tasks)f.taskPorts.push(tasks);const execution=ctx.services.getOptional('crewon.execution','1');const source=ctx.services.getOptional(${JSON.stringify(providerService)},'1');ctx.services.provide(${JSON.stringify(manifest.pluginId)},'1',{actions:[{contributionId:'workbench',action:'image.generate',kind:'generateTask'}],async invoke({input,invocationRef}){if(f.invocationGate){f.invocationEntered(invocationRef);await f.invocationGate}return tasks.createTask({...input,invocationRef})}});if(execution)execution.register({create(context){if(!source)throw new Error('native_worker_original_provider_missing');f.records.push('B:factory');f.contexts.push(context);return {definitions(){return ${JSON.stringify(extensionToolDefinitions(manifest))}},executionPolicy(){return ${JSON.stringify(toolPolicy)}},async execute(command){f.records.push('B:execute');f.commands.push(command);const completed={status:'completed',executionId:command.executionId,providerReceiptId:'native-fixture/'+command.executionId,result:{schemaVersion:'crewon.tool-result.v0',callId:command.callId,output:source.read(),isError:false,artifactRef:null}};f.receipts.set(command.executionId,completed);writeFileSync(f.receiptPath,JSON.stringify(completed));return completed},async reconcile(command){f.records.push('B:reconcile');try{const saved=JSON.parse(readFileSync(f.receiptPath,'utf8'));if(saved.executionId===command.executionId)return saved}catch(error){if(error.code!=='ENOENT')throw error}return {status:'unknownOutcome',executionId:command.executionId,providerReceiptId:null}},async cancel(command){f.records.push('B:cancel');return f.receipts.get(command.executionId)??{status:'unknownOutcome',executionId:command.executionId,providerReceiptId:null}},canRetire(){return true},async close(){f.records.push('B:close')}}}});return {dispose(){f.records.push('B:dispose')}}}};`;
   const f = await nativeTaskRuntimeFixture(t, undefined, {
     composition: options.composition ?? true,
     provider: {
@@ -266,7 +269,7 @@ export async function nativeCompositionFixture(
     { mode: 0o600 },
   );
   const workers: { close(): Promise<void> }[] = [];
-  async function openWorker() {
+  async function openWorker(options: { sharedTaskServices?: boolean } = {}) {
     const config = loadInstalledPluginAuthorityConfig(workerPath, {});
     const authority = createInstalledPluginWorkerAuthority(config);
     const registration = await loadInstalledPluginBusinessRegistration({
@@ -302,7 +305,23 @@ export async function nativeCompositionFixture(
     const resolver = await composeInstalledPluginRuntimeResolver({
       store: f.originalStore,
       extensions: f.originalStore.extensionStore(),
-      config: authority.installedPluginExecution,
+      config: {
+        ...authority.installedPluginExecution,
+        ...(authority.installedPluginExecution.compositionExecution ===
+          undefined || options.sharedTaskServices === false
+          ? {}
+          : {
+              compositionExecution: {
+                ...authority.installedPluginExecution.compositionExecution,
+                hostServiceMetadata: [
+                  ...authority.installedPluginExecution.compositionExecution
+                    .hostServiceMetadata,
+                  ...f.taskHostServices()!.map((entry) => entry.metadata),
+                ],
+                hostServices: f.taskHostServices()!,
+              },
+            }),
+      },
     });
     assert.ok(resolver);
     let closed = false;

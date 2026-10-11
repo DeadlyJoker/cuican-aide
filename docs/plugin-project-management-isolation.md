@@ -6,15 +6,29 @@
 
 继续复用原 Workspace registry、CreativeProject、Thread、Run、Tool、产物 Store、账号与授权服务。插件得到由 Host 绑定归属的管理视图，沿用相同操作和响应，不建立另一套项目数据库、聊天组件或执行器。
 
+“独立管理”指同一套管理能力中的归属隔离，不是每个插件复制一个管理系统。隔离在原服务和存储入口执行，右栏只投影该插件获准访问的项目与产物。即使插件绕过页面过滤直接调用接口，也不能跨归属读取或修改。
+
+| 管理对象 | 继续复用                                  | 隔离边界                                                               |
+| -------- | ----------------------------------------- | ---------------------------------------------------------------------- |
+| 项目     | 原创建、列表、详情、归档与恢复            | Host 绑定完整归属，SQL 分页前过滤；详情和写入再次校验                  |
+| 工作空间 | 原目录分配、registry 与文件访问           | 每个插件项目绑定自己的目录；插件不能自选别人的 root 或 workspaceId     |
+| 会话     | 原 Thread、聊天输入框、模型选择与流式执行 | 同一项目可以有多个会话；绑定由原服务确认，打开右栏不迁移当前会话       |
+| 任务     | 原 Run、队列、取消、查询与恢复            | 当前实际调用资格加持久项目归属；共享执行服务不授予其他插件的任务访问权 |
+| 产物     | 原文本、素材、版本与生成结果服务          | 列表、详情、写入、历史和幂等回放使用相同归属检查                       |
+
+用户明确选择“在此项目中开始对话”时，宿主才沿用原会话创建流程确认项目工作空间。已有会话属于其他项目时不静默改绑，改为打开该项目已有对话或创建新对话。切换右栏项目本身只是查看，不改变中央会话的执行范围。
+
 稳定归属是 tenant、space、principal、actor、profile、plugin、publisher、project 八字段。版本、包摘要、selection revision 和授权 epoch 属于当前调用资格，升级不搬迁项目，卸载不删除旧任务与产物。请求和插件不能自报归属；目录与 workspaceId 由原宿主分配。
 
 打开或关闭右栏不重新派发任务，也不替换中央对话。查看项目产物与选择项目对话是明确操作；切换项目不改写原 Thread 的 workspace 或历史。宿主负责所有布局、主题和会话状态。
 
 任务服务也共用原管理器与运行实例。同一个 `crewon.tasks` 服务目录按各原 Bridge 私有签发的 invocation reference 分派，普通任务、项目生成、项目查询分别保留原提交资格；不存在由插件指定 owner 的通用入口。引用只能选择原 Bridge，不能代替 source publication、实际实例 identity、当前安装授权或事务末端复核。项目生成借用原 Profile 已启动的实际实例，不能在每次操作中另行 setup。
 
-2026-10-12 的接线曾在 Domain 的 `plugin_query_composition_unsupported` 处失败。现已补齐原组合锁继承、SQLite/PostgreSQL 实际源 Run 核验及 Worker 原依赖图恢复，原 Native 正向测试在组合模式开启时通过生成、查询、重放和重开，未放宽普通生成校验。当前查询许可、原 operation、配置和目标继续独立验证；不得使用当前 head 重新解释历史，也不得把查询资格变成生成资格。范围与剩余交付项见[组合查询协议](./plugin-query-composition-inheritance.md)。本次仍未部署 Web 或桌面。
+2026-10-12 的接线曾在 Domain 的 `plugin_query_composition_unsupported` 处失败。现已补齐原组合锁继承、SQLite/PostgreSQL 实际源 Run 核验及 Worker 原依赖图恢复，Control 的 Native 项目测试通过生成、查询、重放和重开，未放宽普通生成校验。这个测试的 Worker 元数据预检使用离线 peer，不能证明真实 Worker 执行成功：当时真实 Native Worker 回归有三项失败，原因是原组合锁记录的共享任务服务尚未在 Worker 接线；后续同进程接线及正式跨进程缺口见下节。当前查询许可、原 operation、配置和目标继续独立验证；不得使用当前 head 重新解释历史，也不得把查询资格变成生成资格。范围与剩余交付项见[组合查询协议](./plugin-query-composition-inheritance.md)。本次仍未部署 Web 或桌面。
 
 ## 已核实的缺口
+
+后续 Worker 已支持可信部署注入原 Core 的真实端口，原 Native 组合测试在同进程实际共享 Core 时通过；保留缺少实现的拒绝对照与跨实例调用引用负例。正式 Control/Worker 跨进程接线仍未完成，不能将同进程回归当作生产验收。详见[实际端口接线](./plugin-worker-shared-host-services.md)。
 
 `CreativeProjectOwnerScope` 目前只有 tenant、space、principal；metadata 主键是 tenant、space、projectId。`createdByActorId` 是历史作者，不是插件归属证明。UI 和 Worker 的实时安装、Run、Tool 与策略校验不能补上这项持久归属。
 

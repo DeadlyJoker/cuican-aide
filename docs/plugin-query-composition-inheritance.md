@@ -16,6 +16,8 @@ Worker 的实际 Run reader 先校验原持久查询与源 Run，再用原 sourc
 
 ## 验证与边界
 
+后续已接入可信同进程部署的原 Core 实际端口，原 Native Worker 执行/恢复三项失败在该接线下通过，未删除原锁声明。真实 UI 引用跨 Worker 实例兑换仍拒绝，原来源关闭后端口同步撤回。下文保留此前的失败证据；正式跨进程目录发行仍未完成，详见[Worker 共享宿主服务](./plugin-worker-shared-host-services.md)。
+
 - 原 Native UI→Project Owner→共享 Profile→实际 Node→原 Application→真实文件 SQLite：生成、查询、重复请求与关闭重开。每个生命周期只 setup 一次，真实 Run 为两个，重放不新增。源 Run 仍运行时查询使用独立 Thread，保留原单 Thread 仅一个活动 Run 的规则。元数据 readiness 使用明确命名的离线 peer；不是生产 Worker/模型或完整 Web 证据。
 - Domain 拒绝升级/降级和每个原 lock 字段的替换，查询 admission 不能成为生成 admission。
 - SQLite/PostgreSQL 两包组合：禁用旧依赖并创建新 head 后提交查询，保留原 lock；并发重放和物理连接重开不额外收费。真实数据库的 binding 故意损坏后，读回拒绝。模型及供应商未调用。

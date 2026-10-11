@@ -786,6 +786,7 @@ export async function nativeTaskRuntimeFixture(
   };
   return {
     actual,
+    taskHostServices: () => runtime?.taskHostServices,
     prepared,
     originalStore,
     policyPath,

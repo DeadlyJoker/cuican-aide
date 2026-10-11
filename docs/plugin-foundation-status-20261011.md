@@ -1,5 +1,7 @@
 # CrewON 基础能力与插件体系当前状态
 
+2026-10-12 最新接线：可信同进程部署可将原 Task Core 的实际服务端口接入 Worker，原 Native 组合执行、恢复及观察通过；仍有效的 UI 引用不能在 Worker 实例兑换，来源关闭后端口立即撤回。缺少实现的对照保持拒绝，没有删除原锁或复制任务管理器。专项 Worker 78/78、Control/Host 27/27、零跳过，含实际 PostgreSQL；不是整个 Worker/UI 验收。正式 Control/Worker 跨进程发行、完整项目归属接线和 Web/桌面闭环尚未完成。详见[实际共享服务与交付边界](./plugin-worker-shared-host-services.md)。下文保留此前失败和阶段证据。
+
 日期：2026-10-11。目标仍是先稳定基础能力，完成可独立开发、安装和恢复的插件体系，再恢复业务插件建设。本页更新交付判断；[2026-10-09 审计](./dsh-plugin-foundation-review-20261009.md)保留各次历史版本、验收结果和限制。
 
 2026-10-12 当前增量补齐原组合查询锁继承，原 Native 项目生成/查询使用同一真实 Profile 实例，生成、查询、重放与重开正例通过。SQLite/PostgreSQL 查询保留原两包锁，真实 Worker resolver 恢复原依赖且拒绝生成，实际 query host 升级后预检原包并在撤权后拒绝。Domain/Application/Store 回归 142/142，Control/Host 121/121，均零跳过；Worker 87/90，三项原 Native 组合执行失败，暴露共享任务服务已进入原 lock 而 Worker 的实际目录尚未提供对应实现。完整 Worker 尚未通过，不能宣布插件闭环完成；没有更新 Web/桌面。详见[协议、证据和下一步目录缺口](./plugin-query-composition-inheritance.md)。

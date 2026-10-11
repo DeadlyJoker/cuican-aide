@@ -7,6 +7,7 @@ import {
 } from "@crewon/contracts/plugins";
 import {
   PluginExecutionComposition,
+  capturePluginNodeHostServiceCatalog,
   type PluginActivationCandidate,
   type PluginHostService,
 } from "@crewon/plugin-host";
@@ -19,7 +20,7 @@ import type {
   InstalledPluginRuntimePrepared,
   InstalledPluginRuntimePackageOwner,
 } from "./installed-plugin-runtime-resident.ts";
-import type { InstalledPluginRuntimeResolverDependencies } from "./installed-plugin-runtime-resolver.ts";
+import type { InstalledPluginRuntimeResolverDependencies } from "./installed-plugin-runtime-resolver-dependencies.ts";
 import { captureInstalledPluginCompositionAuthority } from "./installed-plugin-composition-authority.ts";
 
 /** Capture explicit deployment versions before any asynchronous storage or package loading. */
@@ -30,34 +31,62 @@ export function captureInstalledPluginCompositionExecution(
 ) {
   const property =
     input && Object.getOwnPropertyDescriptor(input, "hostServiceMetadata");
+  const services =
+    input && Object.getOwnPropertyDescriptor(input, "hostServices");
   if (
     !property?.enumerable ||
     !("value" in property) ||
-    Reflect.ownKeys(input).length !==
-      (Object.hasOwn(input, "assertCurrentAuthority") ? 2 : 1)
+    Reflect.ownKeys(input).some(
+      (key) =>
+        ![
+          "hostServiceMetadata",
+          "assertCurrentAuthority",
+          "hostServices",
+        ].includes(key as string),
+    ) ||
+    (services !== undefined && (!services.enumerable || !("value" in services)))
   )
     fail("installed_plugin_composition_configuration_invalid");
   const authority = captureInstalledPluginCompositionAuthority(input);
+  const hostServiceMetadata = createPluginCompositionLock(
+    {
+      schemaVersion: "crewon.plugin-composition-lock.v1",
+      scope: {
+        tenantId: "configuration",
+        spaceId: "configuration",
+        profileId: "configuration",
+        authorityEpoch: "configuration",
+      },
+      revision: 1,
+      nodes: [],
+      hostServices: property.value,
+    },
+    {
+      sha256: (body: string) =>
+        `sha256:${createHash("sha256").update(body).digest("hex")}`,
+    },
+  ).hostServices;
+  const catalog =
+    services === undefined
+      ? undefined
+      : capturePluginNodeHostServiceCatalog(services.value);
+  for (const registration of catalog?.registrations ?? []) {
+    const declared = hostServiceMetadata.find(
+      (entry) =>
+        entry.service === registration.metadata.service &&
+        entry.apiVersion === registration.metadata.apiVersion,
+    );
+    if (
+      !declared ||
+      extensionCanonicalJson(declared) !==
+        extensionCanonicalJson(registration.metadata)
+    )
+      fail("installed_plugin_composition_host_service_identity_conflict");
+  }
   return Object.freeze({
     ...(authority === undefined ? {} : { assertCurrentAuthority: authority }),
-    hostServiceMetadata: createPluginCompositionLock(
-      {
-        schemaVersion: "crewon.plugin-composition-lock.v1",
-        scope: {
-          tenantId: "configuration",
-          spaceId: "configuration",
-          profileId: "configuration",
-          authorityEpoch: "configuration",
-        },
-        revision: 1,
-        nodes: [],
-        hostServices: property.value,
-      },
-      {
-        sha256: (body: string) =>
-          `sha256:${createHash("sha256").update(body).digest("hex")}`,
-      },
-    ).hostServices,
+    hostServiceMetadata,
+    ...(catalog === undefined ? {} : { hostServices: catalog.registrations }),
   });
 }
 

@@ -86,6 +86,8 @@ import type { DesktopProjectMaterialStorage } from "@crewon/media-runtime/deskto
 import type { InstalledProjectMediaGenerationRuntime } from "./installed-project-media-generation-runtime.ts";
 
 export type DesktopPluginRuntime = Readonly<{
+  /** Trusted in-process deployment wiring only; not exposed by HTTP or UI props. */
+  taskHostServices?: DesktopPluginTaskServiceBinding["catalog"]["registrations"];
   installation: PluginInstallationControlService;
   compositionState: DesktopPluginInstallationRuntime["compositionState"];
   compositionStatus: DesktopPluginInstallationRuntime["compositionStatus"];
@@ -644,6 +646,9 @@ export async function createDesktopPluginRuntime(
       compositionState: ownedInstallation.compositionState,
       compositionStatus: ownedInstallation.compositionStatus,
       sources: ownedInstallation.service,
+      ...(taskBinding === undefined || taskRuntime === undefined
+        ? {}
+        : { taskHostServices: taskBinding.catalog.registrations }),
       ui,
       configuration: ownedConfiguration,
       ...(taskRuntime === undefined ? {} : { tasks: taskRuntime.core }),

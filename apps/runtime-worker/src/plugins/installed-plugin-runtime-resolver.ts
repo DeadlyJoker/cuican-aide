@@ -1,10 +1,8 @@
+import { installedPluginRuntimeHostServices } from "./installed-plugin-runtime-host-services.ts";
 import type { InstalledPluginProjectServices } from "./installed-plugin-project-services.ts";
 import { createInstalledPluginRuntimeProjectServices } from "./installed-plugin-runtime-project-services.ts";
-import type { InstalledPluginProjectFoundationToolsDependencies } from "./installed-plugin-project-foundation-tools.ts";
-import type { InstalledPluginProjectMediaInputToolsDependencies } from "./installed-plugin-project-media-input-tools.ts";
 import { createHash } from "node:crypto";
 import { isAbsolute } from "node:path";
-import type { PluginInstallationStore } from "@crewon/application";
 import {
   extensionCanonicalJson,
   extensionToolName,
@@ -12,7 +10,6 @@ import {
   parsePluginTaskAdmission,
   parsePluginQueryTaskAdmission,
   effectivePluginQueryTaskAdmission,
-  type PluginProfileScope,
 } from "@crewon/domain";
 import {
   PluginExecutionPackage,
@@ -32,7 +29,6 @@ import {
   installedPluginRunMaterialization,
   installedPluginToolOperationPurpose,
   type InstalledPluginRunRuntimeResolverPort,
-  type PluginTaskAdmissionProbe,
 } from "./installed-plugin-run-runtime.ts";
 import { adaptPluginToolRuntime } from "./plugin-tool-runtime-adapter.ts";
 import {
@@ -47,22 +43,15 @@ import {
   readPackage,
 } from "./installed-plugin-runtime-resolver-package.ts";
 import { PluginExecutionIoOwner } from "./plugin-execution-io.ts";
-import {
-  captureInstalledPluginExecutionIoConfig,
-  type InstalledPluginExecutionIoDependencies,
-} from "./installed-plugin-execution-io-config.ts";
+import { captureInstalledPluginExecutionIoConfig } from "./installed-plugin-execution-io-config.ts";
 import { createInstalledPluginExecutionIoOwner } from "./installed-plugin-execution-io-owner.ts";
 import { authorizeInstalledPluginRuntimeTool } from "./installed-plugin-runtime-tool-authorization.ts";
 import {
   captureInstalledPluginMediaExecution,
   createInstalledPluginMediaBoundary,
   installedPluginMediaHostService,
-  type InstalledPluginMediaExecutionDependencies,
 } from "./installed-plugin-media-execution.ts";
-import {
-  closeInstalledPluginProjectToolsStartup,
-  type InstalledPluginProjectToolsDependencies,
-} from "./installed-plugin-project-tools.ts";
+import { closeInstalledPluginProjectToolsStartup } from "./installed-plugin-project-tools.ts";
 import {
   canRetireInstalledPluginRuntimeResident,
   closeInstalledPluginRuntimeResident,
@@ -70,50 +59,14 @@ import {
   type InstalledPluginRuntimeResidentLifetime,
 } from "./installed-plugin-runtime-resident.ts";
 
-import type { InstalledPluginProjectOutlineToolsDependencies } from "./installed-plugin-project-outline-tools.ts";
-import type { PluginCompositionHostService } from "@crewon/contracts/plugins";
-import type { InstalledPluginCompositionAuthority } from "./installed-plugin-composition-authority.ts";
 import {
   captureInstalledPluginCompositionExecution,
   openInstalledPluginCompositionRuntime,
 } from "./installed-plugin-composition-runtime-owner.ts";
 
-export type InstalledPluginRuntimeResolverDependencies = Readonly<{
-  contexts: InstalledPluginRunContext;
-  admissions: Required<
-    Pick<
-      PluginTaskAdmissionProbe,
-      "pluginAdmissionVersion" | "loadPluginTaskAdmission"
-    >
-  > &
-    Pick<
-      PluginTaskAdmissionProbe,
-      "pluginQueryAdmissionVersion" | "loadPluginQueryTaskAdmission"
-    >;
-  installations: PluginInstallationStore;
-  installRoot: string;
-  authorizePackage(
-    input: Readonly<{
-      candidate: PluginActivationCandidate;
-      scope: PluginProfileScope;
-      purpose: "submit" | "observe";
-    }>,
-    signal: AbortSignal,
-  ): Promise<"allow" | "deny">;
-  maximumRuntimes?: number;
-  /** Explicit host implementation versions; missing support keeps composed execution closed. */
-  compositionExecution?: Readonly<{
-    hostServiceMetadata: readonly PluginCompositionHostService[];
-    /** Actual live deployment authority. Absence preserves existing non-Native host contracts. */
-    assertCurrentAuthority?: InstalledPluginCompositionAuthority;
-  }>;
-  executionIo?: InstalledPluginExecutionIoDependencies;
-  projectTools?: InstalledPluginProjectToolsDependencies;
-  projectFoundationTools?: InstalledPluginProjectFoundationToolsDependencies;
-  projectOutlineTools?: InstalledPluginProjectOutlineToolsDependencies;
-  projectMedia?: InstalledPluginMediaExecutionDependencies;
-  projectMediaInputs?: InstalledPluginProjectMediaInputToolsDependencies;
-}>;
+import type { InstalledPluginRuntimeResolverDependencies } from "./installed-plugin-runtime-resolver-dependencies.ts";
+export type { InstalledPluginRuntimeResolverDependencies } from "./installed-plugin-runtime-resolver-dependencies.ts";
+
 type Acquire = Parameters<InstalledPluginRunRuntimeResolverPort["acquire"]>[0];
 type Resident = InstalledPluginRuntimeResidentLifetime & {
   compositionAuthorization:
@@ -500,14 +453,16 @@ export class InstalledPluginRuntimeResolver
       // Old hosts that do not support this hook deny the synchronous commit below. The async
       // post-setup current-authority check can never silently degrade to an initial grant.
       const openInput = {
-        ...(projectTools === null && mediaService === null
-          ? {}
-          : {
-              hostServices: [
-                ...(projectTools === null ? [] : projectTools.hostServices()),
-                ...(mediaService === null ? [] : [mediaService]),
-              ],
-            }),
+        hostServices: installedPluginRuntimeHostServices({
+          shared:
+            this.#dependencies.contexts.verifiedComposition(
+              prepared.snapshot,
+            ) === null
+              ? undefined
+              : this.#dependencies.compositionExecution?.hostServices,
+          project: projectTools,
+          media: mediaService,
+        }),
         activation: {
           installRoot: this.#dependencies.installRoot,
           expectedPluginId: prepared.admission.pluginId,
