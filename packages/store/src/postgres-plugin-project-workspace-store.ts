@@ -14,6 +14,7 @@ import {
 } from "./plugin-project-workspace-schema.ts";
 import { assertPostgresProjectTextUiCommit } from "./project-text-ui-commit-support.ts";
 import { assertPostgresPluginProjectWorkspaceHistory } from "./plugin-project-workspace-history-fence.ts";
+import { assertPostgresPluginProjectWorkspaceMetadata } from "./plugin-project-workspace-metadata-fence.ts";
 import {
   assertNamespaceReplay,
   decodeNamespace,
@@ -119,6 +120,11 @@ export class PostgresPluginProjectWorkspaceStore
         if (!(await hasPostgresPluginProjectWorkspaceSchema(c, this.#schema)))
           throw new Error("plugin_project_workspace_schema_missing");
         await assertPostgresProjectTextUiCommit(c, this.#schema, q);
+        await assertPostgresPluginProjectWorkspaceMetadata(
+          c,
+          this.#schema,
+          n.owner,
+        );
         await q.assertTransactionCurrent();
         q.assertActive();
         const table = `${this.#prefix}${PLUGIN_PROJECT_WORKSPACE_TABLE}`;

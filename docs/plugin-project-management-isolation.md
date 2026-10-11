@@ -22,6 +22,10 @@
 
 打开或关闭右栏不重新派发任务，也不替换中央对话。查看项目产物与选择项目对话是明确操作；切换项目不改写原 Thread 的 workspace 或历史。宿主负责所有布局、主题和会话状态。
 
+原 namespace 写入与重放现在会在同一个 SQLite/PostgreSQL 事务中核对已有 protected metadata 的完整八字段归属和原项目 principal。当前 UI 安装来源与项目归属不一致时不写 namespace；部分 metadata schema 也不能退回 legacy。完整 schema 中没有该项目的 protected owner 时仍保留原 legacy 行为，这不授予新项目归属，也不证明 Native 目录或中央会话绑定已接通。SQLite 专项通过真实 UI 创建项目后绑定；PostgreSQL 专项使用原 Store 创建新项目及显式持久记录 fixture 检查相同事务边界，并非 PostgreSQL 的受保护创建资格已实现。
+
+验证：新增 metadata/namespace 专项、原 namespace/会话边界和 SQLite 创建/内容专项联合 **67 passed、0 failed、0 skipped**，PostgreSQL 使用任务专属临时 18.6 实例；Store typecheck、架构边界与文档格式检查通过。测试实例随后停止并清理，未更新 Web 或正式 App。
+
 任务服务也共用原管理器与运行实例。同一个 `crewon.tasks` 服务目录按各原 Bridge 私有签发的 invocation reference 分派，普通任务、项目生成、项目查询分别保留原提交资格；不存在由插件指定 owner 的通用入口。引用只能选择原 Bridge，不能代替 source publication、实际实例 identity、当前安装授权或事务末端复核。项目生成借用原 Profile 已启动的实际实例，不能在每次操作中另行 setup。
 
 2026-10-12 的接线曾在 Domain 的 `plugin_query_composition_unsupported` 处失败。现已补齐原组合锁继承、SQLite/PostgreSQL 实际源 Run 核验及 Worker 原依赖图恢复，Control 的 Native 项目测试通过生成、查询、重放和重开，未放宽普通生成校验。这个测试的 Worker 元数据预检使用离线 peer，不能证明真实 Worker 执行成功：当时真实 Native Worker 回归有三项失败，原因是原组合锁记录的共享任务服务尚未在 Worker 接线；后续同进程接线及正式跨进程缺口见下节。当前查询许可、原 operation、配置和目标继续独立验证；不得使用当前 head 重新解释历史，也不得把查询资格变成生成资格。范围与剩余交付项见[组合查询协议](./plugin-query-composition-inheritance.md)。本次仍未部署 Web 或桌面。

@@ -13,6 +13,7 @@ import {
 } from "./plugin-project-workspace-schema.ts";
 import { assertSqliteProjectTextUiCommit } from "./project-text-ui-commit-support.ts";
 import { assertSqlitePluginProjectWorkspaceHistory } from "./plugin-project-workspace-history-fence.ts";
+import { assertSqlitePluginProjectWorkspaceMetadata } from "./plugin-project-workspace-metadata-fence.ts";
 import {
   assertNamespaceReplay,
   decodeNamespace,
@@ -102,6 +103,7 @@ export class SqlitePluginProjectWorkspaceStore
         if (!hasSqlitePluginProjectWorkspaceSchema(this.#db))
           throw new Error("plugin_project_workspace_schema_missing");
         assertSqliteProjectTextUiCommit(this.#db, q);
+        assertSqlitePluginProjectWorkspaceMetadata(this.#db, n.owner);
         const previous = decodeNamespace(
           this.#db
             .prepare(
