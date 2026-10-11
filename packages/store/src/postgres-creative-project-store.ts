@@ -12,6 +12,12 @@ import {
 } from "./creative-project-run-commit-support.ts";
 import type { Pool, PoolClient } from "pg";
 import {
+  bindPostgresConversationProjectReads,
+  readPostgresOwnedConversationProject,
+} from "./plugin-project-owned-read-postgres.ts";
+import type { PluginProjectReadCall } from "./plugin-project-owned-read-sqlite.ts";
+import type { PluginProjectReadScope } from "@crewon/application";
+import {
   assertCreativeProjectCommitActive,
   assertCreativeProjectCommitCurrent,
   assertCreativeProjectCommitTransactionCurrent,
@@ -106,10 +112,18 @@ export class PostgresCreativeProjectStore implements CreativeProjectStore {
     });
   }
 
-  async loadProject(input: ReadInput<"loadProject">) {
+  bindProjectReads(scope: PluginProjectReadScope) {
+    return bindPostgresConversationProjectReads(this, scope);
+  }
+  async loadProject(
+    input: ReadInput<"loadProject">,
+    scope?: PluginProjectReadScope,
+  ) {
     const query = creativeReadInput("loadProject", input);
-    return this.#read((client, access) =>
-      this.#project(client, query.owner, query.projectId, access),
+    return this.#read(
+      (client, access) =>
+        this.#project(client, query.owner, query.projectId, access),
+      scope === undefined ? undefined : { scope, method: "loadProject", query },
     );
   }
 
@@ -153,43 +167,54 @@ export class PostgresCreativeProjectStore implements CreativeProjectStore {
     });
   }
 
-  async loadBrief(input: ReadInput<"loadBrief">) {
+  async loadBrief(
+    input: ReadInput<"loadBrief">,
+    scope?: PluginProjectReadScope,
+  ) {
     const query = creativeReadInput("loadBrief", input);
-    return this.#read((client, access) =>
-      this.#brief(
-        client,
-        query.owner,
-        query.projectId,
-        query.briefRevision,
-        access,
-      ),
+    return this.#read(
+      (client, access) =>
+        this.#brief(
+          client,
+          query.owner,
+          query.projectId,
+          query.briefRevision,
+          access,
+        ),
+      scope === undefined ? undefined : { scope, method: "loadBrief", query },
     );
   }
 
-  async listBriefs(input: ReadInput<"listBriefs">) {
+  async listBriefs(
+    input: ReadInput<"listBriefs">,
+    scope?: PluginProjectReadScope,
+  ) {
     const query = creativeReadInput("listBriefs", input);
-    return this.#read(async (client, access) => {
-      const rows = await this.#query(
-        client,
-        `${this.#childSelect("creative_project_briefs", "b")}
+    return this.#read(
+      async (client, access) => {
+        const rows = await this.#query(
+          client,
+          `${this.#childSelect("creative_project_briefs", "b")}
        WHERE p.tenant_id=$1 AND p.space_id=$2 AND p.owner_principal_id=$3
        AND p.project_id=$4 AND ${access.predicate("p")} AND b.brief_revision>$5
        ORDER BY b.brief_revision LIMIT $6`,
-        [
-          ...creativeOwnerValues(query.owner),
-          query.projectId,
-          query.afterBriefRevision,
-          query.limit,
-        ],
-      );
-      return Object.freeze(
-        rows.rows.map((row) =>
-          this.#required(
-            decodeCreativeBrief(row, query.owner, query.projectId),
+          [
+            ...creativeOwnerValues(query.owner),
+            query.projectId,
+            query.afterBriefRevision,
+            query.limit,
+          ],
+        );
+        return Object.freeze(
+          rows.rows.map((row) =>
+            this.#required(
+              decodeCreativeBrief(row, query.owner, query.projectId),
+            ),
           ),
-        ),
-      );
-    });
+        );
+      },
+      scope === undefined ? undefined : { scope, method: "listBriefs", query },
+    );
   }
 
   async loadConceptAsset(input: ReadInput<"loadConceptAsset">) {
@@ -801,7 +826,20 @@ export class PostgresCreativeProjectStore implements CreativeProjectStore {
     }
   }
 
-  #read<T>(read: PostgresCreativeProjectLegacyRead<T>): Promise<T> {
+  #read<T>(
+    read: PostgresCreativeProjectLegacyRead<T>,
+    call?: PluginProjectReadCall,
+  ): Promise<T> {
+    if (call !== undefined)
+      return readPostgresOwnedConversationProject(
+        {
+          pool: this.#pool,
+          schema: this.#schema,
+          assertOpen: this.#assertOpen,
+        },
+        call,
+        read,
+      );
     return readPostgresLegacyCreativeProject(
       { pool: this.#pool, schema: this.#schema, assertOpen: this.#assertOpen },
       read,

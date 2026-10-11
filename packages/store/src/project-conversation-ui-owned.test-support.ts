@@ -23,26 +23,38 @@ import {
   uiTestBytes,
 } from "../../application/src/plugin-ui.test-support.ts";
 import { SqliteCreativeProjectStore } from "./sqlite-creative-project-store.ts";
+import { PostgresCreativeProjectStore } from "./postgres-creative-project-store.ts";
 import { committedTaskContext } from "../../application/src/plugin-ui-committed-task-support.ts";
 import { ownedConversationSqlFixture } from "./project-conversation-owned.test-support.ts";
 
 /** Genuine UI lifecycle and original SQL stores. Package discovery, Host callbacks and protected metadata are named fixtures. */
 export async function ownedConversationUiFixture(
   t: TestContext,
-  mismatch: "matching" | "pluginId" = "matching",
+  mismatch:
+    | "matching"
+    | "actorId"
+    | "profileId"
+    | "pluginId"
+    | "publisherId" = "matching",
   reader: "available" | "missing" = "available",
   workspaceKind: "fixture" | "nativeIdentity" = "fixture",
+  options: Readonly<{
+    backend?: "sqlite" | "postgres";
+    namespace?: "deferred";
+  }> = {},
 ) {
-  const f = await ownedConversationSqlFixture(t, "sqlite", mismatch);
+  const backend = options.backend ?? "sqlite";
+  const f = await ownedConversationSqlFixture(t, backend, mismatch);
   const workspaceId =
     workspaceKind === "fixture"
       ? "workspace-isolated"
       : `workspace-project-${createHash("sha256").update(pluginProjectWorkspaceIdentityInput(f.namespaceOwner())).digest("hex")}`;
   if (mismatch === "matching") {
     await f.parent.migratePluginProjectWorkspaceNamespaces();
-    await (
-      await f.mounted()
-    ).write(f.namespaceRecipe(f.reference.projectId, workspaceId));
+    if (options.namespace !== "deferred")
+      await (
+        await f.mounted()
+      ).write(f.namespaceRecipe(f.reference.projectId, workspaceId));
   }
   const state = {
     policyAllowed: true,
@@ -66,7 +78,11 @@ export async function ownedConversationUiFixture(
   };
   const scopes: PluginProjectReadScope[] = [];
   const projects = f.parent.creativeProjectStore();
-  assert.ok(projects instanceof SqliteCreativeProjectStore);
+  assert.ok(
+    backend === "sqlite"
+      ? projects instanceof SqliteCreativeProjectStore
+      : projects instanceof PostgresCreativeProjectStore,
+  );
   const app = new ProjectConversationApplicationService({
     conversations: {
       version: f.store.version,

@@ -124,3 +124,9 @@ namespace 登记与原 Conversation 写入目前是独立事务；原 Conversati
 原 CreativeProject 的 SQLite 内容与概念素材/版本写入已增量接通，仍复用原 Store、事务与独立 write 策略。[具体范围与证据](./plugin-project-owned-content-mutations.md)。其他产物服务、后端及正式产品闭环未完成。
 
 2026-10-12 补充：Standalone 启动组合可显式接收私有 Native 工作空间观察端，经过 Desktop 组合传给原 Conversation 服务；登记仍使用同一个 Parent SqliteRunStore。它是进程内依赖，不增加插件配置 JSON、SDK 或公开 HTTP 字段。缺省不启用；legacy 项目、继承字段、访问器和非函数在数据库获取前拒绝。安装包 HTTP 回归证明真实 UI 创建的 protected 项目准备资格能到达观察端，缺少目标或观察端失败不会新增 Thread、绑定、回执或 Run。此处观察端为明确不可用的测试依赖，尚不证明正式 Main 票据签发、真实目录分配或 Web/桌面闭环。
+
+PostgreSQL 原 Parent 现在也提供冻结的 Native 登记端口，共用原 pool、schema、占用锁和 namespace 写事务。新增调用只消费真实存活的观察引用，不接收 owner 或 workspaceId；提交前复核安装选择、protected metadata 完整归属、原项目 principal 和 active 状态，重放保留首次 createdAt。PostgreSQL 原 CreativeProject Store 增加绑定读取入口，复用原查询并在原事务中检查安装、归属和请求目标；本次会话来源只授予 loadProject，不能借用它读取需求或其他方法，未实现的 protected 管理视图明确拒绝，不能掉回 legacy。
+
+专项使用真实 PostgreSQL 单连接池和 genuine UI 生命周期，验证登记后原 Thread 创建、重放、复制与调用结束后的引用拒绝，以及四种持久归属不匹配。实际 INSERT 返回后撤销独立项目 policy 或 Host，原事务回滚；SQL 触发器在登记后归档项目时，namespace 与触发器修改一起回滚。Native 响应、初始 metadata 和包发现为命名 fixture，这些是原 SQL/会话服务证据，不是正式 Main、Web、桌面或供应商执行验收。没有启用业务插件或更新正式 App。
+
+相关 SQL、锁、旧读取快照与会话回归 73/73，加上 PostgreSQL genuine CreativeProject UI 的项目、需求及需求历史读取专项 1/1，共 74 项通过，无跳过。读取专项验证方法隔离和调用结束后的原/复制引用拒绝；初始 protected metadata 与包发现仍为命名 fixture，未证明 PostgreSQL 首次 UI 创建归属。Store/Control 类型检查、架构边界与格式检查通过。测试 PostgreSQL 为任务专属临时实例，验收后停止并清理。

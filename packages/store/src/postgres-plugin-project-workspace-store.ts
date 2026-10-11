@@ -1,11 +1,17 @@
 import type { Pool, PoolClient } from "pg";
 import {
   capturePluginProjectWorkspaceUiWrite,
+  qualifyPluginProjectWorkspaceNativeObservation,
+  type PluginProjectWorkspaceNativeObservation,
   type PluginProjectWorkspaceReadStore,
   type PluginUiActionContext,
   type RecordPluginProjectWorkspaceNamespaceInput,
   type RecordPluginProjectWorkspaceNamespaceResult,
 } from "@crewon/application";
+import {
+  parsePluginProjectWorkspaceNamespace,
+  pluginInstallationRecord,
+} from "@crewon/domain";
 import { pluginInstallationSchemaName } from "./plugin-installation-schema.ts";
 import {
   hasPostgresPluginProjectWorkspaceSchema,
@@ -122,9 +128,43 @@ export class PostgresPluginProjectWorkspaceStore
     context: PluginUiActionContext,
     input: RecordPluginProjectWorkspaceNamespaceInput,
   ): Promise<RecordPluginProjectWorkspaceNamespaceResult> {
-    const q = capturePluginProjectWorkspaceUiWrite(context, input),
-      n = q.namespace;
+    return this.#record(
+      capturePluginProjectWorkspaceUiWrite(context, input),
+      "original",
+    );
+  }
+  /** Same original pool and transaction; a scoped Native observation supplies all ownership. */
+  async recordFromNativeObservation(
+    reference: PluginProjectWorkspaceNativeObservation,
+    input: Readonly<{ createdAt: string }>,
+  ): Promise<RecordPluginProjectWorkspaceNamespaceResult> {
+    const source = qualifyPluginProjectWorkspaceNativeObservation(reference);
+    const fields = pluginInstallationRecord(input, ["createdAt"]);
+    return this.#record(
+      {
+        namespace: parsePluginProjectWorkspaceNamespace({
+          schemaVersion: "crewon.plugin-project-workspace-namespace.v1",
+          owner: source.owner,
+          workspaceId: source.expectedWorkspaceId,
+          createdAt: fields.createdAt,
+        }),
+        installation: source.commit.pin,
+        selection: source.commit.selection,
+        package: source.commit.package,
+        assertCurrent: source.assertCurrent,
+        assertTransactionCurrent: source.commit.assertTransactionCurrent,
+        assertActive: source.assertActive,
+      },
+      "protected",
+    );
+  }
+  async #record(
+    q: ReturnType<typeof capturePluginProjectWorkspaceUiWrite>,
+    mode: "original" | "protected",
+  ): Promise<RecordPluginProjectWorkspaceNamespaceResult> {
+    const n = q.namespace;
     await q.assertCurrent();
+    if (mode === "protected") await q.assertTransactionCurrent();
     q.assertActive();
     return this.#transaction(
       async (c) => {
@@ -133,11 +173,16 @@ export class PostgresPluginProjectWorkspaceStore
         if (!(await hasPostgresPluginProjectWorkspaceSchema(c, this.#schema)))
           throw new Error("plugin_project_workspace_schema_missing");
         await assertPostgresProjectTextUiCommit(c, this.#schema, q);
-        await assertPostgresPluginProjectWorkspaceMetadata(
+        const metadata = await assertPostgresPluginProjectWorkspaceMetadata(
           c,
           this.#schema,
           n.owner,
         );
+        if (mode === "protected") {
+          if (metadata !== "protected")
+            throw new Error("plugin_project_workspace_metadata_required");
+          await this.#assertActiveProject(c, n.owner);
+        }
         await q.assertTransactionCurrent();
         q.assertActive();
         const table = `${this.#prefix}${PLUGIN_PROJECT_WORKSPACE_TABLE}`;
@@ -151,7 +196,10 @@ export class PostgresPluginProjectWorkspaceStore
           n.owner,
         );
         if (previous !== null) {
-          assertNamespaceReplay(previous, n);
+          assertNamespaceReplay(
+            previous,
+            mode === "protected" ? { ...n, createdAt: previous.createdAt } : n,
+          );
           return Object.freeze({
             disposition: "replayed" as const,
             namespace: previous,
@@ -200,13 +248,39 @@ export class PostgresPluginProjectWorkspaceStore
           namespace: n,
         });
       },
-      q.assertTransactionCurrent,
+      async (c) => {
+        await q.assertTransactionCurrent();
+        if (mode === "protected") {
+          await assertPostgresProjectTextUiCommit(c, this.#schema, q);
+          if (
+            (await assertPostgresPluginProjectWorkspaceMetadata(
+              c,
+              this.#schema,
+              n.owner,
+            )) !== "protected"
+          )
+            throw new Error("plugin_project_workspace_metadata_required");
+          await this.#assertActiveProject(c, n.owner);
+          await q.assertTransactionCurrent();
+        }
+      },
       q.assertActive,
     );
   }
+  async #assertActiveProject(
+    c: PoolClient,
+    owner: ReturnType<typeof parsePluginProjectWorkspaceNamespace>["owner"],
+  ): Promise<void> {
+    const result = await c.query(
+      `SELECT state FROM ${this.#prefix}creative_projects WHERE tenant_id=$1 AND space_id=$2 AND project_id=$3 AND owner_principal_id=$4 FOR SHARE`,
+      [owner.tenantId, owner.spaceId, owner.projectId, owner.principalId],
+    );
+    if (result.rows[0]?.state !== "active")
+      throw new Error("plugin_project_workspace_project_inactive");
+  }
   async #transaction<T>(
     run: (c: PoolClient) => Promise<T>,
-    assertTransactionCurrent?: () => Promise<void>,
+    assertTransactionCurrent?: (client: PoolClient) => Promise<void>,
     assertActive?: () => void,
   ): Promise<T> {
     this.#open();
@@ -215,7 +289,7 @@ export class PostgresPluginProjectWorkspaceStore
       await c.query("BEGIN");
       const result = await run(c);
       // SQL awaits can outlive the captured Host policy/epoch even while the mount remains live.
-      await assertTransactionCurrent?.();
+      await assertTransactionCurrent?.(c);
       assertActive?.();
       this.#open();
       await c.query("COMMIT");

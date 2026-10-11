@@ -6,6 +6,7 @@ import {
 } from "./plugin-project-workspace-thread-fence.ts";
 import type {
   PluginProjectWorkspaceReadStore,
+  PluginProjectWorkspaceNativeRegistrationStore,
   PluginUiActionContext,
   RecordPluginProjectWorkspaceNamespaceInput,
 } from "@crewon/application";
@@ -416,6 +417,18 @@ export class PostgresThreadStore
       schema: this.schema,
       assertOpen: () => this.assertOpen(),
     }).migrate();
+  }
+  pluginProjectWorkspaceNativeRegistrationStore(): PluginProjectWorkspaceNativeRegistrationStore {
+    this.assertOpen();
+    const namespaces = new PostgresPluginProjectWorkspaceStore({
+      pool: this.pool,
+      schema: this.schema,
+      assertOpen: () => this.assertOpen(),
+    });
+    return Object.freeze({
+      recordFromNativeObservation:
+        namespaces.recordFromNativeObservation.bind(namespaces),
+    });
   }
   recordPluginProjectWorkspaceNamespaceFromPluginUi(
     context: PluginUiActionContext,
