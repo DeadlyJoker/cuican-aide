@@ -33,10 +33,24 @@ process.send({kind:"fixture.ready"});
 export async function nativeProjectWorkspaceBridgeFixture(
   approvalRequirement: "none" | "perAction" = "none",
   controlProgram = program,
+  options: Readonly<{
+    beforeBootstrap?(
+      fixture: ReturnType<typeof desktopPluginBootstrapFixture>,
+    ): void;
+  }> = {},
 ) {
   const f = desktopPluginBootstrapFixture();
-  f.writeApproval();
-  const bootstrap = (await prepareDesktopPluginBootstrap(f.input))!;
+  let bootstrap: NonNullable<
+    Awaited<ReturnType<typeof prepareDesktopPluginBootstrap>>
+  >;
+  try {
+    options.beforeBootstrap?.(f);
+    f.writeApproval();
+    bootstrap = (await prepareDesktopPluginBootstrap(f.input))!;
+  } catch (error) {
+    rmSync(f.directory, { recursive: true, force: true });
+    throw error;
+  }
   const packageIdentity = {
     pluginId: f.source.pluginId,
     publisherId: f.source.publisherId,

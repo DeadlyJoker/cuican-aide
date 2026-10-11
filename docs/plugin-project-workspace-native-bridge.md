@@ -44,6 +44,12 @@ Native 文件提交和授权撤回不构成跨进程原子事务：授权可能�
 
 新专项的 child 实际加载上述 Control 源码，通过 Node IPC 调用原 Main bridge 和原 allocator，覆盖真实目录、活动空间保持、一次性票据、明确同 owner 重放、超时、坏响应、并发上限、撤回、实际断连和自身监听器清理。与原 Main bridge 联合 **52 passed、0 failed、0 skipped**；新 portable wire 两项测试通过，合计 **54 passed**。Contracts、Control 和 Electron 类型检查、架构边界及格式检查通过。这里的 ticket 来源仍是受信 Main 测试调用，没有接入实际 Host 项目授权，尚不能证明 namespace、会话、Agent 或 Web 产品闭环。
 
+后续请求端已增加 `allocateForProject({ preparation, ticket, signal? })`，只消费原 Application 发行的活跃准备引用，拒绝扩展字段与 getter，并在异步检查前快照票据。分配前、返回后分别重查完整项目归属、活动状态、当前 Host/UI 与独立 write 策略；返回的 workspaceId 必须等于宿主派生 ID。复制准备 JSON、其他项目的 Native 结果或分配后撤权均不能成为有效的项目观察。失败时不重试、不删除可能已经提交的 Native 文件，不签发 namespace、Thread、Run 或目录访问权限。
+
+对应 child 使用真实 UI 注册、原 SQLite 绑定读取和这个 scoped client，与真实 Main/Native allocator 同时工作。它沿用真实桌面固定运行 actor 和符合原 UUID 格式的 profile；没有放宽生产 bootstrap 的 actor/profile 校验。初始 protected metadata、包发现和独立 Host 策略为命名 fixture；没有配置会话、namespace 或任务写端口。正例确认 Native journal 与 UI 来源的完整八字段归属相同，当前活动目录保持；负例验证复制引用、错项目与 Native 提交后撤权。Main ticket 仍由受信测试调用方 prepare，未接入产品的跨进程资格发行器，也未证明当前包四字段与票据在产品入口的绑定。原未 scoped 的 `allocate` 仍是内部 transport primitive，不允许拿它的响应作为 SQL/Agent 授权。
+
+新增四项与原 Main/client 联合 **56 passed、0 failed、0 skipped**；Store/Control/Electron 类型检查、架构边界与格式检查通过。失败测试产生的八个专属 Native fixture 目录已核对并清理，fixture 初始化失败也会自行清理；未更新 Web 或正式 App。产品 dispatcher、Main 票据发行、SQL 登记与中央会话的完整接线仍未完成。
+
 ## 兼容性与验收范围
 
 原 Native policy / authority persisted DTO、workspace registry、allocation journal、HTTP / SDK / renderer contracts 均保持原 shape。唯一收紧是 Native authority 的内部 factory 要求同一真实 reader 发行的 policy，不能传结构替身、复制品、别的目录或别的 bootstrap。已核对全部生产/测试 factory callers；它们原本均使用同一真实 reader。

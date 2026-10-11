@@ -1,5 +1,9 @@
 import { randomBytes } from "node:crypto";
 import {
+  qualifyPluginProjectWorkspacePreparation,
+  type PluginProjectWorkspacePreparation,
+} from "@crewon/application";
+import {
   DESKTOP_PROJECT_WORKSPACE_REQUEST_SCHEMA,
   DESKTOP_PROJECT_WORKSPACE_RESPONSE_SCHEMA,
   parseDesktopNativeProjectWorkspaceTicket,
@@ -143,6 +147,30 @@ export class DesktopNativeProjectWorkspaceClient {
     if (signal?.aborted) throw failure("request_aborted");
     return result;
   }
+  /** Actual Host project path. A Native result is scoped evidence, never a SQL/Thread/Run grant. */
+  async allocateForProject(
+    input: Readonly<{
+      preparation: PluginProjectWorkspacePreparation;
+      ticket: DesktopNativeProjectWorkspaceTicket;
+      signal?: AbortSignal;
+    }>,
+  ): Promise<DesktopNativeProjectWorkspaceResponse> {
+    this.#assertCurrent();
+    const fields = allocationInput(input);
+    const source = qualifyPluginProjectWorkspacePreparation(fields.preparation);
+    const ticket = parseDesktopNativeProjectWorkspaceTicket(fields.ticket);
+    await source.assertCurrent();
+    source.assertActive();
+    const result = await this.allocate(ticket, fields.signal);
+    await source.assertCurrent();
+    source.assertActive();
+    if (
+      result.outcome === "observed" &&
+      result.allocation.workspaceId !== source.expectedWorkspaceId
+    )
+      throw failure("project_mismatch");
+    return result;
+  }
   withdraw(): void {
     this.#withdrawn = true;
     for (const pending of this.#pending.values())
@@ -188,6 +216,42 @@ function dataProperty(input: unknown, key: string): unknown {
 }
 function failure(reason: string): Error {
   return new Error(`desktop_native_project_workspace_client_${reason}`);
+}
+function allocationInput(
+  input: Parameters<
+    DesktopNativeProjectWorkspaceClient["allocateForProject"]
+  >[0],
+) {
+  if (
+    input === null ||
+    typeof input !== "object" ||
+    ![Object.prototype, null].includes(Object.getPrototypeOf(input))
+  )
+    unavailable();
+  const fields = [
+    "preparation",
+    "ticket",
+    ...(Object.hasOwn(input, "signal") ? ["signal"] : []),
+  ];
+  const keys = Reflect.ownKeys(input);
+  if (
+    keys.length !== fields.length ||
+    keys.some((key) => typeof key !== "string" || !fields.includes(key))
+  )
+    unavailable();
+  for (const key of fields) {
+    const d = Object.getOwnPropertyDescriptor(input, key);
+    if (!d?.enumerable || !Object.hasOwn(d, "value")) unavailable();
+  }
+  return Object.freeze({
+    preparation: Object.getOwnPropertyDescriptor(input, "preparation")!
+      .value as PluginProjectWorkspacePreparation,
+    ticket: Object.getOwnPropertyDescriptor(input, "ticket")!
+      .value as DesktopNativeProjectWorkspaceTicket,
+    signal: Object.getOwnPropertyDescriptor(input, "signal")?.value as
+      | AbortSignal
+      | undefined,
+  });
 }
 function unavailable(): never {
   throw failure("unavailable");
