@@ -44,6 +44,8 @@ import { installLocalPluginPackage } from "./local-plugin-package-installer.ts";
 import { LocalPluginUiPackageReader } from "./plugin-ui-package-reader.ts";
 import { PluginNodeHost } from "./plugin-node-host.ts";
 import { PluginTaskActionBridge } from "./plugin-task-action-bridge.ts";
+import { createPluginTaskHostServiceRegistrations } from "./plugin-core-node-host-services.ts";
+import { capturePluginNodeHostServiceCatalog } from "./plugin-node-host-service-catalog.ts";
 
 export { actor };
 export const threadId = "installed-plugin-paid-thread";
@@ -88,7 +90,10 @@ export function deferred() {
 /** Real SQLite, installed/bundled ESM and application services; current policies are explicit fixtures. */
 export async function taskActionFixture(
   t: TestContext,
-  options: Readonly<{ queryTasks?: boolean }> = {},
+  options: Readonly<{
+    queryTasks?: boolean;
+    nodeServiceCatalog?: "versioned";
+  }> = {},
 ) {
   const f = await configurationServiceFixture(t, "sqlite");
   await f.seedDeployment();
@@ -224,22 +229,38 @@ export async function taskActionFixture(
     clock: { now: () => state.now },
     ids: { nextId: () => randomBytes(32).toString("base64url") },
   });
-  const nodeHost = new PluginNodeHost({
-    services: [
-      bridge.hostService(),
-      ...(options.queryTasks ? [bridge.hostServiceV2()] : []),
-      {
-        service: "fixture.lifecycle",
-        apiVersion: "1",
-        value: {
-          async read() {
-            state.readEntered?.();
-            await state.readGate;
-            return { value: "read fixture" };
-          },
-        },
+  const fixtureLifecycle = {
+    service: "fixture.lifecycle",
+    apiVersion: "1",
+    value: {
+      async read() {
+        state.readEntered?.();
+        await state.readGate;
+        return { value: "read fixture" };
       },
-    ],
+    },
+  };
+  const services =
+    options.nodeServiceCatalog === "versioned"
+      ? capturePluginNodeHostServiceCatalog([
+          ...createPluginTaskHostServiceRegistrations(bridge),
+          {
+            metadata: {
+              service: fixtureLifecycle.service,
+              apiVersion: fixtureLifecycle.apiVersion,
+              implementationId: "fixture.lifecycle.v1",
+              implementationRevision: 1,
+            },
+            implementation: fixtureLifecycle,
+          },
+        ]).implementations
+      : [
+          bridge.hostService(),
+          ...(options.queryTasks ? [bridge.hostServiceV2()] : []),
+          fixtureLifecycle,
+        ];
+  const nodeHost = new PluginNodeHost({
+    services,
   });
   t.after(async () => {
     bridge.close();

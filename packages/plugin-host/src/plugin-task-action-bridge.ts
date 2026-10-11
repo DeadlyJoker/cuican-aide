@@ -75,6 +75,12 @@ export class PluginTaskActionBridge {
   readonly #invocations = new Map<string, Invocation>();
   #closed = false;
 
+  static isOwner(input: unknown): input is PluginTaskActionBridge {
+    return (
+      input !== null && typeof input === "object" && #dependencies in input
+    );
+  }
+
   constructor(dependencies: Dependencies) {
     this.#dependencies = dependencies;
   }

@@ -1,5 +1,8 @@
 export { appendProjectTextPlanUiServiceAvailability } from "./plugin-project-text-plan-ui-service-availability.ts";
-export { appendProjectFoundationUiServiceAvailability, appendProjectSourceUploadUiServiceAvailability } from "./plugin-project-foundation-host-service-availability.ts";
+export {
+  appendProjectFoundationUiServiceAvailability,
+  appendProjectSourceUploadUiServiceAvailability,
+} from "./plugin-project-foundation-host-service-availability.ts";
 export {
   DEFAULT_LOCAL_PLUGIN_PACKAGE_LIMITS,
   LocalPluginPackageError,
@@ -12,7 +15,10 @@ export {
   type InstalledLocalPluginPackage,
 } from "./local-plugin-package-types.ts";
 export { verifyLocalPluginPackage } from "./local-plugin-package-verifier.ts";
-export { publishInstalledPluginComposition, InstalledPluginCompositionPublisherError } from "./installed-plugin-composition-publisher.ts";
+export {
+  publishInstalledPluginComposition,
+  InstalledPluginCompositionPublisherError,
+} from "./installed-plugin-composition-publisher.ts";
 export { installLocalPluginPackage } from "./local-plugin-package-installer.ts";
 export {
   readInstalledPluginBusinessManifest,
@@ -114,12 +120,26 @@ export {
   PluginExecutionRegistryError,
 } from "./plugin-execution-registry.ts";
 export {
+  capturePluginNodeHostServiceCatalog,
+  PluginNodeHostServiceCatalogError,
+  type PluginNodeHostServiceRegistration,
+  type PluginNodeHostServiceCatalog,
+} from "./plugin-node-host-service-catalog.ts";
+export {
+  createPluginExecutionHostServiceRegistration,
+  createPluginTaskHostServiceRegistrations,
+  PLUGIN_TASK_ACTION_BRIDGE_COMPOSITION_SERVICES,
+} from "./plugin-core-node-host-services.ts";
+export {
   PluginExecutionPackage,
   pluginExecutionPackageFailureOwner,
   type PluginExecutionPackageBorrow,
   type PluginExecutionPackageFailureOwner,
 } from "./plugin-execution-package.ts";
-export { PluginExecutionComposition, PLUGIN_EXECUTION_REGISTRY_COMPOSITION_SERVICE } from "./plugin-execution-composition.ts";
+export {
+  PluginExecutionComposition,
+  PLUGIN_EXECUTION_REGISTRY_COMPOSITION_SERVICE,
+} from "./plugin-execution-composition.ts";
 
 export {
   PluginProjectGenerationQueryActionBridge,

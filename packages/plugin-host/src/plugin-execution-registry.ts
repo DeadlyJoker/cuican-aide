@@ -40,6 +40,10 @@ export class PluginExecutionRegistry {
   readonly #maximum: number;
   #closed = false;
 
+  static isOwner(input: unknown): input is PluginExecutionRegistry {
+    return input !== null && typeof input === "object" && #bindings in input;
+  }
+
   constructor(input: Readonly<{ maximumFactories?: number }> = {}) {
     const maximum = input.maximumFactories ?? 128;
     if (!Number.isSafeInteger(maximum) || maximum < 1 || maximum > 1024)
