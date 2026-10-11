@@ -92,6 +92,8 @@ CrewON 继续使用现有 Node、Run、Tool、Store 与 SSE 路径。业务插�
 
 以上联合增量已通过最终 Store/Application/PluginHost/Control 类型检查、boundary、`pnpm format` 与 diff 检查。当前证据保存在 [共享管理隔离回归](../output/plugin-foundation/shared-management-isolation-20261012/shared-composition-host.log)及同目录分组日志，Task Core 与 v2 原始证据在 `output/plugin-foundation/structured-outline-v2-isolation-20261012/`。自有 PG fixture 已正常停止并删除，未操作产品数据库、Web 服务或正式 App。
 
+`97f159882` 在原 Desktop Profile/安装 runtime 增加[只读实例借用](./plugin-profile-node-borrow.md)，同步证明真实 Native owner、文件 claim、完整保存 head/enabled selections 和私有 Node 投影，再取得同一实际实例。借用不占管理队列，不触发 setup、同步或冷恢复；关闭同步撤回新借用，等待实际 lease 释放后再清理原 Node/claim，未改变低层 NodeHost 对遗留 live lease 的原拒绝。固定 Node 24、原生产构造函数与真实文件型 SQLite，七文件 61/61、零跳过；Control 类型、boundary、format 和 diff 通过。原 close 的实际 `plugin_host_has_live_leases` 负例修复后等待成功；[当前回归证据](../output/plugin-foundation/profile-node-borrow-20261012/control-regression.log)。这仍是 Host 内部接线，不包含 PG、真实 Web/桌面或 Worker 任务执行；正式 UI TaskOwner 尚未改用共享实例。
+
 源码 `6246494ee` 增加[私有 Native 分配桥](./plugin-project-workspace-native-bridge.md)，继续调用同一个原 allocator 和 registry。真实 Native policy/owner、指定 IPC 子进程、epoch/generation 和一次性有界票据共同约束空目录分配，撤回及断开后停止，原活动工作空间保持；不接受 caller owner、路径或恢复动作。实际 Node IPC 测试子进程已验证，但生产 Main/Control 尚未启动该桥，也未把票据当作项目 metadata、SQL 或 Agent 授权。这一步只完成私有 transport，不能宣称项目创建闭环。
 
 本轮源码验证使用 Node 24.19.0，证据分别限定为：
