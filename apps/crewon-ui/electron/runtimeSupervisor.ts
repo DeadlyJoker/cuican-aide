@@ -37,6 +37,7 @@ import {
   type RuntimeLogSink,
 } from "./runtimeLogForwarder.ts";
 import { processRuntimeLogs } from "./processRuntimeLogs.ts";
+import { desktopRuntimeChildStdio } from "./desktopRuntimeChildStdio.ts";
 import {
   clearDesktopExtensionEnvironment,
   DESKTOP_RUNTIME_OWNER,
@@ -1331,7 +1332,10 @@ export class RuntimeSupervisor {
       {
         cwd: this.#repositoryRoot ?? process.resourcesPath,
         env: projected,
-        stdio: [options.stdin ?? "ignore", "pipe", "pipe"],
+        stdio: desktopRuntimeChildStdio({
+          stdin: options.stdin ?? "ignore",
+          parentChannel: entry === this.#paths.control ? "control" : "none",
+        }),
         windowsHide: true,
       },
     );

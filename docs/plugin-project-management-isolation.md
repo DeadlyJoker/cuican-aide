@@ -138,3 +138,7 @@ PostgreSQL 原 Parent 现在也提供冻结的 Native 登记端口，共用原 p
 PostgreSQL protected 读取视图现已覆盖原八个项目读取方法，补齐项目列表、概念素材列表/详情和版本列表/详情。所有入口使用原查询和解码器，检查真实调用允许的方法及 projectId、assetId、briefRevision、assetRevision；绑定视图本身不扩大调用资格。列表按完整稳定归属在 SQL 排序与 LIMIT 前过滤，并复核用于判断下一页的记录；额外较新的其他插件和 legacy 项目不占本插件页数，异常 lookahead 记录不发布游标。查询实现从原高频 Store 拆出到 focused module，保留原连接和生命周期，未增加管理系统或迁移流程。
 
 八方法、混合归属分页、详情目标篡改和异常 lookahead 使用真实 PostgreSQL/genuine UI 验证；额外项目的首次创建与归属记录、包发现和 Host 策略为明确 fixture。此专项与原项目 Store/legacy 访问回归 59/59，Native 登记/绑定/旧读取快照另组 22/22（其中一项读取专项重叠），均零跳过；不能相加为整仓验收。Main 授权与正式 Web/桌面接线仍待完成。
+
+正式 RuntimeSupervisor 的 Control 子进程启动此前只有标准输入/输出管道，缺少 Native 客户端要求的 Node IPC。现在按真实 Control 入口路径添加私有 parent channel，保持其他子进程的原 stdio；没有绑定 Main 目录分配器、签发项目票据或增加 renderer IPC。两个真实 supervisor 启动路径（有/无 provider）能在 Control 构建并关闭原 Native workspace client，Worker/发行命令无此通道，退出清理与原基础回归 20/20、零跳过。Electron 类型、架构边界检查通过。这项传输接线不能证明项目授权或正式 App 已更新。
+
+另只读核对当前正式 desktop profile：原 plugin_profile_selections 有三条 uninstalled、零 enabled，未改写历史或账号。Mac 当前锁屏，因此本轮不以数据库状态代替正式页面验收。源码工作区仍有其他未提交启动改动，以上测试基于当前工作区；本次只提交 stdio 接线及对应测试，不打包或发布这些其他改动。
