@@ -63,8 +63,7 @@ export function executeCreativeProjectMutation(
     let authority = captureCreativeProjectCommitAuthority(options, {
       allowTextUiTransaction: false,
       allowCreationScope: kind === "create-project",
-      allowMutationScope:
-        kind === "rename-project" || kind === "set-project-state",
+      allowMutationScope: kind !== "create-project",
     });
     const creationScope = options?.creationScope;
     const mutationScope = options?.mutationScope;

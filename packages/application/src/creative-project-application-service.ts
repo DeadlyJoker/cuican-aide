@@ -583,6 +583,7 @@ export class CreativeProjectApplicationService {
       project,
       conceptCommand.briefRevision,
       options?.authority,
+      readStore,
     );
     if (kind === "create-concept") {
       const input = command as CreateConceptAssetCommand;
@@ -616,6 +617,7 @@ export class CreativeProjectApplicationService {
       project,
       input.assetId,
       options?.authority,
+      readStore,
     );
     const changed = appendConceptAssetRevision(
       {

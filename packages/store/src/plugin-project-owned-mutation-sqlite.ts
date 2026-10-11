@@ -45,8 +45,9 @@ export async function prepareSqliteOwnedMetadataMutation(
   const input = source.request.input as Readonly<Record<string, unknown>>;
   const command = {
     ...(input.request as object),
-    projectId: input.projectId,
-    idempotencyKey: input.idempotencyKey,
+    ...Object.fromEntries(
+      Object.entries(input).filter(([key]) => key !== "request"),
+    ),
   };
   const receipt = scopedPluginMetadataReceipt(
     scope,

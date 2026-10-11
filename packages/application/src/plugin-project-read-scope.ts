@@ -55,6 +55,22 @@ const actionMethods = {
     "listConceptRevisions",
   ],
 } as const;
+const mutationMethods = {
+  renameProject: ["loadProject"],
+  setProjectState: ["loadProject"],
+  appendBrief: ["loadProject"],
+  createConcept: ["loadProject", "loadBrief"],
+  appendConceptRevision: ["loadProject", "loadBrief", "loadConceptAsset"],
+} as const;
+export function isPluginProjectMutationAction(action: string): boolean {
+  return (
+    action.startsWith("crewon.creative-projects.v1.") &&
+    Object.hasOwn(
+      mutationMethods,
+      action.slice("crewon.creative-projects.v1.".length),
+    )
+  );
+}
 type Qualified = Readonly<{
   purpose: "read" | "mutation";
   scope: PluginProjectWorkspaceOwnerScope;
@@ -73,7 +89,7 @@ export function capturePluginProjectReadScope(
 ): PluginProjectReadScope {
   return captureScope(context, hostAuthority, "read") as PluginProjectReadScope;
 }
-/** Private metadata mutation issuer; other write kinds are deliberately not supported yet. */
+/** Private issuer for original project mutations; creation has its own source and recipe. */
 export function capturePluginProjectMutationScope(
   context: PluginUiActionContext,
   hostAuthority: CreativeProjectCommitAuthority,
@@ -113,7 +129,7 @@ function captureScope(
   if (
     (purpose === "read"
       ? !Object.hasOwn(actionMethods, name)
-      : !["renameProject", "setProjectState"].includes(name)) ||
+      : !Object.hasOwn(mutationMethods, name)) ||
     authority.transaction === undefined ||
     authority.transaction.pin.action !== request.action
   )
@@ -121,7 +137,7 @@ function captureScope(
   const methods =
     purpose === "read"
       ? actionMethods[name as keyof typeof actionMethods]
-      : ["loadProject"];
+      : mutationMethods[name as keyof typeof mutationMethods];
   const active = () => {
     authority.assertActive();
     assertCreativeProjectCommitActive(host);

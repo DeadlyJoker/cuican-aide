@@ -66,7 +66,15 @@ export async function readSqliteOwnedCreativeProject<T>(
   for (const key of ["tenantId", "spaceId", "principalId"] as const)
     if (call.query.owner[key] !== source.scope[key])
       throw new Error("plugin_project_read_actor_mismatch");
-  const input = source.request.input as Readonly<Record<string, unknown>>;
+  const originalInput = source.request.input as Readonly<
+    Record<string, unknown>
+  >;
+  const input =
+    source.purpose === "mutation"
+      ? ({ ...(originalInput.request as object), ...originalInput } as Readonly<
+          Record<string, unknown>
+        >)
+      : originalInput;
   for (const key of [
     "projectId",
     "assetId",

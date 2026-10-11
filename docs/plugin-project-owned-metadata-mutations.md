@@ -8,4 +8,4 @@ Host 只能从当前真实 UI 调用签发不可复制的 metadata mutation 来�
 
 专项回归覆盖改名、归档、恢复、旧 revision、幂等回放与冲突、跨插件拒绝、命名 receipt 写入故障回滚以及准备后撤销 write 策略。真实 SQLite 与原 Application/PluginUI/安装 Store 参与；UI 发现及策略仍为命名内存 fixture，不能当作真实 Web/Native 发行证据。
 
-目前仅这两个 metadata 动作支持 mutation scope，普通读取来源不能升级为写入；brief、素材/版本及其他产物写入仍未开放。Foundation、PostgreSQL、Run/Tool、工作空间与中央会话接线及 Web→桌面完整验收仍未完成。业务插件继续保持卸载。
+普通读取来源不能升级为写入。后续已接通原 SQLite 的 brief 与概念素材/版本写入，见[内容与素材](./plugin-project-owned-content-mutations.md)；其他产物服务仍未接通。Foundation、PostgreSQL、Run/Tool、工作空间与中央会话接线及 Web→桌面完整验收仍未完成。业务插件继续保持卸载。

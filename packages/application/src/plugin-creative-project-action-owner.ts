@@ -1,6 +1,7 @@
 import {
   capturePluginProjectReadScope,
   capturePluginProjectMutationScope,
+  isPluginProjectMutationAction,
   type PluginProjectMutationScope,
   type PluginProjectReadOptions,
 } from "./plugin-project-read-scope.ts";
@@ -266,10 +267,7 @@ export class PluginCreativeProjectActionOwner {
             })
           : undefined,
         this.#ownsCreatedProjects &&
-          [
-            "crewon.creative-projects.v1.renameProject",
-            "crewon.creative-projects.v1.setProjectState",
-          ].includes(request.action)
+          isPluginProjectMutationAction(request.action)
           ? capturePluginProjectMutationScope(invocation, authority)
           : undefined,
       );

@@ -24,8 +24,9 @@ export function scopedPluginMetadataReceipt(
     extensionCanonicalJson(command) !==
     extensionCanonicalJson({
       ...(input.request as object),
-      projectId: input.projectId,
-      idempotencyKey: input.idempotencyKey,
+      ...Object.fromEntries(
+        Object.entries(input).filter(([key]) => key !== "request"),
+      ),
     })
   )
     throw new Error("plugin_project_mutation_command_mismatch");

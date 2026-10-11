@@ -373,10 +373,14 @@ export class SqliteCreativeProjectStore implements CreativeProjectStore {
     input: Input<"commitProjectBrief">,
     options?: CreativeProjectCommitOptions,
   ): Promise<Result<"commitProjectBrief">> {
-    const authority = captureCreativeProjectCommitAuthority(options);
+    const authority = captureCreativeProjectCommitAuthority(options, {
+      allowTextUiTransaction: false,
+      allowMutationScope: true,
+    });
     const result = await this.#commit(
       prepareCreativeMutation("append-brief", input),
       authority,
+      options?.mutationScope,
     );
     if (result.kind !== "append-brief")
       throw new Error("creative_project_receipt_invalid");
@@ -387,13 +391,17 @@ export class SqliteCreativeProjectStore implements CreativeProjectStore {
     input: Input<"commitConceptRevision">,
     options?: CreativeProjectCommitOptions,
   ): Promise<Result<"commitConceptRevision">> {
-    const authority = captureCreativeProjectCommitAuthority(options);
+    const authority = captureCreativeProjectCommitAuthority(options, {
+      allowTextUiTransaction: false,
+      allowMutationScope: true,
+    });
     const kind = creativeMutationKind(creativeStoreRecord(input).kind);
     if (kind !== "create-concept" && kind !== "append-concept")
       creativeStoreFailure("creative_project_mutation_kind_invalid");
     const result = await this.#commit(
       prepareCreativeMutation(kind, input),
       authority,
+      options?.mutationScope,
     );
     if (result.kind !== "create-concept" && result.kind !== "append-concept")
       throw new Error("creative_project_receipt_invalid");

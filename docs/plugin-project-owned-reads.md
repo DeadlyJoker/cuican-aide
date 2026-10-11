@@ -15,3 +15,5 @@ Host 私有发行器先核对实际 UI invocation，再固定账号四字段、p
 剩余：受保护修改/归档与产物写入、Foundation/PostgreSQL 对等接线、完整 Run/Tool 资格、工作空间与中央会话绑定，以及真实安装→Web 验收→桌面交付。业务插件仍保持卸载；这次读取接线不表示完整插件体系已完成。
 
 原 SQLite 的受保护改名、归档与恢复已增量接通，具体边界见[metadata 修改](./plugin-project-owned-metadata-mutations.md)。其他写入与生产交付尚未完成。
+
+原 CreativeProject 的 SQLite 内容与概念素材/版本写入已增量接通，仍复用原 Store、事务与独立 write 策略。[具体范围与证据](./plugin-project-owned-content-mutations.md)。其他产物服务、后端及正式产品闭环未完成。

@@ -143,3 +143,5 @@ CrewON 继续使用现有 Node、Run、Tool、Store 与 SSE 路径。业务插�
 正式桌面是在上述真实 Web 放行后更新，先核对候选与正式文件摘要，再验收真实模型与冷恢复。桌面 `gpt-6-astra` 的 40 行运行用时 41.471 秒、首段 2.545 秒；`gpt-6.1-sol` 的短回复运行用时 4.007 秒、首段 3.252 秒，两次均一次调用、零重试。任务未结束时已可见增量内容。回执见[正式桌面验收](../output/plugin-foundation/gateway-root-cause-20261011/desktop-0.1.69-acceptance.json)。桌面运行时合同升级为 v3，为新 Standard 资产分配新版本身份，旧 Lite 资产不被改写；真实 SQLite 编译/发布与历史恢复专项 50/50、现有身份专项 16/16 通过。Responses 最终全包 268/268、相关会话与模型选择 199 项回归、边界检查和 UI/Worker 类型检查通过；这些范围重叠，不相加为整仓测试数。未运行整仓库测试、重新启用业务插件或修改网关、渠道、Cloudflare 配置。历史外部首次断流仍未定因，不能以本轮成功样本将其销账。
 
 原 SQLite 的受保护改名、归档与恢复已增量接通，具体边界见[metadata 修改](./plugin-project-owned-metadata-mutations.md)。其他写入与生产交付尚未完成。
+
+原 CreativeProject 的 SQLite 内容与概念素材/版本写入已增量接通，仍复用原 Store、事务与独立 write 策略。[具体范围与证据](./plugin-project-owned-content-mutations.md)。其他产物服务、后端及正式产品闭环未完成。
