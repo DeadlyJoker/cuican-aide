@@ -1,6 +1,7 @@
 import assert from "node:assert/strict";
 import test from "node:test";
 import { SqliteRunStore } from "@crewon/store";
+import { PLUGIN_EXECUTION_REGISTRY_COMPOSITION_SERVICE } from "@crewon/plugin-host";
 import {
   desktopActivationFixture,
   activationTarget,
@@ -216,16 +217,49 @@ test("Native named activate denial and nonlegacy authority wire cannot become mo
   assert.equal(f.facts().counts.extension_activations, 0);
 });
 
-test("Native mandatory services remain unavailable after peer preflight, with no forged Local Node service", async (t) => {
+test("Native mandatory execution uses the actual host registration after peer preflight without authorizing a business task", async (t) => {
   const f = await desktopActivationFixture(t, {
     mandatoryService: "crewon.execution",
   });
   await f.open(true);
   const result = await f.enable();
-  assert.equal(result.statusCode, 409, result.body);
-  assert.equal((await f.selection()).state, "disabled");
-  assert.deepEqual(await f.nodeEvents(), []);
+  assert.equal(result.statusCode, 200, result.body);
+  assert.equal(result.json().projection.outcome, "applied");
+  assert.equal((await f.selection()).state, "enabled");
+  assert.deepEqual(
+    f.peerCalls.map((call) => call.operation),
+    ["prepareCandidate"],
+  );
+  assert.deepEqual(await f.nodeEvents(), ["load", "setup"]);
   assert.equal(f.facts().counts.extension_activations, 0);
+  assert.equal(f.facts().counts.run_snapshots, 0);
+  const store = new SqliteRunStore(f.databasePath);
+  try {
+    const composition = await store
+      .pluginInstallationStore()
+      .compositionStore()
+      .loadCurrent({ scope: f.bootstrap.scope });
+    assert.ok(composition);
+    assert.deepEqual(composition.hostServices, [
+      PLUGIN_EXECUTION_REGISTRY_COMPOSITION_SERVICE,
+    ]);
+    assert.deepEqual(composition.edges, [
+      {
+        consumerPluginId: manifest.pluginId,
+        service: "crewon.execution",
+        apiVersion: "1",
+        provider: {
+          kind: "host",
+          implementationId: "crewon.execution-registry.v1",
+          implementationRevision: 1,
+        },
+      },
+    ]);
+  } finally {
+    await store.close();
+  }
+  await f.close();
+  assert.deepEqual(await f.nodeEvents(), ["load", "setup", "dispose"]);
 });
 
 test("Native configuration changes during candidate preflight reject the original release before selection CAS", async (t) => {

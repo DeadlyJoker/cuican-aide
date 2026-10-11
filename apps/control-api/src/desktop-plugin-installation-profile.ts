@@ -39,6 +39,7 @@ import {
 import { verifyDesktopInstalledPackage } from "./desktop-plugin-runtime-support.ts";
 import type { DesktopPreparedBusinessCandidate } from "./desktop-installed-plugin-activation-owner.ts";
 import { DesktopPluginCompositionMetadataOwner } from "./desktop-plugin-composition-metadata-owner.ts";
+import { DesktopPluginExecutionServiceOwner } from "./desktop-plugin-execution-service-owner.ts";
 type Method =
   | "install"
   | "select"
@@ -84,7 +85,10 @@ type ProfileDependencies = Readonly<{
 
 export class DesktopInstallationProfile {
   readonly #dependencies: ProfileDependencies;
-  readonly #node = new PluginNodeHost({ services: [] });
+  readonly #executionServices = new DesktopPluginExecutionServiceOwner();
+  readonly #node = new PluginNodeHost({
+    services: this.#executionServices.catalog.implementations,
+  });
   readonly #lifetime = new AbortController();
   #owner!: SqlitePluginInstallationProfileOwner;
   #local!: LocalPluginInstallationHost;
@@ -128,6 +132,7 @@ export class DesktopInstallationProfile {
       profile.#initialize();
       return profile;
     } catch (error) {
+      profile.withdraw();
       await profile.#node.close();
       await profile.#owner?.close();
       throw error;
@@ -142,6 +147,7 @@ export class DesktopInstallationProfile {
       authority: dependencies.authority,
       owner: this.#owner,
       signal: this.#lifetime.signal,
+      hostServices: this.#executionServices.catalog.metadata,
     });
     this.#local = new LocalPluginInstallationHost({
       profile: dependencies.scope,
@@ -324,6 +330,7 @@ export class DesktopInstallationProfile {
   withdraw(): void {
     this.#closed = true;
     this.#lifetime.abort();
+    this.#executionServices.close();
     if (this.#operation !== null) this.#operation.stamp = null;
     for (const value of this.#node.snapshot())
       if (value.phase === "accepting")

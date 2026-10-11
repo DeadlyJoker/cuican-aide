@@ -3,6 +3,7 @@ import type {
   SelectPluginPackageResult,
 } from "@crewon/application";
 import { publishInstalledPluginComposition } from "@crewon/plugin-host";
+import type { PluginCompositionHostService } from "@crewon/contracts/plugins";
 import type { SqlitePluginInstallationProfileOwner } from "@crewon/store";
 import type { DesktopPluginConfiguration } from "./desktop-plugin-configuration.ts";
 import type { DesktopPluginAuthority } from "./desktop-plugin-authority.ts";
@@ -18,6 +19,7 @@ type Dependencies = Readonly<{
   authority: DesktopPluginAuthority;
   owner: SqlitePluginInstallationProfileOwner;
   signal: AbortSignal;
+  hostServices: readonly PluginCompositionHostService[];
 }>;
 
 /** Profile-owned metadata projection. Does not publish Node/UI instances or issue task grants. */
@@ -62,9 +64,9 @@ export class DesktopPluginCompositionMetadataOwner {
           authorityEpoch: configuration.authorityEpoch,
         },
         installRoot: configuration.installRoot,
-        // The installation NodeHost has no host services. UI availability cannot
-        // be relabeled as Node service identity; unresolved graphs stay unavailable.
-        hostServices: [],
+        // Captured from the same actual Node implementation catalog as the profile.
+        // UI availability is not a Node identity; unresolved graphs stay unavailable.
+        hostServices: this.#input.hostServices,
         installations: owner.store,
         compositions,
         signal,
