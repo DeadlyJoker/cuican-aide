@@ -14,7 +14,15 @@ import {
   realpathSync,
   statSync,
 } from "node:fs";
-import { basename, dirname, isAbsolute, join, resolve } from "node:path";
+import {
+  basename,
+  dirname,
+  isAbsolute,
+  join,
+  relative,
+  resolve,
+  sep,
+} from "node:path";
 
 const SCHEMA_VERSION = "crewon.desktop-workspace-authority.v2";
 const MAX_WORKSPACES = 100;
@@ -67,11 +75,32 @@ export class LocalWorkspaceAuthority {
     } as const;
   }
 
+  /** Ordinary navigation is a projection of the same registry, never a second registry. */
+  ordinaryStatus() {
+    const snapshot = this.status();
+    const workspaces = snapshot.workspaces.filter(({ workspaceId }) => {
+      const entry = this.#state.workspaces.find(
+        (value) => value.workspaceId === workspaceId,
+      )!;
+      return !this.#isProjectAllocation(entry);
+    });
+    return {
+      ...snapshot,
+      workspaces,
+      current:
+        workspaces.find(
+          (entry) => entry.workspaceId === snapshot.current?.workspaceId,
+        ) ?? null,
+    };
+  }
+
   root(workspaceId = this.#state.activeWorkspaceId): string {
     const workspace = this.#state.workspaces.find(
       (entry) => entry.workspaceId === workspaceId,
     );
     if (!workspace) throw new Error("desktop_sandbox_workspace_unbound");
+    if (arguments.length === 0 && this.#isProjectAllocation(workspace))
+      throw new Error("desktop_workspace_project_requires_scoped_execution");
     const canonical = requireDirectory(workspace.root);
     if (canonical !== workspace.root)
       throw new Error("desktop_workspace_path_changed");
@@ -97,6 +126,13 @@ export class LocalWorkspaceAuthority {
     const existing = this.#state.workspaces.find(
       (entry) => entry.root === canonical,
     );
+    if (
+      this.#isProjectAllocation({
+        workspaceId: existing?.workspaceId ?? "",
+        root: canonical,
+      })
+    )
+      throw new Error("desktop_workspace_project_requires_scoped_execution");
     if (!existing && this.#state.workspaces.length >= MAX_WORKSPACES) {
       throw new Error("desktop_workspace_limit_reached");
     }
@@ -119,13 +155,21 @@ export class LocalWorkspaceAuthority {
       throw new Error("desktop_workspace_id_invalid");
     }
     // An unavailable directory remains registered, but cannot become the active authority.
+    const entry = this.#state.workspaces.find(
+      (value) => value.workspaceId === workspaceId,
+    );
+    if (entry && this.#isProjectAllocation(entry))
+      throw new Error("desktop_workspace_project_requires_scoped_execution");
     this.root(workspaceId);
     return this.#commit({ ...this.#state, activeWorkspaceId: workspaceId });
   }
 
   canceled(request: unknown) {
     this.#requireMutation(request);
-    return { outcome: "userCanceled", snapshot: this.status() } as const;
+    return {
+      outcome: "userCanceled",
+      snapshot: this.ordinaryStatus(),
+    } as const;
   }
 
   clear(request: unknown) {
@@ -189,7 +233,25 @@ export class LocalWorkspaceAuthority {
     this.#persistedBytes = this.#write(next, this.#persistedBytes);
     this.#state = next;
     if (binding === "replaceActive") this.#activeGeneration = next.revision;
-    return { outcome: "committed", snapshot: this.status() } as const;
+    return {
+      outcome: "committed",
+      snapshot:
+        binding === "preserveActive" ? this.status() : this.ordinaryStatus(),
+    } as const;
+  }
+
+  #isProjectAllocation(entry: WorkspaceEntry): boolean {
+    // Classification only: this grants no owner, installation or execution authority.
+    if (/^workspace-project-[a-f0-9]{64}$/u.test(entry.workspaceId))
+      return true;
+    const path = relative(
+      join(requireDirectory(dirname(this.#path)), "plugin-project-workspaces"),
+      entry.root,
+    );
+    return (
+      path === "" ||
+      (!isAbsolute(path) && path !== ".." && !path.startsWith(`..${sep}`))
+    );
   }
 
   #requireMutation(value: unknown): void {

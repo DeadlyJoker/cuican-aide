@@ -114,10 +114,28 @@ describe("Native project allocation over the original workspace registry", () =>
           Object.keys(entry).sort().join() === "root,workspaceId",
       ),
     ).toBe(true);
-    f.authority.activate(result.workspaceId, mutation(1));
-    expect(() => f.authority.assertRootCurrent(lease)).toThrow(
-      "workspace_changed",
+    expect(() => f.authority.activate(result.workspaceId, mutation(1))).toThrow(
+      "desktop_workspace_project_requires_scoped_execution",
     );
+    expect(() => f.authority.assertRootCurrent(lease)).not.toThrow();
+    expect(f.authority.ordinaryStatus().workspaces).toEqual(before.workspaces);
+    expect(() => f.authority.select(projectRoot, mutation(1))).toThrow(
+      "desktop_workspace_project_requires_scoped_execution",
+    );
+    const nested = join(projectRoot, "assets");
+    mkdirSync(nested);
+    expect(() => f.authority.select(nested, mutation(1))).toThrow(
+      "desktop_workspace_project_requires_scoped_execution",
+    );
+    const alias = join(f.base, "project-alias");
+    symlinkSync(projectRoot, alias);
+    expect(() => f.authority.select(alias, mutation(1))).toThrow(
+      "desktop_workspace_project_requires_scoped_execution",
+    );
+    const cold = new LocalWorkspaceAuthority(f.state);
+    expect(cold.ordinaryStatus().workspaces).toEqual(before.workspaces);
+    expect(cold.root(result.workspaceId)).toBe(projectRoot);
+    expect(cold.root()).toBe(f.ordinary);
   });
   it("replays across a real restart without duplicate roster entries or moving saved files", () => {
     const f = fixture(),
@@ -136,6 +154,42 @@ describe("Native project allocation over the original workspace registry", () =>
     expect(allocator.recover()).toEqual(first);
     expect(cold.status().revision).toBe(1);
     expect(cold.root()).toBe(f.ordinary);
+  });
+  it("keeps old active project records for recovery without exposing them as an ordinary workspace", () => {
+    const f = fixture();
+    const allocation = new LocalWorkspaceProjectAllocator(
+      f.authority,
+      owner,
+    ).provision();
+    const persisted = JSON.parse(readFileSync(f.registry, "utf8"));
+    // This was permitted by the previous Native activation API.
+    persisted.activeWorkspaceId = allocation.workspaceId;
+    writeFileSync(f.registry, JSON.stringify(persisted) + "\n", {
+      mode: 0o600,
+    });
+    const cold = new LocalWorkspaceAuthority(f.state);
+    expect(cold.ordinaryStatus().current).toBeNull();
+    expect(cold.ordinaryStatus().workspaces).toHaveLength(1);
+    expect(() => cold.root()).toThrow(
+      "desktop_workspace_project_requires_scoped_execution",
+    );
+    expect(cold.root(allocation.workspaceId)).toBe(
+      f.authority.root(allocation.workspaceId),
+    );
+    expect(JSON.parse(readFileSync(f.registry, "utf8"))).toEqual(persisted);
+    const selected = cold.select(f.other, mutation(persisted.revision));
+    expect(selected.snapshot.workspaces).toHaveLength(2);
+    expect(selected.snapshot.current?.workspaceId).not.toBe(
+      allocation.workspaceId,
+    );
+    expect(cold.root()).toBe(f.other);
+    expect(cold.status().workspaces).toHaveLength(3);
+    expect(
+      cold.canceled(mutation(selected.snapshot.revision)).snapshot.workspaces,
+    ).toHaveLength(2);
+    expect(
+      cold.clear(mutation(selected.snapshot.revision)).snapshot.workspaces,
+    ).toHaveLength(2);
   });
   it("keeps an in-flight real native file preview readable while appending a project workspace", async () => {
     const f = fixture(),
@@ -230,24 +284,33 @@ describe("Native project allocation over the original workspace registry", () =>
     expect(f.authority.root()).toBe(f.ordinary);
   });
   it("does not adopt a legacy workspace with a matching canonical root", () => {
-    const f = fixture(),
-      allocator = new LocalWorkspaceProjectAllocator(f.authority, owner);
+    const f = fixture();
     const id = projectAllocationWorkspaceId(owner),
       parent = join(f.state, "plugin-project-workspaces"),
       root = join(parent, id);
     mkdirSync(parent, { mode: 0o700 });
     mkdirSync(root, { mode: 0o700 });
     writeFileSync(join(root, "legacy.txt"), "legacy");
-    const legacy = f.authority.select(root, mutation(0)).snapshot.current;
+    // Persist a genuine old-format ordinary registration; new selection must reject it.
+    const persisted = JSON.parse(readFileSync(f.registry, "utf8"));
+    persisted.workspaces.push({ workspaceId: "workspace-legacy", root });
+    persisted.activeWorkspaceId = "workspace-legacy";
+    persisted.revision++;
+    writeFileSync(f.registry, JSON.stringify(persisted) + "\n", {
+      mode: 0o600,
+    });
+    const authority = new LocalWorkspaceAuthority(f.state);
+    const legacy = authority.status().current;
+    const allocator = new LocalWorkspaceProjectAllocator(authority, owner);
     const result = allocator.provision();
     expect(result).toMatchObject({
       phase: "failed",
       observation: "unobserved",
     });
-    expect(f.authority.status().current).toEqual(legacy);
-    expect(f.authority.status().workspaces).toHaveLength(2);
+    expect(authority.status().current).toEqual(legacy);
+    expect(authority.status().workspaces).toHaveLength(2);
     expect(readFileSync(join(root, "legacy.txt"), "utf8")).toBe("legacy");
-    expect(() => f.authority.root(id)).toThrow("unbound");
+    expect(() => authority.root(id)).toThrow("unbound");
   });
   it("leaves failed allocation idle until explicit recovery, preserving active workspace selection", () => {
     const f = fixture(),

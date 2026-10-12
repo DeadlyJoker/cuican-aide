@@ -476,7 +476,7 @@ function registerIpc(options: {
   handle("crewon:sandbox:run-command", (request: unknown) =>
     sandbox.runCommand(request),
   );
-  handle("crewon:workspace:status", () => authority.status());
+  handle("crewon:workspace:status", () => authority.ordinaryStatus());
   handle("crewon:workspace:pick-directory", async (title?: string) => {
     const result = await dialog.showOpenDialog(window, {
       title: typeof title === "string" ? title : undefined,

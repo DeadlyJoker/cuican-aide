@@ -364,3 +364,13 @@ PG 使用原安装 shared lock、receipt advisory namespace、project advisory n
 新增真实 PG 项目通过此前的 original qualified creator 创建，不使用 raw owner seed；original UI/Application action 连续改名、归档、恢复、append brief、create concept、append concept revision，并由 cold Store/Application 重放。内容冲突拒绝；不同 key 的并发旧 revision 修改只有一个成功，另一个明确 revision conflict，revision/history/receipt 数量一致；别的插件无法改写。末尾 receipt trigger 故障回滚 project CAS；在 actual receipt INSERT 后撤回独立 project policy，同样回滚。实际已成功 COMMIT 后注入 acknowledgement 丢失，冷重试发布原 receipt，不增加 project/revision/receipt。注入是本地真实 PG connection 的具名协议 fault，不是线上网络故障归因。
 
 与原两库 owned creator/普通 project/安装竞争/Run/Tool/legacy 写入回归 97/97、零跳过，证据 `output/plugin-foundation/owned-mutation-pg-20261012/tests.txt`，专属 PG 已停止删除。Store/Worker/Control 类型与边界检查通过。Host/package discovery/PDP 仍是具名 fixture，未证明正式 Native/Web 插件安装、运行时模型或跨进程文件激活；Foundation/text/media 的 owned 保存仍待接入，本次未重启用户服务或更新桌面。
+
+### 2026-10-12：普通工作空间入口与插件目录隔离
+
+原 Native 分配器将插件项目追加到同一 v2 工作空间注册表，原 Worker 已按 Thread.workspaceId 查询注册表定位目录，普通 UI 的 activeWorkspaceId 不决定该路由。检查发现此前原 workspace status 直接把全部注册项发给普通工作空间导航，并允许普通 activate/select 激活插件目录；“分配不自动激活”不足以证明隔离。
+
+本次保留原完整 Native status、注册表与项目按 ID 定位，新增 ordinaryStatus 作为普通导航的同结构投影；原 `crewon:workspace:status` 改用该投影，普通 select/activate/cancel/clear 返回同一投影。项目的保留 ID 命名空间和 Native 私有项目根目录及其子目录不会进入普通列表或被普通选择器激活，目录别名先按原 canonical 路径校验再判定。分类只用于普通入口隔离，不授予项目归属或执行权限。显式 Native `root(workspaceId)` 不改变原接口，仍需调用方原 owner/installation/PDP 校验；不得把该路径读取误认为完整授权。
+
+旧版若曾持久化项目目录为 activeWorkspaceId，冷启动保留该记录和文件，不静默重写历史；普通 current 显示为空，普通默认根目录读取拒绝，用户仍可选择普通目录或清空当前选择。原 revision/CAS、注册上限和原 active-root lease 均保留。使用真实分配器覆盖普通投影、冷恢复、旧 active 数据、子目录/符号链接、普通切换及清空，旧 legacy 同路径拒绝采用测试改为持久化历史 fixture，因为新选择入口已拒绝创建这种状态。原跨进程 Native 项目目录/Thread 测试继续运行。
+
+这不是正式 Desktop UI 验收，也未开通插件 Agent 文件写入；完整 owner/pin/lease 撤销检查及实际项目 Agent/产物路径仍需继续实现和验证。
