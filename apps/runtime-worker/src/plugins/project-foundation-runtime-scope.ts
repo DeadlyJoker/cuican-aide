@@ -1,3 +1,4 @@
+import type { PluginProjectRuntimeObservation } from "@crewon/application/host-project-workspaces";
 import type { ProjectFoundationRunAdmissionStore } from "@crewon/application";
 import {
   extensionCanonicalJson,
@@ -101,6 +102,7 @@ export async function readProjectFoundationRuntimeScope(
     binding: ExtensionRunBinding;
     stageAdmission: ProjectStageRunAdmission | null;
     signal: AbortSignal;
+    observation?: PluginProjectRuntimeObservation;
   }>,
 ): Promise<ProjectFoundationRunAdmission | null> {
   input.signal.throwIfAborted();
@@ -109,9 +111,25 @@ export async function readProjectFoundationRuntimeScope(
     spaceId: input.binding.spaceId,
     runId: input.binding.runId,
   };
+  const requiredLegacy =
+    input.observation === undefined
+      ? await input.foundations.readRequiredFoundationDigest(locator)
+      : null;
+  if (
+    input.observation !== undefined &&
+    !input.foundations.loadRuntimeFoundationRunAdmission
+  )
+    throw new Error("installed_plugin_runtime_foundation_reader_unavailable");
+  const raw =
+    input.observation === undefined
+      ? await input.foundations.loadFoundationRunAdmission(locator)
+      : await input.foundations.loadRuntimeFoundationRunAdmission!(
+          input.observation,
+        );
   const required =
-      await input.foundations.readRequiredFoundationDigest(locator),
-    raw = await input.foundations.loadFoundationRunAdmission(locator);
+    input.observation === undefined
+      ? requiredLegacy
+      : (raw?.contentDigest ?? null);
   input.signal.throwIfAborted();
   if (raw === null) {
     if (required !== null)
@@ -160,6 +178,7 @@ export async function readFoundationForVerifiedRuntimeContext(
     stageAdmission: ProjectStageRunAdmission | null;
     requestKind: "direct" | "query";
     signal: AbortSignal;
+    observation?: PluginProjectRuntimeObservation;
   }>,
 ) {
   if (input.foundations === undefined) return null;

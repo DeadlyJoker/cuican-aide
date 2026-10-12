@@ -334,3 +334,13 @@ PG 沿用原 READ COMMITTED 协议及 metadata schema shared lock，owner/projec
 新增两库用例使用原真实 Task/Run/discussion sidecar，之后加具名 immutable metadata owner 约束；原 reader 拒绝、runtime ref 可读、冷 Store 可读，复制 ref/有效但不匹配的 Stage/撤权/读取后撤权/失效生命周期拒绝，记录数量不变。owner 行仍为约束 fixture，不是首个 owned project producer 验收。与原 paired reader/legacy denial/原 runtime 授权顺序/原 checked Tool read 回归 22/22、零跳过；证据 `output/plugin-foundation/runtime-metadata-20261012/tests.txt`，专属 PG 已停止删除。
 
 实际 runtime context 签发和 composer 选择仍待接线，此增量不能等同于真实 Worker 初始化、模型调用或 Web/桌面验收。未重启用户服务、未更新桌面，业务插件保持卸除。
+
+### 原 runtime context 签发与消费 metadata observation
+
+原 `InstalledPluginRunContext` 的 `load/assertCurrent` 在完整原 activation/selection/actor/PDP 校验后，将真实 actor 与 Task/binding/Stage 交给 private Foundation setup helper。只有明确 `plugin-project-v1` 的 direct discussion 分支签发 backend ref，并由原 paired Store 消费；其他分支仍使用原读取和 query 拒绝规则。helper 将凭证 current 校验绑定原 `#authorize`（没有使用 public actor hints），signal 与本次 setup 生命周期共同约束 ref；finally 关闭生命周期，读成功/失败后留存 ref 都不能再次使用。原 composer 仅从已严格捕获的 Foundation Tools 部署配置转发该模式，没有启用用户环境模式。
+
+原配对读取在新分支一次完成 mandatory marker/admission parity 校验，原 domain runtime identity 校验继续执行。未新增 Tool grant 或许可缓存；初始化、assertCurrent 和冷 reader 均复核真实记录与原权限。原 observer 的安装历史语义保持，禁用/卸载阻止 submit，observe 仍使用当时的原 package。将原 accessor-free DTO/purpose/signal 校验移入原 context-data 文件，使高触达 context 文件保持约 787 行，语义不变。
+
+新的 SQLite/PG、creative/novel 四条真实 Task/Run/sidecar 初始化用例验证：PDP 拒绝时读取次数为零，正常 load/原 Foundation projection/assertCurrent/冷 reader 得到真实 sidecar，留存 ref 立即失效，读中撤权拒绝发布，配置 getter 不执行，实际 selection disabled/uninstalled 后 submit 拒绝但 observe 返回原 paired metadata。具名 runtime PDP 与 metadata owner 约束 fixture 不等同于实际账号服务或首个 owned project creator。原 composer forwarding 已接线，但用例没有加载独立 Node 插件包或执行模型。
+
+与原 context/paired reader/owned Tool read/Store/config-composition 回归 52/52、零跳过；证据 `output/plugin-foundation/runtime-context-20261012/tests.txt`，专属 PG 已停止删除。Worker/Control 类型、边界检查通过。真实 Worker loop、模型冷恢复、protected 写入、Web/正式桌面完整验收仍待完成；本次未重启用户服务或更新桌面，业务插件保持卸除。

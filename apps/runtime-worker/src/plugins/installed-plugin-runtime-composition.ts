@@ -341,6 +341,9 @@ export function composeInstalledPluginRuntimeResolver(input: {
     operations,
     conversations: store.projectConversationStore(),
     foundationRuns: store.projectFoundationRunStore(),
+    ...(config.projectFoundationTools?.projectOwnership === undefined
+      ? {}
+      : { projectOwnership: config.projectFoundationTools.projectOwnership }),
     plans: store.projectTextPlanStore(),
     assetStages: store.projectAssetStageStore(),
     ...(config.projectMediaInputs === undefined

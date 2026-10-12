@@ -1,6 +1,9 @@
 import {
   validateReceipt,
   assertRun,
+  record,
+  checkedPurpose,
+  checkedSignal,
 } from "./installed-plugin-run-context-data.ts";
 import { readProjectMediaInputStageRuntimeScope } from "./project-media-input-stage-runtime-scope.ts";
 import type { ProjectMediaInputStageStore } from "@crewon/application";
@@ -49,7 +52,10 @@ import {
 import type { PluginToolRuntimeContext } from "@crewon/plugin-sdk/node";
 import { readProjectTextPlanRuntimeScope } from "./project-text-plan-runtime-scope.ts";
 import { readProjectStageRuntimeScope } from "./project-stage-runtime-scope.ts";
-import { readFoundationForVerifiedRuntimeContext } from "./project-foundation-runtime-scope.ts";
+import {
+  captureRuntimeProjectOwnership,
+  readInstalledRuntimeFoundation,
+} from "./installed-plugin-runtime-foundation.ts";
 import type { ProjectFoundationRunAdmissionStore } from "@crewon/application";
 import type { ProjectFoundationRunAdmission } from "@crewon/domain";
 import type { PluginCompositionStore } from "@crewon/application";
@@ -96,6 +102,7 @@ export type InstalledPluginRunContextDependencies = Readonly<{
     "readRequiredPlanDigest" | "loadRunAdmission"
   >;
   foundationRuns?: ProjectFoundationRunAdmissionStore;
+  projectOwnership?: "plugin-project-v1";
   resolveActor(
     owner: Readonly<{ tenantId: string; spaceId: string; actorId: string }>,
     signal: AbortSignal,
@@ -151,6 +158,7 @@ export class InstalledPluginRunContext {
           "crewon.plugin-query-task-admission.v1")
     )
       fail("installed_plugin_context_port_unavailable");
+    captureRuntimeProjectOwnership(dependencies);
     this.#dependencies = Object.freeze({ ...dependencies });
   }
 
@@ -180,8 +188,8 @@ export class InstalledPluginRunContext {
     const signal = checkedSignal(value.signal);
     const base = await this.#read(locator, target, signal);
     if (base === null) return null;
-    await this.#authorize(base, purpose, signal);
-    const saved = await this.#withFoundation(base, signal);
+    const actor = await this.#authorize(base, purpose, signal);
+    const saved = await this.#withFoundation(base, actor, purpose, signal);
     if (this.#dependencies.foundationRuns !== undefined)
       await this.#authorize(saved, purpose, signal);
     const snapshot = Object.freeze({ context: saved.context });
@@ -210,8 +218,8 @@ export class InstalledPluginRunContext {
       signal,
     );
     if (base === null) fail("installed_plugin_context_changed");
-    await this.#authorize(base, purpose, signal);
-    const current = await this.#withFoundation(base, signal);
+    const actor = await this.#authorize(base, purpose, signal);
+    const current = await this.#withFoundation(base, actor, purpose, signal);
     if (this.#dependencies.foundationRuns !== undefined)
       await this.#authorize(current, purpose, signal);
     if (
@@ -601,10 +609,16 @@ export class InstalledPluginRunContext {
   /** Installation, activation and actor PDP must succeed before the independent sidecar is read. */
   async #withFoundation(
     saved: SavedContext,
+    actor: ActorContext,
+    purpose: InstalledPluginRunPurpose,
     signal: AbortSignal,
   ): Promise<SavedContext> {
     if (this.#dependencies.foundationRuns === undefined) return saved;
-    const projectFoundation = await readFoundationForVerifiedRuntimeContext({
+    const projectFoundation = await readInstalledRuntimeFoundation({
+      ownership: this.#dependencies.projectOwnership,
+      actor,
+      purpose,
+      authorize: () => this.#authorize(saved, purpose, signal),
       foundations: this.#dependencies.foundationRuns,
       admission: saved.admission,
       binding: saved.binding,
@@ -693,6 +707,7 @@ export class InstalledPluginRunContext {
       saved.composition,
       purpose,
     );
+    return actor;
   }
 
   #selection(
@@ -769,40 +784,4 @@ export class InstalledPluginRunContext {
         fail("installed_plugin_execution_identity_unavailable");
     return actor;
   }
-}
-
-function record(
-  input: unknown,
-  fields: readonly string[],
-): Readonly<Record<string, unknown>> {
-  if (
-    input === null ||
-    typeof input !== "object" ||
-    Array.isArray(input) ||
-    (Object.getPrototypeOf(input) !== Object.prototype &&
-      Object.getPrototypeOf(input) !== null) ||
-    Reflect.ownKeys(input).length !== fields.length
-  )
-    fail("installed_plugin_context_fields_invalid");
-  return Object.freeze(
-    Object.fromEntries(
-      fields.map((field) => {
-        const descriptor = Object.getOwnPropertyDescriptor(input, field);
-        if (!descriptor?.enumerable || !Object.hasOwn(descriptor, "value"))
-          fail("installed_plugin_context_fields_invalid");
-        return [field, descriptor.value];
-      }),
-    ),
-  );
-}
-function checkedPurpose(input: unknown): InstalledPluginRunPurpose {
-  if (input !== "submit" && input !== "observe")
-    fail("installed_plugin_context_purpose_invalid");
-  return input;
-}
-function checkedSignal(input: unknown): AbortSignal {
-  if (!(input instanceof AbortSignal))
-    fail("installed_plugin_context_signal_invalid");
-  input.throwIfAborted();
-  return input;
 }
