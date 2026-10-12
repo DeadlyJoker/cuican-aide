@@ -84,7 +84,7 @@ describe("command shell light locals", () => {
     const contract = sliceBetween(
       readStyles("original-shell-overrides.css"),
       "/*\n * Command shell locals for the light theme",
-      ":root[data-theme=\"light\"]\n  .command-shell-route",
+      ':root[data-theme="light"]\n  .command-shell-route',
     );
 
     expect(contract).toMatchSnapshot();
@@ -132,9 +132,9 @@ describe("type weight scale", () => {
   const STEPS = new Set(["400", "500", "600", "700"]);
 
   function weightsIn(file: string): string[] {
-    return Array.from(readStyles(file).matchAll(/font-weight:\s*(\d{3})\b/g)).map(
-      (match) => match[1],
-    );
+    return Array.from(
+      readStyles(file).matchAll(/font-weight:\s*(\d{3})\b/g),
+    ).map((match) => match[1]);
   }
 
   it("keeps every declared weight on the four-step scale", () => {
@@ -209,4 +209,48 @@ describe("transition timing", () => {
 
     expect(block).not.toContain("transform");
   });
+});
+
+describe("readable semantic text", () => {
+  it("snapshots contrast floors and text roles separately from surface colors", () => {
+    const styles = readStyles("appearance.css");
+    expect(
+      sliceBetween(
+        styles,
+        "/*\n * Contrast mixes",
+        "/*\n * The shell resolves",
+      ),
+    ).toMatchSnapshot();
+    expect(
+      styles.slice(styles.indexOf("/* Readable text in both themes")),
+    ).toMatchSnapshot();
+  });
+  it("keeps the least contrasted text readable against raised controls in both themes", () => {
+    const luminance = (hex: string) => {
+      const parts = hex.match(/\w{2}/g)!.map((part) => {
+        const value = parseInt(part, 16) / 255;
+        return value <= 0.04045
+          ? value / 12.92
+          : ((value + 0.055) / 1.055) ** 2.4;
+      });
+      return parts[0] * 0.2126 + parts[1] * 0.7152 + parts[2] * 0.0722;
+    };
+    for (const [ink, surface] of [
+      ["626873", "ececee"],
+      ["b4b7bf", "3c3c3c"],
+    ]) {
+      const a = luminance(ink),
+        b = luminance(surface);
+      expect(
+        (Math.max(a, b) + 0.05) / (Math.min(a, b) + 0.05),
+      ).toBeGreaterThanOrEqual(4.5);
+      expect(readStyles("appearance.css")).toContain("#" + ink);
+    }
+  });
+});
+
+it("never uses translucent shadow ink as readable text", () => {
+  expect(readStyles("app.css")).not.toMatch(
+    /(?:^|\n)\s*color: var\(--n-alpha-(?:20|30|45)\)/,
+  );
 });

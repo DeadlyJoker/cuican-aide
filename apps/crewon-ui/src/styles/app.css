@@ -2945,7 +2945,7 @@ textarea:focus-visible {
   width: 26px;
   height: 26px;
   border-radius: var(--radius-sm);
-  color: var(--n-alpha-45);
+  color: var(--text-muted);
 }
 
 .titlebar .icon-button:focus-visible {
@@ -2956,24 +2956,24 @@ textarea:focus-visible {
 .titlebar .icon-button:hover {
   border-color: var(--n-alpha-08);
   background: var(--n-alpha-06);
-  color: var(--n-alpha-45);
+  color: var(--text-muted);
 }
 
 .titlebar-history .icon-button {
-  color: var(--n-alpha-20);
+  color: var(--text-faint);
   cursor: default;
 }
 
 .titlebar-history .icon-button:hover {
   border-color: transparent;
   background: transparent;
-  color: var(--n-alpha-30);
+  color: var(--text-faint);
 }
 
 .titlebar .icon-button[aria-expanded="true"] {
   border-color: var(--n-alpha-08);
   background: var(--n-alpha-04);
-  color: var(--n-alpha-45);
+  color: var(--text-muted);
 }
 
 :root:not([data-theme="dark"]) .titlebar .icon-button {
@@ -3018,7 +3018,7 @@ textarea:focus-visible {
 
 .language-menu-popover button,
 .settings-menu-popover button {
-  color: var(--n-alpha-45);
+  color: var(--text-muted);
 }
 
 :root:not([data-theme="dark"]) .language-menu-popover button,
@@ -3031,7 +3031,7 @@ textarea:focus-visible {
 .settings-menu-popover button:hover,
 .settings-menu-popover button[data-active="true"] {
   background: var(--n-alpha-08);
-  color: var(--n-alpha-45);
+  color: var(--text-muted);
 }
 
 :root:not([data-theme="dark"]) .language-menu-popover button:hover,
@@ -3808,7 +3808,7 @@ textarea:focus-visible {
   display: grid;
   width: 100%;
   border: 0;
-  color: var(--n-alpha-45);
+  color: var(--text-muted);
 }
 
 .turn-process-summary {
@@ -3872,7 +3872,7 @@ textarea:focus-visible {
 }
 
 .turn-process-summary em {
-  color: var(--n-alpha-30);
+  color: var(--text-faint);
   font-size: calc(11px + var(--user-ui-font-delta));
   font-style: normal;
   font-weight: 500;
@@ -3882,7 +3882,7 @@ textarea:focus-visible {
   min-width: 0;
   padding: 0;
   border: 0;
-  color: var(--n-alpha-45);
+  color: var(--text-muted);
   font-size: calc(11px + var(--user-ui-font-delta));
   font-weight: 500;
   text-align: center;
@@ -3902,7 +3902,7 @@ textarea:focus-visible {
 
 .turn-process-details[data-auto-collapsed="true"][data-state="collapsed"]
   .turn-process-summary {
-  color: var(--n-alpha-30);
+  color: var(--text-faint);
   transform: translateY(-1px);
 }
 
@@ -3972,7 +3972,7 @@ textarea:focus-visible {
 
 .tool-action-verb {
   flex: 0 0 auto;
-  color: var(--n-alpha-45);
+  color: var(--text-muted);
   font-size: calc(12px + var(--user-ui-font-delta));
   font-weight: 500;
   letter-spacing: 0.01em;
@@ -4024,7 +4024,7 @@ textarea:focus-visible {
 .turn-divider {
   min-height: 31px;
   padding-left: 0;
-  color: var(--n-alpha-45);
+  color: var(--text-muted);
 }
 
 .turn-divider::before {
@@ -4050,7 +4050,7 @@ textarea:focus-visible {
   border: 0;
   background: transparent;
   display: inline-flex;
-  color: var(--n-alpha-45);
+  color: var(--text-muted);
   font-style: normal;
   font-weight: 500;
 }
@@ -4074,7 +4074,7 @@ textarea:focus-visible {
 .message[data-status="completed"] .message-icon {
   border-color: transparent;
   background: transparent;
-  color: var(--n-alpha-30);
+  color: var(--text-faint);
 }
 
 :root:not([data-theme="dark"]) .message[data-status="completed"] .message-icon {
@@ -4120,7 +4120,7 @@ textarea:focus-visible {
 
 .message-body p {
   max-width: none;
-  color: var(--n-alpha-45);
+  color: var(--text-muted);
   font-size: calc(13px + var(--user-ui-font-delta));
   line-height: 1.58;
 }
@@ -4130,7 +4130,7 @@ textarea:focus-visible {
   gap: 8px;
   max-width: 760px;
   min-width: 0;
-  color: var(--n-alpha-45);
+  color: var(--text-muted);
   font-size: calc(13px + var(--user-ui-font-delta));
   line-height: 1.58;
   overflow-wrap: anywhere;
@@ -4889,7 +4889,7 @@ body.mermaid-lightbox-open {
   padding: 0;
   border: 0;
   background: transparent;
-  color: var(--n-alpha-45);
+  color: var(--text-muted);
 }
 
 :root:not([data-theme="dark"]) .message[data-kind="plan"] .message-body p,
@@ -5103,7 +5103,7 @@ body.mermaid-lightbox-open {
 }
 
 .command-card-header code {
-  color: var(--n-alpha-45);
+  color: var(--text-muted);
   font-family: "SFMono-Regular", Consolas, "Liberation Mono", monospace;
   font-size: calc(12px + var(--user-ui-font-delta));
   font-weight: 500;
@@ -5115,7 +5115,7 @@ body.mermaid-lightbox-open {
 
 .command-card-header span,
 .command-card-header em {
-  color: var(--n-alpha-45);
+  color: var(--text-muted);
   font-size: calc(11px + var(--user-ui-font-delta));
   font-style: normal;
   font-weight: 500;
@@ -5165,7 +5165,7 @@ body.mermaid-lightbox-open {
 }
 
 .file-change-header span {
-  color: var(--n-alpha-45);
+  color: var(--text-muted);
   font-size: calc(12px + var(--user-ui-font-delta));
   font-weight: 600;
 }
@@ -5185,14 +5185,14 @@ body.mermaid-lightbox-open {
 }
 
 .tool-call-header code {
-  color: var(--n-alpha-45);
+  color: var(--text-muted);
   font-family: "SFMono-Regular", Consolas, "Liberation Mono", monospace;
   font-size: calc(12px + var(--user-ui-font-delta));
   font-weight: 500;
 }
 
 .tool-call-header em {
-  color: var(--n-alpha-30);
+  color: var(--text-faint);
   font-size: calc(11px + var(--user-ui-font-delta));
   font-style: normal;
   font-weight: 500;
@@ -5216,7 +5216,7 @@ body.mermaid-lightbox-open {
 }
 
 .file-change-header strong {
-  color: var(--n-alpha-45);
+  color: var(--text-muted);
   font-size: calc(11px + var(--user-ui-font-delta));
   font-weight: 500;
 }
@@ -5229,7 +5229,7 @@ body.mermaid-lightbox-open {
 }
 
 .file-change-header small {
-  color: var(--n-alpha-30);
+  color: var(--text-faint);
   font-size: calc(11px + var(--user-ui-font-delta));
   font-weight: 500;
 }
@@ -5284,7 +5284,7 @@ body.mermaid-lightbox-open {
 }
 
 .tool-call-section span {
-  color: var(--n-alpha-45);
+  color: var(--text-muted);
   font-size: calc(11px + var(--user-ui-font-delta));
   font-weight: 600;
 }
@@ -5394,7 +5394,7 @@ body.mermaid-lightbox-open {
 }
 
 .file-change-row span {
-  color: var(--n-alpha-45);
+  color: var(--text-muted);
   font-size: calc(11px + var(--user-ui-font-delta));
   font-weight: 500;
 }
@@ -5427,7 +5427,7 @@ body.mermaid-lightbox-open {
 .file-event-title {
   min-width: 0;
   overflow: hidden;
-  color: var(--n-alpha-45);
+  color: var(--text-muted);
   font-size: calc(12px + var(--user-ui-font-delta));
   font-weight: 500;
   text-overflow: ellipsis;
@@ -5447,7 +5447,7 @@ body.mermaid-lightbox-open {
 .file-event-section-title,
 .file-event-disclosure,
 .file-read-more {
-  color: var(--n-alpha-45);
+  color: var(--text-muted);
   font-size: calc(12px + var(--user-ui-font-delta));
   line-height: 1.35;
 }
@@ -5581,7 +5581,7 @@ body.mermaid-lightbox-open {
   min-width: 0;
   align-items: baseline;
   gap: 7px;
-  color: var(--n-alpha-45);
+  color: var(--text-muted);
   font-size: calc(12px + var(--user-ui-font-delta));
 }
 
@@ -5664,7 +5664,7 @@ body.mermaid-lightbox-open {
   border: 1px solid var(--n-alpha-08);
   border-radius: var(--radius-sm);
   background: var(--n-alpha-04);
-  color: var(--n-alpha-45);
+  color: var(--text-muted);
 }
 
 :root:not([data-theme="dark"]) .process-card {
@@ -5693,7 +5693,7 @@ body.mermaid-lightbox-open {
 .process-card.reasoning-card-static .reasoning-card-headline {
   display: block;
   overflow: hidden;
-  color: var(--n-alpha-45);
+  color: var(--text-muted);
   font-size: calc(12px + var(--user-ui-font-delta));
   font-weight: 500;
   line-height: 1.45;
@@ -5730,7 +5730,7 @@ body.mermaid-lightbox-open {
 }
 
 .process-card summary span {
-  color: var(--n-alpha-45);
+  color: var(--text-muted);
   font-size: calc(12px + var(--user-ui-font-delta));
   font-weight: 600;
 }
@@ -5744,7 +5744,7 @@ body.mermaid-lightbox-open {
 }
 
 .process-card summary strong {
-  color: var(--n-alpha-30);
+  color: var(--text-faint);
 }
 
 .tool-card[data-status="inProgress"] .tool-card-status,
@@ -5753,7 +5753,7 @@ body.mermaid-lightbox-open {
 }
 
 .tool-card[data-status="completed"] .tool-card-status {
-  color: var(--n-alpha-45);
+  color: var(--text-muted);
 }
 
 .tool-card[data-status="failed"] .tool-card-status {
@@ -5814,7 +5814,7 @@ body.mermaid-lightbox-open {
 }
 
 .reasoning-card:not([open]) summary .reasoning-card-headline {
-  color: var(--n-alpha-45);
+  color: var(--text-muted);
   font-weight: 500;
 }
 
@@ -5831,7 +5831,7 @@ body.mermaid-lightbox-open {
 }
 
 .reasoning-card .markdown-content {
-  color: var(--n-alpha-45);
+  color: var(--text-muted);
   font-size: calc(12px + var(--user-ui-font-delta));
   line-height: 1.55;
 }
@@ -5845,7 +5845,7 @@ body.mermaid-lightbox-open {
   gap: 4px;
   margin: 0;
   padding: 0 0 0 16px;
-  color: var(--n-alpha-45);
+  color: var(--text-muted);
   font-size: calc(12px + var(--user-ui-font-delta));
   font-weight: 400;
   line-height: 1.45;
@@ -5856,7 +5856,7 @@ body.mermaid-lightbox-open {
 }
 
 .reasoning-step-list li::marker {
-  color: var(--n-alpha-30);
+  color: var(--text-faint);
 }
 
 :root:not([data-theme="dark"]) .reasoning-step-list {
@@ -5943,7 +5943,7 @@ body.mermaid-lightbox-open {
 
   .thinking-shimmer {
     background: none;
-    color: var(--n-alpha-45);
+    color: var(--text-muted);
   }
 
   :root:not([data-theme="dark"]) .thinking-shimmer {
@@ -5998,7 +5998,7 @@ body.mermaid-lightbox-open {
 
 .failure-card p {
   margin: 0;
-  color: var(--n-alpha-45);
+  color: var(--text-muted);
   font-size: calc(12px + var(--user-ui-font-delta));
   line-height: 1.48;
   overflow-wrap: anywhere;
@@ -6009,7 +6009,7 @@ body.mermaid-lightbox-open {
   padding: 6px 7px;
   border-radius: var(--radius-sm);
   background: var(--n-alpha-14);
-  color: var(--n-alpha-45);
+  color: var(--text-muted);
   font-family: "SFMono-Regular", Consolas, "Liberation Mono", monospace;
   font-size: calc(11px + var(--user-ui-font-delta));
   line-height: 1.42;
@@ -6104,7 +6104,7 @@ body.mermaid-lightbox-open {
   border-bottom: 0;
   border-radius: var(--radius-xl) var(--radius-lg) 0 0;
   background: var(--n-900);
-  color: var(--n-alpha-45);
+  color: var(--text-muted);
   font-size: calc(11px + var(--user-ui-font-delta));
 }
 
@@ -6274,7 +6274,7 @@ body.mermaid-lightbox-open {
   border: 0;
   border-radius: var(--radius-sm);
   background: var(--n-alpha-06);
-  color: var(--n-alpha-45);
+  color: var(--text-muted);
   cursor: pointer;
   font: inherit;
   font-size: calc(13px + var(--user-ui-font-delta));
@@ -6287,7 +6287,7 @@ body.mermaid-lightbox-open {
 .capability-dock button:hover,
 .capability-dock button[data-active="true"] {
   background: var(--n-alpha-08);
-  color: var(--n-alpha-45);
+  color: var(--text-muted);
 }
 
 .capability-dock button:disabled {
@@ -6310,7 +6310,7 @@ body.mermaid-lightbox-open {
   border: 0;
   border-radius: var(--radius-pill);
   background: var(--n-alpha-08);
-  color: var(--n-alpha-45);
+  color: var(--text-muted);
   font: inherit;
   font-size: calc(11px + var(--user-ui-font-delta));
 }
@@ -6325,7 +6325,7 @@ body.mermaid-lightbox-open {
   border: 1px solid var(--n-alpha-08);
   border-radius: var(--radius-sm);
   background: var(--n-alpha-04);
-  color: var(--n-alpha-45);
+  color: var(--text-muted);
   font-size: calc(12px + var(--user-ui-font-delta));
 }
 
@@ -6346,7 +6346,7 @@ body.mermaid-lightbox-open {
 }
 
 .capability-result-header span {
-  color: var(--n-alpha-45);
+  color: var(--text-muted);
   font-size: calc(11px + var(--user-ui-font-delta));
 }
 
@@ -6419,7 +6419,7 @@ body.mermaid-lightbox-open {
 }
 
 .capability-field-list span {
-  color: var(--n-alpha-45);
+  color: var(--text-muted);
   font-size: calc(11px + var(--user-ui-font-delta));
 }
 
@@ -9810,11 +9810,11 @@ button.library-item:hover .library-card-chevron {
 }
 
 .message-icon {
-  color: var(--n-alpha-45);
+  color: var(--text-muted);
 }
 
 .message-body p {
-  color: var(--n-alpha-45);
+  color: var(--text-muted);
 }
 
 .tool-card {

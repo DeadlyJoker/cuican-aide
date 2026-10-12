@@ -359,3 +359,93 @@ exports[`conversation surfaces follow the theme > snapshots the diff row contrac
   background: rgb(224 108 95 / 0.13);
 }"
 `;
+
+exports[`readable semantic text > snapshots contrast floors and text roles separately from surface colors 1`] = `
+"/*
+ * Contrast mixes each theme's own muted tones toward that theme's foreground,
+ * so raising contrast darkens secondary text on light and lightens it on dark.
+ * Base tones remain readable even at the lowest contrast preference.
+ */
+:root {
+  --contrast-fg: var(--user-foreground, #18181b);
+  --contrast-faint: color-mix(
+    in srgb,
+    var(--contrast-fg) calc(var(--user-contrast, 0.45) * 55%),
+    #626873
+  );
+  --contrast-muted: color-mix(
+    in srgb,
+    var(--contrast-fg) calc(var(--user-contrast, 0.45) * 55%),
+    #41414a
+  );
+}
+
+:root[data-theme="dark"] {
+  --contrast-fg: var(--user-foreground, #eeeeee);
+  --contrast-faint: color-mix(
+    in srgb,
+    var(--contrast-fg) calc(var(--user-contrast, 0.45) * 55%),
+    #b4b7bf
+  );
+  --contrast-muted: color-mix(
+    in srgb,
+    var(--contrast-fg) calc(var(--user-contrast, 0.45) * 55%),
+    #d3d6dc
+  );
+}"
+`;
+
+exports[`readable semantic text > snapshots contrast floors and text roles separately from surface colors 2`] = `
+"/* Readable text in both themes, independent of the neutral surface ladder.
+ * Borders and backgrounds retain their existing hierarchy. Plugin surfaces
+ * inherit these same semantic tokens through the host presentation. */
+:root,
+:root[data-theme="dark"] {
+  --text-muted: var(--contrast-muted);
+  --text-faint: var(--contrast-faint);
+}
+
+:root[data-theme]
+  .screen-shell.command-screen
+  .command-thread-room
+  .message[data-kind]
+  .markdown-content,
+:root[data-theme]
+  .screen-shell.command-screen
+  .command-thread-room
+  .message[data-kind]
+  .markdown-content
+  :is(p, li, blockquote),
+:root[data-theme] .assistant-thread-room .message[data-kind] .markdown-content,
+:root[data-theme]
+  .assistant-thread-room
+  .message[data-kind]
+  .markdown-content
+  :is(p, li, blockquote) {
+  color: var(--text);
+}
+
+:root[data-theme]
+  .screen-shell.command-screen
+  .command-sidebar
+  :is(.command-thread-status-time, .sidebar-empty-hint, .tree-head-label),
+:root[data-theme]
+  .screen-shell.command-screen
+  .command-thread-room
+  :is(.composer-state, .turn-process-summary, .turn-divider em),
+:root[data-theme]
+  .screen-shell.command-screen
+  .command-workbench
+  :is(.command-workbench-tab, .workbench-empty) {
+  color: var(--text-muted);
+}
+
+:root[data-theme]
+  .screen-shell.command-screen
+  :is(input, textarea)::placeholder,
+.settings-page :is(input, textarea)::placeholder {
+  color: var(--text-faint);
+  opacity: 1;
+}
+"
+`;
