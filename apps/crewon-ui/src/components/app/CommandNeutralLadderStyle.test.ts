@@ -236,8 +236,8 @@ describe("readable semantic text", () => {
       return parts[0] * 0.2126 + parts[1] * 0.7152 + parts[2] * 0.0722;
     };
     for (const [ink, surface] of [
-      ["626873", "ececee"],
-      ["b4b7bf", "3c3c3c"],
+      ["505661", "ececee"],
+      ["c8ccd3", "3c3c3c"],
     ]) {
       const a = luminance(ink),
         b = luminance(surface);
@@ -262,5 +262,15 @@ it("snapshots stronger primary ink while retaining custom foreground preferences
       ":root {\n  --bg: var(--user-background",
       "/* Primary and selected states",
     ),
+  ).toMatchSnapshot();
+});
+
+it("snapshots high contrast composer controls and shared control ink", () => {
+  const styles = readStyles("appearance.css");
+  expect(
+    sliceBetween(styles, ":root {\n  /* Control surfaces", "/* User font"),
+  ).toMatchSnapshot();
+  expect(
+    styles.slice(styles.indexOf("/* Composer labels and icons")),
   ).toMatchSnapshot();
 });

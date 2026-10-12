@@ -371,12 +371,12 @@ exports[`readable semantic text > snapshots contrast floors and text roles separ
   --contrast-faint: color-mix(
     in srgb,
     var(--contrast-fg) calc(var(--user-contrast, 0.45) * 55%),
-    #626873
+    #505661
   );
   --contrast-muted: color-mix(
     in srgb,
     var(--contrast-fg) calc(var(--user-contrast, 0.45) * 55%),
-    #41414a
+    #303038
   );
 }
 
@@ -385,12 +385,12 @@ exports[`readable semantic text > snapshots contrast floors and text roles separ
   --contrast-faint: color-mix(
     in srgb,
     var(--contrast-fg) calc(var(--user-contrast, 0.45) * 55%),
-    #b4b7bf
+    #c8ccd3
   );
   --contrast-muted: color-mix(
     in srgb,
     var(--contrast-fg) calc(var(--user-contrast, 0.45) * 55%),
-    #d3d6dc
+    #e2e5ea
   );
 }"
 `;
@@ -446,6 +446,142 @@ exports[`readable semantic text > snapshots contrast floors and text roles separ
 .settings-page :is(input, textarea)::placeholder {
   color: var(--text-faint);
   opacity: 1;
+}
+
+/* Composer labels and icons use full ink; only disabled controls are subdued. */
+:root[data-theme]
+  .command-shell-route
+  .screen-shell.command-screen
+  .command-home-view
+  .command-input.thread-command-input
+  textarea,
+:root[data-theme] .assistant-home-composer textarea,
+:root[data-theme] .assistant-single-conversation .command-input textarea,
+:root[data-theme]
+  .command-shell-route
+  .screen-shell.command-screen
+  .command-home-view
+  .command-input.thread-command-input
+  :is([role="combobox"], .icon-action, select),
+:root[data-theme] .screen-shell.command-screen .composer-state {
+  color: var(--text);
+}
+
+:root[data-theme]
+  .command-shell-route
+  .screen-shell.command-screen
+  .command-home-view
+  .command-input.thread-command-input
+  textarea::placeholder,
+:root[data-theme] .assistant-home-composer textarea::placeholder {
+  color: var(--text-faint);
+  opacity: 1;
+}
+
+:root[data-theme]
+  .command-shell-route
+  .screen-shell.command-screen
+  .command-home-view
+  .command-input.thread-command-input
+  [role="combobox"]
+  svg,
+:root[data-theme]
+  .command-shell-route
+  .screen-shell.command-screen
+  .command-home-view
+  .command-input.thread-command-input
+  .icon-action
+  svg {
+  opacity: 1;
+}
+
+:root[data-theme]
+  .command-shell-route
+  .screen-shell.command-screen
+  .command-home-view
+  .command-input.thread-command-input {
+  border-color: var(--control-ring);
+}
+"
+`;
+
+exports[`snapshots high contrast composer controls and shared control ink 1`] = `
+":root {
+  /* Control surfaces: a fill plus a hairline that is normally invisible. */
+  --control-surface: oklch(96.5% 0 0);
+  --control-surface-hover: oklch(94% 0 0);
+  --control-surface-active: oklch(91.5% 0 0);
+  --control-ring: oklch(80% 0 0);
+  --control-ring-strong: oklch(62% 0 0);
+  --control-fg: oklch(18% 0 0);
+  --control-fg-muted: oklch(36% 0 0);
+}
+
+:root[data-theme="dark"] {
+  --control-surface: oklch(28% 0 0);
+  --control-surface-hover: oklch(32% 0 0);
+  --control-surface-active: oklch(36% 0 0);
+  --control-ring: oklch(45% 0 0);
+  --control-ring-strong: oklch(62% 0 0);
+  --control-fg: oklch(98% 0 0);
+  --control-fg-muted: oklch(86% 0 0);
+}"
+`;
+
+exports[`snapshots high contrast composer controls and shared control ink 2`] = `
+"/* Composer labels and icons use full ink; only disabled controls are subdued. */
+:root[data-theme]
+  .command-shell-route
+  .screen-shell.command-screen
+  .command-home-view
+  .command-input.thread-command-input
+  textarea,
+:root[data-theme] .assistant-home-composer textarea,
+:root[data-theme] .assistant-single-conversation .command-input textarea,
+:root[data-theme]
+  .command-shell-route
+  .screen-shell.command-screen
+  .command-home-view
+  .command-input.thread-command-input
+  :is([role="combobox"], .icon-action, select),
+:root[data-theme] .screen-shell.command-screen .composer-state {
+  color: var(--text);
+}
+
+:root[data-theme]
+  .command-shell-route
+  .screen-shell.command-screen
+  .command-home-view
+  .command-input.thread-command-input
+  textarea::placeholder,
+:root[data-theme] .assistant-home-composer textarea::placeholder {
+  color: var(--text-faint);
+  opacity: 1;
+}
+
+:root[data-theme]
+  .command-shell-route
+  .screen-shell.command-screen
+  .command-home-view
+  .command-input.thread-command-input
+  [role="combobox"]
+  svg,
+:root[data-theme]
+  .command-shell-route
+  .screen-shell.command-screen
+  .command-home-view
+  .command-input.thread-command-input
+  .icon-action
+  svg {
+  opacity: 1;
+}
+
+:root[data-theme]
+  .command-shell-route
+  .screen-shell.command-screen
+  .command-home-view
+  .command-input.thread-command-input {
+  border-color: var(--control-ring);
 }
 "
 `;
