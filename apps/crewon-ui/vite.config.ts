@@ -81,10 +81,12 @@ function controlSessionPlugin(config: {
         );
       });
       if (!configured) {
-        server.middlewares.use("/api/v1", (_request, response) => {
-          response.statusCode = 503;
-          response.end();
-        });
+        for (const prefix of ["/api/v1", "/api/v2"]) {
+          server.middlewares.use(prefix, (_request, response) => {
+            response.statusCode = 503;
+            response.end();
+          });
+        }
       }
     },
   };
@@ -253,7 +255,7 @@ export default defineConfig(({ mode }) => {
               },
             }),
         "/agent-platform-api": agentPlatformProxy.proxy,
-        "/api/v1": {
+        "^/api/v[12](?:/|$)": {
           target: controlTarget,
           changeOrigin: false,
           rewrite: normalizePluginUiViteImportPath,

@@ -286,7 +286,7 @@ export function prepareNativeDesktopInstalledPluginRuntime(
         },
         get control() {
           assertCurrent();
-          return Object.freeze({ ...shared });
+          return Object.freeze({ ...shared, ...bootstrap.environment });
         },
         controlAfterPeer({ origin }) {
           assertCurrent();
@@ -319,6 +319,7 @@ export function prepareNativeDesktopInstalledPluginRuntime(
           assertCurrent();
           return Object.freeze({
             ...shared,
+            ...bootstrap.environment,
             CREWON_DESKTOP_NATIVE_PLUGIN_CONTROL_PATH: path,
             CREWON_DESKTOP_NATIVE_PLUGIN_AUTHORITY_PATH: authority.path,
             CREWON_DESKTOP_INSTALLED_PLUGIN_PEER_TOKEN: token,

@@ -594,6 +594,9 @@ describe("explicit Main Native installed plugin execution", () => {
       expect(completed.kind).toBe("installed");
       if (completed.kind !== "installed") throw new Error("expected installed");
       const runtime = completed.runtime;
+      expect(runtime.control.CREWON_DESKTOP_PLUGIN_BOOTSTRAP_PATH).toBe(
+        f.bootstrap.bootstrapPath,
+      );
       expect(
         runtime.control.CREWON_DESKTOP_NATIVE_PLUGIN_CONTROL_PATH,
       ).toBeUndefined();
@@ -603,6 +606,12 @@ describe("explicit Main Native installed plugin execution", () => {
       const env = runtime.controlAfterPeer({
         origin: "http://127.0.0.1:39431",
       });
+      expect(env.CREWON_DESKTOP_PLUGIN_BOOTSTRAP_PATH).toBe(
+        f.bootstrap.bootstrapPath,
+      );
+      expect(env.CREWON_CONTROL_DB_PATH).toBe(
+        f.input.sharedEnvironment.CREWON_CONTROL_DB_PATH,
+      );
       const control = JSON.parse(
         readFileSync(env.CREWON_DESKTOP_NATIVE_PLUGIN_CONTROL_PATH!, "utf8"),
       );
@@ -614,6 +623,36 @@ describe("explicit Main Native installed plugin execution", () => {
       owner.withdraw();
       expect(() => runtime.worker).toThrow("withdrawn");
       await owner.close();
+    } finally {
+      await owner?.close();
+      await f.close();
+    }
+  });
+  it("uses the live Main-issued bootstrap rather than an inherited path for the Native execution Control", async () => {
+    const f = await fixture();
+    let owner: ReturnType<typeof f.prepare> = null;
+    try {
+      f.writePolicy();
+      owner = prepareNativeDesktopInstalledPluginRuntime({
+        ...f.input,
+        sharedEnvironment: {
+          ...f.input.sharedEnvironment,
+          CREWON_DESKTOP_PLUGIN_BOOTSTRAP_PATH:
+            "unapproved-inherited-bootstrap",
+        },
+      })!;
+      f.result(owner, true);
+      const completed = owner.complete();
+      if (completed.kind !== "installed") throw new Error("expected installed");
+      expect(
+        completed.runtime.control.CREWON_DESKTOP_PLUGIN_BOOTSTRAP_PATH,
+      ).toBe(f.bootstrap.bootstrapPath);
+      expect(
+        completed.runtime.controlAfterPeer({ origin: "http://127.0.0.1:39431" })
+          .CREWON_DESKTOP_PLUGIN_BOOTSTRAP_PATH,
+      ).toBe(f.bootstrap.bootstrapPath);
+      owner.withdraw();
+      expect(() => completed.runtime.control).toThrow("withdrawn");
     } finally {
       await owner?.close();
       await f.close();

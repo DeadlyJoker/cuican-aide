@@ -205,3 +205,15 @@ CrewON 继续使用现有 Node、Run、Tool、Store 与 SSE 路径。业务插�
 真实 Web CSS 更新后，同一按钮 y=56.898px，中心命中自身；明确点击返回后显示首页与 `未来来信 · 页面验收` 项目卡片，未关闭整个插件，原聊天仍保留。截图见[修复后首页](../output/plugin-foundation/short-drama-page-20261012/home-header-fixed.jpg)。新增原模块晚加载 absolute CSS 的级联回归，断言 pane 在 content row 内及计算 position/inset。HappyDOM 不把 inset 简写展开为 top/left，测试改查其支持的 inset 计算值；真实浏览器命中检查独立覆盖位置和点击效果。
 
 CommandWorkspace 187/187、零跳过，UI build 与 boundary 通过。前一轮全 UI 43 项失败仍未放行；本次不宣称全 UI 或正式桌面通过。项目 Agent 的缺口仍是原插件任务/执行服务未装配，未绕过原提交授权把 UI 按钮开放。目标继续，后续优先接通实际项目对话和产物。
+
+### 2026-10-12：恢复安装与原生宿主 Web 验收
+
+用户明确说明卸载只用于过渡，插件准备好即可安装。短剧 47 已在隔离验收配置中安装、启用，页面位于原右侧工作台，中间继续使用原 Agent 对话和模型选择器。正式桌面尚未更新。
+
+本轮修复两个真实启动/读取错误：Native Control 环境未携带 Main 实际签发的 bootstrap 路径，导致原生启动配置被拒绝；Web 开发代理仅覆盖 `/api/v1`，项目聊天读取 `/api/v2` 大纲时收到前端 HTML。修复保留原 bootstrap 生命周期、鉴权和 Origin 校验，两版接口共用原代理。新增真实 HTTP 代理行为测试，验证两个版本请求路径及相同授权、来源头。
+
+验收使用原 `RuntimeSupervisor`、Native 准备器、Control 与 Worker，并从原验收数据库备份保留历史；没有另建产品运行时。首次项目对话成功建立绑定，但运行队列因私有验收配置缺少原 `projectFoundationTools` 声明，反复出现 `installed_plugin_project_foundation_services_unavailable`。停止这条验收运行并在停机后补齐原协议配置，再正常启动。旧验收运行已 canceled，保留记录，没有删除或伪造终态。
+
+补齐后的第二条项目讨论运行 `plugin-BfFV-broLDEOQkgv3goqHoQWK_tZzBWQnzUkJw0c8iY`：2026-10-12 08:45:14.617 UTC 创建，08:45:25.818 UTC 完成，约 11.2 秒；work item attempt_count=1、last_error_code=null，105 条 `model.output.delta`，一条 `message.completed` 和 `run.completed`。浏览器显示 `gpt-6.1-sol` 的两句话故事方向回复。这里只验收真实项目讨论，不代表 Foundation 写入、小说导入、图片视频、独立项目目录或所有网关断流问题已经通过。
+
+相关 Native 准备、业务启用、插件管理、Foundation 声明与 Web 版本代理测试共 44/44，通过；UI production build、TypeScript boundary 通过。此前完整 UI 套件失败仍待处理，不能宣称全量回归通过。通用缺配置时的无限队列重试防治仍需独立补齐行为测试；本轮通过正确配置解决当前真实路径，未放宽安全边界。
