@@ -8,6 +8,10 @@ import {
   type DesktopNativeProjectWorkspaceTicket,
   type DesktopNativeProjectWorkspaceRequest,
   type DesktopNativeProjectWorkspaceResponse,
+  DESKTOP_PROJECT_WORKSPACE_PREPARE_REQUEST_SCHEMA,
+  DESKTOP_PROJECT_WORKSPACE_PREPARE_RESPONSE_SCHEMA,
+  parseDesktopNativeProjectWorkspacePrepareRequest,
+  type DesktopNativeProjectWorkspacePrepareResponse,
 } from "@crewon/contracts/plugins";
 export type {
   DesktopNativeProjectWorkspaceTicket,
@@ -21,6 +25,7 @@ import { LocalWorkspaceProjectAllocator } from "./localWorkspaceProjectAllocator
 import { exactRecord } from "./localWorkspaceProjectAllocationJournal.ts";
 import {
   qualifyDesktopNativeProjectWorkspaceState,
+  captureDesktopNativeProjectWorkspaceState,
   type DesktopNativeProjectWorkspaceState,
 } from "./desktopNativeProjectWorkspaceState.ts";
 
@@ -266,6 +271,10 @@ export class DesktopNativeProjectWorkspaceBridge {
     if (this.#withdrawn || this.#closed) return;
     // Coexist with other private child protocols without reading or retaining their payloads.
     const schema = dataProperty(input, "schemaVersion");
+    if (schema === DESKTOP_PROJECT_WORKSPACE_PREPARE_REQUEST_SCHEMA) {
+      this.#acceptPreparation(input);
+      return;
+    }
     if (schema !== REQUEST_SCHEMA) return;
     const rawId = dataProperty(input, "ticketId"),
       ticket = validTicketId(rawId) ? this.#burn(rawId) : undefined;
@@ -303,6 +312,56 @@ export class DesktopNativeProjectWorkspaceBridge {
     void physical
       .finally(() => this.#physical.delete(physical))
       .catch(() => {});
+  }
+
+  #acceptPreparation(input: unknown): void {
+    const requestId = dataProperty(input, "requestId");
+    if (!validRequestId(requestId)) return;
+    if (this.#physical.size >= MAX_PENDING_REQUESTS) {
+      this.withdraw();
+      return;
+    }
+    let response: DesktopNativeProjectWorkspacePrepareResponse;
+    let ticketId: string | undefined;
+    try {
+      const request = parseDesktopNativeProjectWorkspacePrepareRequest(input);
+      this.#assertCurrent();
+      const state = captureDesktopNativeProjectWorkspaceState({
+        nativeAuthority: this.#nativeOwner,
+        projectId: request.projectId,
+        packageIdentity: request.packageIdentity,
+      });
+      const ticket = this.prepareForProject(state);
+      ticketId = ticket.ticketId;
+      response = Object.freeze({
+        schemaVersion: DESKTOP_PROJECT_WORKSPACE_PREPARE_RESPONSE_SCHEMA,
+        requestId,
+        outcome: "prepared",
+        ticket,
+      });
+    } catch {
+      if (this.#withdrawn || this.#closed) return;
+      let reasonCode: "request_invalid" | "project_unavailable" =
+        "project_unavailable";
+      try {
+        parseDesktopNativeProjectWorkspacePrepareRequest(input);
+      } catch {
+        reasonCode = "request_invalid";
+      }
+      response = Object.freeze({
+        schemaVersion: DESKTOP_PROJECT_WORKSPACE_PREPARE_RESPONSE_SCHEMA,
+        requestId,
+        outcome: "unavailable",
+        reasonCode,
+      });
+    }
+    const physical = Promise.resolve()
+      .then(() => this.#publish(response))
+      .catch(() => {
+        if (ticketId) this.#burn(ticketId);
+      });
+    this.#physical.add(physical);
+    void physical.finally(() => this.#physical.delete(physical));
   }
 
   async #dispatch(
@@ -368,7 +427,11 @@ export class DesktopNativeProjectWorkspaceBridge {
     }
   }
 
-  #publish(response: DesktopNativeProjectWorkspaceResponse): Promise<void> {
+  #publish(
+    response:
+      | DesktopNativeProjectWorkspaceResponse
+      | DesktopNativeProjectWorkspacePrepareResponse,
+  ): Promise<void> {
     if (this.#withdrawn || this.#closed || !this.#control.connected)
       return Promise.resolve();
     this.#assertCurrent();

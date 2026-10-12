@@ -3,6 +3,8 @@ import test from "node:test";
 import {
   parseDesktopNativeProjectWorkspaceResponse as response,
   parseDesktopNativeProjectWorkspaceTicket as ticket,
+  parseDesktopNativeProjectWorkspacePrepareRequest as preparation,
+  parseDesktopNativeProjectWorkspacePrepareResponse as prepared,
 } from "./desktop-native-project-workspace-contract.ts";
 const validTicket = {
   schemaVersion: "crewon.desktop-native-project-workspace-ticket.v1",
@@ -22,6 +24,51 @@ const validResponse = {
     failureCode: null,
   },
 };
+test("private preparation carries only bounded project/package identifiers and cannot transport owner or path grants", () => {
+  const input = {
+    schemaVersion: "crewon.desktop-native-project-workspace-prepare-request.v1",
+    requestId: "prepare-1",
+    projectId: "project-1",
+    packageIdentity: {
+      pluginId: "example.plugin",
+      publisherId: "example.publisher",
+      version: "1.0.0",
+      packageDigest: `sha256:${"a".repeat(64)}`,
+    },
+  };
+  const parsed = preparation(input);
+  assert.deepEqual(parsed, input);
+  assert.ok(Object.isFrozen(parsed.packageIdentity));
+  input.packageIdentity.version = "2.0.0";
+  assert.equal(parsed.packageIdentity.version, "1.0.0");
+  assert.throws(() => preparation({ ...input, owner: {} }));
+  assert.throws(() => preparation({ ...input, root: "/tmp" }));
+  assert.throws(() => preparation(Object.create(input)));
+  let called = false;
+  assert.throws(() =>
+    preparation({
+      ...input,
+      get projectId() {
+        called = true;
+        return "project-1";
+      },
+    }),
+  );
+  assert.equal(called, false);
+  assert.throws(() => preparation({ ...input, projectId: "x".repeat(129) }));
+  const success = {
+    schemaVersion:
+      "crewon.desktop-native-project-workspace-prepare-response.v1",
+    requestId: "prepare-1",
+    outcome: "prepared",
+    ticket: validTicket,
+  };
+  assert.deepEqual(prepared(success), success);
+  assert.throws(() => prepared({ ...success, authority: {} }));
+  assert.throws(() =>
+    prepared({ ...success, ticket: { ...validTicket, root: "/tmp" } }),
+  );
+});
 test("private workspace wire snapshots bounded ticket and allocation values without roots or ownership fields", () => {
   const parsed = response(validResponse);
   assert.deepEqual(parsed, validResponse);

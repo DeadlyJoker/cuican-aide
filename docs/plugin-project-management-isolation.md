@@ -146,3 +146,7 @@ PostgreSQL protected 读取视图现已覆盖原八个项目读取方法，补�
 Main 内部现在能从真实 Native authority 派生项目完整归属，通过只读连接调用原 metadata fence、项目解码器和 installation Store，核验 protected owner、active 状态及当前批准的包/selection revision。原数据库不迁移；路径、文件身份、Native owner/批准及短生命周期在复核时仍有效。Main 内部状态引用有私有成员资格，复制对象不能兑换；该持久事实资格不是 UI、Task 或 Node 权限。新 prepareForProject 只接受同一个 Main owner 的实际引用，发行票据、分配前、实际目录提交后均复核原状态；旧可信 Main prepare 仍保留为内部兼容原语，不能用于新的产品授权接线。
 
 与真实 ChildProcess 的原桥接/客户端/Scoped 调用回归合组 68/68、零跳过：匹配项目可分配且普通活动 workspace 不变；其他插件归属、票据后归档、同包停用再启用导致 revision 变化被拒绝。实际 registry 提交后归档时不发布成功，已提交目录保留，没有宣称与 SQL 原子回滚。原项目和安装写入器真实执行，初始 protected owner 为明确持久 fixture；本轮尚未把真实 Control UI/write 调用接到这个 Main 状态发行器，也未启用新的生产分配入口、更新 Web 或正式 App。
+
+私有 Control/Main 链路进一步接通：新增独立 preparation IPC schema，消息仅标识 projectId 与包的四字段身份，不传 owner、root 或 UI/Task 授权。Control 原客户端的 observePreparedProject 必须先消费实际存活的 UI 项目准备引用并复核独立 write 策略，再向其真正的父进程请求票据；Main 从自己固定的原数据库和 Native 批准派生状态，使用 prepareForProject，不能拿消息身份当 UI 资格。回应之后 Control 再检查当前来源，并沿用原分配、观察、namespace 与 Conversation 配方。两种请求共享原有并发、发送期限、取消、断连和清理机制，不增加自动重试。Main 依赖绑定的可信 Control 进程；该内部协议不宣称隔离同进程恶意代码或把序列化标识变成 live grant。
+
+真实 Node 子进程与 Main 使用同一个任务专属原 SQLite 文件：genuine UI→自动请求票据→实际 Main 目录/registry→原 namespace→原 Thread 正例通过，不再由测试人工转发票据；复制引用和独立 write 撤回均拒绝且无目录、namespace、Thread。身份/PDP、包发现及初始 protected owner 为明确 fixture，未把它当作真实用户安装、HTTP 或供应商执行。相关桥接/客户端/分配回归 70/70，加私有契约 3/3，零跳过。正式 RuntimeSupervisor 创建桥接 owner、Control main 生命周期组合及真实 Web 验收仍待接线，未更新正式 App。

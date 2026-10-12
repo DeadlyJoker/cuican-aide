@@ -7,6 +7,12 @@ import {
 } from "@crewon/application";
 import {
   DESKTOP_PROJECT_WORKSPACE_REQUEST_SCHEMA,
+  DESKTOP_PROJECT_WORKSPACE_PREPARE_REQUEST_SCHEMA,
+  DESKTOP_PROJECT_WORKSPACE_PREPARE_RESPONSE_SCHEMA,
+  parseDesktopNativeProjectWorkspacePrepareRequest,
+  parseDesktopNativeProjectWorkspacePrepareResponse,
+  type DesktopNativeProjectWorkspacePrepareRequest,
+  type DesktopNativeProjectWorkspaceRequest,
   DESKTOP_PROJECT_WORKSPACE_RESPONSE_SCHEMA,
   parseDesktopNativeProjectWorkspaceTicket,
   parseDesktopNativeProjectWorkspaceResponse,
@@ -16,10 +22,8 @@ import {
 
 type Pending = Readonly<{
   timer: ReturnType<typeof setTimeout>;
-  settle(
-    error: Error | null,
-    result?: DesktopNativeProjectWorkspaceResponse,
-  ): void;
+  schema: string;
+  settle(error: Error | null, result?: unknown): void;
 }>;
 let owner: DesktopNativeProjectWorkspaceClient | undefined;
 
@@ -84,36 +88,65 @@ export class DesktopNativeProjectWorkspaceClient {
     const ticket = parseDesktopNativeProjectWorkspaceTicket(input);
     const remaining = Date.parse(ticket.expiresAt) - Date.now();
     if (remaining <= 0 || remaining > 30_000) throw failure("ticket_expired");
+    return this.#exchange({
+      request: {
+        schemaVersion: DESKTOP_PROJECT_WORKSPACE_REQUEST_SCHEMA,
+        requestId: `allocation-${randomBytes(24).toString("hex")}`,
+        ticketId: ticket.ticketId,
+      },
+      responseSchema: DESKTOP_PROJECT_WORKSPACE_RESPONSE_SCHEMA,
+      parse: parseDesktopNativeProjectWorkspaceResponse,
+      deadlineMs: Math.min(this.#deadlineMs, remaining),
+      ...(signal === undefined ? {} : { signal }),
+    });
+  }
+  async #exchange<T>(
+    input: Readonly<{
+      request:
+        | DesktopNativeProjectWorkspaceRequest
+        | DesktopNativeProjectWorkspacePrepareRequest;
+      responseSchema: string;
+      parse(value: unknown): T;
+      deadlineMs: number;
+      signal?: AbortSignal;
+    }>,
+  ): Promise<T> {
+    this.#assertCurrent();
+    const { deadlineMs, signal } = input;
+    const requestId = input.request.requestId;
     if (signal !== undefined && !(signal instanceof AbortSignal)) unavailable();
     if (signal?.aborted) throw failure("request_aborted");
     if (this.#physical.size >= 4 || this.#pending.size >= 4)
       throw failure("capacity_exceeded");
-    const requestId = `allocation-${randomBytes(24).toString("hex")}`;
-    const deadlineMs = Math.min(this.#deadlineMs, remaining);
-    const response = new Promise<DesktopNativeProjectWorkspaceResponse>(
-      (resolve, reject) => {
-        const abort = () => settle(failure("request_aborted"));
-        let done = false;
-        const settle = (
-          error: Error | null,
-          result?: DesktopNativeProjectWorkspaceResponse,
-        ) => {
-          if (done) return;
-          done = true;
-          clearTimeout(timer);
-          signal?.removeEventListener("abort", abort);
-          this.#pending.delete(requestId);
-          if (error !== null) reject(error);
-          else resolve(result!);
-        };
-        const timer = setTimeout(
-          () => settle(failure("deadline_exceeded")),
-          deadlineMs,
-        );
-        this.#pending.set(requestId, { timer, settle });
-        signal?.addEventListener("abort", abort, { once: true });
-      },
-    );
+    const response = new Promise<T>((resolve, reject) => {
+      const abort = () => settle(failure("request_aborted"));
+      let done = false;
+      const settle = (error: Error | null, result?: unknown) => {
+        if (done) return;
+        done = true;
+        clearTimeout(timer);
+        signal?.removeEventListener("abort", abort);
+        this.#pending.delete(requestId);
+        if (error !== null) reject(error);
+        else {
+          try {
+            resolve(input.parse(result));
+          } catch {
+            reject(failure("response_invalid"));
+          }
+        }
+      };
+      const timer = setTimeout(
+        () => settle(failure("deadline_exceeded")),
+        deadlineMs,
+      );
+      this.#pending.set(requestId, {
+        timer,
+        settle,
+        schema: input.responseSchema,
+      });
+      signal?.addEventListener("abort", abort, { once: true });
+    });
     let physical!: Promise<void>;
     physical = new Promise<void>((resolve) => {
       let done = false;
@@ -130,14 +163,7 @@ export class DesktopNativeProjectWorkspaceClient {
         deadlineMs,
       );
       try {
-        this.#send(
-          {
-            schemaVersion: DESKTOP_PROJECT_WORKSPACE_REQUEST_SCHEMA,
-            requestId,
-            ticketId: ticket.ticketId,
-          },
-          finish,
-        );
+        this.#send(input.request, finish);
       } catch {
         finish(new Error("send_unavailable"));
       }
@@ -186,6 +212,37 @@ export class DesktopNativeProjectWorkspaceClient {
       () => this.#assertCurrent(),
     );
   }
+  /** Trusted Control only: a real live UI preparation is required before the parent ticket request. */
+  async observePreparedProject(
+    preparation: PluginProjectWorkspacePreparation,
+    signal?: AbortSignal,
+  ): Promise<PluginProjectWorkspaceNativeObservation> {
+    this.#assertCurrent();
+    const source = qualifyPluginProjectWorkspacePreparation(preparation);
+    await source.assertCurrent();
+    source.assertActive();
+    const request = parseDesktopNativeProjectWorkspacePrepareRequest({
+      schemaVersion: DESKTOP_PROJECT_WORKSPACE_PREPARE_REQUEST_SCHEMA,
+      requestId: `preparation-${randomBytes(24).toString("hex")}`,
+      projectId: source.owner.projectId,
+      packageIdentity: source.packageIdentity,
+    });
+    const response = await this.#exchange({
+      request,
+      responseSchema: DESKTOP_PROJECT_WORKSPACE_PREPARE_RESPONSE_SCHEMA,
+      parse: parseDesktopNativeProjectWorkspacePrepareResponse,
+      deadlineMs: this.#deadlineMs,
+      ...(signal === undefined ? {} : { signal }),
+    });
+    await source.assertCurrent();
+    source.assertActive();
+    if (response.outcome !== "prepared") throw failure(response.reasonCode);
+    return this.observeForProject({
+      preparation,
+      ticket: response.ticket,
+      ...(signal === undefined ? {} : { signal }),
+    });
+  }
   withdraw(): void {
     this.#withdrawn = true;
     for (const pending of this.#pending.values())
@@ -209,8 +266,10 @@ export class DesktopNativeProjectWorkspaceClient {
   #accept(input: unknown): void {
     if (
       this.#withdrawn ||
-      dataProperty(input, "schemaVersion") !==
-        DESKTOP_PROJECT_WORKSPACE_RESPONSE_SCHEMA
+      ![
+        DESKTOP_PROJECT_WORKSPACE_RESPONSE_SCHEMA,
+        DESKTOP_PROJECT_WORKSPACE_PREPARE_RESPONSE_SCHEMA,
+      ].includes(dataProperty(input, "schemaVersion") as string)
     )
       return;
     const id = dataProperty(input, "requestId");
@@ -218,7 +277,9 @@ export class DesktopNativeProjectWorkspaceClient {
     const pending = this.#pending.get(id);
     if (pending === undefined) return;
     try {
-      pending.settle(null, parseDesktopNativeProjectWorkspaceResponse(input));
+      if (dataProperty(input, "schemaVersion") !== pending.schema)
+        throw failure("response_invalid");
+      pending.settle(null, input);
     } catch {
       pending.settle(failure("response_invalid"));
     }

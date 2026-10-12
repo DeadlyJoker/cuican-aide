@@ -1,4 +1,119 @@
 /** Private Main/Control IPC values. This protocol does not grant SQL, directory access or execution. */
+import type { DesktopNativePluginPackageIdentity } from "./desktop-native-plugin-authority-contract.ts";
+export const DESKTOP_PROJECT_WORKSPACE_PREPARE_REQUEST_SCHEMA =
+  "crewon.desktop-native-project-workspace-prepare-request.v1";
+export const DESKTOP_PROJECT_WORKSPACE_PREPARE_RESPONSE_SCHEMA =
+  "crewon.desktop-native-project-workspace-prepare-response.v1";
+export type DesktopNativeProjectWorkspacePrepareRequest = Readonly<{
+  schemaVersion: typeof DESKTOP_PROJECT_WORKSPACE_PREPARE_REQUEST_SCHEMA;
+  requestId: string;
+  projectId: string;
+  packageIdentity: DesktopNativePluginPackageIdentity;
+}>;
+export type DesktopNativeProjectWorkspacePrepareResponse = Readonly<{
+  schemaVersion: typeof DESKTOP_PROJECT_WORKSPACE_PREPARE_RESPONSE_SCHEMA;
+  requestId: string;
+}> &
+  (
+    | Readonly<{
+        outcome: "prepared";
+        ticket: DesktopNativeProjectWorkspaceTicket;
+      }>
+    | Readonly<{
+        outcome: "unavailable";
+        reasonCode: "request_invalid" | "project_unavailable";
+      }>
+  );
+export function parseDesktopNativeProjectWorkspacePrepareRequest(
+  input: unknown,
+): DesktopNativeProjectWorkspacePrepareRequest {
+  const value = wireRecord(input, [
+    "schemaVersion",
+    "requestId",
+    "projectId",
+    "packageIdentity",
+  ]);
+  const pkg = wireRecord(value.packageIdentity, [
+    "pluginId",
+    "publisherId",
+    "version",
+    "packageDigest",
+  ]);
+  if (
+    value.schemaVersion !== DESKTOP_PROJECT_WORKSPACE_PREPARE_REQUEST_SCHEMA ||
+    !correlation(value.requestId)
+  )
+    invalid();
+  for (const id of [
+    value.projectId,
+    pkg.pluginId,
+    pkg.publisherId,
+    pkg.version,
+  ])
+    if (
+      typeof id !== "string" ||
+      id.length < 1 ||
+      id.length > 128 ||
+      id.trim() !== id ||
+      /[\p{Cc}\p{Cf}\p{Zl}\p{Zp}]/u.test(id)
+    )
+      invalid();
+  if (
+    typeof pkg.packageDigest !== "string" ||
+    !/^sha256:[a-f0-9]{64}$/u.test(pkg.packageDigest)
+  )
+    invalid();
+  return Object.freeze({
+    schemaVersion: DESKTOP_PROJECT_WORKSPACE_PREPARE_REQUEST_SCHEMA,
+    requestId: value.requestId as string,
+    projectId: value.projectId as string,
+    packageIdentity: Object.freeze({
+      ...pkg,
+    }) as DesktopNativePluginPackageIdentity,
+  });
+}
+export function parseDesktopNativeProjectWorkspacePrepareResponse(
+  input: unknown,
+): DesktopNativeProjectWorkspacePrepareResponse {
+  const outcome = dataProperty(input, "outcome");
+  const value = wireRecord(input, [
+    "schemaVersion",
+    "requestId",
+    "outcome",
+    outcome === "prepared" ? "ticket" : "reasonCode",
+  ]);
+  if (
+    value.schemaVersion !== DESKTOP_PROJECT_WORKSPACE_PREPARE_RESPONSE_SCHEMA ||
+    !correlation(value.requestId)
+  )
+    invalid();
+  const base: Pick<
+    DesktopNativeProjectWorkspacePrepareResponse,
+    "schemaVersion" | "requestId"
+  > = {
+    schemaVersion: DESKTOP_PROJECT_WORKSPACE_PREPARE_RESPONSE_SCHEMA,
+    requestId: value.requestId as string,
+  };
+  if (outcome === "prepared")
+    return Object.freeze({
+      ...base,
+      outcome,
+      ticket: parseDesktopNativeProjectWorkspaceTicket(value.ticket),
+    });
+  if (
+    outcome !== "unavailable" ||
+    (value.reasonCode !== "request_invalid" &&
+      value.reasonCode !== "project_unavailable")
+  )
+    invalid();
+  return Object.freeze({ ...base, outcome, reasonCode: value.reasonCode });
+}
+function correlation(input: unknown): input is string {
+  return (
+    typeof input === "string" &&
+    /^[a-zA-Z0-9][a-zA-Z0-9._:-]{0,127}$/u.test(input)
+  );
+}
 export const DESKTOP_PROJECT_WORKSPACE_REQUEST_SCHEMA =
   "crewon.desktop-native-project-workspace-request.v1";
 export const DESKTOP_PROJECT_WORKSPACE_RESPONSE_SCHEMA =

@@ -45,13 +45,15 @@ export async function workspacePreparationUiFixture(
     actor: ActorContext;
     profileId: string;
     packageIdentity: DesktopNativePluginPackageIdentity;
+    /** Explicit task-owned shared parent file; cleanup still removes only this helper's temporary directory. */
+    databasePath?: string;
   }>,
 ) {
   const { actor, profileId, packageIdentity: identity } = input;
   const directory = mkdtempSync(
     join(tmpdir(), "crewon-native-workspace-registration-"),
   );
-  const path = join(directory, "original.sqlite");
+  const path = input.databasePath ?? join(directory, "original.sqlite");
   const parent = new SqliteRunStore(path);
   const database = new DatabaseSync(path);
   try {
