@@ -1,6 +1,8 @@
 import { canonicalActionIntent } from "@crewon/contracts";
 import {
   assertProjectFoundationToolRequest,
+  PROJECT_FOUNDATION_RUN_OPERATIONS,
+  type ProjectFoundationRunOperation,
   creativeProjectOpaqueId,
   extensionCanonicalJson,
   extensionToolName,
@@ -54,6 +56,19 @@ export type ProjectFoundationRunCommitTransactionAuthority = Readonly<{
   /** External dispatch/profile/policy only. Never borrow the committing Store's connection. */
   assertCurrent(): Promise<void>;
 }>;
+/** Independent read evidence; never accepted by the proposal commit protocol. */
+export type ProjectFoundationRunReadAuthority = Readonly<
+  Omit<
+    ProjectFoundationRunCommitTransactionAuthority,
+    "version" | "operationId"
+  > & {
+    version: "crewon.project-foundation-run-read.v1";
+    operationId: Exclude<
+      ProjectFoundationRunOperation,
+      "foundation_proposal_save"
+    >;
+  }
+>;
 const sha = Object.freeze({
   sha256: projectToolAuthorityContentDigest,
 });
@@ -61,6 +76,29 @@ const sha = Object.freeze({
 export function captureProjectFoundationRunCommitTransaction(
   input: unknown,
 ): ProjectFoundationRunCommitTransactionAuthority {
+  return captureFoundationRunAuthority(
+    input,
+    "mutation",
+  ) as ProjectFoundationRunCommitTransactionAuthority;
+}
+export function captureProjectFoundationRunReadAuthority(
+  input: unknown,
+): ProjectFoundationRunReadAuthority {
+  return captureFoundationRunAuthority(
+    input,
+    "read",
+  ) as ProjectFoundationRunReadAuthority;
+}
+function captureFoundationRunAuthority(
+  input: unknown,
+  purpose: "mutation" | "read",
+):
+  | ProjectFoundationRunCommitTransactionAuthority
+  | ProjectFoundationRunReadAuthority {
+  const mutation = purpose === "mutation";
+  const version = mutation
+    ? "crewon.project-foundation-run-commit.v1"
+    : "crewon.project-foundation-run-read.v1";
   try {
     const v = fields(input, [
       "version",
@@ -79,8 +117,12 @@ export function captureProjectFoundationRunCommitTransaction(
       "assertCurrent",
     ]);
     if (
-      v.version !== "crewon.project-foundation-run-commit.v1" ||
-      v.operationId !== "foundation_proposal_save" ||
+      v.version !== version ||
+      (mutation
+        ? v.operationId !== "foundation_proposal_save"
+        : !PROJECT_FOUNDATION_RUN_OPERATIONS.includes(
+            v.operationId as ProjectFoundationRunOperation,
+          ) || v.operationId === "foundation_proposal_save") ||
       typeof v.assertCurrent !== "function" ||
       typeof v.commandInput !== "string" ||
       Buffer.byteLength(v.commandInput, "utf8") > 24 * 1024
@@ -128,6 +170,7 @@ export function captureProjectFoundationRunCommitTransaction(
     if (
       (run.status !== "running" &&
         !(
+          mutation &&
           run.status === "reconciling" &&
           run.reconciliationReceiptId === receipt.receiptId &&
           receipt.status === "unknownOutcome"
@@ -139,16 +182,20 @@ export function captureProjectFoundationRunCommitTransaction(
       receipt.tenantId !== run.tenantId ||
       receipt.runId !== run.runId ||
       (receipt.status !== "dispatched" &&
-        receipt.status !== "unknownOutcome") ||
-      receipt.effect !== "mutation" ||
-      receipt.recovery !== "reconcilable" ||
+        !(mutation && receipt.status === "unknownOutcome")) ||
+      receipt.effect !== (mutation ? "mutation" : "readOnly") ||
+      receipt.recovery !== (mutation ? "reconcilable" : "replaySafe") ||
       receipt.actionIntent === null ||
       receipt.call.name !==
         extensionToolName(
           evidence.installation.pluginId,
-          "foundation_proposal_save",
+          v.operationId as ProjectFoundationRunOperation,
         ) ||
-      receipt.actionIntent.capability !== "project.write" ||
+      receipt.actionIntent.capability !==
+        (mutation ? "project.write" : "project.read") ||
+      (!mutation &&
+        (receipt.actionIntent.effect !== "readOnly" ||
+          receipt.actionIntent.recovery !== "replaySafe")) ||
       receipt.actionIntent.executionTarget.kind !== "control" ||
       receipt.actionIntent.policySnapshotId !== run.policySnapshotId ||
       receipt.actionIntent.workspaceBindingId !== run.workspaceBindingId ||
@@ -201,28 +248,53 @@ export function captureProjectFoundationRunCommitTransaction(
     creativeProjectOpaqueId(claim.lease.ownerId);
     creativeProjectOpaqueId(claim.lease.leaseId);
     const current = v.assertCurrent.bind(input);
-    const result: ProjectFoundationRunCommitTransactionAuthority =
-      Object.freeze({
-        version: "crewon.project-foundation-run-commit.v1",
-        ...evidence,
-        run,
-        receipt,
-        claim,
-        admission,
-        projectStageAdmission: stage,
-        foundationAdmission: foundation,
-        operationId: "foundation_proposal_save",
-        commandInput: v.commandInput,
-        assertCurrent: async () => {
-          if ((await current()) !== undefined) denied();
-        },
-      });
-    projectFoundationRunMutationCommand(result, sha);
-    return result;
-  } catch (cause) {
-    throw new Error("project_foundation_run_commit_authority_invalid", {
-      cause,
+    const result = Object.freeze({
+      version,
+      ...evidence,
+      run,
+      receipt,
+      claim,
+      admission,
+      projectStageAdmission: stage,
+      foundationAdmission: foundation,
+      operationId: v.operationId,
+      commandInput: v.commandInput,
+      assertCurrent: async () => {
+        if ((await current()) !== undefined) denied();
+      },
     });
+    if (mutation)
+      projectFoundationRunMutationCommand(
+        result as ProjectFoundationRunCommitTransactionAuthority,
+        sha,
+      );
+    else {
+      const request: unknown = JSON.parse(result.commandInput);
+      const copied = copy(request);
+      if (
+        copied === null ||
+        typeof copied !== "object" ||
+        Array.isArray(copied)
+      )
+        denied();
+      assertProjectFoundationToolRequest(
+        foundation,
+        result.operationId as ProjectFoundationRunOperation,
+        copied as Readonly<Record<string, unknown>>,
+      );
+    }
+    return result as
+      | ProjectFoundationRunCommitTransactionAuthority
+      | ProjectFoundationRunReadAuthority;
+  } catch (cause) {
+    throw new Error(
+      mutation
+        ? "project_foundation_run_commit_authority_invalid"
+        : "project_foundation_run_read_authority_invalid",
+      {
+        cause,
+      },
+    );
   }
 }
 

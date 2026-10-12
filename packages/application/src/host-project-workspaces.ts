@@ -7,3 +7,8 @@ export {
   captureCreativeProjectRunReadAuthority,
   type CreativeProjectRunReadAuthority,
 } from "./creative-project-run-commit-authority.ts";
+
+export {
+  captureProjectFoundationRunReadAuthority,
+  type ProjectFoundationRunReadAuthority,
+} from "./project-foundation-run-commit-authority.ts";

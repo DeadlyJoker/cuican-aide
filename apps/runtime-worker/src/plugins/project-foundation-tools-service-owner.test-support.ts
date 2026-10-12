@@ -37,10 +37,12 @@ import {
 export async function foundationToolsOwnerFixture(
   t: TestContext,
   origin: "creative" | "novel" = "creative",
+  backend: "sqlite" | "postgres" = "sqlite",
 ) {
   let stage: ProjectStageRunAdmission | undefined,
     conversations: Awaited<ReturnType<typeof conversationFixture>> | undefined;
   const f = await projectToolsOwnerFixture(t, {
+    backend,
     prepareAdmission: async (base) => {
       const foundations = base.first.parent.projectFoundationStore({
         sourceAdmission: "trusted-internal-recipe",
@@ -56,7 +58,7 @@ export async function foundationToolsOwnerFixture(
         ),
       );
       base.reference.projectId = created.project.projectId;
-      conversations = await conversationFixture(t, "sqlite", base);
+      conversations = await conversationFixture(t, backend, base);
       const c = conversations,
         prepared = await c.prepare();
       await c.store.commitBinding(prepared, { authority: c.authority });

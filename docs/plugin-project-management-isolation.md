@@ -256,3 +256,13 @@ Worker 专项现在实际经过原分片上传 Application、解析器、Foundat
 在原上传/解析/采用 + actual Worker owner 的具名观察 wrapper 内，SQLite/PostgreSQL 验证带 emoji 的原文按 5 字符分页完整还原、两个章节的单条分页、错误 digest、超限页长、跨项目/主体、foreign plugin 共享关联和已结束调用的拒绝。与原 Text/Foundation/upload 以及普通 Foundation Tools owner 回归 70/70、零跳过；普通 Foundation Tools 用例自身为 SQLite，其余相应 backend 专项同时验证 PG，不能把总数当成 70 个 PG 用例。Application/Store/Worker 类型、边界与格式检查通过。证据 `output/plugin-foundation/source-pages-20261012/tests.txt`，专属 PG 已停止并删除。
 
 尚未完成：独立 Foundation Tools 受保护项目的 read source 签发及 SQL sidecar fence、protected v2 保存/读取全流程、产物写入、真实模型/Web/正式桌面生命周期。这些页面读取测试是在原 Tool 生命周期内的内部依赖验证，不等同于 Agent 通过独立小说 Tool 的实际执行。业务插件继续卸除，未切换用户环境归属模式或更新桌面。
+
+### 独立 Foundation Tool 读取凭证与 SQL 校验基础
+
+原 Foundation Run authority 捕获器内部区分 read/mutation，原写入版本、限定操作、reconcilable/unknown-outcome 恢复与命令推导保持不变。新增独立 `crewon.project-foundation-run-read.v1` 只接受实际运行中的只读、replaySafe Foundation operation，检查原 actor/安装/Task/Stage/Foundation sidecar/Tool receipt/input/action digest 和命令来源。原写入捕获器不能接受它，也不能换 operation 变成方案写入。原数据捕获规则拒绝 accessor，不执行恶意 getter；持有的 immutable evidence 不是数据读取授权。
+
+新增 private SQL read check 借用原调用方事务，读取原 Run/Tool/step/attempt/安装、Stage、Foundation required/admission paired facts、当前 Foundation 与 binding，并在所有读取后使用数据库物理时间检查原 WorkItem 租约。没有增加 SQL 表或第二个管理器，不调用外部策略占用同一 pool。当前它使用原 legacy paired-fact readers，因此不能授权 protected 项目；后续须将同一 qualified project access 借给这些原 reader，并在私有 opaque scope 和原 Foundation Tools owner 接线。
+
+具名 actual Run/Tool/sidecar fixture 验证 source operation、复制不可变数据、错误 operation/source/sidecar、read-to-write、reconciling 和 accessor 拒绝；SQLite/PostgreSQL SQL 专项验证原租约物理过期、原 binding 提交撤回，并确认成功读取不增加记录。Foundation owner fixture 扩展显式 PG backend 默认仍 SQLite。连同原方案写入/未知结果冷恢复/插件提交/paired reader 回归 56/56、零跳过；Application/Store/Worker 类型、架构边界及格式通过。证据 `output/plugin-foundation/foundation-fence-20261012/tests.txt`，专属 PG 已停止并删除。
+
+这属于独立读取授权链的校验基础，不是原运行时已经放行 protected Foundation Tool，也未联系模型。业务插件保持卸除，用户环境未启用归属模式，仍需 Store/owner 接线、protected v2、产物保存、真实 Web/Worker/正式桌面闭环。
