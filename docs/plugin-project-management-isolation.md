@@ -314,3 +314,13 @@ Application/Store/Worker/Control 类型、边界和格式检查通过。此处�
 新用例使用原 SQLite 真实 paid Task/Run/安装、具名策略与空 Foundation 配对 reader spy：deny 时 reader 调用为零；正常授权后才读取；已有快照撤权不再读；读取 await 内撤回权限不能返回新快照；记录数量不变。该 spy 专门证明调用顺序，不是真实 protected sidecar/模型/Node 包执行。与原 context/owner 回归 30/30、零跳过，Worker 类型、边界和格式检查通过。未创建额外 PG 集群、未重启用户服务。
 
 下一步仍须为已授权 runtime setup 签发仅限原 paired metadata 的 private 来源、在原 Store 消费并由 composer 接线；不能用公开 scope hints 或 Tool read grant 替代。protected 保存、真实 Worker loop/冷恢复/Web/正式桌面仍待验收。业务插件保持卸除，用户环境未启用新归属模式或更新桌面。
+
+### runtime metadata observation 的独立 private 凭证
+
+新增 backend-only `PluginProjectRuntimeObservation` 与独立 WeakMap，仅捕获原 project.execute Task、original Extension binding、discussion Stage、actor 与八项 owner 及 submit/observe purpose。校验原 binding/task/stage digest、request/receipt 身份和原 Stage task-input digest 配方；不使用不存在的 Task inputDigest 字段。其空、不透明且不可复制的 ref 不被原 Tool read scope 接受，不授予项目正文、上传、方案或修改权限。
+
+trusted backend issuer 要求调用方已经完成原 runtime 身份/安装/PDP，捕获独立 current/active 回调并在签发前执行，拒绝 getter、不一致 actor、query binding、失效生命周期、返回非 void 的校验回调。issuer 是校验基础，尚未在 actual runtime context 调用，也尚无 Store 消费者；不能把具名 callback 当作已完成实际授权或数据库复核。
+
+用例使用原 SQLite actual Task/Run/Tool/sidecar fixture 和具名 PDP，验证不可变数据捕获、复制 token 拒绝、不能转换为 Tool scope、换身份/来源/getter/撤权拒绝。与独立 Tool read authority、原 runtime 授权顺序用例 3/3、零跳过；新增 execute action 限定后专项一项再通过。Application 类型、边界与格式检查通过。本次没有新 PG 集群、真实模型调用、服务重启或桌面更新。
+
+接下来需把它限定在已授权 runtime 初始化的实际生命周期内签发，并在原 paired Store 事务中复核原 Task/binding/Run、安装和八项 owner，再完成 composer 接线。完整目标仍未达到，业务插件保持卸除。
