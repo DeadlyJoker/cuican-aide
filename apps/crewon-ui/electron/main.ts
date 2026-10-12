@@ -153,6 +153,7 @@ async function launch(): Promise<void> {
     },
   );
   runtime = new RuntimeSupervisor({
+    workspaceAuthority: authority,
     agentPlatformApiKeyForOrigin: (origin) =>
       agentPlatformCredentials.secretForOrigin(origin),
     dataDirectory: runtimeDataDirectory,

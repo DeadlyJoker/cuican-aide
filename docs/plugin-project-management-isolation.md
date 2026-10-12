@@ -150,3 +150,7 @@ Main 内部现在能从真实 Native authority 派生项目完整归属，通过
 私有 Control/Main 链路进一步接通：新增独立 preparation IPC schema，消息仅标识 projectId 与包的四字段身份，不传 owner、root 或 UI/Task 授权。Control 原客户端的 observePreparedProject 必须先消费实际存活的 UI 项目准备引用并复核独立 write 策略，再向其真正的父进程请求票据；Main 从自己固定的原数据库和 Native 批准派生状态，使用 prepareForProject，不能拿消息身份当 UI 资格。回应之后 Control 再检查当前来源，并沿用原分配、观察、namespace 与 Conversation 配方。两种请求共享原有并发、发送期限、取消、断连和清理机制，不增加自动重试。Main 依赖绑定的可信 Control 进程；该内部协议不宣称隔离同进程恶意代码或把序列化标识变成 live grant。
 
 真实 Node 子进程与 Main 使用同一个任务专属原 SQLite 文件：genuine UI→自动请求票据→实际 Main 目录/registry→原 namespace→原 Thread 正例通过，不再由测试人工转发票据；复制引用和独立 write 撤回均拒绝且无目录、namespace、Thread。身份/PDP、包发现及初始 protected owner 为明确 fixture，未把它当作真实用户安装、HTTP 或供应商执行。相关桥接/客户端/分配回归 70/70，加私有契约 3/3，零跳过。正式 RuntimeSupervisor 创建桥接 owner、Control main 生命周期组合及真实 Web 验收仍待接线，未更新正式 App。
+
+后续启动源码已接线：原 Native installed 完成对象在 Main 私有 registry 绑定真实 authority，不增加可序列化 DTO。RuntimeSupervisor 使用 Main 传入的原 LocalWorkspaceAuthority，为当前实际 Control child 创建桥接，先跟踪 child 再装配；会话失效同步 withdraw，停止过程在原 child 和安装启动工作收尾后 join 桥接，再清理 owner/files。没有另建 workspace manager，也不授予 copied runtime 对象能力。
+
+Control main 在实际 Native 与显式 owned Conversation 配置同时存在时创建原客户端和观察端，传到原 Standalone composer；preClose 与启动失败均关闭客户端。legacy、非 Native 的 metadata-only owned 路径保持原启动，不根据父通道存在猜测权限。Native producer/真实 child/lifetime、原 supervisor/financial environment/parent channel 回归 38/38；Control 默认兼容与原 installed HTTP 2/2，均零跳过，Electron/Control 类型及边界通过。工作区仍有其他未提交启动改动，测试基于当前工作区，不能当作正式打包身份。完整正式启动到真实 UI/目录/Thread/Agent 的验收以及业务插件生命周期、Web 和 App 放行仍未完成。

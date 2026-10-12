@@ -36,6 +36,7 @@ import {
 } from "./standalone-composition.ts";
 import { loadDesktopPluginConfiguration } from "./desktop-plugin-configuration.ts";
 import { composeDesktopProjectStartup } from "./desktop-project-startup.ts";
+import { createDesktopNativeProjectWorkspaceRuntime } from "./desktop-native-project-workspace-runtime.ts";
 import { loadDesktopInstalledPluginActivationEnvironment } from "./desktop-installed-plugin-activation-environment.ts";
 import { loadDesktopNativePluginControlEnvironment } from "./desktop-native-plugin-control-environment.ts";
 import { loadDesktopInstalledPluginTaskEnvironment } from "./desktop-installed-plugin-task-environment.ts";
@@ -279,6 +280,9 @@ const sharedConfig = {
   ),
 };
 let runtime;
+let nativeProjectWorkspaces: ReturnType<
+  typeof createDesktopNativeProjectWorkspaceRuntime
+>;
 let sqliteOutboxDatabasePath: string | null = null;
 let projectSourceUploadAuthorization:
   | ProductionProjectSourceUploadAuthorization
@@ -420,12 +424,23 @@ try {
           : await loadDesktopPluginConfiguration(desktopPluginBootstrapPath, {
               actor,
             }));
+      if (desktopPlugins !== undefined)
+        nativeProjectWorkspaces = createDesktopNativeProjectWorkspaceRuntime({
+          configuration: desktopPlugins,
+          nativeControl: desktopNativePluginControl,
+        });
       runtime =
         desktopPlugins !== undefined
           ? await createStandaloneControlApiWithPlugins({
               ...standaloneConfig,
               databasePath,
               desktopPlugins,
+              ...(nativeProjectWorkspaces === undefined
+                ? {}
+                : {
+                    desktopNativeProjectWorkspaceObserver:
+                      nativeProjectWorkspaces.observe,
+                  }),
               ...(desktopPlugins.schemaVersion ===
                 "crewon.desktop-plugin-bootstrap.v3" &&
               (desktopPlugins.projects.mediaGenerations !== undefined ||
@@ -478,6 +493,7 @@ try {
     }
   }
 } catch (error) {
+  await nativeProjectWorkspaces?.close();
   projectSourceUploadAuthorization?.close();
   await artifactStore.close();
   throw error;
@@ -495,6 +511,7 @@ const sqliteOutboxWakeup =
         outbox: runtime.outboxDispatcher,
       });
 runtime.app.addHook("preClose", async () => sqliteOutboxWakeup?.close());
+runtime.app.addHook("preClose", async () => nativeProjectWorkspaces?.close());
 const shutdown = installProcessShutdown({
   host: process,
   close: () => {

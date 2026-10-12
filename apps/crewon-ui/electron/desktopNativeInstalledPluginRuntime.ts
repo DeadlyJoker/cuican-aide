@@ -1,4 +1,5 @@
 import { randomBytes } from "node:crypto";
+import { bindDesktopNativeProjectWorkspaceRuntime } from "./desktopNativeProjectWorkspaceRuntime.ts";
 import {
   bindDesktopNativePluginBusinessActivation,
   bindDesktopNativePluginPreparationBusinessActivation,
@@ -339,6 +340,11 @@ export function prepareNativeDesktopInstalledPluginRuntime(
         runtime,
         authority.authority.packages,
       );
+      bindDesktopNativeProjectWorkspaceRuntime({
+        owner: runtime,
+        nativeAuthority: authority,
+        assertCurrent,
+      });
       complete = Object.freeze({
         kind: "installed",
         runtime,

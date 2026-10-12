@@ -10,6 +10,10 @@ import { dirname, join } from "node:path";
 import { describe, expect, it } from "vitest";
 import { ControlApiClient } from "@crewon/control-client";
 import { createHash } from "node:crypto";
+import { spawn } from "node:child_process";
+import { once } from "node:events";
+import { attachDesktopNativeProjectWorkspaceRuntime } from "./desktopNativeProjectWorkspaceRuntime.ts";
+import { LocalWorkspaceAuthority } from "./localWorkspaceRegistry.ts";
 import {
   compileAgentVersion,
   type CompiledAgentVersion,
@@ -172,6 +176,60 @@ async function fixture() {
 }
 
 describe("explicit Main Native installed plugin execution", () => {
+  it("actual Native completion privately lends its authority to one child bridge and withdrawal revokes it", async () => {
+    const f = await fixture();
+    let owner: ReturnType<typeof f.prepare> = null;
+    let child: ReturnType<typeof spawn> | undefined;
+    let bridge: ReturnType<typeof attachDesktopNativeProjectWorkspaceRuntime>;
+    try {
+      f.writePolicy();
+      owner = f.prepare()!;
+      f.result(owner, true);
+      const completed = owner.complete();
+      if (completed.kind !== "installed") throw new Error("expected installed");
+      const ordinary = join(f.dataDirectory, "ordinary");
+      mkdirSync(ordinary);
+      const workspaces = new LocalWorkspaceAuthority(f.dataDirectory, ordinary);
+      child = spawn(
+        process.execPath,
+        ["-e", "process.on('message',()=>{});process.send({kind:'ready'});"],
+        { stdio: ["ignore", "pipe", "pipe", "ipc"] },
+      );
+      child.stdout?.resume();
+      child.stderr?.resume();
+      await once(child, "message");
+      const input = {
+        owner: completed.runtime,
+        workspaces,
+        control: child,
+        signal: new AbortController().signal,
+      };
+      expect(
+        attachDesktopNativeProjectWorkspaceRuntime({
+          ...input,
+          owner: { ...completed.runtime },
+        }),
+      ).toBeUndefined();
+      bridge = attachDesktopNativeProjectWorkspaceRuntime(input);
+      expect(bridge).toBeDefined();
+      owner.withdraw();
+      expect(() =>
+        bridge!.prepare({
+          projectId: "test-project",
+          packageIdentity: f.source,
+        }),
+      ).toThrow("unavailable");
+    } finally {
+      await bridge?.close();
+      if (child && child.exitCode === null) {
+        const exited = once(child, "exit");
+        child.kill("SIGTERM");
+        await exited;
+      }
+      await owner?.close();
+      await f.close();
+    }
+  });
   it.each(["enabled", "disabled", "revoked"] as const)(
     "restores one %s business activation for a plugin with multiple published models without replacing its prepared default or re-enabling it",
     async (state) => {

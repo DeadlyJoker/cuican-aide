@@ -38,6 +38,9 @@ import {
 } from "./runtimeLogForwarder.ts";
 import { processRuntimeLogs } from "./processRuntimeLogs.ts";
 import { desktopRuntimeChildStdio } from "./desktopRuntimeChildStdio.ts";
+import { attachDesktopNativeProjectWorkspaceRuntime } from "./desktopNativeProjectWorkspaceRuntime.ts";
+import type { DesktopNativeProjectWorkspaceBridge } from "./desktopNativeProjectWorkspaceBridge.ts";
+import type { LocalWorkspaceAuthority } from "./localWorkspaceRegistry.ts";
 import {
   clearDesktopExtensionEnvironment,
   DESKTOP_RUNTIME_OWNER,
@@ -140,6 +143,8 @@ export type CloudAgentProfile = Readonly<{
 }>;
 
 export class RuntimeSupervisor {
+  readonly #workspaceAuthority: LocalWorkspaceAuthority | undefined;
+  readonly #projectWorkspaceBridges = new Set<DesktopNativeProjectWorkspaceBridge>();
   readonly #dataDirectory: string;
   readonly #paths: RuntimePaths;
   readonly #repositoryRoot: string | null;
@@ -207,6 +212,7 @@ export class RuntimeSupervisor {
     agentPlatformApiKeyForOrigin: (origin: string) => string | null;
     /** Legacy constructor compatibility; actual execution binds the Thread's registered workspace. */
     workspaceRoot?: () => string | null;
+    workspaceAuthority?: LocalWorkspaceAuthority;
     extensionRuntime?: Readonly<{
       configuration: () => DesktopExtensionRuntimeConfiguration;
       deadlineMs?: number;
@@ -221,6 +227,7 @@ export class RuntimeSupervisor {
     logOutputs?: { stdout: Writable; stderr: Writable };
   }) {
     this.#dataDirectory = options.dataDirectory;
+    this.#workspaceAuthority = options.workspaceAuthority;
     this.#paths = options.paths;
     this.#repositoryRoot = options.repositoryRoot;
     this.#provider = options.provider;
@@ -448,13 +455,16 @@ export class RuntimeSupervisor {
               runtime: installedRuntime,
               signal: startup.signal,
               deadlineMs: this.#installedDeadlineMs,
-              spawnControl: (env) => this.#spawnControl(env),
+              spawnControl: (env) =>
+                this.#spawnNativeProjectControl(installedRuntime, env, startup.signal),
               spawnWorker: (env) =>
                 this.#spawn("Runtime Worker", this.#paths.worker, env, {
                   stdin: "pipe",
                   financialRole: "worker",
                 }),
-              trackChild: (child) => this.#children.push(child),
+              trackChild: (child) => {
+                if (!this.#children.includes(child)) this.#children.push(child);
+              },
             }),
           );
           this.#installedStartupJoin = startingChildren;
@@ -890,6 +900,8 @@ export class RuntimeSupervisor {
     // before retiring its captured owner and the Native bootstrap files.
     await Promise.allSettled([installedStartup]);
     await Promise.allSettled([...this.#nativePluginOperations]);
+    await Promise.allSettled([...this.#projectWorkspaceBridges].map((bridge) => bridge.close()));
+    this.#projectWorkspaceBridges.clear();
     const childFailures = childStops.flatMap((result) =>
       result.status === "rejected" ? [result.reason] : [],
     );
@@ -978,6 +990,7 @@ export class RuntimeSupervisor {
   }
 
   #invalidateSession(): void {
+    for (const bridge of this.#projectWorkspaceBridges) bridge.withdraw();
     this.#ready = false;
     this.#sessionGeneration++;
     this.#localManagementEvents.notify();
@@ -1313,6 +1326,22 @@ export class RuntimeSupervisor {
         ? this.#pluginBootstrap.controlEnvironment(environment)
         : clearDesktopPluginEnvironment(environment),
     );
+  }
+
+  #spawnNativeProjectControl(
+    owner: DesktopInstalledPluginRuntime,
+    environment: NodeJS.ProcessEnv,
+    signal: AbortSignal,
+  ): ChildProcess {
+    const child = this.#spawn("Control API", this.#paths.control, environment);
+    this.#children.push(child);
+    if (this.#workspaceAuthority !== undefined) {
+      const bridge = attachDesktopNativeProjectWorkspaceRuntime({
+        owner, workspaces: this.#workspaceAuthority, control: child, signal,
+      });
+      if (bridge !== undefined) this.#projectWorkspaceBridges.add(bridge);
+    }
+    return child;
   }
 
   #spawn(
