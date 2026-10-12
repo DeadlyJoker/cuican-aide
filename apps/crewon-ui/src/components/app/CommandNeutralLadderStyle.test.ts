@@ -254,3 +254,13 @@ it("never uses translucent shadow ink as readable text", () => {
     /(?:^|\n)\s*color: var\(--n-alpha-(?:20|30|45)\)/,
   );
 });
+
+it("snapshots stronger primary ink while retaining custom foreground preferences", () => {
+  expect(
+    sliceBetween(
+      readStyles("appearance.css"),
+      ":root {\n  --bg: var(--user-background",
+      "/* Primary and selected states",
+    ),
+  ).toMatchSnapshot();
+});
