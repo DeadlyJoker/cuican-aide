@@ -186,3 +186,17 @@ Actor、profile 批准、Native policy 及 standalone policy 为明确的测试�
 真实 Control + verified Node package + 原 SQLite 专项验证三个入口抵达明确的任务准备边界，并拒绝错误项目、Host 撤权和来源准备后的独立写撤权；Task peer 明确为 unavailable fixture，任务 sink 在准备后主动失败，因此不证明 Run/Worker/模型执行。与原 genuine UI、Native、HTTP/目录/Thread、普通阶段与模型选择回归合计 30 个测试通过；另 14 个需要外部插件目录或 PostgreSQL 的测试跳过，不计通过。Application/Control 类型及架构边界通过。正式桌面只读确认 admin 和历史会话可见，未重打包；用户正在操作桌面，未干预其页面。受保护大纲来源、Worker/Tool/产物及真实用户 Web 的完整闭环仍待接线验收。
 
 追加验证直接使用原 ExtensionTaskApplicationService、原 SQL Task/Run writers 和 genuine UI 创建的隔离项目会话：受保护需求可准备并提交原阶段 Run，冷建 Application 后同键重放返回相同 Run 与完整 admission；复制 read scope 或改变实际请求在准入前拒绝。1/1 通过。安装快照、可信后台执行 authority 与 unmetered policy 为明确的本地 fixture，不是真实 Control→Worker→模型闭环；未访问模型网关，未安装业务插件，未更新桌面。该结果将后续验收边界推进到 Worker、Tool 与产物，并不替代它们。
+
+### Worker 工具接线的实际缺口与事务边界
+
+源代码定位到 `project-tools-service-invoke.ts`：`readProject` 与需求 `readContent` 调用原 Application，却没有传递归属读取范围。真实 Task/Run/queue/Tool writer 的回归已确认，普通 Worker 在项目加入 immutable metadata owner 后，原 owner 与冷 owner 都拒绝 `readProject`，需求分页也拒绝；无论 metadata owner 是否与当前安装相同，都不能仅凭包信任或同名 plugin 读取。执行之前同一读取正常，因此失败并非模型响应、前端缓存或内容解析。该测试写入 owner 行只用于负向约束，不能作为真实归属创建或授权来源。10/10 Worker 原 owner 与新边界专项、Worker 类型通过。
+
+接下来必须补原 Worker 的显式归属执行路径，而不是放松普通读取。实施边界如下：
+
+1. 由原 `ProjectToolsServiceOwner` 的当前 private invocation 签发只读来源，绑定实际 command、Run、Tool receipt、queue claim、原 task admission、安装与 stage；插件仅能发既有业务请求，不能提交这些证据或 owner/path。不得用 metadata、UI context 或 projectId 合成 Worker 执行权限。
+2. 原 Application 接收非序列化来源并使用原 Store 的方法受限视图。继续保留普通入口对 protected 项目的拒绝；显式归属模式不完整时直接失败，不能悄悄退回 legacy。各环节继续复用原管理服务。
+3. SQL 视图在借用的原事务连接中重读实际 Run、receipt、step/attempt、task admission、配置与队列租约，再比对八项 owner、项目、绑定与 stage 操作。可复用已有 `assertSqliteInstalledProjectRunExecution` / PostgreSQL 同类和 `assertProjectRunQueue` 的事实校验，但不能用 mutation command 的检查代替 read-only Tool 检查。只在 Worker 先检查一次或仅带 installation pin 都不足以证明事务内权限。
+4. 来源在关闭、租约失效、取消、安装/策略撤权后失效，跨进程与冷恢复从原持久化事实和新的当前 dispatch 重建，不能序列化或缓存旧凭证。PostgreSQL 外部 PDP 不再次借用提交 pool，保留单连接无死锁约束。
+5. 接通需求读取后继续接大纲、剧本、素材和保存；真实 Worker 工具执行及提交丢响应后的冷恢复必须覆盖产物与唯一回执，再做用户 Web 最小插件验收，最后更新桌面。当前中央对话的项目准备范围不授予这些能力。
+
+这对应 DSH 的稳定宿主与有生命周期的扩展边界：插件提供能力声明与业务实现，宿主保有身份、调度和资源管理；同一管理能力的隔离视图不能变成另一套数据库或文件管理器。上述步骤仍为未完成实施要求，不以负向边界回归代替完整 Worker 与产品放行。
