@@ -24,13 +24,18 @@ import { SqliteRunStore } from "@crewon/store";
 
 // Original SQLite and genuinely verified installed bytes. Identity/policy are named local fixtures;
 // this proves Control issuance, not HTTP, Native directory allocation or provider execution.
-for (const native of [false, true])
-  test(`actual Control owner ${native ? "qualifies Native provisioning before an unavailable observer" : "qualifies installed UI project conversation reads and rejects changed bytes and identity before replay"}`, async (t) => {
+for (const { native, targetDeclared } of [
+  { native: false, targetDeclared: true },
+  { native: true, targetDeclared: true },
+  { native: true, targetDeclared: false },
+])
+  test(`actual Control owner target declaration ${targetDeclared} ${native ? "qualifies Native provisioning before an unavailable observer" : "qualifies installed UI project conversation reads and rejects changed bytes and identity before replay"}`, async (t) => {
     const f = await ownedConversationSqlFixture(t, "sqlite");
     const parent = f.parent;
     assert.ok(parent instanceof SqliteRunStore);
     const { source, pkg, publications } = await conversationPackage(t, {
       version: "9.0.0",
+      ...(targetDeclared ? { workspaceTargetProtocol: "1" as const } : {}),
       pluginId: f.installation.pluginId,
       publisherId: f.installation.publisherId,
     });
@@ -184,6 +189,19 @@ for (const native of [false, true])
             input: parsePluginUiJsonValue(input),
           }),
       );
+    if (!native) {
+      assert.equal(
+        owner.supportsAction(
+          "crewon.project-workspace-target.v1.resolveTarget",
+        ),
+        false,
+      );
+      await assert.rejects(
+        invoke("crewon.project-workspace-target.v1.resolveTarget", {
+          projectId: f.reference.projectId,
+        }),
+      );
+    }
     const input = {
       projectId: f.reference.projectId,
       workspaceId: native
@@ -192,7 +210,31 @@ for (const native of [false, true])
       title: "原会话服务",
       idempotencyKey: "actual-control-conversation",
     };
+    const targetAction = "crewon.project-workspace-target.v1.resolveTarget";
     if (native) {
+      if (!targetDeclared)
+        await assert.rejects(
+          invoke(targetAction, { projectId: input.projectId }),
+        );
+      else {
+        const target = await invoke(targetAction, {
+          projectId: input.projectId,
+        });
+        assert.deepEqual(target, {
+          projectId: input.projectId,
+          workspaceId: input.workspaceId,
+        });
+        assert.equal(state.observed, 0);
+        assert.equal(state.taskCalls, 0);
+        await assert.rejects(
+          invoke(targetAction, { projectId: "foreign-project" }),
+        );
+        state.policyAllowed = false;
+        await assert.rejects(
+          invoke(targetAction, { projectId: input.projectId }),
+        );
+        state.policyAllowed = true;
+      }
       await assert.rejects(
         invoke(actions.createConversation, { ...input, workspaceId: null }),
         (error) =>

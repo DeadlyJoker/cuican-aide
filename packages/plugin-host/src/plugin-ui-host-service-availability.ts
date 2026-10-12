@@ -236,6 +236,7 @@ export function appendProjectTextRecoveryUiServiceAvailability(
 export function appendProjectConversationUiServiceAvailability(
   input: Readonly<{
     conversations: PluginUiHostServiceAvailabilityPort;
+    workspaceTargets?: PluginUiHostServiceAvailabilityPort;
     fallback?: PluginUiHostServiceAvailabilityPort;
   }>,
 ): PluginUiHostServiceAvailabilityPort {
@@ -243,13 +244,20 @@ export function appendProjectConversationUiServiceAvailability(
     input.conversations,
   )!;
   const fallback = capturePluginUiHostServiceAvailability(input.fallback);
+  const workspaceTargets = capturePluginUiHostServiceAvailability(
+    input.workspaceTargets,
+  );
   let port: PluginUiHostServiceAvailabilityPort = Object.freeze({
     isAvailable: (request) =>
-      request.requirement.service === "crewon.project-conversations" ||
-      request.requirement.service === "crewon.project-conversation-association"
+      request.requirement.service === "crewon.project-workspace-target"
         ? request.requirement.apiVersion === "1" &&
-          conversations.isAvailable(request)
-        : fallback?.isAvailable(request) === true,
+          workspaceTargets?.isAvailable(request) === true
+        : request.requirement.service === "crewon.project-conversations" ||
+            request.requirement.service ===
+              "crewon.project-conversation-association"
+          ? request.requirement.apiVersion === "1" &&
+            conversations.isAvailable(request)
+          : fallback?.isAvailable(request) === true,
   });
   if (fallback !== undefined) {
     port = preserveProjectGenerationHostAvailability(fallback, port);
@@ -309,7 +317,8 @@ export function assertUiOnlyServiceDeclarations(
             (requirement.service === "crewon.project-asset-recovery" &&
               ["1", "2"].includes(requirement.apiVersion))) &&
             (requirement.optional || hostUiServices !== undefined)) ||
-          ((requirement.service === "crewon.project-conversations" ||
+          ((requirement.service === "crewon.project-workspace-target" ||
+            requirement.service === "crewon.project-conversations" ||
             requirement.service ===
               "crewon.project-conversation-association") &&
             requirement.apiVersion === "1" &&

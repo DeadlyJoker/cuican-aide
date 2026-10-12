@@ -768,3 +768,53 @@ test("port capture rejects missing methods and accessors without executing them"
     );
   assert.equal(calls, 0);
 });
+
+test("workspace target service needs its independent live assembly; conversation v1 does not imply it", () => {
+  const requirement = {
+    service: "crewon.project-workspace-target",
+    apiVersion: "1",
+    optional: false,
+  };
+  const actual = candidate({ requires: [requirement] });
+  const older = appendProjectConversationUiServiceAvailability({
+    conversations: { isAvailable: () => true },
+  });
+  assert.equal(
+    older.isAvailable({ scope, candidate: actual, requirement }),
+    false,
+  );
+  rejectsUnavailable(() =>
+    assertPluginUiHostServiceAvailability({
+      scope,
+      candidate: actual,
+      hostUiServices: older,
+    }),
+  );
+  let live = true;
+  const port = appendProjectConversationUiServiceAvailability({
+    conversations: { isAvailable: () => true },
+    workspaceTargets: { isAvailable: () => live },
+  });
+  assertUiOnlyServiceDeclarations(actual.descriptor, port);
+  assertPluginUiHostServiceAvailability({
+    scope,
+    candidate: actual,
+    hostUiServices: port,
+  });
+  live = false;
+  rejectsUnavailable(() =>
+    assertPluginUiHostServiceAvailability({
+      scope,
+      candidate: actual,
+      hostUiServices: port,
+    }),
+  );
+  assert.equal(
+    port.isAvailable({
+      scope,
+      candidate: actual,
+      requirement: { ...requirement, apiVersion: "2" },
+    }),
+    false,
+  );
+});

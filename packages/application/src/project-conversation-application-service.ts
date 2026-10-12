@@ -1,3 +1,4 @@
+import { resolvePluginProjectWorkspaceTarget } from "./plugin-project-workspace-target.ts";
 import { projectConversationCall } from "./project-conversation-call.ts";
 import { readProjectOutlineSourceRevision } from "./project-outline-source-reader.ts";
 import { captureProjectConversationDependencies } from "./project-conversation-dependencies.ts";
@@ -96,6 +97,20 @@ export class ProjectConversationApplicationService {
   readonly #d: ProjectConversationApplicationDependencies;
   constructor(d: ProjectConversationApplicationDependencies) {
     this.#d = captureProjectConversationDependencies(d);
+  }
+  /** Read-only target discovery on the original qualified project store. */
+  resolveWorkspaceTargetFromPluginUi(
+    context: PluginUiActionContext,
+    authority: ProjectConversationCommitAuthority,
+  ) {
+    return projectConversationCall(() =>
+      resolvePluginProjectWorkspaceTarget({
+        context,
+        authority,
+        projects: this.#d.projects,
+        authorization: this.#d.authorization,
+      }),
+    );
   }
   /** Private Host preparation; it creates no directory, namespace, Thread or Run. */
   prepareWorkspaceFromPluginUi(

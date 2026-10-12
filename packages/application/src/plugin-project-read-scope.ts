@@ -1,4 +1,8 @@
 import {
+  PROJECT_WORKSPACE_TARGET_ACTION,
+  parseProjectWorkspaceTargetRequest,
+} from "@crewon/contracts/project-workspace-target";
+import {
   captureCreativeProjectCommitAuthority,
   assertCreativeProjectCommitActive,
   assertCreativeProjectCommitCurrent,
@@ -83,7 +87,11 @@ type Qualified = Readonly<{
   snapshot: ReturnType<typeof committedTaskContext>;
   request:
     | ReturnType<typeof parseCreativeProjectUiActionRequest>
-    | ReturnType<typeof parseProjectConversationsActionRequest>;
+    | ReturnType<typeof parseProjectConversationsActionRequest>
+    | Readonly<{
+        action: typeof PROJECT_WORKSPACE_TARGET_ACTION;
+        input: ReturnType<typeof parseProjectWorkspaceTargetRequest>;
+      }>;
   methods: readonly string[];
   assertCurrent(): Promise<void>;
   assertActive(): void;
@@ -98,19 +106,26 @@ export function capturePluginProjectConversationReadScope(
   const live = capturePluginUiInvocationCommitAuthority(context);
   const host = captureProjectConversationAuthority(hostAuthority);
   const snapshot = committedTaskContext(context);
-  const request = parseProjectConversationsActionRequest({
-    action: context.action,
-    input: context.input,
-  });
+  const target = context.action === PROJECT_WORKSPACE_TARGET_ACTION;
+  const request = target
+    ? Object.freeze({
+        action: PROJECT_WORKSPACE_TARGET_ACTION,
+        input: parseProjectWorkspaceTargetRequest(context.input),
+      })
+    : parseProjectConversationsActionRequest({
+        action: context.action,
+        input: context.input,
+      });
   if (
-    ![
-      PROJECT_CONVERSATIONS_METHOD_ACTIONS.createConversation,
-      PROJECT_CONVERSATIONS_METHOD_ACTIONS.getBinding,
-      PROJECT_CONVERSATIONS_METHOD_ACTIONS.listConversations,
-      PROJECT_CONVERSATIONS_METHOD_ACTIONS.openConversation,
-      PROJECT_CONVERSATIONS_METHOD_ACTIONS.refreshSource,
-      PROJECT_CONVERSATIONS_METHOD_ACTIONS.setState,
-    ].includes(request.action as never) ||
+    (!target &&
+      ![
+        PROJECT_CONVERSATIONS_METHOD_ACTIONS.createConversation,
+        PROJECT_CONVERSATIONS_METHOD_ACTIONS.getBinding,
+        PROJECT_CONVERSATIONS_METHOD_ACTIONS.listConversations,
+        PROJECT_CONVERSATIONS_METHOD_ACTIONS.openConversation,
+        PROJECT_CONVERSATIONS_METHOD_ACTIONS.refreshSource,
+        PROJECT_CONVERSATIONS_METHOD_ACTIONS.setState,
+      ].includes(request.action as never)) ||
     snapshot.pin.action !== request.action ||
     extensionCanonicalJson({ ...snapshot.pin, action: "project.execute" }) !==
       extensionCanonicalJson(host.pin) ||

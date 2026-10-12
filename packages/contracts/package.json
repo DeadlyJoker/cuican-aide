@@ -40,7 +40,8 @@
     "./project-asset-recovery-v2": "./src/project-asset-recovery-v2.ts",
     "./project-foundation": "./src/project-foundation.ts",
     "./project-source-uploads": "./src/project-source-uploads.ts",
-    "./project-foundation-tools": "./src/project-foundation-tools.ts"
+    "./project-foundation-tools": "./src/project-foundation-tools.ts",
+    "./project-workspace-target": "./src/plugin-project-workspace-target.ts"
   },
   "scripts": {
     "generate": "node scripts/generate-control-api-types.mjs",

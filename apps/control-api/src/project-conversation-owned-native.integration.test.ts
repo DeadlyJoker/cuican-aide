@@ -43,6 +43,7 @@ test(
       Awaited<ReturnType<typeof createStandaloneControlApiWithPlugins>>
     >();
     const { source, pkg, publications } = await conversationPackage(t, {
+      workspaceTargetProtocol: "1",
       beforeCleanup: async () => {
         for (const r of runtimes) await r.app.close();
         runtimes.clear();
@@ -51,6 +52,7 @@ test(
     const other = await conversationPackage(t, {
       source,
       pluginId: "test.other-owned",
+      workspaceTargetProtocol: "1",
       version: "2.0.0",
     });
     const packages = [pkg, other.pkg];
@@ -438,7 +440,7 @@ test(
     runtimes.delete(runtime);
     runtime = await open({ nativeObserver: "unavailable" });
     lease = await h.mount(pkg, 2);
-    const workspaceId = `workspace-project-${createHash("sha256")
+    const expectedWorkspaceId = `workspace-project-${createHash("sha256")
       .update(
         pluginProjectWorkspaceIdentityInput({
           ...actor,
@@ -449,6 +451,31 @@ test(
         }),
       )
       .digest("hex")}`;
+    const targetAction = "crewon.project-workspace-target.v1.resolveTarget";
+    const targetReply = await h.request(
+      "POST",
+      `/api/v1/plugins/ui/mounts/${lease.mountRef}/actions`,
+      { action: targetAction, input: { projectId } },
+    );
+    assert.equal(targetReply.statusCode, 200, targetReply.body);
+    const target = targetReply.json().output;
+    assert.deepEqual(target, { projectId, workspaceId: expectedWorkspaceId });
+    assert.equal(
+      observed,
+      0,
+      "discovery is read-only and never invokes Native",
+    );
+    const workspaceId = target.workspaceId;
+    const deniedTarget = await h.request(
+      "POST",
+      `/api/v1/plugins/ui/mounts/${lease.mountRef}/actions`,
+      {
+        action: targetAction,
+        input: { projectId: otherProject.project.projectId },
+      },
+    );
+    assert.notEqual(deniedTarget.statusCode, 200, deniedTarget.body);
+    assert.equal(observed, 0);
     const unavailable = await invoke("createConversation", {
       ...input,
       workspaceId,

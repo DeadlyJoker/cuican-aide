@@ -1,4 +1,9 @@
 import {
+  PROJECT_WORKSPACE_TARGET_ACTION,
+  parseProjectWorkspaceTargetRequest,
+  parseProjectWorkspaceTargetResponse,
+} from "@crewon/contracts/project-workspace-target";
+import {
   ApplicationError,
   ProjectConversationApplicationService,
   assertPluginUiInvocationCurrent,
@@ -156,6 +161,9 @@ export class ProjectConversationControlOwner {
   }
   supportsAction(action: string): boolean {
     return (
+      (action === PROJECT_WORKSPACE_TARGET_ACTION &&
+        this.#input.nativeWorkspace !== undefined &&
+        this.#input.projectOwnership === "plugin-project-v1") ||
       Object.values(actions).includes(action as never) ||
       Object.values(associationActions).includes(action as never)
     );
@@ -314,12 +322,19 @@ export class ProjectConversationControlOwner {
     const association = Object.values(associationActions).includes(
       context.action as never,
     );
-    const request = association
-      ? this.#associationRequest(context)
-      : parseProjectConversationsActionRequest({
-          action: context.action,
-          input: context.input,
-        });
+    const target = context.action === PROJECT_WORKSPACE_TARGET_ACTION;
+    if (target && !this.supportsAction(context.action)) unavailable();
+    const request = target
+      ? Object.freeze({
+          action: PROJECT_WORKSPACE_TARGET_ACTION,
+          input: parseProjectWorkspaceTargetRequest(context.input),
+        })
+      : association
+        ? this.#associationRequest(context)
+        : parseProjectConversationsActionRequest({
+            action: context.action,
+            input: context.input,
+          });
     const authority = await this.#issue(
       context.actor,
       {
@@ -332,11 +347,13 @@ export class ProjectConversationControlOwner {
         packageDigest: context.package.packageDigest,
         selectionRevision: context.selection.revision,
       },
-      association
-        ? "association"
-        : request.action === actions.startStage
-          ? "execute"
-          : "metadata",
+      target
+        ? "target"
+        : association
+          ? "association"
+          : request.action === actions.startStage
+            ? "execute"
+            : "metadata",
     );
     const original = authority.assertCurrent;
     const live = capturePluginUiInvocationCommitAuthority(context);
@@ -359,26 +376,34 @@ export class ProjectConversationControlOwner {
       },
     });
     const output = parsePluginUiJsonValue(
-      request.action === associationActions.inspect ||
-        request.action === associationActions.attach
-        ? parseProjectConversationAssociationResponse(
-            request,
-            await this.#dispatch(
-              context.actor,
-              request,
-              actualAuthority,
+      request.action === PROJECT_WORKSPACE_TARGET_ACTION
+        ? parseProjectWorkspaceTargetResponse(
+            await this.#input.service.resolveWorkspaceTargetFromPluginUi(
               context,
+              actualAuthority,
             ),
+            request.input,
           )
-        : parseProjectConversationsActionResponse(
-            request,
-            await this.#dispatch(
-              context.actor,
+        : request.action === associationActions.inspect ||
+            request.action === associationActions.attach
+          ? parseProjectConversationAssociationResponse(
               request,
-              actualAuthority,
-              context,
+              await this.#dispatch(
+                context.actor,
+                request,
+                actualAuthority,
+                context,
+              ),
+            )
+          : parseProjectConversationsActionResponse(
+              request,
+              await this.#dispatch(
+                context.actor,
+                request,
+                actualAuthority,
+                context,
+              ),
             ),
-          ),
     );
     if (
       request.action === actions.createConversation ||
@@ -485,7 +510,7 @@ export class ProjectConversationControlOwner {
   async #issue(
     actor: ActorContext,
     expected: ProjectConversationInstallation,
-    purpose: "metadata" | "execute" | "association" = "metadata",
+    purpose: "metadata" | "execute" | "association" | "target" = "metadata",
   ): Promise<ProjectConversationCommitAuthority> {
     this.assertAvailable();
     await this.#input.requests.assertCurrent();
@@ -565,6 +590,12 @@ export class ProjectConversationControlOwner {
           entry.service === "crewon.project-conversations" &&
           entry.apiVersion === "1",
       ) ||
+      (purpose === "target" &&
+        !candidate.descriptor.requires.some(
+          (entry) =>
+            entry.service === "crewon.project-workspace-target" &&
+            entry.apiVersion === "1",
+        )) ||
       (purpose === "association" &&
         !candidate.descriptor.requires.some(
           (entry) =>

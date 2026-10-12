@@ -86,6 +86,25 @@ export function createDesktopProjectConversationRuntime(
   let closed = false;
   let plans: ProjectTextPlanPluginUiRuntime | undefined;
   const conversationServices = appendProjectConversationUiServiceAvailability({
+    workspaceTargets: {
+      isAvailable: (request) =>
+        !closed &&
+        owner !== undefined &&
+        owner.supportsAction(
+          "crewon.project-workspace-target.v1.resolveTarget",
+        ) &&
+        foundation.configuration.publications.some(
+          (publication) =>
+            publication.pluginId === request.candidate.descriptor.pluginId &&
+            publication.packageDigest === request.candidate.packageDigest &&
+            request.candidate.descriptor.contributions.some(
+              (contribution) =>
+                contribution.id === publication.contributionId &&
+                contribution.kind === "module" &&
+                contribution.slot === "main.content",
+            ),
+        ),
+    },
     conversations: {
       isAvailable: (request) => {
         if (closed || owner === undefined) return false;

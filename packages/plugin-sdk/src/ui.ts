@@ -108,3 +108,13 @@ export function parsePluginUiDefinition(input: unknown): PluginUiDefinition {
     mount: value.mount as PluginUiDefinition["mount"],
   });
 }
+
+export { resolvePluginProjectWorkspaceTarget } from "./project-workspace-target-ui.js";
+export {
+  CREWON_PROJECT_WORKSPACE_TARGET_SERVICE,
+  CREWON_PROJECT_WORKSPACE_TARGET_API_VERSION,
+} from "./project-workspace-target-ui.js";
+export type {
+  ProjectWorkspaceTargetRequest,
+  ProjectWorkspaceTargetResponse,
+} from "./project-workspace-target-ui.js";

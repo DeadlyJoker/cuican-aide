@@ -17,6 +17,7 @@ export function isProjectConversationUiNamespaceAction(
   return [
     "crewon.project-conversations",
     PROJECT_CONVERSATION_ASSOCIATION_SERVICE,
+    "crewon.project-workspace-target",
   ].some(
     (namespace) => action === namespace || action.startsWith(`${namespace}.`),
   );

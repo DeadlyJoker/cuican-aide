@@ -10,6 +10,7 @@ export async function conversationPackage(
   options: {
     beforeCleanup?: () => Promise<void>;
     associationProtocol?: "1";
+    workspaceTargetProtocol?: "1";
     version?: string;
     pluginId?: string;
     publisherId?: string;
@@ -31,6 +32,9 @@ export async function conversationPackage(
         "crewon.project-conversations",
         ...(options.associationProtocol === "1"
           ? ["crewon.project-conversation-association"]
+          : []),
+        ...(options.workspaceTargetProtocol === "1"
+          ? ["crewon.project-workspace-target"]
           : []),
         "crewon.execution",
       ].map((service) => ({ service, apiVersion: "1", optional: true })),

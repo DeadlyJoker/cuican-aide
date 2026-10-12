@@ -248,7 +248,10 @@ export async function ownedConversationUiFixture(
           await state.onWorkspacePrepared?.(preparation);
         }
         return parsePluginUiJsonValue(
-          await app.metadataFromPluginUi(context, authority),
+          await (context.action ===
+          "crewon.project-workspace-target.v1.resolveTarget"
+            ? app.resolveWorkspaceTargetFromPluginUi(context, authority)
+            : app.metadataFromPluginUi(context, authority)),
         );
       },
     },

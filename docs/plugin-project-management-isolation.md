@@ -154,3 +154,15 @@ Main 内部现在能从真实 Native authority 派生项目完整归属，通过
 后续启动源码已接线：原 Native installed 完成对象在 Main 私有 registry 绑定真实 authority，不增加可序列化 DTO。RuntimeSupervisor 使用 Main 传入的原 LocalWorkspaceAuthority，为当前实际 Control child 创建桥接，先跟踪 child 再装配；会话失效同步 withdraw，停止过程在原 child 和安装启动工作收尾后 join 桥接，再清理 owner/files。没有另建 workspace manager，也不授予 copied runtime 对象能力。
 
 Control main 在实际 Native 与显式 owned Conversation 配置同时存在时创建原客户端和观察端，传到原 Standalone composer；preClose 与启动失败均关闭客户端。legacy、非 Native 的 metadata-only owned 路径保持原启动，不根据父通道存在猜测权限。Native producer/真实 child/lifetime、原 supervisor/financial environment/parent channel 回归 38/38；Control 默认兼容与原 installed HTTP 2/2，均零跳过，Electron/Control 类型及边界通过。工作区仍有其他未提交启动改动，测试基于当前工作区，不能当作正式打包身份。完整正式启动到真实 UI/目录/Thread/Agent 的验收以及业务插件生命周期、Web 和 App 放行仍未完成。
+
+### 工作空间目标查询：原管理服务的只读扩展
+
+按用户确认，继续使用同一套项目、工作空间、会话和文件管理能力，以归属隔离数据与权限。插件不能通过填写 owner 或目录路径获得自己的工作空间，也不能复制管理系统。新增独立协议 `crewon.project-workspace-target@1` 的 `resolveTarget`，仅接受 `{ projectId }`，返回 `{ projectId, workspaceId }`。它复用原 Conversation Host owner、真实安装声明、原 UI invocation、原项目 Store 的归属绑定视图及独立项目读取策略；不创建目录、namespace、Thread 或 Run，不授予写入或执行权限。
+
+只有实际 Native provisioning 与显式 `plugin-project-v1` 同时接线的 Desktop Control 发布该能力；旧 Conversation v1 和 metadata-only 部署不推断或宣布支持。声明这一新服务是新增兼容性要求，旧客户端请求与 `workspaceId: null` 的语义不变；不自动改写调用目标。查询结果是归属派生的不透明标识，创建对话时仍独立检查当前安装、项目写策略、Native 观察、namespace 和 Thread 事务。查询不是可缓存的权限凭证。
+
+独立插件在原 UI SDK 的 `ui` 入口使用 `resolvePluginProjectWorkspaceTarget(services, { projectId }, { signal })`，再将返回的 `workspaceId` 交给原创建会话操作。SDK 只调用已有挂载的 `services.invoke` 一次，验证精确输入和关联结果，不启动另一个 transport、不自动重试。插件包须声明 `crewon.project-conversations@1` 与 `crewon.project-workspace-target@1`；宿主实际不支持时不能通过声明获得能力。
+
+本轮真实安装包/Control 来源测试覆盖已声明、未声明和非 Native 模式；原 SQLite 的 genuine UI 覆盖 actor/profile/plugin/publisher 归属不匹配、复制 context、独立读取撤权及 UI 撤权。原 installed HTTP 覆盖查询目标、拒绝另一个插件的已存在项目，并将实际查询结果传给原会话创建入口；Native observer 明确为不可用 fixture，该失败被正确保留，不能当作目录或 Agent 执行通过。测试没有增加目录、namespace、Thread 或 Run。完整用户 Web 操作、正式启动到真实 Native 分配和中央 Agent 的闭环仍待验收，未更新桌面包。
+
+验证结果：上述来源/安装/HTTP/归属/协议专项 32/32，SDK 完整构建与测试 91/91，均零跳过；22 个 packages 类型检查、Control 类型检查、TypeScript 边界及仓库格式检查通过。PostgreSQL 生产集成另一次运行因无测试数据库跳过，不作为通过证据；本轮未验证 PostgreSQL 新目标查询或真实用户 Web/桌面操作。工作区仍有其他未提交 UI/启动改动，保留且不纳入本次提交。
