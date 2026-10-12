@@ -130,6 +130,30 @@ async function openPlugin(id: string) {
 }
 
 describe("plugin panels in the formal Agent shell", () => {
+  it("contains original absolute shell views inside the plugin content row instead of covering the host header", async () => {
+    const style = document.createElement("style");
+    style.textContent =
+      readFileSync(
+        new NodeURL("./CommandWorkspacePluginPanel.css", import.meta.url),
+        "utf8",
+      ) + "\n.shell-view { position: absolute; inset: 0px; }";
+    document.head.append(style);
+    try {
+      await render({ hostModules: [contribution("fixture", "项目产物")] });
+      await openPlugin("fixture");
+      const pane = container.querySelector<HTMLElement>(
+        '.command-plugin-panels > [data-host-module-id="fixture"]',
+      )!;
+      expect(pane.closest(".command-plugin-panel-target")).not.toBeNull();
+      expect(getComputedStyle(pane).position).toBe("relative");
+      expect(getComputedStyle(pane).inset).toBe("auto");
+      expect(
+        container.querySelector(".command-plugin-panel-header"),
+      ).not.toBeNull();
+    } finally {
+      style.remove();
+    }
+  });
   it.each([
     { width: 640, height: 360 },
     { width: 360, height: 320 },

@@ -197,3 +197,11 @@ CrewON 继续使用现有 Node、Run、Tool、Store 与 SSE 路径。业务插�
 限制须保留：当前 Web 使用原 metadata/Foundation 管理能力，未启用 owned creation，不证明项目目录隔离；项目 Agent context 未配置，页面显示暂时无法读取。创意创建后面包屑返回未导航，关闭整个面板再打开才回到首页，仍待修复。本次没有实际 Agent/工具、媒体调用或正式桌面更新，不是完整短剧或 F0–F5 放行。后续优先修复这些可见交互及原 Agent 接通，不再把所有后台基础工作完成作为出现页面的前置条件。
 
 短剧包测试 416/416、零跳过；正确筛选的 CommandWorkspace 186/186、零跳过；UI build 成功。按技能原命令 `pnpm --filter @crewon/ui test -- CommandWorkspace` 实际展开了全 UI 套件：43 失败、5268 通过、53 跳过，不能声称完整 UI 回归通过。失败含当前工作树导航/消息/创建对话框快照和运行时集成、超时，尚未逐项归因；没有改写快照或移除测试来获得放行。其他用户工作树改动保持原样，正式桌面不更新。
+
+### 2026-10-12：真实右侧返回按钮命中修复
+
+沿实际短剧 47 项目页检查 DOM 命中：返回按钮未 disabled/inert，矩形 y=12.898px，但中心点命中宿主 `<strong>AI 短剧</strong>`。原模块 pane 复用了宿主 `.shell-view` 的 absolute/inset:0，跨出右侧内容行，覆盖到宿主标题栏；此前把无导航归因于创建后状态互锁不准确。将原 portal 范围 `.command-plugin-panels > [data-host-module-id]` 明确设为 relative/inset:auto，保留原注册、加载器、标题栏、大小调整和中间聊天布局，不修改冻结插件包或页面业务数据。
+
+真实 Web CSS 更新后，同一按钮 y=56.898px，中心命中自身；明确点击返回后显示首页与 `未来来信 · 页面验收` 项目卡片，未关闭整个插件，原聊天仍保留。截图见[修复后首页](../output/plugin-foundation/short-drama-page-20261012/home-header-fixed.jpg)。新增原模块晚加载 absolute CSS 的级联回归，断言 pane 在 content row 内及计算 position/inset。HappyDOM 不把 inset 简写展开为 top/left，测试改查其支持的 inset 计算值；真实浏览器命中检查独立覆盖位置和点击效果。
+
+CommandWorkspace 187/187、零跳过，UI build 与 boundary 通过。前一轮全 UI 43 项失败仍未放行；本次不宣称全 UI 或正式桌面通过。项目 Agent 的缺口仍是原插件任务/执行服务未装配，未绕过原提交授权把 UI 按钮开放。目标继续，后续优先接通实际项目对话和产物。

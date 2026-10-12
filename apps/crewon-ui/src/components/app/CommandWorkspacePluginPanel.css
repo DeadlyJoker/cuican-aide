@@ -29,6 +29,9 @@
 }
 
 .command-plugin-panels > [data-host-module-id] {
+  /* Original shell views are absolute; a plugin must stay inside the content row below the host header. */
+  position: relative;
+  inset: auto;
   overflow: auto;
 }
 
