@@ -1,3 +1,7 @@
+import { commitPostgresCreativeMutation } from "./postgres-creative-project-mutation.ts";
+import { prepareOwnedMetadataMutation } from "./plugin-project-owned-mutation-preparation.ts";
+import { readPostgresOwnedMetadataReceipt } from "./plugin-project-owned-mutation-postgres.ts";
+import type { PluginProjectMutationScope } from "@crewon/application";
 import { savePostgresCreativeProjectReceipt } from "./postgres-creative-project-record-writers.ts";
 import { transactPostgresCreativeProject } from "./postgres-creative-project-transaction.ts";
 import {
@@ -32,7 +36,6 @@ import {
 import type { PluginProjectReadCall } from "./plugin-project-owned-read-sqlite.ts";
 import type { PluginProjectReadScope } from "@crewon/application";
 import {
-  assertCreativeProjectCommitActive,
   assertCreativeProjectCommitTransactionCurrent,
   captureCreativeProjectCommitAuthority,
   type CreativeProjectCommitAuthority,
@@ -64,28 +67,16 @@ import {
   decodeCreativeAsset,
   decodeCreativeRevision,
   prepareCreativeMutation,
-  verifyCreativeMutation,
   type PreparedCreativeMutation,
 } from "./creative-project-store-records.ts";
 import { commitOriginalProjectMigration } from "./original-project-migration.ts";
-import {
-  admitPostgresPluginInstallationPin,
-  assertPostgresPluginInstallationPinSchema,
-} from "./plugin-installation-pin-store-support.ts";
-import {
-  creativeProjectPluginCommitQualification,
-  assertCreativeProjectPluginCommitSelection,
-} from "./creative-project-plugin-commit-support.ts";
 import { type PostgresCreativeProjectLegacyAccess } from "./creative-project-legacy-access.ts";
 import {
   readPostgresLegacyCreativeProject,
   readPostgresLegacyCreativeProjectReceipt,
   type PostgresCreativeProjectLegacyRead,
 } from "./creative-project-postgres-legacy-read.ts";
-import {
-  postgresCreativeProjectLegacyMutationFence,
-  type PostgresCreativeProjectLegacyMutationFence,
-} from "./creative-project-legacy-mutation-access.ts";
+import { type PostgresCreativeProjectLegacyMutationFence } from "./creative-project-legacy-mutation-access.ts";
 
 type ReadInput<Method extends keyof CreativeProjectStore> = Parameters<
   CreativeProjectStore[Method]
@@ -326,7 +317,37 @@ export class PostgresCreativeProjectStore implements CreativeProjectStore {
     options?: CreativeProjectCommitOptions,
   ) {
     const identity = creativeMutationIdentity(input);
-    const authority = captureCreativeProjectCommitAuthority(options);
+    const authority = captureCreativeProjectCommitAuthority(options, {
+      allowTextUiTransaction: false,
+      allowMutationScope: true,
+    });
+    if (options?.mutationScope !== undefined) {
+      const source = await prepareOwnedMetadataMutation(
+        options.mutationScope,
+        authority,
+        identity,
+      );
+      await assertCreativeProjectCommitTransactionCurrent(authority);
+      return this.#transaction(
+        (client) =>
+          readPostgresOwnedMetadataReceipt(
+            client,
+            this.#schema,
+            source,
+            (access) => this.#receipt(client, identity, access),
+          ),
+        authority,
+        undefined,
+        async (client) => {
+          await readPostgresOwnedMetadataReceipt(
+            client,
+            this.#schema,
+            source,
+            (access) => this.#receipt(client, identity, access),
+          );
+        },
+      );
+    }
     const q = projectRunCommitQualification(
       authority,
       identity.actor,
@@ -387,7 +408,10 @@ export class PostgresCreativeProjectStore implements CreativeProjectStore {
     input: ReadInput<"commitProjectMetadata">,
     options?: CreativeProjectCommitOptions,
   ) {
-    const authority = captureCreativeProjectCommitAuthority(options);
+    const authority = captureCreativeProjectCommitAuthority(options, {
+      allowTextUiTransaction: false,
+      allowMutationScope: true,
+    });
     const detached = creativeStoreRecord(input);
     const kind = creativeMutationKind(detached.kind);
     if (kind !== "rename-project" && kind !== "set-project-state")
@@ -395,6 +419,7 @@ export class PostgresCreativeProjectStore implements CreativeProjectStore {
     const result = await this.#commit(
       prepareCreativeMutation(kind, detached),
       authority,
+      options?.mutationScope,
     );
     if (result.kind !== "rename-project" && result.kind !== "set-project-state")
       throw new Error("creative_project_receipt_invalid");
@@ -405,10 +430,14 @@ export class PostgresCreativeProjectStore implements CreativeProjectStore {
     input: ReadInput<"commitProjectBrief">,
     options?: CreativeProjectCommitOptions,
   ) {
-    const authority = captureCreativeProjectCommitAuthority(options);
+    const authority = captureCreativeProjectCommitAuthority(options, {
+      allowTextUiTransaction: false,
+      allowMutationScope: true,
+    });
     const result = await this.#commit(
       prepareCreativeMutation("append-brief", input),
       authority,
+      options?.mutationScope,
     );
     if (result.kind !== "append-brief")
       throw new Error("creative_project_receipt_invalid");
@@ -419,7 +448,10 @@ export class PostgresCreativeProjectStore implements CreativeProjectStore {
     input: ReadInput<"commitConceptRevision">,
     options?: CreativeProjectCommitOptions,
   ) {
-    const authority = captureCreativeProjectCommitAuthority(options);
+    const authority = captureCreativeProjectCommitAuthority(options, {
+      allowTextUiTransaction: false,
+      allowMutationScope: true,
+    });
     const detached = creativeStoreRecord(input);
     const kind = creativeMutationKind(detached.kind);
     if (kind !== "create-concept" && kind !== "append-concept")
@@ -427,6 +459,7 @@ export class PostgresCreativeProjectStore implements CreativeProjectStore {
     const result = await this.#commit(
       prepareCreativeMutation(kind, detached),
       authority,
+      options?.mutationScope,
     );
     if (result.kind !== "create-concept" && result.kind !== "append-concept")
       throw new Error("creative_project_receipt_invalid");
@@ -436,136 +469,27 @@ export class PostgresCreativeProjectStore implements CreativeProjectStore {
   async #commit(
     prepared: PreparedCreativeMutation,
     authority: CreativeProjectCommitAuthority | undefined,
+    mutationScope?: PluginProjectMutationScope,
   ): Promise<CreativeProjectMutationResult> {
-    const identity = creativeMutationIdentity({
-      actor: prepared.actor,
-      receipt: prepared.receipt,
-      kind: prepared.kind,
-    });
-    const qualification = creativeProjectPluginCommitQualification(
-      authority,
-      identity.actor,
-      identity.kind,
-    );
-    const runQualification = projectRunCommitQualification(
-      authority,
-      identity.actor,
-      identity.kind,
-      identity.receipt,
-    );
-    const assertLegacy = postgresCreativeProjectLegacyMutationFence({
-      schema: this.#schema,
-      project: prepared.project,
-      identity,
-    });
-    return this.#transaction(
-      async (client, access) => {
-        await assertPostgresProjectRunCommit(
-          client,
-          this.#schema,
-          runQualification,
-        );
-        if (qualification !== undefined) {
-          await assertPostgresPluginInstallationPinSchema(client, this.#schema);
-          const installation = await admitPostgresPluginInstallationPin(
-            client,
-            this.#schema,
-            qualification.pin,
-          );
-          assertCreativeProjectPluginCommitSelection(
-            qualification,
-            installation,
-          );
-          await assertCreativeProjectCommitTransactionCurrent(authority);
-          assertCreativeProjectCommitActive(authority);
-          this.#assertOpen();
-        }
-        // Receipt first: retries may prepare a different server-generated project ID.
-        await this.#lock(client, [
-          "creative-project-receipt",
-          this.#schema,
-          ...creativeOwnerValues(identity.owner),
-          identity.actor.actorId,
-          identity.kind,
-          identity.receipt.idempotencyKey,
-        ]);
-        await assertLegacy(client, access);
-        const planResult = await beginPostgresPlanResult(
-          client,
-          this.#schema,
-          runQualification,
-        );
-        const previous = await this.#receipt(client, identity, access);
-        if (previous !== null) {
-          await finishPostgresPlanResult(
-            client,
-            this.#schema,
-            planResult,
-            previous,
-          );
-          return previous;
-        }
-        await this.#lock(client, [
-          "creative-project-project",
-          this.#schema,
-          prepared.project.tenantId,
-          prepared.project.spaceId,
-          prepared.project.projectId,
-        ]);
-        const project = await this.#project(
-          client,
-          identity.owner,
-          prepared.project.projectId,
-          access,
-        );
-        const concept =
-          prepared.kind === "create-concept" ||
-          prepared.kind === "append-concept";
-        const brief = concept
-          ? await this.#brief(
-              client,
-              identity.owner,
-              prepared.project.projectId,
-              prepared.assetRevision.briefRevision,
-              access,
-            )
-          : null;
-        const asset = concept
-          ? await this.#asset(
-              client,
-              identity.owner,
-              prepared.project.projectId,
-              prepared.asset.assetId,
-              access,
-            )
-          : null;
-        const result = verifyCreativeMutation(prepared, {
-          project,
-          brief,
-          asset,
-        });
-        await this.#writeProject(client, result.project, prepared, access);
-        if (result.kind === "create-project" || result.kind === "append-brief")
-          await this.#insertBrief(client, result.brief);
-        if (
-          result.kind === "create-concept" ||
-          result.kind === "append-concept"
-        ) {
-          await this.#writeAsset(client, result.asset, prepared, access);
-          await this.#insertRevision(client, result.assetRevision);
-        }
-        await this.#saveReceipt(client, identity, result);
-        await finishPostgresPlanResult(
-          client,
-          this.#schema,
-          planResult,
-          result,
-        );
-        return result;
+    return commitPostgresCreativeMutation(
+      {
+        schema: this.#schema,
+        assertOpen: this.#assertOpen,
+        transact: this.#transaction.bind(this),
+        lock: this.#lock.bind(this),
+        readReceipt: this.#receipt.bind(this),
+        loadProject: this.#project.bind(this),
+        loadBrief: this.#brief.bind(this),
+        loadAsset: this.#asset.bind(this),
+        writeProject: this.#writeProject.bind(this),
+        writeAsset: this.#writeAsset.bind(this),
+        insertBrief: this.#insertBrief.bind(this),
+        insertRevision: this.#insertRevision.bind(this),
+        saveReceipt: this.#saveReceipt.bind(this),
       },
+      prepared,
       authority,
-      runQualification,
-      assertLegacy,
+      mutationScope,
     );
   }
 

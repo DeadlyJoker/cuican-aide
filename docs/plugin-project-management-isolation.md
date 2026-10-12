@@ -354,3 +354,13 @@ PG 重放按原 scoped receipt 验证 actual project、metadata owner 的完整�
 新增真实 PG 测试通过 original UI/Application action 与 opaque source 创建首个 owned metadata project，并由冷 Store/Application 重放；UI package/Host discovery 与 policy 仍是具名内存 fixture，不是 formal Native/Web 资格证明。实际四行族同事务写入，普通 reader 仍不可见；并发重试、不同插件同 key、内容冲突、独立 policy 拒绝、占用 legacy ID 和末尾 receipt trigger 失败回滚得到验证。对真实 PG connection 在包含 receipt 写入的 COMMIT 已成功后注入 acknowledgement 丢失：首次调用报错而四行族持久化，冷重试返回 replay，数量不增长。此 fault injection 是本地协议验证，不宣称发生过真实网络断连。
 
 与原 SQLite creator/owned UI、普通两库 project、安装锁竞争和原 Run/Tool write 回归 93/93、零跳过，证据 `output/plugin-foundation/owned-creation-pg-20261012/tests.txt`；专属 PG 已停止删除。Store/Worker/Control 类型检查通过。PG 隔离项目的后续 metadata/brief/concept/Foundation/text/media 保存、Native namespace 启用、实际 Worker/model/Web/正式桌面验收仍待完成；本次没有重启用户服务或更新桌面。
+
+### PostgreSQL 隔离项目的原 metadata/brief/concept 修改
+
+PG 原 `loadMutationReceipt/commitProjectMetadata/commitProjectBrief/commitConceptRevision` 接入已有可选 opaque `mutationScope`。两库共用原 mutation preparation（SQLite 保留原 import/re-export）：完整 scope/pin/selection/package、actor/action、scoped receipt 与来源生命周期匹配后才进入事务；普通调用不启用 owned 分支。没有新增 HTTP action、持久化字段或公共授权参数。
+
+PG 使用原安装 shared lock、receipt advisory namespace、project advisory namespace和原八项 owner predicate/decoder。owned 项目在取得 project advisory lock 后才取得 owner/project SHARE，避免两个不同幂等 key 的并发修改各持有 project SHARE 再升级而互等。原 CAS、project/brief/concept writers、不可变 revision、receipt decode/replay、Run/Tool/plan 规则继续复用；事务末尾借用相同 owned target fence，再执行原 current/active/lease/COMMIT 检查。将原较长 PG mutation orchestration 提取为 focused private helper，Store 主文件约 766 行，原事务/连接池没有替换。
+
+新增真实 PG 项目通过此前的 original qualified creator 创建，不使用 raw owner seed；original UI/Application action 连续改名、归档、恢复、append brief、create concept、append concept revision，并由 cold Store/Application 重放。内容冲突拒绝；不同 key 的并发旧 revision 修改只有一个成功，另一个明确 revision conflict，revision/history/receipt 数量一致；别的插件无法改写。末尾 receipt trigger 故障回滚 project CAS；在 actual receipt INSERT 后撤回独立 project policy，同样回滚。实际已成功 COMMIT 后注入 acknowledgement 丢失，冷重试发布原 receipt，不增加 project/revision/receipt。注入是本地真实 PG connection 的具名协议 fault，不是线上网络故障归因。
+
+与原两库 owned creator/普通 project/安装竞争/Run/Tool/legacy 写入回归 97/97、零跳过，证据 `output/plugin-foundation/owned-mutation-pg-20261012/tests.txt`，专属 PG 已停止删除。Store/Worker/Control 类型与边界检查通过。Host/package discovery/PDP 仍是具名 fixture，未证明正式 Native/Web 插件安装、运行时模型或跨进程文件激活；Foundation/text/media 的 owned 保存仍待接入，本次未重启用户服务或更新桌面。

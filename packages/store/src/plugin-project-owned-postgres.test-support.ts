@@ -129,3 +129,37 @@ export async function ownedProjectPostgresFixture(t: TestContext) {
     installations,
   };
 }
+
+/** Intercept the actual borrowed PG connection after each successful SQL await; keep pool callback semantics. */
+export function interceptOwnedPostgresQueries(
+  pool: Pool,
+  after: (statement: unknown) => void,
+) {
+  const connect = pool.connect;
+  pool.connect = new Proxy(connect, {
+    apply(target, thisArg, args) {
+      if (args.length !== 0) return Reflect.apply(target, thisArg, args);
+      return (
+        Reflect.apply(target, thisArg, args) as Promise<import("pg").PoolClient>
+      ).then(
+        (client) =>
+          new Proxy(client, {
+            get(source, key) {
+              const value = Reflect.get(source, key, source);
+              if (typeof value !== "function") return value;
+              if (key !== "query") return value.bind(source);
+              return new Proxy(value, {
+                apply(fn, _owner, parameters) {
+                  return (async () => {
+                    const result = await Reflect.apply(fn, source, parameters);
+                    after(parameters[0]);
+                    return result;
+                  })();
+                },
+              });
+            },
+          }),
+      );
+    },
+  });
+}
