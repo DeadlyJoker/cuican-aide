@@ -198,6 +198,7 @@ export async function issuePluginProjectRunReadScope(
             "loadRevision",
             "loadOutlineSourceRevision",
             "loadStructuredRevision",
+            "loadFoundation",
           ]
         : []),
       ...(q.operationId === "text_history"

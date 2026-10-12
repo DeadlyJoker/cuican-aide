@@ -37,7 +37,7 @@ import { ApplicationError } from "./application-error.ts";
 import { actor, sha256 } from "./creative-project.test-support.ts";
 export { actor, sha256 };
 type Input<M extends keyof ProjectFoundationStore> = Parameters<
-  ProjectFoundationStore[M]
+  NonNullable<ProjectFoundationStore[M]>
 >[0];
 type Method = keyof ProjectFoundationStore | "loadProject";
 const owner = (who: ActorContext = actor) => ({

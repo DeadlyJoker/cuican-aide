@@ -1,3 +1,4 @@
+import { readPostgresOwnedCreativeProject } from "./plugin-project-owned-read-postgres.ts";
 import {
   assertPostgresSavedSourceUploadLegacyAccess,
   foundationResultSavedSource,
@@ -19,6 +20,8 @@ import {
   type ProjectFoundationCommitOptions,
   type ProjectFoundationMutationResult,
   type ProjectFoundationStore,
+  qualifyPluginProjectReadScope,
+  type PluginProjectReadScope,
 } from "@crewon/application";
 import {
   creativeProjectDigest,
@@ -82,7 +85,7 @@ import {
 } from "./project-foundation-source-adoption-postgres.ts";
 
 type Input<M extends keyof ProjectFoundationStore> = Parameters<
-  ProjectFoundationStore[M]
+  NonNullable<ProjectFoundationStore[M]>
 >[0];
 type Row = Record<string, unknown>;
 type ReadScope = Readonly<{
@@ -132,13 +135,40 @@ export class PostgresProjectFoundationStore implements ProjectFoundationStore {
     });
   }
 
-  async loadFoundation(input: Input<"loadFoundation">) {
+  bindProjectReads(scope: PluginProjectReadScope) {
+    qualifyPluginProjectReadScope(scope);
+    return Object.freeze({
+      loadFoundation: (input: Input<"loadFoundation">) =>
+        this.loadFoundation(input, scope),
+    });
+  }
+  async loadFoundation(
+    input: Input<"loadFoundation">,
+    scope?: PluginProjectReadScope,
+  ) {
     const query = foundationRead(input);
-    return this.#read(
-      query,
-      (client, access) => this.#foundation(client, query, access),
-      null,
+    if (scope === undefined)
+      return this.#read(
+        query,
+        (client, access) => this.#foundation(client, query, access),
+        null,
+      );
+    const result = await readPostgresOwnedCreativeProject(
+      { pool: this.#pool, schema: this.#schema, assertOpen: this.#assertOpen },
+      { scope, method: "loadFoundation", query },
+      async (client, access) => {
+        await access.assertProject(
+          foundationLegacyScope(query.owner, query.projectId),
+        );
+        return {
+          projectId: query.projectId,
+          value: (await this.#schemaConfigured(client))
+            ? await this.#foundation(client, query, access)
+            : null,
+        };
+      },
     );
+    return result.value;
   }
 
   async loadSource(input: Input<"loadSource">) {

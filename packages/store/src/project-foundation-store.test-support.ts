@@ -44,7 +44,7 @@ import {
 
 export { actor, digester, owner, receipt, withDigest, type Backend };
 type Input<M extends keyof ProjectFoundationStore> = Parameters<
-  ProjectFoundationStore[M]
+  NonNullable<ProjectFoundationStore[M]>
 >[0];
 export const foundationTables = [
   "creative_projects",

@@ -11,6 +11,7 @@ import type {
   ProjectSourceChunk,
   ProjectSourcePage,
 } from "@crewon/domain";
+import type { PluginProjectReadScope } from "./plugin-project-read-scope.ts";
 import type { ActorContext } from "./authorization-port.ts";
 import type {
   CreativeProjectMutationReceipt,
@@ -100,6 +101,10 @@ type SourceRecords = Readonly<{
  * A confirmed COMMIT is not rejected because authority is subsequently withdrawn.
  */
 export interface ProjectFoundationStore {
+  /** Original immutable dependency reader, bound to one qualified project source. */
+  bindProjectReads?(
+    scope: PluginProjectReadScope,
+  ): Pick<ProjectFoundationStore, "loadFoundation">;
   /** null means no attached foundation; it never creates or classifies an existing project. */
   loadFoundation(
     input: ProjectFoundationReadScope,

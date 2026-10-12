@@ -47,7 +47,7 @@ import {
 } from "./creative-project-store-records.ts";
 
 type Input<M extends keyof ProjectFoundationStore> = Parameters<
-  ProjectFoundationStore[M]
+  NonNullable<ProjectFoundationStore[M]>
 >[0];
 export type FoundationIdentity = Readonly<{
   actor: ActorContext;

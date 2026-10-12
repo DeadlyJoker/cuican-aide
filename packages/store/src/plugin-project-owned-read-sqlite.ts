@@ -24,7 +24,7 @@ import type { CreativeProjectLegacyAccess } from "./creative-project-legacy-acce
 
 export type PluginProjectReadCall = Readonly<{
   scope: PluginProjectReadScope | PluginProjectMutationScope;
-  method: PluginProjectReadMethod | ProjectTextReadMethod;
+  method: PluginProjectReadMethod | ProjectTextReadMethod | "loadFoundation";
   query: Readonly<{
     owner: CreativeProjectOwnerScope;
     projectId?: string;

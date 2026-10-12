@@ -230,3 +230,11 @@ SQLite 和 PostgreSQL 原读取事务在数据读取前及返回前使用同一�
 `project-conversation-owned-script-stage.test.ts` 使用真实 SQLite/PostgreSQL 原 Task/Run 与 binding writers，验证已选 v1 大纲进入剧本阶段、同 key 冷实例重放同 Run、错误 artifact/episode、复制来源、缺少 binder、当前权限撤回。测试大纲由原人工命令在 owner 约束前保存，安装执行 authority 与 owner 约束仍是具名 fixture；不证明 protected 写入、真实 Worker/模型或正式 UI。与原 protected discussion 测试合计 3/3、零跳过，证据在 `output/plugin-foundation/script-stage-20261012/tests.txt`，专属 PG 已停止并清理。另跑普通 Conversation Application 兼容 SQLite 一项通过，PG 一项跳过，不计入上述三项。Application/Control 类型及边界检查通过。
 
 这补齐的是阶段准备的大纲依赖，Foundation/小说、protected v2、素材与产物保存、真实 Web/Worker/桌面闭环仍待完成；业务插件仍保持卸除，未因此启用用户环境归属模式或更新桌面。
+
+### Worker 基础资料依赖读取
+
+原 Foundation Store 增加可选 `bindProjectReads`，只返回 `loadFoundation`；没有回执、修改、原文章节或全文分页端口。SQLite/PostgreSQL 使用原连接/pool、原 Foundation 查询/decoder、原 owner 谓词及安装/Run/lease/stage 检查。Worker 文本读取来源追加这一个内部依赖方法，原 scoped StructuredOutline Application 使用原 Store 投影，替换先前一律拒绝的占位端口。普通读取路径和上传关联的独立防护保持原样。
+
+`project-tools-owned-foundation.test.ts` 在真实 Task/Run/queue/Tool 与原 owner 上验证已保存 creative 基础资料读取，冷 owner 再读、拒绝另一项目/主体、调用结束后的来源不可复用；具名观察 wrapper 在 Tool 生命周期内调用真实 Foundation reader。Foundation 仍由原人工提交在 owner 约束前创建，owner 行是具名约束 fixture。该测试没有保存 protected v2 大纲，没有调用模型，不证明小说上传来源或 protected 写入。专项连同原文本读取、Foundation store、legacy access/snapshot 回归 55/55，零跳过；Application/Store/Worker 类型与架构边界通过。证据 `output/plugin-foundation/foundation-read-20261012/tests.txt`，专属 PG 已停止并删除。
+
+小说原文的生产创建要求原上传 provenance，当前独立上传关联检查仍拒绝受保护来源，不能改用普通端口绕过；需要继续在原上传/关联服务补齐同一隔离授权。protected v2 完整读取与真实 Worker/模型/Web/桌面闭环仍未验收。业务插件保持卸除，用户运行环境未启用新归属模式，未更新桌面。

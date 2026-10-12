@@ -66,15 +66,7 @@ export function projectToolBoundReadServices(
       ...common,
       projects,
       store,
-      // This scope has no Foundation/novel source grant yet. Do not fall back to an ordinary reader.
-      foundations: {
-        loadFoundation: async () => {
-          throw new ApplicationError(
-            "authorization",
-            "plugin_project_foundation_read_binding_unavailable",
-          );
-        },
-      },
+      foundations: input.store.projectFoundationStore().bindProjectReads(scope),
     }),
   });
 }
