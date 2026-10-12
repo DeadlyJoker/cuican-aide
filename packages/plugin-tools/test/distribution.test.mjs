@@ -3,6 +3,7 @@ import { execFileSync, spawnSync } from "node:child_process";
 import { createHash } from "node:crypto";
 import {
   chmod,
+  stat,
   mkdtemp,
   mkdir,
   readFile,
@@ -268,9 +269,31 @@ test("init from the packed tool builds a standalone SDK plugin, refuses existing
     assert.deepEqual(await readdir(existingEmpty), []);
     const packagePath = join(source, "package.json");
     const manifest = JSON.parse(await readFile(packagePath, "utf8"));
-    manifest.devDependencies["@crewon/plugin-sdk"] =
-      `file:${join(artifacts, sdk)}`;
-    await writeFile(packagePath, JSON.stringify(manifest));
+    assert.equal(
+      Object.hasOwn(manifest.devDependencies, "@crewon/plugin-sdk"),
+      false,
+    );
+    // Follow the README command: a generated, unpublished registry dependency must not
+    // force an SDK registry lookup before pnpm can add the distributed local tarball.
+    execFileSync(
+      pnpm,
+      [
+        "add",
+        "-D",
+        join(artifacts, sdk),
+        "--offline",
+        "--ignore-scripts",
+        "--config.minimumReleaseAge=0",
+        "--registry=https://registry.npmjs.org",
+      ],
+      { cwd: source, timeout: 60000, stdio: "pipe" },
+    );
+    const installedManifest = JSON.parse(await readFile(packagePath, "utf8"));
+    assert.ok(
+      installedManifest.devDependencies["@crewon/plugin-sdk"].startsWith(
+        "file:",
+      ),
+    );
     execFileSync(
       pnpm,
       [
@@ -288,6 +311,8 @@ test("init from the packed tool builds a standalone SDK plugin, refuses existing
       stdio: "pipe",
     });
     const candidate = join(source, "dist/1.0.0");
+    if (process.platform !== "win32")
+      assert.equal((await stat(candidate)).mode & 0o777, 0o700);
     const check = spawnSync(
       pnpm,
       ["exec", "crewon-plugin", "check", candidate],

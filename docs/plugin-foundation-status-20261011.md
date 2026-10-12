@@ -179,3 +179,11 @@ CrewON 继续使用现有 Node、Run、Tool、Store 与 SSE 路径。业务插�
 新运行从 started 到 completed 为 43199 ms、首段 41866 ms；HTTP dispatch 2 ms、headers 38858 ms、firstByte 38862 ms。仍有响应头前等待，不能声称延迟已解决，也不能从这一个样本确定 DNS/TLS、网关或渠道。原调用参数未改成 Lite，也未进行任意限速/降级。其他模型、长流、断网、停止和插件 Agent 执行未在本轮重测。
 
 当前实际 Web 由 `output/plugin-foundation/web-management-20261012/start.mjs` 持有，统一源码工作树保持 `incremental-extensions`，权威 head 为 `2c4497541`，其他 UI/启动工作树改动保留，不能冒充纯净发布包。浏览器旧标签在停机期间进入连接错误页，工具无法在该错误页直接恢复；同一浏览器新验收标签正常进入原会话，留作可查看页面。Mac 当前锁屏，本轮未更新正式 App。F0–F5 的完整安装、项目目录/Agent/产物和正式产品验收仍未完成。
+
+### 2026-10-12：独立模板的真实 Web 安装生命周期
+
+独立目录使用分发 SDK tarball 与 packed CLI 构建原 minimal Node 服务模板，发现两个真实开发缺口：模板预声明未发布的 SDK registry 版本，按 README 添加本地 SDK 时会先请求该版本并返回 404；输出目录默认 0755，原宿主要求私有 0700，因此字节校验通过但原安装来源目录不会列出。现移除初始 SDK registry 依赖，先由开发者添加分发 tarball；构建器生成 0700 目录。没有放宽原宿主权限或包身份验证。分发测试改为真实 `pnpm add` tarball，不再事先改写模板依赖掩盖问题，并断言目录权限。
+
+真实 Web 使用原 admin、原 SQLite、原插件安装控制路由，临时批准自有 `example.minimal` / `example.publisher` / `1.0.0`，目录通过原配置文件加载器和来源注册器验证。浏览器依次完成安装（默认停用）、启用、停用、卸载。原数据库最终 selection 为 uninstalled / revision 4，安装回执一条、选择回执三条；没有业务插件恢复。原历史 Thread 与回答仍可见。回执见[实际生命周期](../output/plugin-foundation/independent-web-20261012/lifecycle-acceptance.json)，启用证据见[截图](../output/plugin-foundation/independent-web-20261012/enabled.jpg)。测试完成后撤下临时批准来源，恢复 sources/publications 均为空，保留原不可变包和卸载历史。
+
+本轮完整分发测试 2/2 通过、零跳过，plugin-tools typecheck 与 TypeScript boundary 通过。该模板没有 UI、Agent 工具和模型/供应商调用；本次只证明真实 Web 的目录发现和安装选择生命周期，不能证明 echo 服务调用、右侧插件 UI、独立项目工作空间、Agent/产物、正式 Desktop 或所有 F0–F5 验收。重启后账号曾显示自动重连，随后恢复 admin，本轮未修复或证明账号恢复延迟已消除。其他 UI/启动工作树改动保持原样，未更新正式桌面包。

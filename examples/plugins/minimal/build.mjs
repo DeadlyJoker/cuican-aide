@@ -27,7 +27,7 @@ if (!/^[0-9]+\.[0-9]+\.[0-9]+$/u.test(validation.version))
   throw new Error("template_output_version_invalid");
 const output = join(root, "dist", validation.version);
 await rm(output, { recursive: true, force: true });
-await mkdir(output, { recursive: true });
+await mkdir(output, { recursive: true, mode: 0o700 });
 const result = await build({
   absWorkingDir: root,
   entryPoints: ["src/node.ts"],
