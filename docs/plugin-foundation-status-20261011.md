@@ -155,3 +155,13 @@ CrewON 继续使用现有 Node、Run、Tool、Store 与 SSE 路径。业务插�
 正式原数据库的新只读核对显示 3 个 plugin selection 全为 `uninstalled`，没有启用插件，没有更改账号或历史。Web 开发启动器还残留 `gpt-5.5` 隐式默认，本轮移除该过期回退：保留原 `CREWON_MODEL_ID` / `CREWON_DESKTOP_DEV_PROVIDER_MODEL_ID` 的配置优先级，未选模型时在启动前明确提示选择可用网关模型，不替用户猜测另一个模型。未收窄已有网关目录或聊天框模型列表。启动器专项 25/25、UI 原构建、边界检查通过。
 
 范围仍未放行：当前后端未替换为当前分支，所以本轮不能证明新 Host 协议、Native 分配、项目→会话→中央 Agent/Tool/产物闭环或正式桌面已可用。下一步须统一实际运行基线并验收最小插件，保持业务插件卸除；不能把这次 UI 与既有后端回归当成完整插件产品完成。Mac 仍锁屏，未更新或重开正式 App；当前工作区其他 UI/启动改动仍保留，未纳入本轮提交。
+
+### 2026-10-12：实际 Web UI / Control / Worker 统一到当前工作树
+
+已定位旧启动来源：任务所有的 `output/plugin-foundation/start-web-acceptance.mjs` 把运行脚本硬编码为 `short16-desktop-verification`。在确认无活动 Run 后，使用原 SQLite backup API 保存一份 Control / artifact 数据库和原绑定清单，向已核验 PID/目录/启动脚本的旧 launcher 发 SIGTERM；其三个端口 105 ms 内释放。新的任务 launcher 引用当前工作树的原 `crewon-control-web-dev.mjs`，继续使用相同 `5730/5731/5732` 端口、原 Web 数据、PIM 账号后端、现有 API Key 和两个 Worker，没有重建账号或复制新运行时。绑定清单由原 release 流程发布新的不可变版本 `local-web-645da92361449444a3fa8718`；不是将旧版本内容改成当前代码。
+
+启动后核验实际 Control / Worker 的源路径和 UI 的实际 cwd 全属于当前工作树；见[进程来源](../output/plugin-foundation/current-web-20261012/processes.json)。在新消息发出前，与备份逐行比对，原 14 个 Thread 和 47 条 Message 的全部 SQL 字段完全一致，schema 仍为 44；见[保留回执](../output/plugin-foundation/current-web-20261012/history-preserved.json)。页面恢复原 admin、旧会话和模型。旧会话在当前版本执行真实 `gpt-6-astra` 并回复“历史会话继续正常”，一次 completed 调用观察，Run 执行 2391 ms。未验证所有旧版本执行恢复或活动 Run 跨升级；切换时没有在途 Run。
+
+网关 `/v1/models` 用配置中的 API Key 实际返回 8 个模型，模型选择器逐项与这个列表一致，没有 `gpt-5.5`，没有网站管理登录。当前源码的两个真实独立会话分别选 `gpt-6.1-sol` / `gpt-6-astra`，各完成 30 行，调用实际重叠 14571 ms，各为一个 Run、一次 completed 模型调用观察和一份最终回答。A / B 分别有 788 / 814 条输出 delta，执行 45619 / 67531 ms。B 刷新调用前显示正在执行和 12 条内容，刷新后同一 Thread、同一模型恢复为 30 条；未重建 Run。浏览器刷新请求发出的精确时间以及恢复后的中间增量没有埋点，不宣称它们已单独证明。回执见[当前运行基线验收](../output/plugin-foundation/current-web-20261012/acceptance.json)，截图见[完整 B 结果](../output/plugin-foundation/current-web-20261012/b-completed.png)。调用观察数不能代替网关或渠道内部物理重试的证据。
+
+性能边界：A / B 的宿主 dispatch 均为 0–1 ms，HTTP headers 分别约 9.2 / 32.4 秒，首次文本约 12.1 / 34.1 秒。本轮说明这部分等待发生在尚未收到 HTTP 响应的阶段，并非前端拿到内容后缓存 32 秒；不能由此区分 DNS/TLS、网关或渠道，也不能把旧外部断流根因销账。当前已通过的基础回归与尚未完成的插件/Native/Agent 项目执行验收继续分开。业务插件保持卸除，正式 App 未更新；两张临时验收页已关闭，当前 Web 服务继续运行。仅留这次约 22 MiB 的数据库备份用于回滚，没有复制旧桌面包或完整 profile。当前工作树其他 UI/启动修改保留，源码状态不冒充纯净提交。
