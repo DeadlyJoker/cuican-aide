@@ -1,3 +1,4 @@
+import { projectFoundationBoundReadService } from "./project-foundation-bound-read-service.ts";
 import {
   isProjectFoundationApplicationService,
   type CreativeProjectAuthorizationPort,
@@ -26,11 +27,13 @@ import {
   foundationOwnerBound as bound,
   foundationOwnerData as data,
   foundationOwnerDenied as denied,
+  foundationOwnerNativeRecord,
 } from "./project-foundation-owner-support.ts";
 
 /** Deployment opt-in is independent of text tools, UI pin and prompt/skill guidance. */
 export type InstalledPluginProjectFoundationToolsConfig = Readonly<{
   version: "crewon.project-foundation-tools.v1";
+  projectOwnership?: "plugin-project-v1";
   createFoundations(
     input: Readonly<{ store: SqliteRunStore | PostgresDomainStore }>,
   ): ProjectFoundationApplicationService;
@@ -44,6 +47,8 @@ export type InstalledPluginProjectFoundationToolsConfig = Readonly<{
 export type InstalledPluginProjectFoundationToolsDependencies = Pick<
   ProjectFoundationToolsServiceOwnerDependencies,
   | "foundations"
+  | "projectOwnership"
+  | "readService"
   | "foundationRuns"
   | "conversations"
   | "runs"
@@ -58,7 +63,16 @@ export type InstalledPluginProjectFoundationToolsDependencies = Pick<
 export function captureInstalledPluginProjectFoundationToolsConfig(
   input: InstalledPluginProjectFoundationToolsConfig,
 ): InstalledPluginProjectFoundationToolsConfig {
+  foundationOwnerNativeRecord(input);
+  const ownership = Object.getOwnPropertyDescriptor(input, "projectOwnership");
+  if (
+    ownership !== undefined &&
+    (!Object.hasOwn(ownership, "value") ||
+      ownership.value !== "plugin-project-v1")
+  )
+    denied();
   const fields = data(input, [
+    ...(ownership === undefined ? [] : ["projectOwnership"]),
     "version",
     "createFoundations",
     "authorization",
@@ -70,6 +84,9 @@ export function captureInstalledPluginProjectFoundationToolsConfig(
   >(input, "authorizeService");
   return Object.freeze({
     version: "crewon.project-foundation-tools.v1",
+    ...(ownership === undefined
+      ? {}
+      : { projectOwnership: "plugin-project-v1" as const }),
     createFoundations: bound<
       InstalledPluginProjectFoundationToolsConfig["createFoundations"]
     >(input, "createFoundations"),
@@ -101,6 +118,18 @@ export function composeInstalledPluginProjectFoundationToolsDependencies(
     );
   if (!isProjectFoundationApplicationService(foundations)) denied();
   return Object.freeze({
+    ...(config.projectOwnership === undefined
+      ? {}
+      : {
+          projectOwnership: config.projectOwnership,
+          readService: (
+            scope: import("@crewon/application").PluginProjectReadScope,
+          ) =>
+            projectFoundationBoundReadService(
+              { store: input.store, authorization: config.authorization },
+              scope,
+            ),
+        }),
     foundations,
     foundationRuns: input.store.projectFoundationRunStore(),
     conversations: input.store.projectConversationStore(),
@@ -175,8 +204,12 @@ export async function prepareInstalledPluginProjectFoundationStores(
   }>,
 ): Promise<void> {
   if (input.config === undefined) return;
-  captureInstalledPluginProjectFoundationToolsConfig(input.config);
+  const config = captureInstalledPluginProjectFoundationToolsConfig(
+    input.config,
+  );
   await input.store.creativeProjectStore().migrate();
+  if (config.projectOwnership !== undefined)
+    await input.store.migratePluginProjectOwnership();
   await input.store.projectFoundationStore().migrate();
   await input.store.projectConversationStore().migrate();
 }

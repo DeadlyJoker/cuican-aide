@@ -286,3 +286,13 @@ SQLite/PostgreSQL 新 owned 专项：原 Task/Run/Tool/sidecar writers 在 owner
 SQLite/PostgreSQL 专项使用原人工命令保存两个 immutable 方案后加入具名 owner 约束，实际 Run/Tool/sidecar evidence 签发新来源；原普通 Application 拒绝，投影读取指定原文、单条版本历史和下页，拒绝错误 revision/方法、换 actor、读转写和撤权，写拒绝后记录数量保持原样。指定版本与 method 拒绝检查原 wrapper 的具体 cause，未把任意异常算作权限验证。方案由原人工端口在 owner 约束前保存，不证明 protected 保存；基础小说仍是具名 canonical source fixture，没有模型执行。
 
 与原 Source/Store/owner/legacy 回归 66/66、零跳过；Application/Store/Worker 类型、边界与格式通过。证据 `output/plugin-foundation/proposal-read-20261012/tests.txt`，专属 PG 已停止删除。独立读取端口已齐，下一步仍是原 owner/composer 接线、protected Task sidecar 准备、保存及真实 Web/Worker/正式桌面闭环。业务插件保持卸除，用户环境未启用归属模式或更新桌面。
+
+### 原 Foundation Tools owner 与部署 composer 接线
+
+原 owner 显式 `projectOwnership: plugin-project-v1` 时，使用已检查的真实 dispatch/receipt/claim、当前 installation、Stage/Foundation admission 签发独立读来源，并从部署 composer 的原 parent 构造原只读 Application。独立 service/package/profile/PDP 和原 `#run`/同步 lifetime 检查保持；读取前后仍重新校验。受保护读取不再走普通 paired reader，由同一 Store 事务内的原 paired facts/Binding/lease/八项 owner fence 校验。保存路径仍使用原独立 write authority，没有使用 read projection 或借读取来源升级权限。
+
+新可选部署字段缺省保留原行为，未知值、显式 undefined、getter 拒绝；composer 使用原 parent 与原配置的 authorization 接 readService，缺少 binder 明确拒绝。显式启动模式调用原 parent 的 ownership/namespace migration，原资料初始化不采纳旧项目：实际 SQLite/PG 配置专项确认 owner 记录为零，普通原 Foundation 仍可读，业务记录数量保持原样。owner 的读取资格提取到 focused helper，主文件保持约 800 行以内，未另设 runtime 或数据库。
+
+SQLite/PostgreSQL actual checked Tool dispatch 专项验证已准备的真实 Run/Tool/sidecar 后加具名 owner 约束，原 owner 读取 Unicode 原文页、冷 owner 下一页；复制 command/外国项目在创建 readService 前拒绝，缺少绑定、独立 service 撤权拒绝，读取不增加记录。基础小说仍由具名 canonical source fixture 准备；这里没有调用模型或证明 protected 项目首次 Task/sidecar 创建。部署/原 owner/原投影/方案写入与 unknown-outcome 恢复回归 25/25，零跳过；Worker 类型、架构边界与格式通过。证据 `output/plugin-foundation/foundation-owner-20261012/tests.txt`，专属 PG 已停止并删除。
+
+尚未完成：真实 runtime context 在创建 owner 前读取 protected paired facts 的接线、Control/Task 的 protected Foundation 准备和 sidecar 生产、protected 保存/首个 creator、v2 全流程、实际 Worker loop/模型/Web/正式桌面闭环。现有专项是原分发链中的完整 Tool owner 调用，不能等同于实际安装包的模型执行。业务插件继续卸除，未启用用户环境归属模式或更新桌面。

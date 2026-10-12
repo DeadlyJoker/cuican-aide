@@ -3,82 +3,139 @@ import test from "node:test";
 import {
   captureInstalledPluginProjectFoundationToolsConfig,
   composeInstalledPluginProjectFoundationToolsDependencies,
+  prepareInstalledPluginProjectFoundationStores,
   createInstalledPluginProjectFoundationToolsOwner,
   type InstalledPluginProjectFoundationToolsConfig,
 } from "./installed-plugin-project-foundation-tools.ts";
 import { foundationToolsOwnerFixture } from "./project-foundation-tools-service-owner.test-support.ts";
 
-test("independent Foundation deployment config requires explicit service policy and never treats a guide or old grant as readiness", async (t) => {
-  const f = await foundationToolsOwnerFixture(t);
-  let policy = true,
-    creates = 0;
-  const config: InstalledPluginProjectFoundationToolsConfig = {
-    version: "crewon.project-foundation-tools.v1",
-    createFoundations: ({ store }) => {
-      assert.equal(store, f.parent);
-      creates++;
-      return f.foundations;
-    },
-    authorization: f.dependencies.authorization,
-    authorizeService: async (admission, signal) => {
-      assert.deepEqual(admission, f.taskAdmission);
-      signal.throwIfAborted();
-      if (!policy)
-        throw new Error("named_independent_foundation_deployment_denied");
-    },
-  };
-  const captured = captureInstalledPluginProjectFoundationToolsConfig(config);
-  assert.equal(creates, 0);
-  const { authorizeService: _service, ...oldGrant } = config;
-  assert.throws(
-    () =>
-      captureInstalledPluginProjectFoundationToolsConfig(
-        oldGrant as InstalledPluginProjectFoundationToolsConfig,
-      ),
-    /authority_denied/,
-  );
-  assert.throws(
-    () =>
-      captureInstalledPluginProjectFoundationToolsConfig({
-        ...config,
-        guidance: "save a proposal",
-      } as InstalledPluginProjectFoundationToolsConfig),
-    /authority_denied/,
-  );
-  let getter = 0;
-  assert.throws(
-    () =>
-      captureInstalledPluginProjectFoundationToolsConfig({
-        ...config,
-        get authorizeService() {
-          getter++;
-          return config.authorizeService;
+for (const backend of ["sqlite", "postgres"] as const)
+  test(
+    `${backend}: independent Foundation deployment config requires explicit service policy and never treats a guide or old grant as readiness`,
+    { skip: backend === "postgres" && !process.env.CREWON_TEST_POSTGRES_URL },
+    async (t) => {
+      const f = await foundationToolsOwnerFixture(t, "creative", backend);
+      let policy = true,
+        creates = 0;
+      const config: InstalledPluginProjectFoundationToolsConfig = {
+        version: "crewon.project-foundation-tools.v1",
+        createFoundations: ({ store }) => {
+          assert.equal(store, f.parent);
+          creates++;
+          return f.foundations;
         },
-      }),
-    /authority_denied/,
-  );
-  assert.equal(getter, 0);
-  const dependencies = composeInstalledPluginProjectFoundationToolsDependencies(
-    {
-      store: f.parent,
-      config: captured,
-      resolveActor: f.dependencies.resolveActor,
+        authorization: f.dependencies.authorization,
+        authorizeService: async (admission, signal) => {
+          assert.deepEqual(admission, f.taskAdmission);
+          signal.throwIfAborted();
+          if (!policy)
+            throw new Error("named_independent_foundation_deployment_denied");
+        },
+      };
+      const captured =
+        captureInstalledPluginProjectFoundationToolsConfig(config);
+      assert.equal(creates, 0);
+      const { authorizeService: _service, ...oldGrant } = config;
+      assert.throws(
+        () =>
+          captureInstalledPluginProjectFoundationToolsConfig(
+            oldGrant as InstalledPluginProjectFoundationToolsConfig,
+          ),
+        /authority_denied/,
+      );
+      assert.throws(
+        () =>
+          captureInstalledPluginProjectFoundationToolsConfig({
+            ...config,
+            guidance: "save a proposal",
+          } as InstalledPluginProjectFoundationToolsConfig),
+        /authority_denied/,
+      );
+      let getter = 0;
+      assert.throws(
+        () =>
+          captureInstalledPluginProjectFoundationToolsConfig({
+            ...config,
+            get authorizeService() {
+              getter++;
+              return config.authorizeService;
+            },
+          }),
+        /authority_denied/,
+      );
+      assert.equal(getter, 0);
+      const owned = captureInstalledPluginProjectFoundationToolsConfig({
+        ...config,
+        projectOwnership: "plugin-project-v1",
+      });
+      assert.equal(owned.projectOwnership, "plugin-project-v1");
+      for (const projectOwnership of [undefined, "legacy"])
+        assert.throws(() =>
+          captureInstalledPluginProjectFoundationToolsConfig({
+            ...config,
+            projectOwnership,
+          } as InstalledPluginProjectFoundationToolsConfig),
+        );
+      assert.throws(() =>
+        captureInstalledPluginProjectFoundationToolsConfig({
+          ...config,
+          get projectOwnership() {
+            getter++;
+            return "plugin-project-v1" as const;
+          },
+        }),
+      );
+      assert.equal(getter, 0);
+      const scoped = composeInstalledPluginProjectFoundationToolsDependencies({
+        store: f.parent,
+        config: owned,
+        resolveActor: f.dependencies.resolveActor,
+      });
+      assert.equal(scoped.projectOwnership, "plugin-project-v1");
+      assert.equal(typeof scoped.readService, "function");
+      const beforeOwnedStartup = await f.counts();
+      await prepareInstalledPluginProjectFoundationStores({
+        store: f.parent,
+        config: owned,
+      });
+      assert.equal(
+        Number(
+          (
+            await f.sql(
+              `SELECT COUNT(*) AS n FROM ${f.prefix}plugin_project_metadata_owners`,
+            )
+          )[0]!.n,
+        ),
+        0,
+      );
+      assert.ok(
+        await f.foundations.getFoundation(f.actor, {
+          projectId: f.admission.projectId,
+        }),
+      );
+      assert.deepEqual(await f.counts(), beforeOwnedStartup);
+      creates = 0;
+      const dependencies =
+        composeInstalledPluginProjectFoundationToolsDependencies({
+          store: f.parent,
+          config: captured,
+          resolveActor: f.dependencies.resolveActor,
+        });
+      assert.equal(creates, 1);
+      await dependencies.authorizeService(
+        f.taskAdmission,
+        new AbortController().signal,
+      );
+      policy = false;
+      await assert.rejects(
+        dependencies.authorizeService(
+          f.taskAdmission,
+          new AbortController().signal,
+        ),
+        /independent_foundation_deployment_denied/,
+      );
     },
   );
-  assert.equal(creates, 1);
-  await dependencies.authorizeService(
-    f.taskAdmission,
-    new AbortController().signal,
-  );
-  policy = false;
-  await assert.rejects(
-    dependencies.authorizeService(
-      f.taskAdmission,
-      new AbortController().signal,
-    ),
-    /independent_foundation_deployment_denied/,
-  );
-});
 
 test("actual admitted Foundation owner fails closed without deployment, and binds the exact installed identity/lifetime", async (t) => {
   const f = await foundationToolsOwnerFixture(t),

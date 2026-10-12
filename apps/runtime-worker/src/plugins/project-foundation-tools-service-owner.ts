@@ -1,5 +1,10 @@
 import {
+  prepareFoundationToolOwnedReads,
+  qualifyFoundationToolRead,
+} from "./project-foundation-owned-reads.ts";
+import {
   ApplicationError,
+  type PluginProjectReadScope,
   captureProjectFoundationRunCommitTransaction,
   isProjectFoundationApplicationService,
   parseProjectToolInstallationPin,
@@ -14,7 +19,6 @@ import {
   type RunStore,
 } from "@crewon/application";
 import {
-  assertProjectFoundationRunFoundation,
   assertProjectFoundationToolRequest,
   extensionCanonicalJson,
   extensionToolName,
@@ -65,6 +69,10 @@ import {
 } from "./project-foundation-tools-service-projection.ts";
 
 export type ProjectFoundationToolsServiceOwnerDependencies = Readonly<{
+  projectOwnership?: "plugin-project-v1";
+  readService?(
+    scope: PluginProjectReadScope,
+  ): ProjectFoundationApplicationService;
   context: PluginToolRuntimeContext;
   admission: PluginTaskAdmission;
   stageAdmission: ProjectStageRunAdmission;
@@ -112,11 +120,33 @@ export class ProjectFoundationToolsServiceOwner {
   #closing: Promise<void> | undefined;
 
   constructor(input: ProjectFoundationToolsServiceOwnerDependencies) {
+    foundationOwnerNativeRecord(input);
+    const mode = Object.getOwnPropertyDescriptor(input, "projectOwnership");
+    if (
+      mode !== undefined &&
+      (!Object.hasOwn(mode, "value") || mode.value !== "plugin-project-v1")
+    )
+      denied();
+    const readService = Object.getOwnPropertyDescriptor(input, "readService");
+    if (
+      readService !== undefined &&
+      (!Object.hasOwn(readService, "value") ||
+        typeof readService.value !== "function")
+    )
+      denied();
     if (!isProjectFoundationApplicationService(input.foundations)) denied();
     const admission = parsePluginTaskAdmission(input.admission);
     this.#stage = parseProjectStageRunAdmission(input.stageAdmission, sha);
     this.#foundation = captureProjectFoundationRuntimeAdmission({
       ...input,
+      ...(readService === undefined
+        ? {}
+        : {
+            readService: bound<
+              ProjectFoundationToolsServiceOwnerDependencies["readService"] &
+                Function
+            >(input, "readService"),
+          }),
       admission,
     });
     this.#d = Object.freeze({
@@ -377,7 +407,6 @@ export class ProjectFoundationToolsServiceOwner {
     await this.#policy(actor, write);
     let foundation: ProjectFoundation | null = null;
     if (write) await this.#identityQualification(actor, i);
-    else foundation = await this.#qualification(actor, i);
     const installation = this.#foundation.installation,
       scope = {
         tenantId: actor.tenantId,
@@ -412,6 +441,45 @@ export class ProjectFoundationToolsServiceOwner {
       )
     )
       denied();
+    let foundations = this.#d.foundations;
+    let readScope: PluginProjectReadScope | undefined;
+    if (request.operation !== "foundation_proposal_save") {
+      const evidence = this.#check(i);
+      const prepared = await prepareFoundationToolOwnedReads({
+        dependencies: this.#d,
+        evidence: {
+          actor,
+          run,
+          receipt: evidence.receipt,
+          claim: evidence.claim,
+          commandInput: i.command.input,
+          operationId: request.operation,
+          installation: parseProjectToolInstallationPin(installation),
+          admission: this.#d.admission,
+          projectStageAdmission: this.#stage,
+          foundationAdmission: this.#foundation,
+          selection,
+          package: pkg,
+        },
+        assertActive: () => {
+          this.#check(i);
+          signal.throwIfAborted();
+        },
+        assertCurrent: async () => {
+          this.#check(i);
+          await this.#authorizeCurrent(operation);
+          await this.#actor(signal);
+          await this.#policy(actor, false);
+          this.#check(i);
+        },
+      });
+      foundations = prepared.service;
+      readScope = prepared.scope;
+      foundation = await this.#qualification(actor, i, {
+        service: foundations,
+        scope: readScope,
+      });
+    }
     let value: unknown;
     if (request.operation === "foundation_proposal_save") {
       const current = async () => {
@@ -454,7 +522,7 @@ export class ProjectFoundationToolsServiceOwner {
       });
       const result =
         await ProjectFoundationApplicationService.prototype.saveProposal.call(
-          this.#d.foundations,
+          foundations,
           actor,
           projectFoundationRunMutationCommand(transaction, sha),
           { authority },
@@ -478,7 +546,7 @@ export class ProjectFoundationToolsServiceOwner {
     } else if (request.operation === "foundation_source") {
       const source =
         await ProjectFoundationApplicationService.prototype.getSource.call(
-          this.#d.foundations,
+          foundations,
           actor,
           {
             projectId: request.request.projectId,
@@ -490,13 +558,13 @@ export class ProjectFoundationToolsServiceOwner {
     } else if (request.operation === "foundation_source_page") {
       const page =
         await ProjectFoundationApplicationService.prototype.readSourcePage.call(
-          this.#d.foundations,
+          foundations,
           actor,
           request.request,
         );
       const source =
         await ProjectFoundationApplicationService.prototype.getSource.call(
-          this.#d.foundations,
+          foundations,
           actor,
           {
             projectId: request.request.projectId,
@@ -517,7 +585,7 @@ export class ProjectFoundationToolsServiceOwner {
     } else if (request.operation === "foundation_chapters") {
       const page =
         await ProjectFoundationApplicationService.prototype.listSourceChapters.call(
-          this.#d.foundations,
+          foundations,
           actor,
           {
             ...request.request,
@@ -532,7 +600,7 @@ export class ProjectFoundationToolsServiceOwner {
       try {
         const proposal =
           await ProjectFoundationApplicationService.prototype.getProposal.call(
-            this.#d.foundations,
+            foundations,
             actor,
             {
               projectId: request.request.projectId,
@@ -560,7 +628,7 @@ export class ProjectFoundationToolsServiceOwner {
     } else {
       const page =
         await ProjectFoundationApplicationService.prototype.listProposals.call(
-          this.#d.foundations,
+          foundations,
           actor,
           request.request,
         );
@@ -574,7 +642,10 @@ export class ProjectFoundationToolsServiceOwner {
       await this.#actor(signal);
       await this.#run(i);
       await this.#policy(actor, false);
-      await this.#qualification(actor, i);
+      await this.#qualification(actor, i, {
+        service: foundations,
+        scope: readScope,
+      });
       this.#check(i);
     }
     return projectFoundationToolsCodec.parseResponse(value, request);
@@ -590,19 +661,24 @@ export class ProjectFoundationToolsServiceOwner {
     if ((await this.#d.authorizeCurrent(operation)) !== undefined) denied();
   }
 
-  async #qualification(actor: ActorContext, i: Invocation) {
-    await this.#identityQualification(actor, i);
-    const f = this.#foundation;
-    const foundation =
-      await ProjectFoundationApplicationService.prototype.getFoundation.call(
-        this.#d.foundations,
-        actor,
-        { projectId: f.projectId },
-      );
-    if (foundation === null) denied();
-    assertProjectFoundationRunFoundation(f, foundation, sha);
-    this.#check(i);
-    return foundation;
+  async #qualification(
+    actor: ActorContext,
+    i: Invocation,
+    reads: Readonly<{
+      service: ProjectFoundationApplicationService;
+      scope: PluginProjectReadScope | undefined;
+    }>,
+  ) {
+    return qualifyFoundationToolRead({
+      actor,
+      service: reads.service,
+      scope: reads.scope,
+      foundation: this.#foundation,
+      assertLegacyIdentity: () => this.#identityQualification(actor, i),
+      assertActive: () => {
+        this.#check(i);
+      },
+    });
   }
 
   /** Replay publication requires the same actual Run/binding; captured pointers gate only fresh writes in Store. */
