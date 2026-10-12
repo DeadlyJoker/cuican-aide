@@ -1,3 +1,7 @@
+import {
+  projectToolReadPolicyFence,
+  assertProjectToolOwnershipDeployment,
+} from "./project-tool-read-policy-fence.ts";
 import { invokeProjectTool } from "./project-tools-service-invoke.ts";
 import { assertProjectTextStageDispatch } from "./project-stage-dispatch-scope.ts";
 import {
@@ -84,6 +88,7 @@ export type ProjectToolsAuthorizationInvocation =
       projectId: string | null;
     }>;
 export type ProjectToolsServiceOwnerDependencies = Readonly<{
+  projectOwnership?: "plugin-project-v1";
   context: PluginToolRuntimeContext;
   admission: PluginTaskAdmission;
   assetStageAdmission?: ProjectAssetStageRunAdmission | null;
@@ -153,6 +158,7 @@ export class ProjectToolsServiceOwner {
   #closed = false;
   #closing: Promise<void> | undefined;
   constructor(dependencies: ProjectToolsServiceOwnerDependencies) {
+    assertProjectToolOwnershipDeployment(dependencies);
     this.#dependencies = dependencies;
     this.#assetStage = dependencies.assetStageAdmission ?? null;
     this.#mediaInputStage = captureMediaInputReadScope(
@@ -190,6 +196,7 @@ export class ProjectToolsServiceOwner {
       dependencies.stageAdmission == null
         ? null
         : parseProjectStageRunAdmission(dependencies.stageAdmission, digester);
+
     if (
       this.#stage !== null &&
       (this.#stage.runId !== this.#admission.runId ||
@@ -684,6 +691,55 @@ export class ProjectToolsServiceOwner {
         this.#check(invocation);
       }
     }
+    let projectReadOptions;
+    if (
+      this.#dependencies.projectOwnership !== undefined &&
+      (method === "readProject" ||
+        (method === "readContent" &&
+          (request as ProjectToolsRequests["readContent"]).source.kind ===
+            "brief"))
+    ) {
+      if (
+        this.#dependencies.projectOwnership !== "plugin-project-v1" ||
+        this.#stage === null
+      )
+        denied();
+      const evidence = this.#check(invocation);
+      const readAuthority: CreativeProjectRunReadAuthority = {
+        version: "crewon.creative-project-run-read.v1",
+        actor,
+        run,
+        receipt: evidence.receipt,
+        claim: evidence.claim,
+        commandInput: invocation.command.input,
+        operationId: method === "readProject" ? "project_read" : "content_read",
+        installation,
+        admission: this.#admission,
+        projectStageAdmission: this.#stage,
+        selection,
+        package: pkg,
+        assertCurrent: projectToolReadPolicyFence({
+          actor,
+          expectedRun: run,
+          receiptId: evidence.receipt.receiptId,
+          authorization,
+          dependencies: this.#dependencies,
+          assertActive: () => {
+            this.#check(invocation);
+          },
+          resolveActor: () =>
+            this.#actor(run.createdByActorId, authorization.signal),
+        }),
+      };
+      projectReadOptions = {
+        readScope: await issuePluginProjectRunReadScope({
+          authority: readAuthority,
+          assertActive: () => {
+            this.#check(invocation);
+          },
+        }),
+      };
+    }
     const value = await invokeProjectTool({
       dependencies: this.#dependencies,
       method,
@@ -691,6 +747,7 @@ export class ProjectToolsServiceOwner {
       actor,
       idempotencyKey: key,
       authority,
+      ...(projectReadOptions === undefined ? {} : { projectReadOptions }),
     });
     await this.#dependencies.authorizeCurrent(authorization);
     await this.#actor(run.createdByActorId, authorization.signal);
@@ -738,3 +795,7 @@ export class ProjectToolsServiceOwner {
 function denied(): never {
   throw new Error("plugin_project_tools_authority_denied");
 }
+import {
+  issuePluginProjectRunReadScope,
+  type CreativeProjectRunReadAuthority,
+} from "@crewon/application/host-project-workspaces";

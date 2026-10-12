@@ -1,6 +1,7 @@
 import type {
   ActorContext,
   CreativeProjectCommitAuthority,
+  PluginProjectReadOptions,
 } from "@crewon/application";
 import {
   extensionCanonicalJson,
@@ -36,6 +37,7 @@ export async function invokeProjectTool(
     actor: ActorContext;
     idempotencyKey: string | undefined;
     authority: CreativeProjectCommitAuthority | undefined;
+    projectReadOptions?: PluginProjectReadOptions;
   }>,
 ): Promise<unknown> {
   const { dependencies, method, request, actor, idempotencyKey, authority } =
@@ -57,14 +59,22 @@ export async function invokeProjectTool(
     }
     case "readProject": {
       const query = request as ProjectToolsRequests["readProject"];
-      const project = await projects.getProject(actor, query);
+      const project = await projects.getProject(
+        actor,
+        query,
+        input.projectReadOptions,
+      );
       const brief =
         project.latestBriefRevision === 0
           ? null
-          : await projects.getBrief(actor, {
-              projectId: project.projectId,
-              briefRevision: project.latestBriefRevision,
-            });
+          : await projects.getBrief(
+              actor,
+              {
+                projectId: project.projectId,
+                briefRevision: project.latestBriefRevision,
+              },
+              input.projectReadOptions,
+            );
       return {
         project: projectToolsProject(project),
         brief: brief === null ? null : projectToolsBrief(brief),
@@ -112,10 +122,14 @@ export async function invokeProjectTool(
     case "readContent": {
       const query = request as ProjectToolsRequests["readContent"];
       if (query.source.kind === "brief") {
-        const brief = await projects.getBrief(actor, {
-          projectId: query.projectId,
-          briefRevision: query.source.briefRevision,
-        });
+        const brief = await projects.getBrief(
+          actor,
+          {
+            projectId: query.projectId,
+            briefRevision: query.source.briefRevision,
+          },
+          input.projectReadOptions,
+        );
         return projectToolsContent(
           brief.contentDigest,
           "text",

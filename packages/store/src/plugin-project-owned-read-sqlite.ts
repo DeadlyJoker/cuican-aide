@@ -105,6 +105,7 @@ export async function readSqliteOwnedCreativeProject<T>(
       source.snapshot.context,
       installation,
     );
+    assertSqlitePluginProjectRunRead(db, source.runAuthority);
     const access = captureSqliteOwnedProjectAccess(db, source);
     source.assertActive();
     result = read(access);
@@ -132,6 +133,7 @@ export async function readSqliteOwnedCreativeProject<T>(
     }
     source.assertActive();
     assertOpen();
+    assertSqlitePluginProjectRunRead(db, source.runAuthority);
     db.exec("COMMIT");
   } catch (error) {
     try {
@@ -205,3 +207,4 @@ export function captureSqliteOwnedProjectAccess(
     assertProject: (scope) => checkProject(scope.projectId),
   });
 }
+import { assertSqlitePluginProjectRunRead } from "./plugin-project-run-read.ts";

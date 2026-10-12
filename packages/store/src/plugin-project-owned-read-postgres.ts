@@ -96,6 +96,11 @@ export async function readPostgresOwnedCreativeProject<T>(
       source.snapshot.context,
       installation,
     );
+    await assertPostgresPluginProjectRunRead(
+      c,
+      input.schema,
+      source.runAuthority,
+    );
     const columns = [
       "tenant_id",
       "space_id",
@@ -172,6 +177,11 @@ export async function readPostgresOwnedCreativeProject<T>(
     }
     source.assertActive();
     input.assertOpen();
+    await assertPostgresPluginProjectRunRead(
+      c,
+      input.schema,
+      source.runAuthority,
+    );
     await c.query("COMMIT");
   } catch (error) {
     await rollbackPostgres(c);
@@ -184,3 +194,4 @@ export async function readPostgresOwnedCreativeProject<T>(
   input.assertOpen();
   return result;
 }
+import { assertPostgresPluginProjectRunRead } from "./plugin-project-run-read.ts";

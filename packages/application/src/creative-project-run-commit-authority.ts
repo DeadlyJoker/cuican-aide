@@ -1,6 +1,8 @@
+import { canonicalActionIntent } from "@crewon/contracts";
 import { createHash } from "node:crypto";
 import {
   creativeProjectOpaqueId,
+  extensionToolName,
   extensionCanonicalJson,
   parseInstalledPluginPackage,
   parsePluginSelection,
@@ -99,9 +101,33 @@ export type CreativeProjectRunCommitTransactionAuthority = Readonly<{
 }>;
 
 /** Capture data without executing getters, toJSON, or caller-controlled thenables. */
+export type CreativeProjectRunReadAuthority = Omit<
+  CreativeProjectRunCommitTransactionAuthority,
+  "version" | "operationId"
+> &
+  Readonly<{
+    version: "crewon.creative-project-run-read.v1";
+    operationId: "project_read" | "content_read";
+  }>;
+export function captureCreativeProjectRunReadAuthority(
+  input: unknown,
+): CreativeProjectRunReadAuthority {
+  return captureRunAuthority(input, "read") as CreativeProjectRunReadAuthority;
+}
 export function captureCreativeProjectRunCommitTransaction(
   input: unknown,
 ): CreativeProjectRunCommitTransactionAuthority {
+  return captureRunAuthority(
+    input,
+    "mutation",
+  ) as CreativeProjectRunCommitTransactionAuthority;
+}
+function captureRunAuthority(
+  input: unknown,
+  purpose: "read" | "mutation",
+):
+  | CreativeProjectRunReadAuthority
+  | CreativeProjectRunCommitTransactionAuthority {
   const fields = ownFields(input, [
     "version",
     "actor",
@@ -127,7 +153,10 @@ export function captureCreativeProjectRunCommitTransaction(
       : []),
   ]);
   if (
-    fields.version !== "crewon.creative-project-run-commit.v1" ||
+    fields.version !==
+      (purpose === "read"
+        ? "crewon.creative-project-run-read.v1"
+        : "crewon.creative-project-run-commit.v1") ||
     typeof fields.assertCurrent !== "function" ||
     typeof fields.commandInput !== "string" ||
     Buffer.byteLength(fields.commandInput, "utf8") > 131072
@@ -154,14 +183,17 @@ export function captureCreativeProjectRunCommitTransaction(
             sha256: projectToolAuthorityContentDigest,
           },
         );
-  const operations = [
-    "project_create",
-    "brief_append",
-    "outline_save",
-    "script_save",
-    "text_select",
-    "text_lock",
-  ];
+  const operations =
+    purpose === "read"
+      ? ["project_read", "content_read"]
+      : [
+          "project_create",
+          "brief_append",
+          "outline_save",
+          "script_save",
+          "text_select",
+          "text_lock",
+        ];
   if (
     typeof fields.operationId !== "string" ||
     !operations.includes(fields.operationId)
@@ -213,8 +245,8 @@ export function captureCreativeProjectRunCommitTransaction(
     receipt.tenantId !== actor.tenantId ||
     receipt.runId !== run.runId ||
     (receipt.status !== "dispatched" && receipt.status !== "unknownOutcome") ||
-    receipt.effect !== "mutation" ||
-    receipt.recovery !== "reconcilable" ||
+    receipt.effect !== (purpose === "read" ? "readOnly" : "mutation") ||
+    receipt.recovery !== (purpose === "read" ? "replaySafe" : "reconcilable") ||
     receipt.actionIntent === null ||
     receipt.actionIntent.policySnapshotId !== run.policySnapshotId ||
     receipt.actionIntent.workspaceBindingId !== run.workspaceBindingId ||
@@ -249,6 +281,21 @@ export function captureCreativeProjectRunCommitTransaction(
     (
       ["tenantId", "spaceId", "profileId", "pluginId", "publisherId"] as const
     ).some((key) => selection[key] !== pin[key] || pkg[key] !== pin[key])
+  )
+    denied();
+  if (
+    purpose === "read" &&
+    (stage === undefined ||
+      receipt.actionIntent?.capability !== "project.read" ||
+      receipt.actionIntent.effect !== "readOnly" ||
+      receipt.call.name !==
+        extensionToolName(pin.pluginId, fields.operationId as string) ||
+      receipt.call.inputDigest !==
+        projectToolAuthorityContentDigest(fields.commandInput) ||
+      receipt.actionDigest !==
+        projectToolAuthorityContentDigest(
+          canonicalActionIntent(receipt.actionIntent),
+        ))
   )
     denied();
   creativeProjectOpaqueId(claim.lease.ownerId);
@@ -286,7 +333,10 @@ export function captureCreativeProjectRunCommitTransaction(
     );
   }
   return Object.freeze({
-    version: "crewon.creative-project-run-commit.v1",
+    version:
+      purpose === "read"
+        ? "crewon.creative-project-run-read.v1"
+        : "crewon.creative-project-run-commit.v1",
     actor,
     run,
     receipt,
@@ -303,7 +353,9 @@ export function captureCreativeProjectRunCommitTransaction(
       const result: unknown = await current();
       if (result !== undefined) denied();
     },
-  });
+  }) as
+    | CreativeProjectRunReadAuthority
+    | CreativeProjectRunCommitTransactionAuthority;
 }
 
 function ownFields(

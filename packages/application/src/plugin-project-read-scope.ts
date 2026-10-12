@@ -11,6 +11,7 @@ import {
 import type { CreativeProjectCommitAuthority } from "./creative-project-store-port.ts";
 import {
   extensionCanonicalJson,
+  parsePluginTaskAdmissionPin,
   parsePluginProjectWorkspaceOwnerScope,
   type PluginProjectWorkspaceOwnerScope,
 } from "@crewon/domain";
@@ -25,6 +26,10 @@ import {
   parseProjectConversationsActionRequest,
   PROJECT_CONVERSATIONS_METHOD_ACTIONS,
 } from "@crewon/contracts/project-conversations";
+import {
+  captureCreativeProjectRunReadAuthority,
+  type CreativeProjectRunReadAuthority,
+} from "./creative-project-run-commit-authority.ts";
 
 export const PLUGIN_PROJECT_READ_METHODS = [
   "loadProject",
@@ -82,6 +87,7 @@ export function isPluginProjectMutationAction(action: string): boolean {
   );
 }
 type Qualified = Readonly<{
+  runAuthority?: CreativeProjectRunReadAuthority;
   purpose: "read" | "mutation";
   scope: PluginProjectWorkspaceOwnerScope;
   snapshot: Readonly<{
@@ -90,6 +96,10 @@ type Qualified = Readonly<{
     fingerprint: string;
   }>;
   request:
+    | Readonly<{
+        action: "crewon.project-run-read.v1";
+        input: Readonly<{ projectId: string; briefRevision?: number }>;
+      }>
     | ReturnType<typeof parseCreativeProjectUiActionRequest>
     | ReturnType<typeof parseProjectConversationsActionRequest>
     | Readonly<{
@@ -101,6 +111,92 @@ type Qualified = Readonly<{
   assertActive(): void;
 }>;
 const references = new WeakMap<object, Qualified>();
+
+/** Trusted Worker producer only; original Run/Tool evidence is rechecked on the Store's transaction connection. */
+export async function issuePluginProjectRunReadScope(
+  input: Readonly<{
+    authority: CreativeProjectRunReadAuthority;
+    assertActive(): void;
+  }>,
+): Promise<PluginProjectReadScope> {
+  const q = captureCreativeProjectRunReadAuthority(input.authority);
+  const active = input.assertActive.bind(input);
+  active();
+  await q.assertCurrent();
+  active();
+  const command = JSON.parse(q.commandInput) as Record<string, unknown>;
+  const projectId = q.projectStageAdmission!.projectId;
+  if (command.projectId !== projectId) unavailable();
+  let briefRevision: number | undefined;
+  if (q.operationId === "content_read") {
+    const source = command.source as Record<string, unknown>;
+    if (
+      source?.kind !== "brief" ||
+      !Number.isSafeInteger(source.briefRevision) ||
+      Number(source.briefRevision) < 1
+    )
+      unavailable();
+    briefRevision = Number(source.briefRevision);
+  }
+  const pin = parsePluginTaskAdmissionPin(
+    Object.fromEntries(
+      [
+        "tenantId",
+        "spaceId",
+        "profileId",
+        "pluginId",
+        "publisherId",
+        "version",
+        "packageDigest",
+        "selectionRevision",
+        "principalId",
+        "actorId",
+        "contributionId",
+        "action",
+        "authorityEpoch",
+      ].map((k) => [k, q.admission[k as keyof typeof q.admission]]),
+    ),
+  );
+  const request = Object.freeze({
+    action: "crewon.project-run-read.v1" as const,
+    input: Object.freeze({
+      projectId,
+      ...(briefRevision === undefined ? {} : { briefRevision }),
+    }),
+  });
+  const source: Qualified = Object.freeze({
+    purpose: "read",
+    runAuthority: q,
+    scope: parsePluginProjectWorkspaceOwnerScope({
+      ...q.actor,
+      profileId: pin.profileId,
+      pluginId: pin.pluginId,
+      publisherId: pin.publisherId,
+    }),
+    snapshot: Object.freeze({
+      pin,
+      context: Object.freeze({ selection: q.selection, package: q.package }),
+      fingerprint: extensionCanonicalJson({
+        pin,
+        request,
+        receiptId: q.receipt.receiptId,
+      }),
+    }),
+    request,
+    methods: Object.freeze(["loadProject", "loadBrief"]),
+    assertActive: active,
+    assertCurrent: async () => {
+      active();
+      await q.assertCurrent();
+      active();
+    },
+  });
+  const ref: PluginProjectReadScope = Object.freeze({
+    version: "crewon.plugin-project-read-scope.v1",
+  });
+  references.set(ref, source);
+  return ref;
+}
 
 /** Private original Conversation preparation reader. It grants neither a mutation scope nor a Run/Tool capability. */
 export function capturePluginProjectConversationReadScope(

@@ -58,6 +58,14 @@ test("project-tool composition preserves the original absent capability and capt
   assert.deepEqual(decision, { outcome: "deny", reasonCode: "owned-denial" });
   assert.deepEqual(calls, ["creativeProject:write"]);
   assert.equal(Object.isFrozen(captured.projectTools), true);
+  assert.equal(
+    captureInstalledPluginProjectToolsConfig({
+      version: "crewon.project-tools.v1",
+      authorization: { authorize: async () => ({ outcome: "allow" }) },
+      projectOwnership: "plugin-project-v1",
+    }).projectOwnership,
+    "plugin-project-v1",
+  );
 });
 test("malformed project service deployment is rejected without evaluating authority accessors", () => {
   let getters = 0;
@@ -70,9 +78,11 @@ test("malformed project service deployment is rejected without evaluating author
     { ...good, version: "2" },
     { ...good, actor: textActor },
     { ...good, authorization: {} },
+    { ...good, projectOwnership: undefined },
+    { ...good, projectOwnership: "unknown" },
     Object.assign(Object.create(good), {}),
   ];
-  for (const key of ["version", "authorization"])
+  for (const key of ["version", "authorization", "projectOwnership"])
     bad.push(
       Object.defineProperty({ ...good }, key, {
         enumerable: true,
@@ -141,6 +151,21 @@ for (const backend of ["sqlite", "postgres"] as const)
       );
       assert.equal(await f.count("project_text_artifacts"), 0);
       assert.equal(await f.count("project_text_revisions"), 0);
+      await prepareInstalledPluginProjectToolsStores({
+        store: f.first.parent,
+        config: {
+          version: "crewon.project-tools.v1",
+          projectOwnership: "plugin-project-v1",
+          authorization: {
+            authorize: async () => ({
+              outcome: "deny",
+              reasonCode: "named-denial",
+            }),
+          },
+        },
+      });
+      assert.equal(await f.count("plugin_project_metadata_owners"), 0);
+      assert.equal(await f.count("plugin_project_workspace_namespaces"), 0);
       assert.equal(await f.count("project_text_mutation_receipts"), 0);
       assert.equal(
         (

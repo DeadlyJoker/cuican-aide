@@ -200,3 +200,15 @@ Actor、profile 批准、Native policy 及 standalone policy 为明确的测试�
 5. 接通需求读取后继续接大纲、剧本、素材和保存；真实 Worker 工具执行及提交丢响应后的冷恢复必须覆盖产物与唯一回执，再做用户 Web 最小插件验收，最后更新桌面。当前中央对话的项目准备范围不授予这些能力。
 
 这对应 DSH 的稳定宿主与有生命周期的扩展边界：插件提供能力声明与业务实现，宿主保有身份、调度和资源管理；同一管理能力的隔离视图不能变成另一套数据库或文件管理器。上述步骤仍为未完成实施要求，不以负向边界回归代替完整 Worker 与产品放行。
+
+### Worker 阶段项目与需求读取：原事务内接通
+
+后续已接通上述实施要求中的项目元数据和需求分页读取。原 Worker tools 的可信部署配置可显式设置 `projectOwnership: "plugin-project-v1"`；缺省保持旧行为，未知、显式 undefined 或 accessor 字段拒绝且不执行 getter。配置捕获后沿原 composer 传给原 resident owner，并用原 Parent 初始化既有 metadata / namespace schema；不插入归属，不接管项目，不创建目录。显式模式要求真正的 text stage admission，没有 stage 则在 owner 创建前拒绝。这是可信后端配置的可选增量，没有新增插件、HTTP 或 renderer 可提交的授权字段，也没有自动启用到当前 Web/正式 App。
+
+`readProject` 和 brief 类型的 `readContent` 使用原 private dispatch、真实 Run/Tool receipt/claim/task admission、安装及 stage 签发方法受限的非序列化 read scope，再传给原 Application 与原 Store。read authority 与 mutation authority 各有严格 version/effect/recovery/operation 检查，复用身份与数据验证，不把只读证据升级为写入。receipt 的 tool name、原 command input digest、action digest 与 `project.read` 必须关联；scope 只允许请求项目与需求 revision 的 `loadProject` / `loadBrief`。不能复制 ref、保留出 invocation、换项目或借给列表查询。
+
+SQLite 和 PostgreSQL 原读取事务在数据读取前及返回前使用同一连接检查原 Run、receipt、step/attempt、task admission、安装与配置、真实 queue lease，以及持久化 stage 和当前 binding。独立 read PDP、actor 与当前 Run 状态在事务外前后复查；PG 在连接释放后才执行外部检查，避免再次借用同 pool。数据库中的租约已经过期，即使内存 claim 仍有效，也按 authorization 拒绝，不误报账号服务故障。元数据读取完成后取消 Run，后续需求与结果也被拒绝。
+
+证据来自原 Task/Run/queue/Tool writers、原 resident owner、原 Application 和真实 SQLite/PG。测试的安装/策略是明确 fixture，protected metadata owner 行是约束 fixture；不是实际安装包、完整 Worker loop 或真实模型调用。验证有效阶段读取需求 digest 和文本分页、冷 owner 读取、普通入口拒绝、复制 ref/command、换项目、出 invocation 留存、独立 PDP 撤权、内存过期与数据库单独过期、读后取消 Run；业务存储计数不增加。与原 mutation、PG 归属读取、UI 和配置迁移回归 44/44，零跳过；加强后的两个 SQL 阶段专项再次通过。Application/Store/Worker 类型及边界通过。专属 PG 停止清理，保留小体积文本证据。
+
+剩余要求保持：当前只接 `readProject` 与需求分页；大纲/剧本/素材来源、受保护写入与唯一产物回执、真实 Worker 冷恢复、用户 Web 最小插件、正式 Main 生命周期和桌面更新均未据此放行。显式模式尚未用于实际用户运行环境，不能把本地 owner 专项称为用户端插件执行完成。

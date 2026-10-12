@@ -36,13 +36,14 @@ const writeMethods = new Set<ProjectToolsMethod>([
 export async function projectToolsOwnerFixture(
   t: TestContext,
   options: {
+    backend?: "sqlite" | "postgres";
     prepareAdmission?: Parameters<typeof projectRunCommitFixture>[2];
     stageAdmission?: () => ProjectToolsServiceOwnerDependencies["stageAdmission"];
   } = {},
 ) {
   const f = await projectRunCommitFixture(
     t,
-    "sqlite",
+    options.backend ?? "sqlite",
     options.prepareAdmission,
   );
   const binding = await f.first.store.loadExtensionRunBinding({

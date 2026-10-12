@@ -192,6 +192,7 @@ export async function assertInstalledPluginProjectToolsExternalCurrent(
 
 /** Explicit trusted host deployment. It never grants project access to an ordinary chat Run. */
 export type InstalledPluginProjectToolsConfig = Readonly<{
+  projectOwnership?: "plugin-project-v1";
   version: "crewon.project-tools.v1";
   authorization: CreativeProjectAuthorizationPort;
   /** Optional package-specific deployment grant, independent of general Node execution approval. */
@@ -201,6 +202,7 @@ export type InstalledPluginProjectToolsConfig = Readonly<{
   ): Promise<void>;
 }>;
 export type InstalledPluginProjectToolsDependencies = Readonly<{
+  projectOwnership?: "plugin-project-v1";
   assetTools?(
     admission: PluginTaskAdmission,
   ): NonNullable<
@@ -236,6 +238,9 @@ export function composeInstalledPluginProjectToolsDependencies(
     digester: new NodeSha256ContentDigester(),
   };
   return Object.freeze({
+    ...(config.projectOwnership === undefined
+      ? {}
+      : { projectOwnership: config.projectOwnership }),
     projects: new CreativeProjectApplicationService({
       ...common,
       store: projects,
@@ -274,7 +279,9 @@ export function captureInstalledPluginProjectToolsConfig(
   const fields = Object.getOwnPropertyDescriptors(input);
   if (
     Reflect.ownKeys(input).length !==
-      (Object.hasOwn(input, "authorizeService") ? 3 : 2) ||
+      2 +
+        (Object.hasOwn(input, "authorizeService") ? 1 : 0) +
+        (Object.hasOwn(input, "projectOwnership") ? 1 : 0) ||
     !fields.version?.enumerable ||
     !("value" in fields.version) ||
     fields.version.value !== "crewon.project-tools.v1" ||
@@ -283,6 +290,14 @@ export function captureInstalledPluginProjectToolsConfig(
   )
     throw new Error("installed_plugin_project_tools_configuration_invalid");
   const service = fields.authorizeService;
+  const ownership = fields.projectOwnership;
+  if (
+    ownership !== undefined &&
+    (!ownership.enumerable ||
+      !("value" in ownership) ||
+      ownership.value !== "plugin-project-v1")
+  )
+    throw new Error("installed_plugin_project_tools_configuration_invalid");
   if (
     service !== undefined &&
     (!service.enumerable ||
@@ -300,6 +315,9 @@ export function captureInstalledPluginProjectToolsConfig(
       if (!("value" in method) || typeof method.value !== "function") break;
       return Object.freeze({
         version: "crewon.project-tools.v1",
+        ...(ownership === undefined
+          ? {}
+          : { projectOwnership: "plugin-project-v1" as const }),
         ...(service === undefined
           ? {}
           : {
@@ -327,7 +345,9 @@ export async function prepareInstalledPluginProjectToolsStores(
   }>,
 ): Promise<void> {
   if (input.config === undefined) return;
-  captureInstalledPluginProjectToolsConfig(input.config);
+  const config = captureInstalledPluginProjectToolsConfig(input.config);
   await input.store.creativeProjectStore().migrate();
+  if (config.projectOwnership !== undefined)
+    await input.store.migratePluginProjectOwnership();
   await input.store.projectTextStore().migrate();
 }
