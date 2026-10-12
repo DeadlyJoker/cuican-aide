@@ -187,3 +187,13 @@ CrewON 继续使用现有 Node、Run、Tool、Store 与 SSE 路径。业务插�
 真实 Web 使用原 admin、原 SQLite、原插件安装控制路由，临时批准自有 `example.minimal` / `example.publisher` / `1.0.0`，目录通过原配置文件加载器和来源注册器验证。浏览器依次完成安装（默认停用）、启用、停用、卸载。原数据库最终 selection 为 uninstalled / revision 4，安装回执一条、选择回执三条；没有业务插件恢复。原历史 Thread 与回答仍可见。回执见[实际生命周期](../output/plugin-foundation/independent-web-20261012/lifecycle-acceptance.json)，启用证据见[截图](../output/plugin-foundation/independent-web-20261012/enabled.jpg)。测试完成后撤下临时批准来源，恢复 sources/publications 均为空，保留原不可变包和卸载历史。
 
 本轮完整分发测试 2/2 通过、零跳过，plugin-tools typecheck 与 TypeScript boundary 通过。该模板没有 UI、Agent 工具和模型/供应商调用；本次只证明真实 Web 的目录发现和安装选择生命周期，不能证明 echo 服务调用、右侧插件 UI、独立项目工作空间、Agent/产物、正式 Desktop 或所有 F0–F5 验收。重启后账号曾显示自动重连，随后恢复 admin，本轮未修复或证明账号恢复延迟已消除。其他 UI/启动工作树改动保持原样，未更新正式桌面包。
+
+### 2026-10-12：先交付可见短剧页面，安装作为过渡而非持续卸除
+
+用户明确指出长期底层测试没有交付可见页面，并补充做好后应安装插件；先卸除不再解释为必须一直保持业务插件卸除。本轮用现有 47.0.0 冻结包，通过原 verifier、私有来源目录和实际 Web 设置安装并启用 AI 短剧。没有新造页面 runtime，没有重做中心 Agent，原右侧宿主面板挂载原 SDK UI。真实来源为任务自有 `output/plugin-foundation/short-drama-page-20261012/47.0.0`，包摘要 `sha256:5573dd289c61f4f3934c2a8f538beff9e8740756c410e44efeaddcd2b96321fa`，3,542,359 字节 / 18 文件。
+
+初次挂载返回 route_not_found，原因是 UI 声明恢复能力但 Web v3 没有原恢复接口配置，hydrate 在导入前失败。补充原 uiRecovery / publications / actions=[]，仅用于原 metadata 恢复，不授权生成、查询或图片选用。临时开发日志已撤销。重启前检查没有活跃 Run，原进程和端口退出后再启动，同一 admin/Thread/历史恢复。实际页面已显示首页、创作参数、创意项目和小说创建入口。小说仅打开表单，没有上传或创建；创意项目 `未来来信 · 页面验收` 通过实际 Foundation UI 保存创作想法，关闭整个插件面板再打开，原项目卡片和需求 v1 保留。中间原聊天、模型选择和输入框保留。回执见[实际页面验收](../output/plugin-foundation/short-drama-page-20261012/acceptance.json)，[首页截图](../output/plugin-foundation/short-drama-page-20261012/home.jpg)。
+
+限制须保留：当前 Web 使用原 metadata/Foundation 管理能力，未启用 owned creation，不证明项目目录隔离；项目 Agent context 未配置，页面显示暂时无法读取。创意创建后面包屑返回未导航，关闭整个面板再打开才回到首页，仍待修复。本次没有实际 Agent/工具、媒体调用或正式桌面更新，不是完整短剧或 F0–F5 放行。后续优先修复这些可见交互及原 Agent 接通，不再把所有后台基础工作完成作为出现页面的前置条件。
+
+短剧包测试 416/416、零跳过；正确筛选的 CommandWorkspace 186/186、零跳过；UI build 成功。按技能原命令 `pnpm --filter @crewon/ui test -- CommandWorkspace` 实际展开了全 UI 套件：43 失败、5268 通过、53 跳过，不能声称完整 UI 回归通过。失败含当前工作树导航/消息/创建对话框快照和运行时集成、超时，尚未逐项归因；没有改写快照或移除测试来获得放行。其他用户工作树改动保持原样，正式桌面不更新。
