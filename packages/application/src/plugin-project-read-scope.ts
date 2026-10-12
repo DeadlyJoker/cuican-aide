@@ -1,4 +1,8 @@
 import {
+  captureProjectFoundationRunReadAuthority,
+  type ProjectFoundationRunReadAuthority,
+} from "./project-foundation-run-commit-authority.ts";
+import {
   PROJECT_WORKSPACE_TARGET_ACTION,
   parseProjectWorkspaceTargetRequest,
 } from "@crewon/contracts/project-workspace-target";
@@ -88,6 +92,7 @@ export function isPluginProjectMutationAction(action: string): boolean {
 }
 type Qualified = Readonly<{
   runAuthority?: CreativeProjectRunReadAuthority;
+  foundationRunAuthority?: ProjectFoundationRunReadAuthority;
   purpose: "read" | "mutation";
   scope: PluginProjectWorkspaceOwnerScope;
   snapshot: Readonly<{
@@ -97,8 +102,15 @@ type Qualified = Readonly<{
   }>;
   request:
     | Readonly<{
-        action: "crewon.project-run-read.v1";
-        input: Readonly<{ projectId: string; briefRevision?: number }>;
+        action:
+          | "crewon.project-run-read.v1"
+          | "crewon.project-foundation-run-read.v1";
+        input: Readonly<{
+          projectId: string;
+          briefRevision?: number;
+          revision?: number;
+          digest?: string;
+        }>;
       }>
     | ReturnType<typeof parseCreativeProjectUiActionRequest>
     | ReturnType<typeof parseProjectConversationsActionRequest>
@@ -111,6 +123,99 @@ type Qualified = Readonly<{
   assertActive(): void;
 }>;
 const references = new WeakMap<object, Qualified>();
+
+/** Separate original Foundation Tool evidence; never obtained from public scope hints. */
+export async function issuePluginProjectFoundationRunReadScope(
+  input: Readonly<{
+    authority: ProjectFoundationRunReadAuthority;
+    assertActive(): void;
+  }>,
+): Promise<PluginProjectReadScope> {
+  const q = captureProjectFoundationRunReadAuthority(input.authority);
+  const methods: Record<string, readonly string[]> = {
+    foundation_scope: [],
+    foundation_read: [],
+    foundation_source: ["loadSource"],
+    foundation_source_page: ["loadSource", "readSourcePage"],
+    foundation_chapters: ["loadSource", "listSourceChapters"],
+  };
+  if (!Object.hasOwn(methods, q.operationId)) unavailable();
+  const active = input.assertActive.bind(input);
+  active();
+  await q.assertCurrent();
+  active();
+  const command = JSON.parse(q.commandInput) as Record<string, unknown>;
+  const pin = parsePluginTaskAdmissionPin(
+    Object.fromEntries(
+      [
+        "tenantId",
+        "spaceId",
+        "profileId",
+        "pluginId",
+        "publisherId",
+        "version",
+        "packageDigest",
+        "selectionRevision",
+        "principalId",
+        "actorId",
+        "contributionId",
+        "action",
+        "authorityEpoch",
+      ].map((k) => [k, q.admission[k as keyof typeof q.admission]]),
+    ),
+  );
+  const request = Object.freeze({
+    action: "crewon.project-foundation-run-read.v1" as const,
+    input: Object.freeze({
+      projectId: q.foundationAdmission.projectId,
+      ...(command.sourceRevision === undefined
+        ? {}
+        : {
+            revision: Number(command.sourceRevision),
+            digest: String(command.sourceDigest),
+          }),
+    }),
+  });
+  const ref: PluginProjectReadScope = Object.freeze({
+    version: "crewon.plugin-project-read-scope.v1",
+  });
+  references.set(
+    ref,
+    Object.freeze({
+      purpose: "read",
+      foundationRunAuthority: q,
+      scope: parsePluginProjectWorkspaceOwnerScope({
+        ...q.actor,
+        profileId: pin.profileId,
+        pluginId: pin.pluginId,
+        publisherId: pin.publisherId,
+      }),
+      snapshot: Object.freeze({
+        pin,
+        context: Object.freeze({ selection: q.selection, package: q.package }),
+        fingerprint: extensionCanonicalJson({
+          pin,
+          request,
+          receiptId: q.receipt.receiptId,
+        }),
+      }),
+      request,
+      methods: Object.freeze([
+        "loadProject",
+        "loadBrief",
+        "loadFoundation",
+        ...methods[q.operationId]!,
+      ]),
+      assertActive: active,
+      assertCurrent: async () => {
+        active();
+        await q.assertCurrent();
+        active();
+      },
+    }),
+  );
+  return ref;
+}
 
 /** Trusted Worker producer only; original Run/Tool evidence is rechecked on the Store's transaction connection. */
 export async function issuePluginProjectRunReadScope(

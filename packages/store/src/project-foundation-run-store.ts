@@ -2,11 +2,13 @@ import {
   captureSqliteCreativeProjectLegacyAccess,
   capturePostgresCreativeProjectLegacyAccess,
   lockPostgresCreativeProjectLegacySchema,
+  type CreativeProjectLegacyAccess,
+  type PostgresCreativeProjectLegacyAccess,
 } from "./creative-project-legacy-access.ts";
 import { readSqliteLegacyCreativeProject } from "./creative-project-sqlite-legacy-read.ts";
 import {
-  assertPostgresSavedSourceUploadLegacyAccess,
-  assertSqliteSavedSourceUploadLegacyAccess,
+  assertSqliteSavedSourceUploadProjectAccess,
+  assertPostgresSavedSourceUploadProjectAccess,
 } from "./project-source-upload-legacy-access.ts";
 import { foundationLegacyScope } from "./project-foundation-legacy-scope.ts";
 import { rollbackPostgres } from "./postgres-store-support.ts";
@@ -92,9 +94,11 @@ function invalid(): never {
 export function loadSqliteFoundationRun(
   db: DatabaseSync,
   input: ProjectFoundationRunLocator,
+  options?: Readonly<{ projectAccess: CreativeProjectLegacyAccess }>,
 ) {
   const scope = foundationRunLocator(input);
-  const access = captureSqliteCreativeProjectLegacyAccess(db);
+  const access =
+    options?.projectAccess ?? captureSqliteCreativeProjectLegacyAccess(db);
   if (!assertSqliteProjectFoundationRunSchema(db)) return null;
   const admission = decode(
     db
@@ -111,11 +115,15 @@ export function loadSqliteFoundationRun(
       foundationLegacyScope(admission.actor, admission.projectId),
     );
     if (admission.source !== null)
-      assertSqliteSavedSourceUploadLegacyAccess(db, {
-        owner: admission.actor,
-        projectId: admission.projectId,
-        sourceRevision: admission.source.revision,
-      });
+      assertSqliteSavedSourceUploadProjectAccess(
+        db,
+        {
+          owner: admission.actor,
+          projectId: admission.projectId,
+          sourceRevision: admission.source.revision,
+        },
+        access,
+      );
   }
   return admission;
 }
@@ -123,10 +131,13 @@ export async function loadPostgresFoundationRun(
   c: PoolClient,
   schema: string,
   input: ProjectFoundationRunLocator,
+  options?: Readonly<{ projectAccess: PostgresCreativeProjectLegacyAccess }>,
 ) {
   const scope = foundationRunLocator(input);
   await lockPostgresCreativeProjectLegacySchema(c, schema);
-  const access = await capturePostgresCreativeProjectLegacyAccess(c, schema);
+  const access =
+    options?.projectAccess ??
+    (await capturePostgresCreativeProjectLegacyAccess(c, schema));
   if (!(await assertPostgresProjectFoundationRunSchema(c, schema))) return null;
   const admission = decode(
     (
@@ -142,11 +153,16 @@ export async function loadPostgresFoundationRun(
       foundationLegacyScope(admission.actor, admission.projectId),
     );
     if (admission.source !== null)
-      await assertPostgresSavedSourceUploadLegacyAccess(c, schema, {
-        owner: admission.actor,
-        projectId: admission.projectId,
-        sourceRevision: admission.source.revision,
-      });
+      await assertPostgresSavedSourceUploadProjectAccess(
+        c,
+        schema,
+        {
+          owner: admission.actor,
+          projectId: admission.projectId,
+          sourceRevision: admission.source.revision,
+        },
+        access,
+      );
   }
   return admission;
 }

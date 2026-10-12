@@ -1,3 +1,4 @@
+import { assertSqliteFoundationRunRead } from "./project-foundation-run-read.ts";
 import type { ProjectFoundationSourceReadMethod } from "./plugin-project-foundation-read-view.ts";
 import type { DatabaseSync } from "node:sqlite";
 import type { ProjectTextReadMethod } from "./plugin-project-text-read-view.ts";
@@ -35,6 +36,8 @@ export type PluginProjectReadCall = Readonly<{
     assetId?: string;
     briefRevision?: number;
     assetRevision?: number;
+    revision?: number;
+    digest?: string;
   }>;
 }>;
 /** The same Store's original read methods, bound to a genuine source, never a new database or manager. */
@@ -85,6 +88,8 @@ export async function readSqliteOwnedCreativeProject<T>(
     "assetId",
     "briefRevision",
     "assetRevision",
+    "revision",
+    "digest",
   ] as const)
     if (
       call.query[key] !== undefined &&
@@ -112,6 +117,10 @@ export async function readSqliteOwnedCreativeProject<T>(
     );
     assertSqlitePluginProjectRunRead(db, source.runAuthority);
     const access = captureSqliteOwnedProjectAccess(db, source);
+    if (source.foundationRunAuthority !== undefined)
+      assertSqliteFoundationRunRead(db, source.foundationRunAuthority, {
+        projectAccess: access,
+      });
     source.assertActive();
     result = read(access);
     const items = Array.isArray(result)
@@ -139,6 +148,10 @@ export async function readSqliteOwnedCreativeProject<T>(
     source.assertActive();
     assertOpen();
     assertSqlitePluginProjectRunRead(db, source.runAuthority);
+    if (source.foundationRunAuthority !== undefined)
+      assertSqliteFoundationRunRead(db, source.foundationRunAuthority, {
+        projectAccess: access,
+      });
     db.exec("COMMIT");
   } catch (error) {
     try {

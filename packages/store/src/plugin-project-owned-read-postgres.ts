@@ -1,3 +1,8 @@
+import {
+  assertPostgresInstalledProjectRunExecution,
+  assertPostgresProjectRunLease,
+} from "./creative-project-run-commit-postgres.ts";
+import { assertPostgresFoundationRunRead } from "./project-foundation-run-read.ts";
 import type { Pool } from "pg";
 import {
   qualifyPluginProjectReadScope,
@@ -69,6 +74,8 @@ export async function readPostgresOwnedCreativeProject<T>(
     "assetId",
     "briefRevision",
     "assetRevision",
+    "revision",
+    "digest",
   ] as const)
     if (
       call.query[key] !== undefined &&
@@ -101,6 +108,18 @@ export async function readPostgresOwnedCreativeProject<T>(
       input.schema,
       source.runAuthority,
     );
+    if (source.foundationRunAuthority !== undefined) {
+      await assertPostgresInstalledProjectRunExecution(
+        c,
+        input.schema,
+        source.foundationRunAuthority,
+      );
+      await assertPostgresProjectRunLease(
+        c,
+        input.schema,
+        source.foundationRunAuthority,
+      );
+    }
     const columns = [
       "tenant_id",
       "space_id",
@@ -155,7 +174,15 @@ export async function readPostgresOwnedCreativeProject<T>(
       await assertProject({ projectId: call.query.projectId });
     source.assertActive();
     input.assertOpen();
-    result = await read(c, Object.freeze({ predicate, assertProject }));
+    const access = Object.freeze({ predicate, assertProject });
+    if (source.foundationRunAuthority !== undefined)
+      await assertPostgresFoundationRunRead(
+        c,
+        input.schema,
+        source.foundationRunAuthority,
+        { projectAccess: access },
+      );
+    result = await read(c, access);
     const items =
       result && typeof result === "object" && "projects" in result
         ? result.projects
@@ -182,6 +209,13 @@ export async function readPostgresOwnedCreativeProject<T>(
       input.schema,
       source.runAuthority,
     );
+    if (source.foundationRunAuthority !== undefined)
+      await assertPostgresFoundationRunRead(
+        c,
+        input.schema,
+        source.foundationRunAuthority,
+        { projectAccess: access },
+      );
     await c.query("COMMIT");
   } catch (error) {
     await rollbackPostgres(c);

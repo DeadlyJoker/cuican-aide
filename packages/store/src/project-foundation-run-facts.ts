@@ -1,11 +1,13 @@
 import {
-  assertSqliteSavedSourceUploadLegacyAccess,
-  assertPostgresSavedSourceUploadLegacyAccess,
+  assertSqliteSavedSourceUploadProjectAccess,
+  assertPostgresSavedSourceUploadProjectAccess,
 } from "./project-source-upload-legacy-access.ts";
 import {
   captureSqliteCreativeProjectLegacyAccess,
   capturePostgresCreativeProjectLegacyAccess,
   lockPostgresCreativeProjectLegacySchema,
+  type CreativeProjectLegacyAccess,
+  type PostgresCreativeProjectLegacyAccess,
 } from "./creative-project-legacy-access.ts";
 import { foundationLegacyScope } from "./project-foundation-legacy-scope.ts";
 import type { DatabaseSync } from "node:sqlite";
@@ -158,8 +160,10 @@ export function captureSqliteFoundationRunFacts(
   db: DatabaseSync,
   stage: ProjectStageRunAdmission,
   latest = false,
+  options?: Readonly<{ projectAccess: CreativeProjectLegacyAccess }>,
 ): FoundationRunFacts | null {
-  const access = captureSqliteCreativeProjectLegacyAccess(db);
+  const access =
+    options?.projectAccess ?? captureSqliteCreativeProjectLegacyAccess(db);
   access.assertProject(foundationLegacyScope(stage.actor, stage.projectId));
   if (!assertSqliteProjectFoundationSchema(db)) return null;
   const iterator = facts("", stage, latest, access.predicate);
@@ -171,11 +175,15 @@ export function captureSqliteFoundationRunFacts(
     );
   }
   if (step.value?.source != null)
-    assertSqliteSavedSourceUploadLegacyAccess(db, {
-      owner: stage.actor,
-      projectId: step.value.source.projectId,
-      sourceRevision: step.value.source.revision,
-    });
+    assertSqliteSavedSourceUploadProjectAccess(
+      db,
+      {
+        owner: stage.actor,
+        projectId: step.value.source.projectId,
+        sourceRevision: step.value.source.revision,
+      },
+      access,
+    );
   return step.value;
 }
 export async function capturePostgresFoundationRunFacts(
@@ -183,9 +191,12 @@ export async function capturePostgresFoundationRunFacts(
   schema: string,
   stage: ProjectStageRunAdmission,
   latest = false,
+  options?: Readonly<{ projectAccess: PostgresCreativeProjectLegacyAccess }>,
 ): Promise<FoundationRunFacts | null> {
   await lockPostgresCreativeProjectLegacySchema(c, schema);
-  const access = await capturePostgresCreativeProjectLegacyAccess(c, schema);
+  const access =
+    options?.projectAccess ??
+    (await capturePostgresCreativeProjectLegacyAccess(c, schema));
   await access.assertProject(
     foundationLegacyScope(stage.actor, stage.projectId),
   );
@@ -210,11 +221,16 @@ export async function capturePostgresFoundationRunFacts(
     foundationLegacyScope(stage.actor, stage.projectId),
   );
   if (step.value?.source != null)
-    await assertPostgresSavedSourceUploadLegacyAccess(c, schema, {
-      owner: stage.actor,
-      projectId: step.value.source.projectId,
-      sourceRevision: step.value.source.revision,
-    });
+    await assertPostgresSavedSourceUploadProjectAccess(
+      c,
+      schema,
+      {
+        owner: stage.actor,
+        projectId: step.value.source.projectId,
+        sourceRevision: step.value.source.revision,
+      },
+      access,
+    );
   return step.value;
 }
 export function assertFoundationRunFactsUnchanged(

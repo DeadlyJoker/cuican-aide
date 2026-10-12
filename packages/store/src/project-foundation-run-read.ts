@@ -1,3 +1,7 @@
+import type {
+  CreativeProjectLegacyAccess,
+  PostgresCreativeProjectLegacyAccess,
+} from "./creative-project-legacy-access.ts";
 import type { DatabaseSync } from "node:sqlite";
 import type { PoolClient } from "pg";
 import {
@@ -41,6 +45,7 @@ function same(actual: unknown, expected: unknown) {
 export function assertSqliteFoundationRunRead(
   db: DatabaseSync,
   input: ProjectFoundationRunReadAuthority,
+  options?: Readonly<{ projectAccess: CreativeProjectLegacyAccess }>,
 ): void {
   if (!db.isTransaction)
     throw new Error("project_foundation_run_read_transaction_required");
@@ -54,14 +59,23 @@ export function assertSqliteFoundationRunRead(
     q.projectStageAdmission,
   );
   same(
-    loadSqliteFoundationRun(db, {
-      tenantId: q.actor.tenantId,
-      spaceId: q.actor.spaceId,
-      runId: q.run.runId,
-    }),
+    loadSqliteFoundationRun(
+      db,
+      {
+        tenantId: q.actor.tenantId,
+        spaceId: q.actor.spaceId,
+        runId: q.run.runId,
+      },
+      options,
+    ),
     q.foundationAdmission,
   );
-  const facts = captureSqliteFoundationRunFacts(db, q.projectStageAdmission);
+  const facts = captureSqliteFoundationRunFacts(
+    db,
+    q.projectStageAdmission,
+    false,
+    options,
+  );
   if (facts === null)
     throw new ApplicationError(
       "authorization",
@@ -78,6 +92,7 @@ export async function assertPostgresFoundationRunRead(
   client: PoolClient,
   schema: string,
   input: ProjectFoundationRunReadAuthority,
+  options?: Readonly<{ projectAccess: PostgresCreativeProjectLegacyAccess }>,
 ): Promise<void> {
   const q = captureProjectFoundationRunReadAuthority(input);
   await assertPostgresInstalledProjectRunExecution(client, schema, q);
@@ -89,17 +104,24 @@ export async function assertPostgresFoundationRunRead(
     q.projectStageAdmission,
   );
   same(
-    await loadPostgresFoundationRun(client, schema, {
-      tenantId: q.actor.tenantId,
-      spaceId: q.actor.spaceId,
-      runId: q.run.runId,
-    }),
+    await loadPostgresFoundationRun(
+      client,
+      schema,
+      {
+        tenantId: q.actor.tenantId,
+        spaceId: q.actor.spaceId,
+        runId: q.run.runId,
+      },
+      options,
+    ),
     q.foundationAdmission,
   );
   const facts = await capturePostgresFoundationRunFacts(
     client,
     schema,
     q.projectStageAdmission,
+    false,
+    options,
   );
   if (facts === null)
     throw new ApplicationError(

@@ -12,3 +12,5 @@ export {
   captureProjectFoundationRunReadAuthority,
   type ProjectFoundationRunReadAuthority,
 } from "./project-foundation-run-commit-authority.ts";
+
+export { issuePluginProjectFoundationRunReadScope } from "./plugin-project-read-scope.ts";

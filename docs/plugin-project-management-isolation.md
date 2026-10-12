@@ -266,3 +266,13 @@ Worker 专项现在实际经过原分片上传 Application、解析器、Foundat
 具名 actual Run/Tool/sidecar fixture 验证 source operation、复制不可变数据、错误 operation/source/sidecar、read-to-write、reconciling 和 accessor 拒绝；SQLite/PostgreSQL SQL 专项验证原租约物理过期、原 binding 提交撤回，并确认成功读取不增加记录。Foundation owner fixture 扩展显式 PG backend 默认仍 SQLite。连同原方案写入/未知结果冷恢复/插件提交/paired reader 回归 56/56、零跳过；Application/Store/Worker 类型、架构边界及格式通过。证据 `output/plugin-foundation/foundation-fence-20261012/tests.txt`，专属 PG 已停止并删除。
 
 这属于独立读取授权链的校验基础，不是原运行时已经放行 protected Foundation Tool，也未联系模型。业务插件保持卸除，用户环境未启用归属模式，仍需 Store/owner 接线、protected v2、产物保存、真实 Web/Worker/正式桌面闭环。
+
+### 独立 Foundation 来源接入原 Store 事务
+
+新增 trusted-backend `issuePluginProjectFoundationRunReadScope`，沿用同一 private WeakMap。来源携带之前独立校验的 Foundation Run evidence，精确绑定 project、source revision/digest，并按原 operation 限定方法。当前签发 scope/read/source/page/chapters 五种读取；proposal/proposals 尚未接入，明确拒绝，不退回普通端口。公开 DTO、SDK、数据库表和第二份管理器均未新增。
+
+原 paired Foundation Run reader 与事实读取配方接收可选、显式的 caller-owned project access；缺省继续原 legacy 行为。原所有上传关联检查借用同一谓词。原 owned SQLite/PostgreSQL 事务在读取前、提交前使用独立 Foundation SQL fence，验证真实安装/Run/receipt/lease、配对执行凭证、当前 Foundation、会话 binding 和八项归属。PG 在项目归属锁之前取得原 Run/WorkItem 执行检查，并在最后一个 awaited SQL 检查物理租约时间；外部策略检查继续在借用连接之前和释放连接之后。
+
+SQLite/PostgreSQL 新 owned 专项：原 Task/Run/Tool/sidecar writers 在 owner 约束前准备真实小说 canonical source，随后增加具名 owner 约束。原普通 paired reader 拒绝，genuine scope 的原 Store 可读取原文页/Foundation/指定 manifest，复制 scope、错误 source revision、其他 method、跨项目、过期真实租约、已撤回 scope 拒绝，冷 Store 重读相同内容。其来源是具名 canonical fixture，不等同于这一独立 scope 已验证生产上传来源；之前的上传专项覆盖另一条原 text dependency source。原未加 owner 的 lease/binding 撤回检查仍保留。
+
+连同原 paired reader、legacy 拒绝、Text/上传依赖、未知结果/方案写入回归 41/41，零跳过；Application/Store/Worker 类型、边界及格式通过，证据 `output/plugin-foundation/foundation-scope-20261012/tests.txt`，专属 PG 已停止并删除。此处是 backend issuer + original Store 的 actual SQL 验证，尚未接入 Foundation Tools owner、Task 的 protected Foundation 准备/sidecar 创建或真实模型。方案/历史读取、protected v2、产物保存及 Web/正式桌面闭环仍待完成。业务插件保持卸除，用户环境未启用归属模式，未更新桌面。
