@@ -184,3 +184,5 @@ Actor、profile 批准、Native policy 及 standalone policy 为明确的测试�
 绑定视图仅支持当前请求的项目与需求读取；实际阶段仍经过原 binding、Thread、revision、Task admission。执行权限保留原 Host 检查，并在最后 Host await 后检查独立项目写策略；读取准备完成后撤销写权限也不能抵达任务提交边界。源码拆出原阶段来源 recipe，未另建项目或工作空间管理系统。
 
 真实 Control + verified Node package + 原 SQLite 专项验证三个入口抵达明确的任务准备边界，并拒绝错误项目、Host 撤权和来源准备后的独立写撤权；Task peer 明确为 unavailable fixture，任务 sink 在准备后主动失败，因此不证明 Run/Worker/模型执行。与原 genuine UI、Native、HTTP/目录/Thread、普通阶段与模型选择回归合计 30 个测试通过；另 14 个需要外部插件目录或 PostgreSQL 的测试跳过，不计通过。Application/Control 类型及架构边界通过。正式桌面只读确认 admin 和历史会话可见，未重打包；用户正在操作桌面，未干预其页面。受保护大纲来源、Worker/Tool/产物及真实用户 Web 的完整闭环仍待接线验收。
+
+追加验证直接使用原 ExtensionTaskApplicationService、原 SQL Task/Run writers 和 genuine UI 创建的隔离项目会话：受保护需求可准备并提交原阶段 Run，冷建 Application 后同键重放返回相同 Run 与完整 admission；复制 read scope 或改变实际请求在准入前拒绝。1/1 通过。安装快照、可信后台执行 authority 与 unmetered policy 为明确的本地 fixture，不是真实 Control→Worker→模型闭环；未访问模型网关，未安装业务插件，未更新桌面。该结果将后续验收边界推进到 Worker、Tool 与产物，并不替代它们。
