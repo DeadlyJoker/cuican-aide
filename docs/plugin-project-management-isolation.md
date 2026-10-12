@@ -306,3 +306,11 @@ SQLite/PostgreSQL actual checked Tool dispatch 专项验证已准备的真实 Ru
 SQLite/PostgreSQL actual original Task/Run/SQL 专项在具名 canonical source 与原普通创建、绑定之后加入 owner 约束：新的 protected discussion 提交一份 Foundation admission 和 mandatory marker，同 key 冷 Application 重放同 Run、同配对 digest；原普通 paired reader 仍拒绝。复制 scope 拒绝。与原 script/discussion、paired facts/legacy、lease 和 owner 回归 31/31、零跳过，证据 `output/plugin-foundation/foundation-stage-20261012/tests.txt`，专属 PG 已停止删除。之后补了 common dangling/getter options 负例，纯校验用例及 SQLite 新任务再通过，单独命令中的 PG 跳过不计入前述 31。
 
 Application/Store/Worker/Control 类型、边界和格式检查通过。此处没有实际 Node 包或模型调用，source 为具名 canonical fixture，metadata owner 仍非首个 producer 证明；protected 保存、actual runtime context 的 paired-fact setup 读取、真实 Worker 冷恢复/Web/正式桌面仍待接线验收。业务插件继续卸除，用户环境未启用新模式，未更新桌面。
+
+### runtime setup 读取前后的原身份与权限校验
+
+检查 actual InstalledPluginRunContext 发现原 Foundation sidecar 在配置/激活/安装/actor PDP 完成之前读取。为后续 protected setup source 补齐前置边界，原 context reader 将 Foundation 配对读取移至原 `#authorize` 之后，并在该 await 后再次执行原授权；`assertCurrent` 同样先授权，再读取配对事实和比较原快照。配置缺少 Foundation reader 的原流程不新增授权调用。身份、配置、Run/receipt 和组合锁检查仍沿用原实现；没有授予新的 protected 读取能力。
+
+新用例使用原 SQLite 真实 paid Task/Run/安装、具名策略与空 Foundation 配对 reader spy：deny 时 reader 调用为零；正常授权后才读取；已有快照撤权不再读；读取 await 内撤回权限不能返回新快照；记录数量不变。该 spy 专门证明调用顺序，不是真实 protected sidecar/模型/Node 包执行。与原 context/owner 回归 30/30、零跳过，Worker 类型、边界和格式检查通过。未创建额外 PG 集群、未重启用户服务。
+
+下一步仍须为已授权 runtime setup 签发仅限原 paired metadata 的 private 来源、在原 Store 消费并由 composer 接线；不能用公开 scope hints 或 Tool read grant 替代。protected 保存、真实 Worker loop/冷恢复/Web/正式桌面仍待验收。业务插件保持卸除，用户环境未启用新归属模式或更新桌面。

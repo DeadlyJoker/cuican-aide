@@ -49,7 +49,7 @@ import {
 import type { PluginToolRuntimeContext } from "@crewon/plugin-sdk/node";
 import { readProjectTextPlanRuntimeScope } from "./project-text-plan-runtime-scope.ts";
 import { readProjectStageRuntimeScope } from "./project-stage-runtime-scope.ts";
-import { readProjectFoundationRuntimeScope } from "./project-foundation-runtime-scope.ts";
+import { readFoundationForVerifiedRuntimeContext } from "./project-foundation-runtime-scope.ts";
 import type { ProjectFoundationRunAdmissionStore } from "@crewon/application";
 import type { ProjectFoundationRunAdmission } from "@crewon/domain";
 import type { PluginCompositionStore } from "@crewon/application";
@@ -178,9 +178,12 @@ export class InstalledPluginRunContext {
     const target = parseExtensionExecutionTarget(value.expectedTarget);
     const purpose = checkedPurpose(value.purpose);
     const signal = checkedSignal(value.signal);
-    const saved = await this.#read(locator, target, signal);
-    if (saved === null) return null;
-    await this.#authorize(saved, purpose, signal);
+    const base = await this.#read(locator, target, signal);
+    if (base === null) return null;
+    await this.#authorize(base, purpose, signal);
+    const saved = await this.#withFoundation(base, signal);
+    if (this.#dependencies.foundationRuns !== undefined)
+      await this.#authorize(saved, purpose, signal);
     const snapshot = Object.freeze({ context: saved.context });
     this.#snapshots.set(snapshot, saved);
     return snapshot;
@@ -201,11 +204,16 @@ export class InstalledPluginRunContext {
       previous.composition,
       previous.query === null ? purpose : "observe",
     );
-    const current = await this.#read(
+    const base = await this.#read(
       previous.binding,
       previous.binding.target,
       signal,
     );
+    if (base === null) fail("installed_plugin_context_changed");
+    await this.#authorize(base, purpose, signal);
+    const current = await this.#withFoundation(base, signal);
+    if (this.#dependencies.foundationRuns !== undefined)
+      await this.#authorize(current, purpose, signal);
     if (
       current === null ||
       extensionCanonicalJson({
@@ -218,7 +226,6 @@ export class InstalledPluginRunContext {
         })
     )
       fail("installed_plugin_context_changed");
-    await this.#authorize(current, purpose, signal);
   }
 
   /** Host-only projection from the actual persisted Run; never supplied by a plugin or copied snapshot. */
@@ -486,23 +493,6 @@ export class InstalledPluginRunContext {
       fail("installed_plugin_project_stage_mismatch");
     if (projectStage !== null && projectAssetStage !== null)
       fail("installed_plugin_asset_stage_conflict");
-    const projectFoundation =
-      this.#dependencies.foundationRuns === undefined
-        ? null
-        : await readProjectFoundationRuntimeScope({
-            foundations: this.#dependencies.foundationRuns,
-            admission,
-            binding,
-            stageAdmission: projectStage,
-            signal,
-          });
-    if (
-      projectFoundation !== null &&
-      (query !== null ||
-        (rawReceipt.turn.threadState.workspaceId ?? null) !==
-          projectFoundation.workspaceId)
-    )
-      fail("installed_plugin_project_foundation_mismatch");
     const projectTextPlan =
       this.#dependencies.plans === undefined
         ? null
@@ -603,9 +593,26 @@ export class InstalledPluginRunContext {
       projectTextPlan,
       projectAssetStage,
       projectMediaInputStage,
-      projectFoundation,
+      projectFoundation: null,
       composition,
     });
+  }
+
+  /** Installation, activation and actor PDP must succeed before the independent sidecar is read. */
+  async #withFoundation(
+    saved: SavedContext,
+    signal: AbortSignal,
+  ): Promise<SavedContext> {
+    if (this.#dependencies.foundationRuns === undefined) return saved;
+    const projectFoundation = await readFoundationForVerifiedRuntimeContext({
+      foundations: this.#dependencies.foundationRuns,
+      admission: saved.admission,
+      binding: saved.binding,
+      stageAdmission: saved.projectStage,
+      requestKind: saved.query === null ? "direct" : "query",
+      signal,
+    });
+    return Object.freeze({ ...saved, projectFoundation });
   }
 
   async #authorize(

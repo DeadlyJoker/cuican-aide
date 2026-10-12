@@ -150,3 +150,29 @@ export async function readProjectFoundationRuntimeScope(
     throw new Error("installed_plugin_project_foundation_scope_mismatch");
   return result;
 }
+
+/** Only the original context reader calls this after its activation/installation/actor PDP. */
+export async function readFoundationForVerifiedRuntimeContext(
+  input: Readonly<{
+    foundations: ProjectFoundationRunAdmissionStore | undefined;
+    admission: PluginTaskAdmission;
+    binding: ExtensionRunBinding;
+    stageAdmission: ProjectStageRunAdmission | null;
+    requestKind: "direct" | "query";
+    signal: AbortSignal;
+  }>,
+) {
+  if (input.foundations === undefined) return null;
+  const result = await readProjectFoundationRuntimeScope({
+    ...input,
+    foundations: input.foundations,
+  });
+  if (
+    result !== null &&
+    (input.requestKind === "query" ||
+      input.stageAdmission === null ||
+      result.workspaceId !== input.stageAdmission.workspaceId)
+  )
+    throw new Error("installed_plugin_project_foundation_mismatch");
+  return result;
+}
