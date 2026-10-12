@@ -1,4 +1,10 @@
 import {
+  bindProjectTextReadView,
+  readPostgresOwnedProjectText,
+} from "./plugin-project-text-read-view.ts";
+import type { PluginProjectReadCall } from "./plugin-project-owned-read-sqlite.ts";
+import type { PluginProjectReadScope } from "@crewon/application";
+import {
   listPostgresTextArtifacts,
   listPostgresTextRevisions,
 } from "./project-text-postgres-reads.ts";
@@ -101,13 +107,20 @@ export class PostgresProjectTextStore implements ProjectStructuredOutlineStore {
     this.#assertOpen = input.assertOpen;
     this.#structured = new PostgresStructuredOutlineStorage(input);
   }
-  loadStructuredRevision(input: StructuredTextInput<"loadStructuredRevision">) {
-    return this.#structured.loadRevision(input);
+  bindProjectReads(scope: PluginProjectReadScope) {
+    return bindProjectTextReadView(this, scope);
+  }
+  loadStructuredRevision(
+    input: StructuredTextInput<"loadStructuredRevision">,
+    scope?: PluginProjectReadScope,
+  ) {
+    return this.#structured.loadRevision(input, scope);
   }
   listStructuredRevisions(
     input: StructuredTextInput<"listStructuredRevisions">,
+    scope?: PluginProjectReadScope,
   ) {
-    return this.#structured.listRevisions(input);
+    return this.#structured.listRevisions(input, scope);
   }
   loadStructuredMutationReceipt(
     input: StructuredTextInput<"loadStructuredMutationReceipt">,
@@ -134,7 +147,10 @@ export class PostgresProjectTextStore implements ProjectStructuredOutlineStore {
       migrate: (client) => migratePostgresProjectText(client, this.#schema),
     });
   }
-  async loadOutline(input: TextInput<"loadOutline">) {
+  async loadOutline(
+    input: TextInput<"loadOutline">,
+    readScope?: PluginProjectReadScope,
+  ) {
     const q = textRead("loadOutline", input);
     return this.#read(
       q,
@@ -147,9 +163,15 @@ export class PostgresProjectTextStore implements ProjectStructuredOutlineStore {
           [],
         ),
       null,
+      readScope === undefined
+        ? undefined
+        : { scope: readScope, method: "loadOutline", query: q },
     );
   }
-  async loadScript(input: TextInput<"loadScript">) {
+  async loadScript(
+    input: TextInput<"loadScript">,
+    readScope?: PluginProjectReadScope,
+  ) {
     const q = textRead("loadScript", input);
     return this.#read(
       q,
@@ -162,9 +184,15 @@ export class PostgresProjectTextStore implements ProjectStructuredOutlineStore {
           [q.episodeId],
         ),
       null,
+      readScope === undefined
+        ? undefined
+        : { scope: readScope, method: "loadScript", query: q },
     );
   }
-  async loadArtifact(input: TextInput<"loadArtifact">) {
+  async loadArtifact(
+    input: TextInput<"loadArtifact">,
+    readScope?: PluginProjectReadScope,
+  ) {
     const q = textRead("loadArtifact", input);
     return this.#read(
       q,
@@ -173,9 +201,15 @@ export class PostgresProjectTextStore implements ProjectStructuredOutlineStore {
           q.artifactId,
         ]),
       null,
+      readScope === undefined
+        ? undefined
+        : { scope: readScope, method: "loadArtifact", query: q },
     );
   }
-  async loadRevision(input: TextInput<"loadRevision">) {
+  async loadRevision(
+    input: TextInput<"loadRevision">,
+    readScope?: PluginProjectReadScope,
+  ) {
     const q = textRead("loadRevision", input);
     return this.#read(
       q,
@@ -188,10 +222,14 @@ export class PostgresProjectTextStore implements ProjectStructuredOutlineStore {
           q.contentRevision,
         ),
       null,
+      readScope === undefined
+        ? undefined
+        : { scope: readScope, method: "loadRevision", query: q },
     );
   }
   async loadOutlineSourceRevision(
     input: TextInput<"loadOutlineSourceRevision">,
+    readScope?: PluginProjectReadScope,
   ) {
     const q = textRead("loadRevision", input);
     return this.#read(
@@ -205,9 +243,15 @@ export class PostgresProjectTextStore implements ProjectStructuredOutlineStore {
           q.contentRevision,
         ),
       null,
+      readScope === undefined
+        ? undefined
+        : { scope: readScope, method: "loadOutlineSourceRevision", query: q },
     );
   }
-  async listArtifacts(input: TextInput<"listArtifacts">) {
+  async listArtifacts(
+    input: TextInput<"listArtifacts">,
+    readScope?: PluginProjectReadScope,
+  ) {
     const q = textRead("listArtifacts", input);
     return this.#read(
       q,
@@ -216,9 +260,15 @@ export class PostgresProjectTextStore implements ProjectStructuredOutlineStore {
           this.#query(client, sql, values),
         ),
       { artifacts: [], nextArtifactId: null },
+      readScope === undefined
+        ? undefined
+        : { scope: readScope, method: "listArtifacts", query: q },
     );
   }
-  async listRevisions(input: TextInput<"listRevisions">) {
+  async listRevisions(
+    input: TextInput<"listRevisions">,
+    readScope?: PluginProjectReadScope,
+  ) {
     const q = textRead("listRevisions", input);
     return this.#read(
       q,
@@ -227,6 +277,9 @@ export class PostgresProjectTextStore implements ProjectStructuredOutlineStore {
           this.#query(client, sql, values),
         ),
       { revisions: [], nextContentRevision: null },
+      readScope === undefined
+        ? undefined
+        : { scope: readScope, method: "listRevisions", query: q },
     );
   }
   async loadMutationReceipt(
@@ -772,7 +825,18 @@ export class PostgresProjectTextStore implements ProjectStructuredOutlineStore {
     q: Readonly<{ owner: CreativeProjectOwnerScope; projectId: string }>,
     read: (client: PoolClient) => Promise<T>,
     absent: T,
+    call?: PluginProjectReadCall,
   ): Promise<T> {
+    if (call !== undefined)
+      return readPostgresOwnedProjectText(
+        {
+          pool: this.#pool,
+          schema: this.#schema,
+          assertOpen: this.#assertOpen,
+        },
+        call,
+        read,
+      );
     return readPostgresLegacyText(
       { pool: this.#pool, schema: this.#schema, assertOpen: this.#assertOpen },
       textLegacyScope(q.owner, q.projectId),

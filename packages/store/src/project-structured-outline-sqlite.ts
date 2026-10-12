@@ -1,3 +1,5 @@
+import { readSqliteProjectText } from "./plugin-project-text-read-view.ts";
+import type { PluginProjectReadScope } from "@crewon/application";
 import {
   beginSqlitePlanResult,
   finishSqlitePlanResult,
@@ -83,23 +85,32 @@ export class SqliteStructuredOutlineStorage {
     this.#database = input.database;
     this.#assertOpen = input.assertOpen;
   }
-  async loadRevision(input: StructuredTextInput<"loadStructuredRevision">) {
+  async loadRevision(
+    input: StructuredTextInput<"loadStructuredRevision">,
+    scope?: PluginProjectReadScope,
+  ) {
     const q = textRead("loadRevision", input);
     this.#assertOpen();
-    return readSqliteLegacyText(
-      this.#database,
-      textLegacyScope(q.owner, q.projectId),
+    return readSqliteProjectText(
+      { database: this.#database, assertOpen: this.#assertOpen },
+      q,
+      "loadStructuredRevision",
       () =>
         this.#revision(q.owner, q.projectId, q.artifactId, q.contentRevision),
       null,
+      scope,
     );
   }
-  async listRevisions(input: StructuredTextInput<"listStructuredRevisions">) {
+  async listRevisions(
+    input: StructuredTextInput<"listStructuredRevisions">,
+    scope?: PluginProjectReadScope,
+  ) {
     const q = textRead("listRevisions", input);
     this.#assertOpen();
-    return readSqliteLegacyText(
-      this.#database,
-      textLegacyScope(q.owner, q.projectId),
+    return readSqliteProjectText(
+      { database: this.#database, assertOpen: this.#assertOpen },
+      q,
+      "listStructuredRevisions",
       () => {
         const rows = this.#all(
           `SELECT c.*,p.owner_principal_id FROM project_text_revisions c ${join} WHERE ${filter} AND c.artifact_id=? AND c.content_revision>? ORDER BY c.content_revision ASC LIMIT ?`,
@@ -127,6 +138,7 @@ export class SqliteStructuredOutlineStorage {
         revisions: Object.freeze([]),
         nextContentRevision: null,
       }),
+      scope,
     );
   }
   async receipt(

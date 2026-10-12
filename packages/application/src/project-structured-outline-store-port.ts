@@ -29,6 +29,9 @@ type Selection = Omit<
 
 /** Explicit v2 storage API, sharing the original artifact slot, append-only history, CAS and receipt tables. */
 export interface ProjectStructuredOutlineStore extends ProjectTextStore {
+  bindProjectReads?(
+    scope: import("./plugin-project-read-scope.ts").PluginProjectReadScope,
+  ): ProjectStructuredOutlineStore;
   loadStructuredRevision(
     input: Parameters<ProjectTextStore["loadRevision"]>[0],
   ): Promise<StoredProjectTextArtifactRevision | null>;

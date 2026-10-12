@@ -47,6 +47,10 @@ type PreparedMutation = Readonly<{
 
 /** Independent append-only text storage. No implicit migration, model, Run or supplier access. */
 export interface ProjectTextStore {
+  /** Original manager's private per-call projection; no independent storage. */
+  bindProjectReads?(
+    scope: import("./plugin-project-read-scope.ts").PluginProjectReadScope,
+  ): ProjectTextStore;
   loadOutline(input: ProjectTextReadScope): Promise<ProjectTextArtifact | null>;
   loadScript(
     input: ProjectTextReadScope & Readonly<{ episodeId: string }>,

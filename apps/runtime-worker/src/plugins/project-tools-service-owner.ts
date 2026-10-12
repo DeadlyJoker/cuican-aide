@@ -1,3 +1,4 @@
+import { prepareProjectToolOwnedReads } from "./project-tool-owned-reads.ts";
 import {
   projectToolReadPolicyFence,
   assertProjectToolOwnershipDeployment,
@@ -88,6 +89,9 @@ export type ProjectToolsAuthorizationInvocation =
       projectId: string | null;
     }>;
 export type ProjectToolsServiceOwnerDependencies = Readonly<{
+  readServices?(
+    scope: import("@crewon/application").PluginProjectReadScope,
+  ): Pick<ProjectToolsServiceOwnerDependencies, "texts" | "outlines">;
   projectOwnership?: "plugin-project-v1";
   context: PluginToolRuntimeContext;
   admission: PluginTaskAdmission;
@@ -675,14 +679,50 @@ export class ProjectToolsServiceOwner {
         },
       };
     }
+    const evidence = this.#check(invocation);
+    const ownedReads = await prepareProjectToolOwnedReads({
+      dependencies: this.#dependencies,
+      method,
+      request,
+      evidence: {
+        actor,
+        run,
+        receipt: evidence.receipt,
+        claim: evidence.claim,
+        commandInput: invocation.command.input,
+        installation,
+        admission: this.#admission,
+        ...(this.#stage === null ? {} : { projectStageAdmission: this.#stage }),
+        selection,
+        package: pkg,
+      },
+      assertActive: () => {
+        this.#check(invocation);
+      },
+      assertCurrent: projectToolReadPolicyFence({
+        actor,
+        expectedRun: run,
+        receiptId: evidence.receipt.receiptId,
+        authorization,
+        dependencies: this.#dependencies,
+        assertActive: () => {
+          this.#check(invocation);
+        },
+        resolveActor: () =>
+          this.#actor(run.createdByActorId, authorization.signal),
+      }),
+    });
     if (this.#stage?.stage.kind === "script" && method === "readContent") {
       const read = request as ProjectToolsRequests["readContent"];
       if (read.source.kind === "text") {
-        const revision = await this.#dependencies.texts.getRevision(actor, {
-          projectId: read.projectId,
-          artifactId: read.source.artifactId,
-          contentRevision: read.source.contentRevision,
-        });
+        const revision = await ownedReads.dependencies.texts.getRevision(
+          actor,
+          {
+            projectId: read.projectId,
+            artifactId: read.source.artifactId,
+            contentRevision: read.source.contentRevision,
+          },
+        );
         if (
           revision.kind === "script" &&
           revision.episodeId !== this.#stage.stage.episodeId
@@ -691,63 +731,16 @@ export class ProjectToolsServiceOwner {
         this.#check(invocation);
       }
     }
-    let projectReadOptions;
-    if (
-      this.#dependencies.projectOwnership !== undefined &&
-      (method === "readProject" ||
-        (method === "readContent" &&
-          (request as ProjectToolsRequests["readContent"]).source.kind ===
-            "brief"))
-    ) {
-      if (
-        this.#dependencies.projectOwnership !== "plugin-project-v1" ||
-        this.#stage === null
-      )
-        denied();
-      const evidence = this.#check(invocation);
-      const readAuthority: CreativeProjectRunReadAuthority = {
-        version: "crewon.creative-project-run-read.v1",
-        actor,
-        run,
-        receipt: evidence.receipt,
-        claim: evidence.claim,
-        commandInput: invocation.command.input,
-        operationId: method === "readProject" ? "project_read" : "content_read",
-        installation,
-        admission: this.#admission,
-        projectStageAdmission: this.#stage,
-        selection,
-        package: pkg,
-        assertCurrent: projectToolReadPolicyFence({
-          actor,
-          expectedRun: run,
-          receiptId: evidence.receipt.receiptId,
-          authorization,
-          dependencies: this.#dependencies,
-          assertActive: () => {
-            this.#check(invocation);
-          },
-          resolveActor: () =>
-            this.#actor(run.createdByActorId, authorization.signal),
-        }),
-      };
-      projectReadOptions = {
-        readScope: await issuePluginProjectRunReadScope({
-          authority: readAuthority,
-          assertActive: () => {
-            this.#check(invocation);
-          },
-        }),
-      };
-    }
     const value = await invokeProjectTool({
-      dependencies: this.#dependencies,
+      dependencies: ownedReads.dependencies,
       method,
       request,
       actor,
       idempotencyKey: key,
       authority,
-      ...(projectReadOptions === undefined ? {} : { projectReadOptions }),
+      ...(ownedReads.projectReadOptions === undefined
+        ? {}
+        : { projectReadOptions: ownedReads.projectReadOptions }),
     });
     await this.#dependencies.authorizeCurrent(authorization);
     await this.#actor(run.createdByActorId, authorization.signal);
@@ -795,7 +788,3 @@ export class ProjectToolsServiceOwner {
 function denied(): never {
   throw new Error("plugin_project_tools_authority_denied");
 }
-import {
-  issuePluginProjectRunReadScope,
-  type CreativeProjectRunReadAuthority,
-} from "@crewon/application/host-project-workspaces";

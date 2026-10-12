@@ -1,4 +1,10 @@
 import {
+  bindProjectTextReadView,
+  readSqliteOwnedProjectText,
+} from "./plugin-project-text-read-view.ts";
+import type { PluginProjectReadCall } from "./plugin-project-owned-read-sqlite.ts";
+import type { PluginProjectReadScope } from "@crewon/application";
+import {
   assertSqliteLegacyTextReceipt,
   readSqliteLegacyText,
   textLegacyResultScope,
@@ -96,13 +102,20 @@ export class SqliteProjectTextStore implements ProjectStructuredOutlineStore {
     this.#assertOpen = input.assertOpen;
     this.#structured = new SqliteStructuredOutlineStorage(input);
   }
-  loadStructuredRevision(input: StructuredTextInput<"loadStructuredRevision">) {
-    return this.#structured.loadRevision(input);
+  bindProjectReads(scope: PluginProjectReadScope) {
+    return bindProjectTextReadView(this, scope);
+  }
+  loadStructuredRevision(
+    input: StructuredTextInput<"loadStructuredRevision">,
+    scope?: PluginProjectReadScope,
+  ) {
+    return this.#structured.loadRevision(input, scope);
   }
   listStructuredRevisions(
     input: StructuredTextInput<"listStructuredRevisions">,
+    scope?: PluginProjectReadScope,
   ) {
-    return this.#structured.listRevisions(input);
+    return this.#structured.listRevisions(input, scope);
   }
   loadStructuredMutationReceipt(
     input: StructuredTextInput<"loadStructuredMutationReceipt">,
@@ -129,7 +142,10 @@ export class SqliteProjectTextStore implements ProjectStructuredOutlineStore {
       migrate: () => migrateSqliteProjectText(this.#database),
     });
   }
-  async loadOutline(input: TextInput<"loadOutline">) {
+  async loadOutline(
+    input: TextInput<"loadOutline">,
+    readScope?: PluginProjectReadScope,
+  ) {
     const q = textRead("loadOutline", input);
     return this.#read(
       q,
@@ -141,9 +157,15 @@ export class SqliteProjectTextStore implements ProjectStructuredOutlineStore {
           [],
         ),
       null,
+      readScope === undefined
+        ? undefined
+        : { scope: readScope, method: "loadOutline", query: q },
     );
   }
-  async loadScript(input: TextInput<"loadScript">) {
+  async loadScript(
+    input: TextInput<"loadScript">,
+    readScope?: PluginProjectReadScope,
+  ) {
     const q = textRead("loadScript", input);
     return this.#read(
       q,
@@ -155,28 +177,44 @@ export class SqliteProjectTextStore implements ProjectStructuredOutlineStore {
           [q.episodeId],
         ),
       null,
+      readScope === undefined
+        ? undefined
+        : { scope: readScope, method: "loadScript", query: q },
     );
   }
-  async loadArtifact(input: TextInput<"loadArtifact">) {
+  async loadArtifact(
+    input: TextInput<"loadArtifact">,
+    readScope?: PluginProjectReadScope,
+  ) {
     const q = textRead("loadArtifact", input);
     return this.#read(
       q,
       () =>
         this.#artifact(q.owner, q.projectId, "c.artifact_id=?", [q.artifactId]),
       null,
+      readScope === undefined
+        ? undefined
+        : { scope: readScope, method: "loadArtifact", query: q },
     );
   }
-  async loadRevision(input: TextInput<"loadRevision">) {
+  async loadRevision(
+    input: TextInput<"loadRevision">,
+    readScope?: PluginProjectReadScope,
+  ) {
     const q = textRead("loadRevision", input);
     return this.#read(
       q,
       () =>
         this.#revision(q.owner, q.projectId, q.artifactId, q.contentRevision),
       null,
+      readScope === undefined
+        ? undefined
+        : { scope: readScope, method: "loadRevision", query: q },
     );
   }
   async loadOutlineSourceRevision(
     input: TextInput<"loadOutlineSourceRevision">,
+    readScope?: PluginProjectReadScope,
   ) {
     const q = textRead("loadRevision", input);
     return this.#read(
@@ -189,9 +227,15 @@ export class SqliteProjectTextStore implements ProjectStructuredOutlineStore {
           q.contentRevision,
         ),
       null,
+      readScope === undefined
+        ? undefined
+        : { scope: readScope, method: "loadOutlineSourceRevision", query: q },
     );
   }
-  async listArtifacts(input: TextInput<"listArtifacts">) {
+  async listArtifacts(
+    input: TextInput<"listArtifacts">,
+    readScope?: PluginProjectReadScope,
+  ) {
     const q = textRead("listArtifacts", input);
     return this.#read(
       q,
@@ -216,9 +260,15 @@ export class SqliteProjectTextStore implements ProjectStructuredOutlineStore {
         });
       },
       { artifacts: [], nextArtifactId: null },
+      readScope === undefined
+        ? undefined
+        : { scope: readScope, method: "listArtifacts", query: q },
     );
   }
-  async listRevisions(input: TextInput<"listRevisions">) {
+  async listRevisions(
+    input: TextInput<"listRevisions">,
+    readScope?: PluginProjectReadScope,
+  ) {
     const q = textRead("listRevisions", input);
     return this.#read(
       q,
@@ -246,6 +296,9 @@ export class SqliteProjectTextStore implements ProjectStructuredOutlineStore {
         });
       },
       { revisions: [], nextContentRevision: null },
+      readScope === undefined
+        ? undefined
+        : { scope: readScope, method: "listRevisions", query: q },
     );
   }
   async loadMutationReceipt(
@@ -702,8 +755,15 @@ export class SqliteProjectTextStore implements ProjectStructuredOutlineStore {
     q: Readonly<{ owner: CreativeProjectOwnerScope; projectId: string }>,
     read: () => T,
     absent: T,
-  ): T {
+    call?: PluginProjectReadCall,
+  ): T | Promise<T> {
     this.#assertOpen();
+    if (call !== undefined)
+      return readSqliteOwnedProjectText(
+        { database: this.#database, assertOpen: this.#assertOpen },
+        call,
+        read,
+      );
     return readSqliteLegacyText(
       this.#database,
       textLegacyScope(q.owner, q.projectId),

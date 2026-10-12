@@ -1,3 +1,5 @@
+import { readPostgresProjectText } from "./plugin-project-text-read-view.ts";
+import type { PluginProjectReadScope } from "@crewon/application";
 import {
   beginPostgresPlanResult,
   finishPostgresPlanResult,
@@ -88,11 +90,15 @@ export class PostgresStructuredOutlineStorage {
     this.#prefix = `${creativeProjectSchemaName(input.schema)}.`;
     this.#assertOpen = input.assertOpen;
   }
-  async loadRevision(input: StructuredTextInput<"loadStructuredRevision">) {
+  async loadRevision(
+    input: StructuredTextInput<"loadStructuredRevision">,
+    scope?: PluginProjectReadScope,
+  ) {
     const q = textRead("loadRevision", input);
-    return readPostgresLegacyText(
+    return readPostgresProjectText(
       { pool: this.#pool, schema: this.#schema, assertOpen: this.#assertOpen },
-      textLegacyScope(q.owner, q.projectId),
+      q,
+      "loadStructuredRevision",
       (client) =>
         this.#revision(
           client,
@@ -102,13 +108,18 @@ export class PostgresStructuredOutlineStorage {
           q.contentRevision,
         ),
       null,
+      scope,
     );
   }
-  async listRevisions(input: StructuredTextInput<"listStructuredRevisions">) {
+  async listRevisions(
+    input: StructuredTextInput<"listStructuredRevisions">,
+    scope?: PluginProjectReadScope,
+  ) {
     const q = textRead("listRevisions", input);
-    return readPostgresLegacyText(
+    return readPostgresProjectText(
       { pool: this.#pool, schema: this.#schema, assertOpen: this.#assertOpen },
-      textLegacyScope(q.owner, q.projectId),
+      q,
+      "listStructuredRevisions",
       async (client) => {
         const rows = (
           await this.#query(
@@ -139,6 +150,7 @@ export class PostgresStructuredOutlineStorage {
         revisions: Object.freeze([]),
         nextContentRevision: null,
       }),
+      scope,
     );
   }
   async receipt(

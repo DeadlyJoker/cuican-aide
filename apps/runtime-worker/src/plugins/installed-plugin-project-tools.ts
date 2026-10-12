@@ -1,3 +1,4 @@
+import { projectToolBoundReadServices } from "./project-tool-bound-read-services.ts";
 import {
   CreativeProjectApplicationService,
   ProjectTextApplicationService,
@@ -202,6 +203,7 @@ export type InstalledPluginProjectToolsConfig = Readonly<{
   ): Promise<void>;
 }>;
 export type InstalledPluginProjectToolsDependencies = Readonly<{
+  readServices?: import("./project-tools-service-owner.ts").ProjectToolsServiceOwnerDependencies["readServices"];
   projectOwnership?: "plugin-project-v1";
   assetTools?(
     admission: PluginTaskAdmission,
@@ -238,6 +240,11 @@ export function composeInstalledPluginProjectToolsDependencies(
     digester: new NodeSha256ContentDigester(),
   };
   return Object.freeze({
+    readServices: (scope) =>
+      projectToolBoundReadServices(
+        { store: input.store, authorization: config.authorization },
+        scope,
+      ),
     ...(config.projectOwnership === undefined
       ? {}
       : { projectOwnership: config.projectOwnership }),

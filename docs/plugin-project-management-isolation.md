@@ -212,3 +212,13 @@ SQLite 和 PostgreSQL 原读取事务在数据读取前及返回前使用同一�
 证据来自原 Task/Run/queue/Tool writers、原 resident owner、原 Application 和真实 SQLite/PG。测试的安装/策略是明确 fixture，protected metadata owner 行是约束 fixture；不是实际安装包、完整 Worker loop 或真实模型调用。验证有效阶段读取需求 digest 和文本分页、冷 owner 读取、普通入口拒绝、复制 ref/command、换项目、出 invocation 留存、独立 PDP 撤权、内存过期与数据库单独过期、读后取消 Run；业务存储计数不增加。与原 mutation、PG 归属读取、UI 和配置迁移回归 44/44，零跳过；加强后的两个 SQL 阶段专项再次通过。Application/Store/Worker 类型及边界通过。专属 PG 停止清理，保留小体积文本证据。
 
 剩余要求保持：当前只接 `readProject` 与需求分页；大纲/剧本/素材来源、受保护写入与唯一产物回执、真实 Worker 冷恢复、用户 Web 最小插件、正式 Main 生命周期和桌面更新均未据此放行。显式模式尚未用于实际用户运行环境，不能把本地 owner 专项称为用户端插件执行完成。
+
+### 原文本管理器读取视图与 Worker 接线
+
+后续将原 Text/StructuredOutline Store 增加可选的 `bindProjectReads` 端口。视图绑定 genuine opaque scope，沿用同一连接/pool、原 SQL、原 decoder 和分页；没有第二份文本存储或独立管理器。读取前后使用上一节的原 installation、Run、receipt、step/attempt、claim、stage 与八项 owner 校验。原普通端口继续隐藏或拒绝 protected 项目；新视图的回执与修改端口均拒绝，不能把读取范围升级为产物保存授权。
+
+原 Worker owner 现在为 `outline_read`、`script_read`、文本 `content_read` 和 `text_history` 签发同一 Run read 来源。原 composer 提供私有 per-call `readServices`，构造原 Application 的只读投影；原项目读取、需求依赖、文本/结构化历史共享原源数据和独立 PDP。投影在 Application 授权入口再次比对当前 actor、资源 tenant/space 与项目，并只允许 read 操作；不允许换身份或借用这份只读服务执行写入。来源是项目级范围，内部可读同项目的必要依赖，原 public Tool 请求、原 stage/episode 检查和正文分页仍限定实际请求与返回；它不是任意 artifact/跨项目的公开凭证。新方法位于原接口的可选端口，旧部署缺省行为不变，显式归属模式缺少端口拒绝，不退回普通文本读取。
+
+真实 Task/Run/queue/Tool writers 与原 Worker owner 在 SQLite/PostgreSQL 验证原 v1 大纲、已选剧本、immutable 正文分页、两版本 history 的单条分页、冷 owner 重读，并拒绝 copied command、替换项目、撤权、换 actor 与 read-to-write。产物由原人工命令在加入 owner 约束前保存，metadata owner 行仍是明确的负向约束 fixture；这不证明受保护写入或首次归属创建。回归 60/60 加混合 v1/v2、普通入口隔离、原 structured Application/Store 38/38，均零跳过，两个新 SQL 专项在两组中重叠；加强后的 actor/write 边界两项再通过。Application/Store/Worker 类型与架构边界通过。证据保留在 `output/plugin-foundation/text-read-20261012`；专属 PG 已停止清理，不留下中间数据库。
+
+仍未完成：新投影尚无 Foundation/小说原文的归属读取授权，受保护 v2 大纲需要它时明确报 `plugin_project_foundation_read_binding_unavailable`，不声称原始小说不存在或降级成 v1。普通 v1/v2 兼容已回归，但不能等同于 protected v2 完整通过。素材、文本/素材产物保存、stage 准备的大纲依赖、真正 Worker loop/模型/断线冷恢复和实际用户 Web/桌面闭环继续待接线验收。业务插件保持卸除，正式运行环境没有启用此次显式模式，也没有更新桌面。

@@ -1,4 +1,5 @@
 import type { DatabaseSync } from "node:sqlite";
+import type { ProjectTextReadMethod } from "./plugin-project-text-read-view.ts";
 import {
   qualifyPluginProjectReadScope,
   PLUGIN_PROJECT_READ_METHODS,
@@ -23,7 +24,7 @@ import type { CreativeProjectLegacyAccess } from "./creative-project-legacy-acce
 
 export type PluginProjectReadCall = Readonly<{
   scope: PluginProjectReadScope | PluginProjectMutationScope;
-  method: PluginProjectReadMethod;
+  method: PluginProjectReadMethod | ProjectTextReadMethod;
   query: Readonly<{
     owner: CreativeProjectOwnerScope;
     projectId?: string;

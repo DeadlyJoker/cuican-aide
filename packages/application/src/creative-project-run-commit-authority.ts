@@ -107,7 +107,12 @@ export type CreativeProjectRunReadAuthority = Omit<
 > &
   Readonly<{
     version: "crewon.creative-project-run-read.v1";
-    operationId: "project_read" | "content_read";
+    operationId:
+      | "project_read"
+      | "content_read"
+      | "outline_read"
+      | "script_read"
+      | "text_history";
   }>;
 export function captureCreativeProjectRunReadAuthority(
   input: unknown,
@@ -185,7 +190,13 @@ function captureRunAuthority(
         );
   const operations =
     purpose === "read"
-      ? ["project_read", "content_read"]
+      ? [
+          "project_read",
+          "content_read",
+          "outline_read",
+          "script_read",
+          "text_history",
+        ]
       : [
           "project_create",
           "brief_append",

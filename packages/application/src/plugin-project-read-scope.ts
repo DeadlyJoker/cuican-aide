@@ -128,15 +128,19 @@ export async function issuePluginProjectRunReadScope(
   const projectId = q.projectStageAdmission!.projectId;
   if (command.projectId !== projectId) unavailable();
   let briefRevision: number | undefined;
+  const contentSource = command.source as Record<string, unknown> | undefined;
+  const textRead =
+    q.operationId !== "project_read" &&
+    (q.operationId !== "content_read" || contentSource?.kind === "text");
   if (q.operationId === "content_read") {
-    const source = command.source as Record<string, unknown>;
-    if (
-      source?.kind !== "brief" ||
-      !Number.isSafeInteger(source.briefRevision) ||
-      Number(source.briefRevision) < 1
-    )
-      unavailable();
-    briefRevision = Number(source.briefRevision);
+    if (contentSource?.kind === "brief") {
+      if (
+        !Number.isSafeInteger(contentSource.briefRevision) ||
+        Number(contentSource.briefRevision) < 1
+      )
+        unavailable();
+      briefRevision = Number(contentSource.briefRevision);
+    } else if (contentSource?.kind !== "text") unavailable();
   }
   const pin = parsePluginTaskAdmissionPin(
     Object.fromEntries(
@@ -183,7 +187,23 @@ export async function issuePluginProjectRunReadScope(
       }),
     }),
     request,
-    methods: Object.freeze(["loadProject", "loadBrief"]),
+    methods: Object.freeze([
+      "loadProject",
+      "loadBrief",
+      ...(textRead
+        ? [
+            "loadOutline",
+            "loadScript",
+            "loadArtifact",
+            "loadRevision",
+            "loadOutlineSourceRevision",
+            "loadStructuredRevision",
+          ]
+        : []),
+      ...(q.operationId === "text_history"
+        ? ["listRevisions", "listStructuredRevisions"]
+        : []),
+    ]),
     assertActive: active,
     assertCurrent: async () => {
       active();
