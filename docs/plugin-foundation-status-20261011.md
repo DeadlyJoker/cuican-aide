@@ -165,3 +165,17 @@ CrewON 继续使用现有 Node、Run、Tool、Store 与 SSE 路径。业务插�
 网关 `/v1/models` 用配置中的 API Key 实际返回 8 个模型，模型选择器逐项与这个列表一致，没有 `gpt-5.5`，没有网站管理登录。当前源码的两个真实独立会话分别选 `gpt-6.1-sol` / `gpt-6-astra`，各完成 30 行，调用实际重叠 14571 ms，各为一个 Run、一次 completed 模型调用观察和一份最终回答。A / B 分别有 788 / 814 条输出 delta，执行 45619 / 67531 ms。B 刷新调用前显示正在执行和 12 条内容，刷新后同一 Thread、同一模型恢复为 30 条；未重建 Run。浏览器刷新请求发出的精确时间以及恢复后的中间增量没有埋点，不宣称它们已单独证明。回执见[当前运行基线验收](../output/plugin-foundation/current-web-20261012/acceptance.json)，截图见[完整 B 结果](../output/plugin-foundation/current-web-20261012/b-completed.png)。调用观察数不能代替网关或渠道内部物理重试的证据。
 
 性能边界：A / B 的宿主 dispatch 均为 0–1 ms，HTTP headers 分别约 9.2 / 32.4 秒，首次文本约 12.1 / 34.1 秒。本轮说明这部分等待发生在尚未收到 HTTP 响应的阶段，并非前端拿到内容后缓存 32 秒；不能由此区分 DNS/TLS、网关或渠道，也不能把旧外部断流根因销账。当前已通过的基础回归与尚未完成的插件/Native/Agent 项目执行验收继续分开。业务插件保持卸除，正式 App 未更新；两张临时验收页已关闭，当前 Web 服务继续运行。仅留这次约 22 MiB 的数据库备份用于回滚，没有复制旧桌面包或完整 profile。当前工作树其他 UI/启动修改保留，源码状态不冒充纯净提交。
+
+### 2026-10-12：实际 Web 的空插件管理配置与基础回归
+
+在实际浏览器设置页发现 `此环境尚未开启插件管理`。现有 Web launcher 没有原 `CREWON_DESKTOP_PLUGIN_BOOTSTRAP_PATH`，所以先前真实基本聊天不能证明插件管理已装配。本轮为同一原 Web SQLite 显式准备 v1 空 bootstrap：sources/publications 均为零、没有业务插件，继续原身份、PIM 账号、两个 Worker、API Key 模型配置与原数据目录，不启用 legacy extensions 单 Worker 拓扑、不建立独立账号服务。
+
+停机前真实 Run 均为终态，原线程/消息/Run 数为 16/53/29，并用 Node SQLite backup 留一份约 24 MiB 的回滚备份。按原 launcher 的 SIGTERM/子进程清理完成退出并确认三个端口已释放后重新启动。首次文件加载拒绝，因为新临时配置的父目录是 0755；配置 DTO 的内存解析成功不等于真实文件校验。将任务自有目录按原规则设为 0700、配置文件保持 0600，并通过原 `loadDesktopPluginConfiguration` 的真实叶子/祖先校验后启动成功。没有放宽规则。首次失败的 Control 和全部自有子进程已终止，未在旧服务仍活跃时重复启动。
+
+实际 Web 自动恢复原 admin、旧 Thread 和历史输出；设置/工具与扩展能正常显示 `暂无可安装的插件` 与 `还没有安装插件`，不再显示未开启。数据库真实 installed packages/profile selections 均为零；未安装或启用测试/业务插件。未认证直接 GET plugin sources 返回 401。回执见[空管理配置及真实回归](../output/plugin-foundation/web-management-20261012/acceptance.json)，截图见[管理页](../output/plugin-foundation/web-management-20261012/plugin-management.jpg)。这是原 standalone 开发身份下的 Web 管理装配证明，不是生产多租户策略或独立插件生命周期验收。
+
+原历史 Thread 的 `gpt-6-astra` 实际短调用完成，原 SQLite 保存一个模型调用观察、8 个 output delta、一份最终回答；点击发送后的首次 UI 观察已显示用户消息与执行状态。刷新后原 admin、同一 Thread、模型和新回答恢复，没有再生成；总数变为 16/55/30，恰好一条新 Run 与两条消息。新回复[截图](../output/plugin-foundation/web-management-20261012/chat-completed.jpg)。调用观察为一次 completed，不代表网关/渠道内部没有重试。
+
+新运行从 started 到 completed 为 43199 ms、首段 41866 ms；HTTP dispatch 2 ms、headers 38858 ms、firstByte 38862 ms。仍有响应头前等待，不能声称延迟已解决，也不能从这一个样本确定 DNS/TLS、网关或渠道。原调用参数未改成 Lite，也未进行任意限速/降级。其他模型、长流、断网、停止和插件 Agent 执行未在本轮重测。
+
+当前实际 Web 由 `output/plugin-foundation/web-management-20261012/start.mjs` 持有，统一源码工作树保持 `incremental-extensions`，权威 head 为 `2c4497541`，其他 UI/启动工作树改动保留，不能冒充纯净发布包。浏览器旧标签在停机期间进入连接错误页，工具无法在该错误页直接恢复；同一浏览器新验收标签正常进入原会话，留作可查看页面。Mac 当前锁屏，本轮未更新正式 App。F0–F5 的完整安装、项目目录/Agent/产物和正式产品验收仍未完成。
