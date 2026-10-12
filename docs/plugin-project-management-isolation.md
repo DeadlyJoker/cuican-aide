@@ -176,3 +176,11 @@ Control main 在实际 Native 与显式 owned Conversation 配置同时存在时
 新增联合专项使用真实包字节、真实 HTTP listener、真正的 Control 子进程、Main 原 Native authority/IPC、原文件系统 allocator/registry、原 Parent namespace 登记、原 workspace admission 和原 Thread。两个项目及归属均通过 installed UI 创建，没有手工插入 metadata 或 namespace；只读目标查询不分配目录。各项目的目录和 Thread 不同，同键重放不增加目录或 Thread，错误项目目标在分配前拒绝，原普通工作空间仍活动，普通 Thread API 不能借用 protected 项目目录。最终两个 metadata、两个 namespace、两个 Thread，零 Run；不把元数据会话建立当作 Agent 执行授权。
 
 Actor、profile 批准、Native policy 及 standalone policy 为明确的测试配置，Control 通过原 standalone composer 接入真实 observer；它不是正式 RuntimeSupervisor/Main 生命周期、真实用户 Web 或模型/Tool/产物执行验收。SQLite/PostgreSQL 的幂等、旧项目全字段保留且不回填、坏 namespace 使新增 metadata DDL 回滚及 closed 生命周期，加原启动、installed HTTP 和生产 PG pool1 冷兼容专项 15/15；原 admission/配置/Control 来源回归 13/13，均零跳过。Store/Control 类型、边界通过。专属 PostgreSQL 已停止清理。业务插件与正式 App 保持原状态；现有 Web 是此前已启动的基线，未据此宣称新插件功能已在该页面开放。
+
+### 原中央对话与阶段执行的项目读取接线
+
+发现另一个真实缺口：创建隔离项目和 Thread 后，原 `startProjectTurn` / `startStage` 的项目与需求准备仍调用普通 Store，受保护项目会按原隔离规则拒绝读取。现在由原 Control 执行签发在真实安装包的 `project.execute` Node action 与 submit 授权通过后登记进程私有来源；原 authenticated request owner、当前 actor/profile、安装、Host 生命周期和精确阶段请求共同取得原 Store 的只读绑定视图。中央对话、HTTP 阶段执行和真实 UI 阶段操作均复用这一路径，不伪造 UI invocation，不增加公开 owner、路径或可序列化权限字段。未配置归属模式保持原读取方式，未知模式拒绝。
+
+绑定视图仅支持当前请求的项目与需求读取；实际阶段仍经过原 binding、Thread、revision、Task admission。执行权限保留原 Host 检查，并在最后 Host await 后检查独立项目写策略；读取准备完成后撤销写权限也不能抵达任务提交边界。源码拆出原阶段来源 recipe，未另建项目或工作空间管理系统。
+
+真实 Control + verified Node package + 原 SQLite 专项验证三个入口抵达明确的任务准备边界，并拒绝错误项目、Host 撤权和来源准备后的独立写撤权；Task peer 明确为 unavailable fixture，任务 sink 在准备后主动失败，因此不证明 Run/Worker/模型执行。与原 genuine UI、Native、HTTP/目录/Thread、普通阶段与模型选择回归合计 30 个测试通过；另 14 个需要外部插件目录或 PostgreSQL 的测试跳过，不计通过。Application/Control 类型及架构边界通过。正式桌面只读确认 admin 和历史会话可见，未重打包；用户正在操作桌面，未干预其页面。受保护大纲来源、Worker/Tool/产物及真实用户 Web 的完整闭环仍待接线验收。

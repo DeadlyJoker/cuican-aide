@@ -24,18 +24,20 @@ import { SqliteRunStore } from "@crewon/store";
 
 // Original SQLite and genuinely verified installed bytes. Identity/policy are named local fixtures;
 // this proves Control issuance, not HTTP, Native directory allocation or provider execution.
-for (const { native, targetDeclared } of [
-  { native: false, targetDeclared: true },
-  { native: true, targetDeclared: true },
-  { native: true, targetDeclared: false },
+for (const { native, targetDeclared, executeCase } of [
+  { native: false, targetDeclared: true, executeCase: false },
+  { native: false, targetDeclared: true, executeCase: true },
+  { native: true, targetDeclared: true, executeCase: false },
+  { native: true, targetDeclared: false, executeCase: false },
 ])
-  test(`actual Control owner target declaration ${targetDeclared} ${native ? "qualifies Native provisioning before an unavailable observer" : "qualifies installed UI project conversation reads and rejects changed bytes and identity before replay"}`, async (t) => {
+  test(`actual Control owner stage preparation ${executeCase} target declaration ${targetDeclared} ${native ? "qualifies Native provisioning before an unavailable observer" : "qualifies installed UI project conversation reads and rejects changed bytes and identity before replay"}`, async (t) => {
     const f = await ownedConversationSqlFixture(t, "sqlite");
     const parent = f.parent;
     assert.ok(parent instanceof SqliteRunStore);
     const { source, pkg, publications } = await conversationPackage(t, {
       version: "9.0.0",
       ...(targetDeclared ? { workspaceTargetProtocol: "1" as const } : {}),
+      ...(executeCase ? { projectAction: true as const } : {}),
       pluginId: f.installation.pluginId,
       publisherId: f.installation.publisherId,
     });
@@ -77,6 +79,8 @@ for (const { native, targetDeclared } of [
     const state = {
       identityAllowed: true,
       policyAllowed: true,
+      projectWriteAllowed: true,
+      withdrawAfterSources: false,
       taskCalls: 0,
       observed: 0,
     };
@@ -90,6 +94,30 @@ for (const { native, targetDeclared } of [
         },
       },
       profiles,
+      ...(executeCase
+        ? {
+            taskPeer: {
+              prepare: async () => ({
+                catalog: { list: () => [], resolve: () => null },
+                host: {
+                  taskAdmissionMode: () => "installed" as const,
+                  validateConfiguration: async () => {},
+                  evaluate: async () => ({
+                    outcome: "unavailable" as const,
+                    reasonCode: "extension_runtime_unavailable" as const,
+                  }),
+                },
+                pluginQueryHost: {
+                  resolveRegistration: async () => null,
+                  evaluate: async () => ({
+                    outcome: "unavailable" as const,
+                    reasonCode: "extension_runtime_unavailable" as const,
+                  }),
+                },
+              }),
+            },
+          }
+        : {}),
     });
     const authorization = {
       async authorize() {
@@ -109,12 +137,26 @@ for (const { native, targetDeclared } of [
       projects: f.parent.creativeProjectStore(),
       texts: f.parent.projectTextStore(),
       tasks: {
-        async createProjectConversationTurnFromHost() {
+        async createProjectConversationTurnFromHost(_actor, _command, task) {
+          if (executeCase) {
+            assert.ok("prepareSources" in task);
+            const sources = await task.prepareSources();
+            assert.ok(sources.brief);
+            if (state.withdrawAfterSources) state.projectWriteAllowed = false;
+            await task.authority.assertCurrent();
+            state.taskCalls++;
+            throw new Error("named_stage_task_boundary_reached");
+          }
           state.taskCalls++;
           throw new Error("metadata_must_not_execute_run");
         },
       },
-      authorization: { authorize: async () => ({ outcome: "allow" }) },
+      authorization: {
+        authorize: async ({ action }) =>
+          action !== "creativeProject:write" || state.projectWriteAllowed
+            ? { outcome: "allow" }
+            : { outcome: "deny", reasonCode: "named_project_write_withdrawn" },
+      },
       clock,
       ids: { nextId: () => randomUUID() },
       digester: f.digester,
@@ -313,6 +355,61 @@ for (const { native, targetDeclared } of [
       threadId: first.binding.threadId,
     })) as { binding: unknown };
     assert.deepEqual(opened.binding, first.binding);
+    if (executeCase) {
+      const httpRequest = {
+        method: "POST",
+        url: "/named/project-stage",
+        remoteAddress: "127.0.0.1",
+        headers: {},
+      };
+      const stageInput = {
+        projectId: input.projectId,
+        threadId: first.binding.threadId,
+        expectedThreadRevision: 1,
+        expectedBindingRevision: 1,
+        stage: { kind: "discussion" as const },
+        content: "原中央对话的受保护项目准备",
+        idempotencyKey: "owned-stage-prepare",
+      };
+      const reached = (error: unknown) => {
+        let item = error;
+        for (let i = 0; item instanceof Error && i < 8; i++, item = item.cause)
+          if (item.message === "named_stage_task_boundary_reached") return true;
+        return false;
+      };
+      await assert.rejects(
+        owner.startStage(httpRequest, f.actor, stageInput),
+        reached,
+      );
+      await assert.rejects(
+        owner.startBoundTurn(httpRequest, f.actor, {
+          threadId: first.binding.threadId,
+          expectedThreadRevision: 1,
+          content: stageInput.content,
+          idempotencyKey: "owned-bound-prepare",
+        }),
+        reached,
+      );
+      assert.equal(state.taskCalls, 2);
+      await assert.rejects(invoke(actions.startStage, stageInput), reached);
+      assert.equal(state.taskCalls, 3);
+      await assert.rejects(
+        owner.startStage(httpRequest, f.actor, {
+          ...stageInput,
+          projectId: randomUUID(),
+        }),
+      );
+      assert.equal(state.taskCalls, 3);
+      state.policyAllowed = false;
+      await assert.rejects(owner.startStage(httpRequest, f.actor, stageInput));
+      assert.equal(state.taskCalls, 3);
+      state.policyAllowed = true;
+      state.withdrawAfterSources = true;
+      await assert.rejects(owner.startStage(httpRequest, f.actor, stageInput));
+      assert.equal(state.taskCalls, 3);
+      state.withdrawAfterSources = false;
+      state.projectWriteAllowed = true;
+    }
     state.identityAllowed = false;
     await assert.rejects(
       invoke(actions.createConversation, input),
@@ -363,5 +460,5 @@ for (const { native, targetDeclared } of [
         e instanceof ApplicationError &&
         e.code === "project_conversation_unavailable",
     );
-    assert.equal(state.taskCalls, 0);
+    assert.equal(state.taskCalls, executeCase ? 3 : 0);
   });

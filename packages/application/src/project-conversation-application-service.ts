@@ -1,6 +1,7 @@
+import { projectConversationStageSources } from "./project-conversation-stage-sources.ts";
+import { conversationStageProjectReader } from "./project-conversation-stage-project-reader.ts";
 import { resolvePluginProjectWorkspaceTarget } from "./plugin-project-workspace-target.ts";
 import { projectConversationCall } from "./project-conversation-call.ts";
-import { readProjectOutlineSourceRevision } from "./project-outline-source-reader.ts";
 import { captureProjectConversationDependencies } from "./project-conversation-dependencies.ts";
 import {
   PROJECT_CONVERSATION_ASSOCIATION_ACTIONS as associationActions,
@@ -22,10 +23,7 @@ import {
   extensionCanonicalJson,
   parseProjectConversationBinding,
   parseProjectStageRunAdmission,
-  parseProjectBriefRevision,
-  parseProjectTextArtifact,
   type ProjectConversationBinding,
-  type ProjectStageSources,
 } from "@crewon/domain";
 import type {
   ProjectConversationCommitAuthority,
@@ -567,12 +565,14 @@ export class ProjectConversationApplicationService {
     actor: ActorContext,
     input: ProjectConversationsRequests["startStage"],
     authority: ProjectConversationCommitAuthority,
+    options: Readonly<{ projectReadScope?: PluginProjectReadScope }> = {},
   ): Promise<ProjectConversationsResponses["startStage"]> {
     const request = this.#input("startStage", input),
       { result, stageAdmission } = await this.startProjectTurn(
         actor,
         request,
         authority,
+        options,
       );
     return this.#output("startStage", request, {
       disposition: result.run.disposition,
@@ -588,12 +588,30 @@ export class ProjectConversationApplicationService {
     actor: ActorContext,
     input: ProjectConversationsRequests["startStage"],
     authority: ProjectConversationCommitAuthority,
+    options: Readonly<{ projectReadScope?: PluginProjectReadScope }> = {},
   ) {
     return projectConversationCall(async () => {
       const request = this.#input("startStage", input),
-        q = await this.#authority(actor, authority),
+        captured = await this.#authority(actor, authority),
+        q =
+          options.projectReadScope === undefined
+            ? captured
+            : ownedConversationProjectWriteAuthority({
+                authority: captured,
+                projectId: request.projectId,
+                authorization: this.#d.authorization,
+              }),
+        projects =
+          options.projectReadScope === undefined
+            ? this.#d.projects
+            : await conversationStageProjectReader({
+                scope: options.projectReadScope,
+                authority: q,
+                request,
+                projects: this.#d.projects,
+              }),
         b = await this.#binding(q, request.projectId, request.threadId);
-      await this.#project(q, b.projectId, "creativeProject:write");
+      await this.#project(q, b.projectId, "creativeProject:write", projects);
       await this.#thread(q, b);
       if (b.revision !== request.expectedBindingRevision)
         throw new ApplicationError(
@@ -613,7 +631,15 @@ export class ProjectConversationApplicationService {
           {
             binding: b,
             stage: request.stage,
-            prepareSources: () => this.#sources(q, request),
+            prepareSources: () =>
+              projectConversationStageSources({
+                authority: q,
+                request,
+                projects,
+                texts: this.#d.texts,
+                authorization: this.#d.authorization,
+                digester: this.#d.digester,
+              }),
             content: request.content,
             ...(request.modelId === undefined
               ? {}
@@ -624,85 +650,6 @@ export class ProjectConversationApplicationService {
         );
 
       return { result, stageAdmission };
-    });
-  }
-  async #sources(
-    q: ProjectConversationCommitAuthority,
-    request: ProjectConversationsRequests["startStage"],
-  ): Promise<ProjectStageSources> {
-    const owner = creativeOwner(q.actor),
-      project = await this.#project(
-        q,
-        request.projectId,
-        "creativeProject:read",
-      ),
-      stage = request.stage,
-      briefRevision =
-        stage.kind === "discussion"
-          ? project.latestBriefRevision
-          : stage.briefRevision;
-    const raw =
-        briefRevision === 0
-          ? null
-          : await this.#d.projects.loadBrief({
-              owner,
-              projectId: request.projectId,
-              briefRevision,
-            }),
-      brief =
-        raw === null ? null : parseProjectBriefRevision(raw, this.#d.digester);
-    if (stage.kind !== "discussion" && brief === null)
-      throw new ApplicationError(
-        "notFound",
-        "creative_project_brief_not_found",
-      );
-    let outline: ProjectStageSources["outline"] = null;
-    if (stage.kind === "script" && stage.outline !== null) {
-      const rawHead = await this.#d.texts.loadOutline({
-        owner,
-        projectId: request.projectId,
-      });
-      if (rawHead === null)
-        throw new ApplicationError(
-          "notFound",
-          "project_text_artifact_not_found",
-        );
-      const head = parseProjectTextArtifact(rawHead);
-      if (head.artifactId !== stage.outline.artifactId)
-        throw new ApplicationError(
-          "conflict",
-          "project_text_dependencies_stale",
-        );
-      const revision = await readProjectOutlineSourceRevision({
-        store: this.#d.texts,
-        scope: { owner, projectId: request.projectId },
-        project,
-        artifact: head,
-        contentRevision: stage.outline.contentRevision,
-        digester: this.#d.digester,
-      });
-      if (
-        revision.kind !== "outline" ||
-        !revision.content.episodes.some(
-          (e) => e.episodeId === stage.episodeId,
-        ) ||
-        revision.brief.briefRevision !== stage.briefRevision
-      )
-        throw new ApplicationError(
-          "conflict",
-          "project_text_dependencies_stale",
-        );
-      outline = { ...stage.outline, contentDigest: revision.contentDigest };
-    }
-    return Object.freeze({
-      brief:
-        brief === null
-          ? null
-          : Object.freeze({
-              briefRevision: brief.briefRevision,
-              contentDigest: brief.contentDigest,
-            }),
-      outline,
     });
   }
   async #authority(

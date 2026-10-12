@@ -1,4 +1,9 @@
 import {
+  registerProjectConversationExecutionAuthority,
+  bindDerivedProjectConversationExecutionAuthority,
+  projectConversationStageReadOptions,
+} from "./project-conversation-execution-read-scope.ts";
+import {
   PROJECT_WORKSPACE_TARGET_ACTION,
   parseProjectWorkspaceTargetRequest,
   parseProjectWorkspaceTargetResponse,
@@ -269,7 +274,17 @@ export class ProjectConversationControlOwner {
             binding.currentInstallation,
             "execute",
           );
-          return this.#input.service.startStage(actor, parsed.input, authority);
+          return this.#input.service.startStage(
+            actor,
+            parsed.input,
+            authority,
+            await projectConversationStageReadOptions({
+              projectOwnership: this.#input.projectOwnership,
+              requests: this.#input.requests,
+              authority,
+              request: parsed.input,
+            }),
+          );
         },
       ),
     );
@@ -299,18 +314,25 @@ export class ProjectConversationControlOwner {
             binding.currentInstallation,
             "execute",
           );
+          const stageRequest = {
+            projectId: binding.projectId,
+            threadId: input.threadId,
+            expectedThreadRevision: input.expectedThreadRevision,
+            expectedBindingRevision: binding.revision,
+            content: input.content,
+            idempotencyKey: input.idempotencyKey,
+            stage: { kind: "discussion" as const },
+          };
           return this.#input.service.startProjectTurn(
             actor,
-            {
-              projectId: binding.projectId,
-              threadId: input.threadId,
-              expectedThreadRevision: input.expectedThreadRevision,
-              expectedBindingRevision: binding.revision,
-              content: input.content,
-              idempotencyKey: input.idempotencyKey,
-              stage: { kind: "discussion" },
-            },
+            stageRequest,
             authority,
+            await projectConversationStageReadOptions({
+              projectOwnership: this.#input.projectOwnership,
+              requests: this.#input.requests,
+              authority,
+              request: stageRequest,
+            }),
           );
         },
       ),
@@ -375,6 +397,11 @@ export class ProjectConversationControlOwner {
         live.assertActive();
       },
     });
+    if (request.action === actions.startStage)
+      bindDerivedProjectConversationExecutionAuthority(
+        authority,
+        actualAuthority,
+      );
     const output = parsePluginUiJsonValue(
       request.action === PROJECT_WORKSPACE_TARGET_ACTION
         ? parseProjectWorkspaceTargetResponse(
@@ -438,7 +465,7 @@ export class ProjectConversationControlOwner {
       );
     }
   }
-  #dispatch(
+  async #dispatch(
     actor: ActorContext,
     request:
       | ProjectConversationsUiActionRequest
@@ -488,7 +515,17 @@ export class ProjectConversationControlOwner {
       case actions.setState:
         return service.setState(actor, request.input, authority);
       case actions.startStage:
-        return service.startStage(actor, request.input, authority);
+        return service.startStage(
+          actor,
+          request.input,
+          authority,
+          await projectConversationStageReadOptions({
+            projectOwnership: this.#input.projectOwnership,
+            requests: this.#input.requests,
+            authority,
+            request: request.input,
+          }),
+        );
     }
   }
   async #binding(actor: ActorContext, threadId: string) {
@@ -736,8 +773,8 @@ export class ProjectConversationControlOwner {
       });
       await assertCurrent();
     }
-    return Object.freeze({
-      version: "crewon.project-conversation-commit.v1",
+    const issued = Object.freeze({
+      version: "crewon.project-conversation-commit.v1" as const,
       actor,
       installation: expected,
       selection,
@@ -747,6 +784,9 @@ export class ProjectConversationControlOwner {
       assertTransactionCurrent,
       assertActive,
     });
+    if (purpose === "execute")
+      registerProjectConversationExecutionAuthority(issued);
+    return issued;
   }
   #track<T>(work: () => Promise<T>): Promise<T> {
     this.assertAvailable();

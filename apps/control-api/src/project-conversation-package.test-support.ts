@@ -11,6 +11,7 @@ export async function conversationPackage(
     beforeCleanup?: () => Promise<void>;
     associationProtocol?: "1";
     workspaceTargetProtocol?: "1";
+    projectAction?: true;
     version?: string;
     pluginId?: string;
     publisherId?: string;
@@ -47,12 +48,17 @@ export async function conversationPackage(
     }),
   );
   const node = Buffer.from(
-    `import {appendFileSync} from 'node:fs';appendFileSync(${JSON.stringify(source.marker)},'node-import\\n');export default {apiVersion:'crewon.plugin-host.v1',pluginId:${JSON.stringify(raw.pluginId)},setup(){return {dispose(){}};}};`,
+    options.projectAction
+      ? `export default {apiVersion:"crewon.plugin-host.v1",pluginId:${JSON.stringify(raw.pluginId)},setup(ctx){const lease=ctx.services.provide(${JSON.stringify(raw.pluginId)},"1",{actions:[{contributionId:"workbench",action:"project.execute",kind:"generateTask"}],invoke(){throw Error("named-declaration-not-model-runtime");}});return {dispose(){lease.dispose();}};}};`
+      : `import {appendFileSync} from 'node:fs';appendFileSync(${JSON.stringify(source.marker)},'node-import\\n');export default {apiVersion:'crewon.plugin-host.v1',pluginId:${JSON.stringify(raw.pluginId)},setup(){return {dispose(){}};}};`,
   );
   const descriptor = {
     ...raw.descriptor,
     entrypoints: { node: "node.mjs", ui: raw.descriptor.entrypoints.ui },
     businessManifestPath: "business.json",
+    ...(options.projectAction
+      ? { provides: [{ service: raw.pluginId, apiVersion: "1" }] }
+      : {}),
     files: [
       ...raw.descriptor.files,
       ...[

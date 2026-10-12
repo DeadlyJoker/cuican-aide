@@ -84,7 +84,11 @@ export function isPluginProjectMutationAction(action: string): boolean {
 type Qualified = Readonly<{
   purpose: "read" | "mutation";
   scope: PluginProjectWorkspaceOwnerScope;
-  snapshot: ReturnType<typeof committedTaskContext>;
+  snapshot: Readonly<{
+    pin: ReturnType<typeof committedTaskContext>["pin"];
+    context: Pick<PluginUiActionContext, "selection" | "package">;
+    fingerprint: string;
+  }>;
   request:
     | ReturnType<typeof parseCreativeProjectUiActionRequest>
     | ReturnType<typeof parseProjectConversationsActionRequest>
@@ -268,6 +272,59 @@ function captureScope(
   references.set(ref, source);
   return ref;
 }
+/** Trusted backend issuer after actual Control execution admission. Identification/installation snapshot only, never a fabricated UI invocation or Run grant. */
+export function issuePluginProjectConversationStageReadScope(
+  input: Readonly<{
+    authority: ProjectConversationCommitAuthority;
+    request: Extract<
+      ReturnType<typeof parseProjectConversationsActionRequest>,
+      { action: typeof PROJECT_CONVERSATIONS_METHOD_ACTIONS.startStage }
+    >;
+  }>,
+): PluginProjectReadScope {
+  const authority = captureProjectConversationAuthority(input.authority);
+  const request = parseProjectConversationsActionRequest(input.request);
+  if (request.action !== PROJECT_CONVERSATIONS_METHOD_ACTIONS.startStage)
+    unavailable();
+  const pin = authority.pin;
+  const snapshot = Object.freeze({
+    pin,
+    context: Object.freeze({
+      selection: authority.selection,
+      package: authority.package,
+    }),
+    fingerprint: extensionCanonicalJson({ pin, request }),
+  });
+  const ref: PluginProjectReadScope = Object.freeze({
+    version: "crewon.plugin-project-read-scope.v1",
+  });
+  const source: Qualified = Object.freeze({
+    purpose: "read",
+    scope: parsePluginProjectWorkspaceOwnerScope({
+      tenantId: pin.tenantId,
+      spaceId: pin.spaceId,
+      principalId: pin.principalId,
+      actorId: pin.actorId,
+      profileId: pin.profileId,
+      pluginId: pin.pluginId,
+      publisherId: pin.publisherId,
+    }),
+    snapshot,
+    request,
+    methods: Object.freeze(["loadProject", "loadBrief"]),
+    assertActive: authority.assertActive,
+    assertCurrent: async () => {
+      authority.assertActive();
+      await authority.assertCurrent();
+      await authority.assertTransactionCurrent();
+      authority.assertActive();
+    },
+  });
+  source.assertActive();
+  references.set(ref, source);
+  return ref;
+}
+
 export function qualifyPluginProjectReadScope(
   ref: PluginProjectReadScope | PluginProjectMutationScope,
 ): Qualified {
