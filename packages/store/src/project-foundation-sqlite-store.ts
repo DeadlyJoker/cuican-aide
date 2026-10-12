@@ -280,22 +280,35 @@ export class SqliteProjectFoundationStore implements ProjectFoundationStore {
           read,
         );
   }
-  async loadProposal(input: Input<"loadProposal">) {
+  async loadProposal(
+    input: Input<"loadProposal">,
+    scope?: PluginProjectReadScope,
+  ) {
     this.#assertOpen();
     const q = foundationRead(input, ["revision"]);
     const revision = creativeProjectRevision(q.revision);
-    return readSqliteLegacyCreativeProject(this.#database, (access) => {
+    const read = (access: CreativeProjectLegacyAccess) => {
       access.assertProject(foundationLegacyScope(q.owner, q.projectId));
       if (!assertSqliteProjectFoundationSchema(this.#database)) return null;
       return this.#proposal(q.owner, q.projectId, revision, access);
-    });
+    };
+    return scope === undefined
+      ? readSqliteLegacyCreativeProject(this.#database, read)
+      : readSqliteOwnedProjectFoundation(
+          { database: this.#database, assertOpen: this.#assertOpen },
+          { scope, method: "loadProposal", query: q },
+          read,
+        );
   }
-  async listProposals(input: Input<"listProposals">) {
+  async listProposals(
+    input: Input<"listProposals">,
+    scope?: PluginProjectReadScope,
+  ) {
     this.#assertOpen();
     const q = foundationRead(input, ["afterRevision", "limit"]);
     const after = creativeProjectRevision(q.afterRevision, { minimum: 0 });
     const limit = foundationLimit(q.limit);
-    return readSqliteLegacyCreativeProject(this.#database, (access) => {
+    const read = (access: CreativeProjectLegacyAccess) => {
       access.assertProject(foundationLegacyScope(q.owner, q.projectId));
       if (!assertSqliteProjectFoundationSchema(this.#database))
         return Object.freeze({
@@ -316,7 +329,14 @@ export class SqliteProjectFoundationStore implements ProjectFoundationStore {
         proposals,
         nextRevision: rows.length > limit ? proposals.at(-1)!.revision : null,
       });
-    });
+    };
+    return scope === undefined
+      ? readSqliteLegacyCreativeProject(this.#database, read)
+      : readSqliteOwnedProjectFoundation(
+          { database: this.#database, assertOpen: this.#assertOpen },
+          { scope, method: "listProposals", query: q },
+          read,
+        );
   }
   async loadMutationReceipt(
     input: Input<"loadMutationReceipt">,

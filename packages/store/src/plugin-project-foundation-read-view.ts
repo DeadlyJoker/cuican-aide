@@ -17,6 +17,8 @@ export const PROJECT_FOUNDATION_SOURCE_READ_METHODS = [
   "loadSource",
   "readSourcePage",
   "listSourceChapters",
+  "loadProposal",
+  "listProposals",
 ] as const;
 export type ProjectFoundationSourceReadMethod =
   (typeof PROJECT_FOUNDATION_SOURCE_READ_METHODS)[number];
@@ -26,7 +28,7 @@ type Readers = {
     scope?: PluginProjectReadScope,
   ) => ReturnType<ProjectFoundationStore[K]>;
 };
-/** The original immutable dependency readers only; no upload, proposal or mutation port. */
+/** The original immutable dependency readers only; no upload or mutation port. */
 export function bindProjectFoundationReadView(
   store: Readers,
   scope: PluginProjectReadScope,
@@ -44,6 +46,12 @@ export function bindProjectFoundationReadView(
     listSourceChapters: (
       input: Parameters<ProjectFoundationStore["listSourceChapters"]>[0],
     ) => store.listSourceChapters(input, scope),
+    loadProposal: (
+      input: Parameters<ProjectFoundationStore["loadProposal"]>[0],
+    ) => store.loadProposal(input, scope),
+    listProposals: (
+      input: Parameters<ProjectFoundationStore["listProposals"]>[0],
+    ) => store.listProposals(input, scope),
   });
 }
 export async function readSqliteOwnedProjectFoundation<T>(

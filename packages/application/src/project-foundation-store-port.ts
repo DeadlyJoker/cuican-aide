@@ -106,7 +106,12 @@ export interface ProjectFoundationStore {
     scope: PluginProjectReadScope,
   ): Pick<
     ProjectFoundationStore,
-    "loadFoundation" | "loadSource" | "readSourcePage" | "listSourceChapters"
+    | "loadFoundation"
+    | "loadSource"
+    | "readSourcePage"
+    | "listSourceChapters"
+    | "loadProposal"
+    | "listProposals"
   >;
   /** null means no attached foundation; it never creates or classifies an existing project. */
   loadFoundation(

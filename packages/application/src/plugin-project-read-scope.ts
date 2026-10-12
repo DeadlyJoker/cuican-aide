@@ -138,6 +138,8 @@ export async function issuePluginProjectFoundationRunReadScope(
     foundation_source: ["loadSource"],
     foundation_source_page: ["loadSource", "readSourcePage"],
     foundation_chapters: ["loadSource", "listSourceChapters"],
+    foundation_proposal: ["loadProposal"],
+    foundation_proposals: ["listProposals"],
   };
   if (!Object.hasOwn(methods, q.operationId)) unavailable();
   const active = input.assertActive.bind(input);
@@ -168,6 +170,12 @@ export async function issuePluginProjectFoundationRunReadScope(
     action: "crewon.project-foundation-run-read.v1" as const,
     input: Object.freeze({
       projectId: q.foundationAdmission.projectId,
+      ...(command.proposalRevision === undefined
+        ? {}
+        : {
+            revision: Number(command.proposalRevision),
+            digest: String(command.proposalDigest),
+          }),
       ...(command.sourceRevision === undefined
         ? {}
         : {

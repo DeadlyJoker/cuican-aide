@@ -276,17 +276,24 @@ export class PostgresProjectFoundationStore implements ProjectFoundationStore {
     );
   }
 
-  async loadProposal(input: Input<"loadProposal">) {
+  async loadProposal(
+    input: Input<"loadProposal">,
+    scope?: PluginProjectReadScope,
+  ) {
     const query = foundationRead(input, ["revision"]);
     const revision = creativeProjectRevision(query.revision);
     return this.#read(
       query,
       (client, access) => this.#proposal(client, query, revision, access),
       null,
+      { method: "loadProposal", scope },
     );
   }
 
-  async listProposals(input: Input<"listProposals">) {
+  async listProposals(
+    input: Input<"listProposals">,
+    scope?: PluginProjectReadScope,
+  ) {
     const query = foundationRead(input, ["afterRevision", "limit"]);
     const afterRevision = creativeProjectRevision(query.afterRevision, {
       minimum: 0,
@@ -323,6 +330,7 @@ export class PostgresProjectFoundationStore implements ProjectFoundationStore {
         proposals: Object.freeze([]) as readonly ProjectProposal[],
         nextRevision: null,
       }),
+      { method: "listProposals", scope },
     );
   }
 

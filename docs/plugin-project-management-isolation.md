@@ -276,3 +276,13 @@ Worker 专项现在实际经过原分片上传 Application、解析器、Foundat
 SQLite/PostgreSQL 新 owned 专项：原 Task/Run/Tool/sidecar writers 在 owner 约束前准备真实小说 canonical source，随后增加具名 owner 约束。原普通 paired reader 拒绝，genuine scope 的原 Store 可读取原文页/Foundation/指定 manifest，复制 scope、错误 source revision、其他 method、跨项目、过期真实租约、已撤回 scope 拒绝，冷 Store 重读相同内容。其来源是具名 canonical fixture，不等同于这一独立 scope 已验证生产上传来源；之前的上传专项覆盖另一条原 text dependency source。原未加 owner 的 lease/binding 撤回检查仍保留。
 
 连同原 paired reader、legacy 拒绝、Text/上传依赖、未知结果/方案写入回归 41/41，零跳过；Application/Store/Worker 类型、边界及格式通过，证据 `output/plugin-foundation/foundation-scope-20261012/tests.txt`，专属 PG 已停止并删除。此处是 backend issuer + original Store 的 actual SQL 验证，尚未接入 Foundation Tools owner、Task 的 protected Foundation 准备/sidecar 创建或真实模型。方案/历史读取、protected v2、产物保存及 Web/正式桌面闭环仍待完成。业务插件保持卸除，用户环境未启用归属模式，未更新桌面。
+
+### 方案与历史读取以及原 Foundation 服务只读投影
+
+原 Foundation Store 的同一绑定视图增加 `loadProposal`/`listProposals`，两种 independent Foundation read operation 在同一 issuer 中各自限定方法；指定方案 revision 与命令绑定。原 Text dependency source 未追加方案读取授权，不能借旧 text operation 获取这两个端口。原 SQL、decoder、分页与 immutable history 不变，没有公开数据形状、SDK 或新数据库变更。
+
+新增 private `projectFoundationBoundReadService`：要求独立 Foundation source，在原 parent 的原 Creative/Foundation Store 上构造原 Application 的 per-call 只读投影。独立 actor/resource/project/PDP 检查沿用原服务，mutation receipt、所有保存端口以及 upload preparation 都拒绝。没有第二份项目管理或存储。它尚未被原 Foundation Tools owner/composer 调用，不等同于实际 Worker 对 protected Foundation Tool 的执行已经完成。
+
+SQLite/PostgreSQL 专项使用原人工命令保存两个 immutable 方案后加入具名 owner 约束，实际 Run/Tool/sidecar evidence 签发新来源；原普通 Application 拒绝，投影读取指定原文、单条版本历史和下页，拒绝错误 revision/方法、换 actor、读转写和撤权，写拒绝后记录数量保持原样。指定版本与 method 拒绝检查原 wrapper 的具体 cause，未把任意异常算作权限验证。方案由原人工端口在 owner 约束前保存，不证明 protected 保存；基础小说仍是具名 canonical source fixture，没有模型执行。
+
+与原 Source/Store/owner/legacy 回归 66/66、零跳过；Application/Store/Worker 类型、边界与格式通过。证据 `output/plugin-foundation/proposal-read-20261012/tests.txt`，专属 PG 已停止删除。独立读取端口已齐，下一步仍是原 owner/composer 接线、protected Task sidecar 准备、保存及真实 Web/Worker/正式桌面闭环。业务插件保持卸除，用户环境未启用归属模式或更新桌面。

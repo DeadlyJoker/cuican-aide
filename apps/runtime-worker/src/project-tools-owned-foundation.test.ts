@@ -182,6 +182,8 @@ for (const backend of ["sqlite", "postgres"] as const)
                 "loadSource",
                 "readSourcePage",
                 "listSourceChapters",
+                "loadProposal",
+                "listProposals",
               ]);
               const services = projectToolBoundReadServices(
                 {
