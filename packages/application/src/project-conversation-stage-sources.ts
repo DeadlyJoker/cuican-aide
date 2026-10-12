@@ -10,6 +10,7 @@ import { ApplicationError } from "./application-error.ts";
 import { creativeOwner } from "./creative-project-application-support.ts";
 import { readConversationProject } from "./project-conversation-project-reader.ts";
 import { readProjectOutlineSourceRevision } from "./project-outline-source-reader.ts";
+import type { PluginProjectReadScope } from "./plugin-project-read-scope.ts";
 /** Original source recipe; callers lend the exact current project reader. */
 export async function projectConversationStageSources(
   input: Readonly<{
@@ -20,6 +21,7 @@ export async function projectConversationStageSources(
       "loadProject" | "loadBrief"
     >;
     texts: ProjectConversationApplicationDependencies["texts"];
+    projectReadScope?: PluginProjectReadScope;
     authorization: ProjectConversationApplicationDependencies["authorization"];
     digester: ProjectConversationApplicationDependencies["digester"];
   }>,
@@ -52,7 +54,19 @@ export async function projectConversationStageSources(
     throw new ApplicationError("notFound", "creative_project_brief_not_found");
   let outline: ProjectStageSources["outline"] = null;
   if (stage.kind === "script" && stage.outline !== null) {
-    const rawHead = await input.texts.loadOutline({
+    if (
+      input.projectReadScope !== undefined &&
+      input.texts.bindProjectReads === undefined
+    )
+      throw new ApplicationError(
+        "authorization",
+        "project_conversation_text_read_binding_unavailable",
+      );
+    const texts =
+      input.projectReadScope === undefined
+        ? input.texts
+        : input.texts.bindProjectReads!(input.projectReadScope);
+    const rawHead = await texts.loadOutline({
       owner,
       projectId: request.projectId,
     });
@@ -62,7 +76,7 @@ export async function projectConversationStageSources(
     if (head.artifactId !== stage.outline.artifactId)
       throw new ApplicationError("conflict", "project_text_dependencies_stale");
     const revision = await readProjectOutlineSourceRevision({
-      store: input.texts,
+      store: texts,
       scope: { owner, projectId: request.projectId },
       project,
       artifact: head,

@@ -23,6 +23,7 @@ export function captureProjectConversationDependencies(
   )
     fail();
   const binding = optionalMethod(d.projects, "bindProjectReads");
+  const textBinding = optionalMethod(d.texts, "bindProjectReads");
   return Object.freeze({
     conversations: Object.freeze({
       version: "crewon.project-conversation-binding.v1",
@@ -50,6 +51,7 @@ export function captureProjectConversationDependencies(
       loadBrief: method(d.projects, "loadBrief"),
     }),
     texts: Object.freeze({
+      ...(textBinding === undefined ? {} : { bindProjectReads: textBinding }),
       ...captureProjectOutlineSourceReader(d.texts),
       loadOutline: method(d.texts, "loadOutline"),
       loadRevision: method(d.texts, "loadRevision"),

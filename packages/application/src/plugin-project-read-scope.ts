@@ -427,7 +427,14 @@ export function issuePluginProjectConversationStageReadScope(
     }),
     snapshot,
     request,
-    methods: Object.freeze(["loadProject", "loadBrief"]),
+    methods: Object.freeze([
+      "loadProject",
+      "loadBrief",
+      ...(request.input.stage.kind === "script" &&
+      request.input.stage.outline !== null
+        ? ["loadOutline", "loadOutlineSourceRevision", "loadRevision"]
+        : []),
+    ]),
     assertActive: authority.assertActive,
     assertCurrent: async () => {
       authority.assertActive();

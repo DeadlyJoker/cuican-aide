@@ -75,7 +75,10 @@ export type ProjectConversationApplicationDependencies = Readonly<{
     Partial<PluginProjectReadStoreBinding>;
   texts: Pick<
     ProjectTextStore,
-    "loadOutline" | "loadRevision" | "loadOutlineSourceRevision"
+    | "loadOutline"
+    | "loadRevision"
+    | "loadOutlineSourceRevision"
+    | "bindProjectReads"
   >;
   tasks: Pick<
     ExtensionTaskApplicationService,
@@ -637,6 +640,9 @@ export class ProjectConversationApplicationService {
                 request,
                 projects,
                 texts: this.#d.texts,
+                ...(options.projectReadScope === undefined
+                  ? {}
+                  : { projectReadScope: options.projectReadScope }),
                 authorization: this.#d.authorization,
                 digester: this.#d.digester,
               }),

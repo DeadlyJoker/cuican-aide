@@ -222,3 +222,11 @@ SQLite 和 PostgreSQL 原读取事务在数据读取前及返回前使用同一�
 真实 Task/Run/queue/Tool writers 与原 Worker owner 在 SQLite/PostgreSQL 验证原 v1 大纲、已选剧本、immutable 正文分页、两版本 history 的单条分页、冷 owner 重读，并拒绝 copied command、替换项目、撤权、换 actor 与 read-to-write。产物由原人工命令在加入 owner 约束前保存，metadata owner 行仍是明确的负向约束 fixture；这不证明受保护写入或首次归属创建。回归 60/60 加混合 v1/v2、普通入口隔离、原 structured Application/Store 38/38，均零跳过，两个新 SQL 专项在两组中重叠；加强后的 actor/write 边界两项再通过。Application/Store/Worker 类型与架构边界通过。证据保留在 `output/plugin-foundation/text-read-20261012`；专属 PG 已停止清理，不留下中间数据库。
 
 仍未完成：新投影尚无 Foundation/小说原文的归属读取授权，受保护 v2 大纲需要它时明确报 `plugin_project_foundation_read_binding_unavailable`，不声称原始小说不存在或降级成 v1。普通 v1/v2 兼容已回归，但不能等同于 protected v2 完整通过。素材、文本/素材产物保存、stage 准备的大纲依赖、真正 Worker loop/模型/断线冷恢复和实际用户 Web/桌面闭环继续待接线验收。业务插件保持卸除，正式运行环境没有启用此次显式模式，也没有更新桌面。
+
+### 剧本阶段准备读取原大纲
+
+原 `startStage` 来源现在仅在 script 阶段且显式引用大纲时，追加原大纲 head/source revision 的读取方法。Conversation Application 的原依赖捕获器保留 Store 的可选绑定端口；准备阶段使用同一 opaque 来源、原 Text Store 和原 decoder 获取内容摘要，然后由原任务 SQL 事务再次确认所选版本。缺少绑定端口明确拒绝，不降级到普通读。普通项目缺省路径不变，没有添加公开协议字段或新的 Run 授权。
+
+`project-conversation-owned-script-stage.test.ts` 使用真实 SQLite/PostgreSQL 原 Task/Run 与 binding writers，验证已选 v1 大纲进入剧本阶段、同 key 冷实例重放同 Run、错误 artifact/episode、复制来源、缺少 binder、当前权限撤回。测试大纲由原人工命令在 owner 约束前保存，安装执行 authority 与 owner 约束仍是具名 fixture；不证明 protected 写入、真实 Worker/模型或正式 UI。与原 protected discussion 测试合计 3/3、零跳过，证据在 `output/plugin-foundation/script-stage-20261012/tests.txt`，专属 PG 已停止并清理。另跑普通 Conversation Application 兼容 SQLite 一项通过，PG 一项跳过，不计入上述三项。Application/Control 类型及边界检查通过。
+
+这补齐的是阶段准备的大纲依赖，Foundation/小说、protected v2、素材与产物保存、真实 Web/Worker/桌面闭环仍待完成；业务插件仍保持卸除，未因此启用用户环境归属模式或更新桌面。
