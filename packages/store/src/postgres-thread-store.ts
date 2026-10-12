@@ -411,6 +411,13 @@ export class PostgresThreadStore
       assertOpen: () => this.assertOpen(),
     }).readonlyView();
   }
+  async migratePluginProjectOwnership(): Promise<void> {
+    await new PostgresPluginProjectWorkspaceStore({
+      pool: this.pool,
+      schema: this.schema,
+      assertOpen: () => this.assertOpen(),
+    }).migrateOwnership();
+  }
   async migratePluginProjectWorkspaceNamespaces(): Promise<void> {
     await new PostgresPluginProjectWorkspaceStore({
       pool: this.pool,

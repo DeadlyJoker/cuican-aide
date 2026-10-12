@@ -166,3 +166,13 @@ Control main 在实际 Native 与显式 owned Conversation 配置同时存在时
 本轮真实安装包/Control 来源测试覆盖已声明、未声明和非 Native 模式；原 SQLite 的 genuine UI 覆盖 actor/profile/plugin/publisher 归属不匹配、复制 context、独立读取撤权及 UI 撤权。原 installed HTTP 覆盖查询目标、拒绝另一个插件的已存在项目，并将实际查询结果传给原会话创建入口；Native observer 明确为不可用 fixture，该失败被正确保留，不能当作目录或 Agent 执行通过。测试没有增加目录、namespace、Thread 或 Run。完整用户 Web 操作、正式启动到真实 Native 分配和中央 Agent 的闭环仍待验收，未更新桌面包。
 
 验证结果：上述来源/安装/HTTP/归属/协议专项 32/32，SDK 完整构建与测试 91/91，均零跳过；22 个 packages 类型检查、Control 类型检查、TypeScript 边界及仓库格式检查通过。PostgreSQL 生产集成另一次运行因无测试数据库跳过，不作为通过证据；本轮未验证 PostgreSQL 新目标查询或真实用户 Web/桌面操作。工作区仍有其他未提交 UI/启动改动，保留且不纳入本次提交。
+
+### 显式归属模式的真实启动初始化与 HTTP→目录→Thread 联合验收
+
+联合接线发现：配置已经声明 `creationOwnership` / owned Conversation，但原启动没有初始化 metadata / namespace schema，首次真实 UI 创建项目返回 `creative_project_service_unavailable`；已有 installed HTTP 专项手工建表，不能证明这一启动缺口已闭合。现由原 `prepareCreativeProjects` 在明确启用归属模式且原项目 schema 初始化后，调用原 Parent 的 `migratePluginProjectOwnership`。未配置 / legacy 模式保持原路径。SQLite 使用原父连接，PostgreSQL 使用原父 pool、原 namespace 迁移锁和事务；沿用已有两个独立 schema 迁移函数，不增加管理系统或主 schema 版本，不插入归属、接管、目录、Thread 或 Run。任一 schema 不合法则回滚本次初始化，保留已有错误 schema，不能隐式修复。
+
+这是内部可信部署配置的 DDL 接线，没有新增 HTTP/SDK/renderer 迁移操作或 owner 字段。首次归属仍必须来自真实安装和 UI invocation，公开旧入口仍不能访问 protected 项目。新配置需要具有这一显式迁移端口的宿主；旧不完整组合不能被声明为可用。PostgreSQL 的初始化和旧会话兼容通过，不等于其新 qualified 项目首次创建及完整 Native 执行已支持。
+
+新增联合专项使用真实包字节、真实 HTTP listener、真正的 Control 子进程、Main 原 Native authority/IPC、原文件系统 allocator/registry、原 Parent namespace 登记、原 workspace admission 和原 Thread。两个项目及归属均通过 installed UI 创建，没有手工插入 metadata 或 namespace；只读目标查询不分配目录。各项目的目录和 Thread 不同，同键重放不增加目录或 Thread，错误项目目标在分配前拒绝，原普通工作空间仍活动，普通 Thread API 不能借用 protected 项目目录。最终两个 metadata、两个 namespace、两个 Thread，零 Run；不把元数据会话建立当作 Agent 执行授权。
+
+Actor、profile 批准、Native policy 及 standalone policy 为明确的测试配置，Control 通过原 standalone composer 接入真实 observer；它不是正式 RuntimeSupervisor/Main 生命周期、真实用户 Web 或模型/Tool/产物执行验收。SQLite/PostgreSQL 的幂等、旧项目全字段保留且不回填、坏 namespace 使新增 metadata DDL 回滚及 closed 生命周期，加原启动、installed HTTP 和生产 PG pool1 冷兼容专项 15/15；原 admission/配置/Control 来源回归 13/13，均零跳过。Store/Control 类型、边界通过。专属 PostgreSQL 已停止清理。业务插件与正式 App 保持原状态；现有 Web 是此前已启动的基线，未据此宣称新插件功能已在该页面开放。

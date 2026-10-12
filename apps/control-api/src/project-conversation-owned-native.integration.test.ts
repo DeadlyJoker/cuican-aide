@@ -11,8 +11,6 @@ import { DatabaseSync } from "node:sqlite";
 import test from "node:test";
 import { InMemoryArtifactStore } from "@crewon/artifacts";
 import { parsePluginProjectWorkspaceNamespace } from "@crewon/domain";
-import { migrateSqlitePluginProjectMetadataOwners } from "../../../packages/store/src/plugin-project-metadata-owner-schema.ts";
-import { migrateSqlitePluginProjectWorkspaces } from "../../../packages/store/src/plugin-project-workspace-schema.ts";
 import {
   namespaceColumns,
   namespaceValues,
@@ -156,20 +154,8 @@ test(
       idempotencyKey: "owned-native-conversation",
     });
     assert.notEqual(noOwner.statusCode, 200, noOwner.body);
-    assert.equal(
-      noOwner.json().error.code,
-      "plugin_project_read_schema_required",
-    );
-    // Caller-owned DDL only: no metadata or namespace rows are fabricated here.
-    const migration = new DatabaseSync(databasePath);
-    try {
-      migration.exec("PRAGMA foreign_keys=ON; BEGIN IMMEDIATE");
-      migrateSqlitePluginProjectMetadataOwners(migration);
-      migrateSqlitePluginProjectWorkspaces(migration);
-      migration.exec("COMMIT");
-    } finally {
-      migration.close();
-    }
+    assert.equal(noOwner.json().error.code, "creative_project_not_found");
+    // Actual trusted startup creates empty source schemas; it does not adopt the legacy project.
     const createInput = {
       request: { title: "实际 UI 创建项目", briefText: "实际项目首次创建归属" },
       idempotencyKey: "owned-native-ui-project",

@@ -175,6 +175,7 @@ type CreativeProjectStoreOwner = ProjectFoundationStoreOwner &
   ProjectAssetStoreOwner &
   Readonly<{
     creativeProjectStore(): CreativeProjectStore & { migrate(): Promise<void> };
+    migratePluginProjectOwnership?(): Promise<void>;
     projectTextStore?(): ProjectTextStore & { migrate(): Promise<void> };
     projectConversationStore?(): ProjectConversationStore;
     projectTextPlanStore?(): ProjectTextPlanStore;
@@ -492,6 +493,14 @@ export async function prepareCreativeProjects(
   if (configuration.pluginUi?.creationOwnership === "plugin-project-v1")
     assertOwnedCreativeProjectStoreReady(store);
   await store.migrate();
+  if (
+    configuration.pluginUi?.creationOwnership === "plugin-project-v1" ||
+    configuration.conversations?.projectOwnership === "plugin-project-v1"
+  ) {
+    if (owner.migratePluginProjectOwnership === undefined)
+      throw new Error("plugin_project_owned_schema_startup_unavailable");
+    await owner.migratePluginProjectOwnership();
+  }
   const foundation = await prepareProjectFoundation(owner, {
     configuration: configuration.foundation,
     projects: store,

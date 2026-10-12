@@ -5,6 +5,7 @@ import { SqliteProjectAssetStore } from "./project-asset-sqlite-store.ts";
 import { SqliteProjectAssetStageStore } from "./project-asset-stage-store.ts";
 import { SqliteProjectTextPlanStore } from "./project-text-plan-sqlite-store.ts";
 import { SqliteProjectConversationStore } from "./project-conversation-sqlite-store.ts";
+import { migrateSqlitePluginProjectOwnership } from "./sqlite-plugin-project-ownership-migration.ts";
 import { sqliteProjectWorkspacePorts } from "./sqlite-project-workspace-ports.ts";
 import {
   assertSqlitePluginProjectWorkspaceThread,
@@ -879,6 +880,12 @@ export class SqliteRunStore implements DomainStore {
   pluginProjectWorkspaceNativeRegistrationStore(): PluginProjectWorkspaceNativeRegistrationStore {
     this.#assertOpen();
     return this.#projectWorkspacePorts().nativeRegistration;
+  }
+  async migratePluginProjectOwnership(): Promise<void> {
+    migrateSqlitePluginProjectOwnership({
+      database: this.#database,
+      assertOpen: () => this.#assertOpen(),
+    });
   }
   async migratePluginProjectWorkspaceNamespaces(): Promise<void> {
     await this.#projectWorkspacePorts().migrate();

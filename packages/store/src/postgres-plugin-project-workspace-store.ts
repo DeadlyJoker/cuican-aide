@@ -36,6 +36,7 @@ import {
   pluginProjectNamespaceLock,
 } from "./plugin-project-workspace-store-support.ts";
 import { advisoryLock } from "./postgres-thread-lock.ts";
+import { migratePostgresPluginProjectMetadataOwners } from "./plugin-project-metadata-owner-schema.ts";
 import { rollbackPostgres } from "./postgres-store-support.ts";
 
 /** Same original parent pool; explicit migration and no directory/runtime ownership. */
@@ -56,6 +57,13 @@ export class PostgresPluginProjectWorkspaceStore
     return Object.freeze({
       loadNamespace: this.loadNamespace.bind(this),
       listNamespaces: this.listNamespaces.bind(this),
+    });
+  }
+  async migrateOwnership(): Promise<void> {
+    await this.#transaction(async (c) => {
+      await advisoryLock(c, `plugin-project-workspace-migrate:${this.#schema}`);
+      await migratePostgresPluginProjectMetadataOwners(c, this.#schema);
+      await migratePostgresPluginProjectWorkspaces(c, this.#schema);
     });
   }
   async migrate(): Promise<void> {
