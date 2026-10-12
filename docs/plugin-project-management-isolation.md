@@ -344,3 +344,13 @@ PG 沿用原 READ COMMITTED 协议及 metadata schema shared lock，owner/projec
 新的 SQLite/PG、creative/novel 四条真实 Task/Run/sidecar 初始化用例验证：PDP 拒绝时读取次数为零，正常 load/原 Foundation projection/assertCurrent/冷 reader 得到真实 sidecar，留存 ref 立即失效，读中撤权拒绝发布，配置 getter 不执行，实际 selection disabled/uninstalled 后 submit 拒绝但 observe 返回原 paired metadata。具名 runtime PDP 与 metadata owner 约束 fixture 不等同于实际账号服务或首个 owned project creator。原 composer forwarding 已接线，但用例没有加载独立 Node 插件包或执行模型。
 
 与原 context/paired reader/owned Tool read/Store/config-composition 回归 52/52、零跳过；证据 `output/plugin-foundation/runtime-context-20261012/tests.txt`，专属 PG 已停止删除。Worker/Control 类型、边界检查通过。真实 Worker loop、模型冷恢复、protected 写入、Web/正式桌面完整验收仍待完成；本次未重启用户服务或更新桌面，业务插件保持卸除。
+
+### PostgreSQL 原 Store 的首个 qualified owned project 创建
+
+原 `PostgresCreativeProjectStore` 现在实现已有可选 owned creation port，沿用 original CreativeProjectApplicationService 与原 UI creation WeakMap source；actor、完整安装 pin/selection/package、独立 project policy、scoped receipt 和当前生命周期继续用与 SQLite 相同的 preparation。将原 preparation 提取为两库 private shared 模块，SQLite 保留原路径 re-export。PG 使用原 pool/schema/READ COMMITTED 事务、receipt/project advisory namespace、installation shared lock和原 project/brief/receipt writers，一次写入 project、initial brief、immutable 八项 metadata owner 与 scoped receipt；没有 raw 插入 owner 代替 creator，也没有自动接管普通项目。
+
+PG 重放按原 scoped receipt 验证 actual project、metadata owner 的完整归属、创建时间/创建 actor 和 initial brief；最后事务 fence 在原当前权限与生命周期检查之前重读真实记录。两插件相同外部 key 的命名空间独立，同插件并发请求以原 receipt lock 收敛为同一项目；占用普通 ID 明确拒绝。原 transaction 和 receipt SQL 分拆至 focused private helpers，普通路径复用相同语义，保留提交确认后的返回、回滚与连接释放规则；没有新连接池或运行时。
+
+新增真实 PG 测试通过 original UI/Application action 与 opaque source 创建首个 owned metadata project，并由冷 Store/Application 重放；UI package/Host discovery 与 policy 仍是具名内存 fixture，不是 formal Native/Web 资格证明。实际四行族同事务写入，普通 reader 仍不可见；并发重试、不同插件同 key、内容冲突、独立 policy 拒绝、占用 legacy ID 和末尾 receipt trigger 失败回滚得到验证。对真实 PG connection 在包含 receipt 写入的 COMMIT 已成功后注入 acknowledgement 丢失：首次调用报错而四行族持久化，冷重试返回 replay，数量不增长。此 fault injection 是本地协议验证，不宣称发生过真实网络断连。
+
+与原 SQLite creator/owned UI、普通两库 project、安装锁竞争和原 Run/Tool write 回归 93/93、零跳过，证据 `output/plugin-foundation/owned-creation-pg-20261012/tests.txt`；专属 PG 已停止删除。Store/Worker/Control 类型检查通过。PG 隔离项目的后续 metadata/brief/concept/Foundation/text/media 保存、Native namespace 启用、实际 Worker/model/Web/正式桌面验收仍待完成；本次没有重启用户服务或更新桌面。

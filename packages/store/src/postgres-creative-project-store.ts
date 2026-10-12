@@ -1,3 +1,13 @@
+import { savePostgresCreativeProjectReceipt } from "./postgres-creative-project-record-writers.ts";
+import { transactPostgresCreativeProject } from "./postgres-creative-project-transaction.ts";
+import {
+  runPostgresOwnedCreation,
+  type PostgresOwnedCreationPorts,
+} from "./plugin-project-owned-creation-postgres.ts";
+import type {
+  OwnedCreativeProjectCreationInput,
+  OwnedCreativeProjectCreationReceiptInput,
+} from "@crewon/application";
 import {
   readPostgresListProjects,
   readPostgresListConceptAssets,
@@ -9,10 +19,7 @@ import {
   beginPostgresPlanResult,
   finishPostgresPlanResult,
 } from "./project-text-plan-tool.ts";
-import {
-  assertPostgresProjectRunCommit,
-  assertPostgresProjectRunLease,
-} from "./creative-project-run-commit-postgres.ts";
+import { assertPostgresProjectRunCommit } from "./creative-project-run-commit-postgres.ts";
 import {
   projectRunCommitQualification,
   type ProjectRunQualification,
@@ -26,7 +33,6 @@ import type { PluginProjectReadCall } from "./plugin-project-owned-read-sqlite.t
 import type { PluginProjectReadScope } from "@crewon/application";
 import {
   assertCreativeProjectCommitActive,
-  assertCreativeProjectCommitCurrent,
   assertCreativeProjectCommitTransactionCurrent,
   captureCreativeProjectCommitAuthority,
   type CreativeProjectCommitAuthority,
@@ -61,7 +67,6 @@ import {
   verifyCreativeMutation,
   type PreparedCreativeMutation,
 } from "./creative-project-store-records.ts";
-import { rollbackPostgres } from "./postgres-store-support.ts";
 import { commitOriginalProjectMigration } from "./original-project-migration.ts";
 import {
   admitPostgresPluginInstallationPin,
@@ -71,11 +76,7 @@ import {
   creativeProjectPluginCommitQualification,
   assertCreativeProjectPluginCommitSelection,
 } from "./creative-project-plugin-commit-support.ts";
-import {
-  capturePostgresCreativeProjectLegacyAccess,
-  lockPostgresCreativeProjectLegacySchema,
-  type PostgresCreativeProjectLegacyAccess,
-} from "./creative-project-legacy-access.ts";
+import { type PostgresCreativeProjectLegacyAccess } from "./creative-project-legacy-access.ts";
 import {
   readPostgresLegacyCreativeProject,
   readPostgresLegacyCreativeProjectReceipt,
@@ -83,7 +84,6 @@ import {
 } from "./creative-project-postgres-legacy-read.ts";
 import {
   postgresCreativeProjectLegacyMutationFence,
-  finishPostgresCreativeProjectLegacyMutation,
   type PostgresCreativeProjectLegacyMutationFence,
 } from "./creative-project-legacy-mutation-access.ts";
 
@@ -285,6 +285,39 @@ export class PostgresCreativeProjectStore implements CreativeProjectStore {
       scope === undefined
         ? undefined
         : { scope, method: "listConceptRevisions", query },
+    );
+  }
+
+  #ownedCreationPorts(): PostgresOwnedCreationPorts {
+    return {
+      schema: this.#schema,
+      transact: (body, authority, final) =>
+        this.#transaction(body, authority, undefined, final),
+      insertProject: this.#writeProject.bind(this),
+      insertBrief: this.#insertBrief.bind(this),
+      saveReceipt: this.#saveReceipt.bind(this),
+    };
+  }
+  async loadOwnedCreationReceipt(
+    input: OwnedCreativeProjectCreationReceiptInput,
+    options?: CreativeProjectCommitOptions,
+  ) {
+    return runPostgresOwnedCreation(
+      this.#ownedCreationPorts(),
+      input,
+      options,
+      "read",
+    );
+  }
+  async commitOwnedProjectCreation(
+    input: OwnedCreativeProjectCreationInput,
+    options?: CreativeProjectCommitOptions,
+  ) {
+    return runPostgresOwnedCreation(
+      this.#ownedCreationPorts(),
+      input,
+      options,
+      "commit",
     );
   }
 
@@ -521,21 +554,7 @@ export class PostgresCreativeProjectStore implements CreativeProjectStore {
           await this.#writeAsset(client, result.asset, prepared, access);
           await this.#insertRevision(client, result.assetRevision);
         }
-        await this.#query(
-          client,
-          `INSERT INTO ${this.#prefix}creative_project_mutation_receipts
-         (tenant_id,space_id,principal_id,actor_id,kind,idempotency_key,request_digest,project_id,result_json)
-         VALUES($1,$2,$3,$4,$5,$6,$7,$8,$9)`,
-          [
-            ...creativeOwnerValues(identity.owner),
-            identity.actor.actorId,
-            identity.kind,
-            identity.receipt.idempotencyKey,
-            identity.receipt.requestDigest,
-            result.project.projectId,
-            creativeRecordJson(result),
-          ],
-        );
+        await this.#saveReceipt(client, identity, result);
         await finishPostgresPlanResult(
           client,
           this.#schema,
@@ -663,6 +682,20 @@ export class PostgresCreativeProjectStore implements CreativeProjectStore {
       throw new Error("creative_project_revision_conflict");
   }
 
+  async #saveReceipt(
+    client: PoolClient,
+    identity: MutationIdentity,
+    result: CreativeProjectMutationResult,
+  ) {
+    return savePostgresCreativeProjectReceipt({
+      client,
+      prefix: this.#prefix,
+      identity,
+      result,
+      assertOpen: this.#assertOpen,
+    });
+  }
+
   async #insertBrief(client: PoolClient, brief: ProjectBriefRevision) {
     await this.#query(
       client,
@@ -764,47 +797,13 @@ export class PostgresCreativeProjectStore implements CreativeProjectStore {
     runQualification?: ProjectRunQualification,
     assertLegacy?: PostgresCreativeProjectLegacyMutationFence,
   ): Promise<T> {
-    this.#assertOpen();
-    if (authority !== undefined) {
-      await assertCreativeProjectCommitCurrent(authority);
-      assertCreativeProjectCommitActive(authority);
-      this.#assertOpen();
-    }
-    const client = await this.#pool.connect();
-    try {
-      await this.#query(client, "BEGIN ISOLATION LEVEL READ COMMITTED");
-      await lockPostgresCreativeProjectLegacySchema(client, this.#schema);
-      const access = await capturePostgresCreativeProjectLegacyAccess(
-        client,
-        this.#schema,
-      );
-      const result = await body(client, access);
-      // Revalidate after all SQL awaits, including lock waits and the final receipt INSERT.
-      if (authority !== undefined)
-        await assertCreativeProjectCommitTransactionCurrent(authority);
-      await assertPostgresProjectRunLease(
-        client,
-        this.#schema,
-        runQualification,
-      );
-      await finishPostgresCreativeProjectLegacyMutation({
-        client,
-        schema: this.#schema,
-        assertLegacy,
-        authority,
-        runQualification,
-      });
-      assertCreativeProjectCommitActive(authority);
-      // A confirmed COMMIT remains successful even if the host closes while awaiting it.
-      this.#assertOpen();
-      await client.query("COMMIT");
-      return result;
-    } catch (error) {
-      await rollbackPostgres(client);
-      throw error;
-    } finally {
-      client.release();
-    }
+    return transactPostgresCreativeProject(
+      { pool: this.#pool, schema: this.#schema, assertOpen: this.#assertOpen },
+      body,
+      authority,
+      runQualification,
+      assertLegacy,
+    );
   }
 
   #pageReadPorts(
