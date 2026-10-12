@@ -1,4 +1,14 @@
 import {
+  qualifyPluginProjectRuntimeObservation,
+  type PluginProjectRuntimeObservation,
+} from "@crewon/application/host-project-workspaces";
+import {
+  assertRuntimeFoundationPair,
+  runtimeFoundationLocator,
+  sqliteRuntimeFoundationAccess,
+  postgresRuntimeFoundationAccess,
+} from "./project-foundation-runtime-observation.ts";
+import {
   captureSqliteCreativeProjectLegacyAccess,
   capturePostgresCreativeProjectLegacyAccess,
   lockPostgresCreativeProjectLegacySchema,
@@ -181,6 +191,27 @@ export class SqliteProjectFoundationRunStore
       loadSqliteFoundationRun(this.#database, scope),
     );
   }
+  async loadRuntimeFoundationRunAdmission(
+    ref: PluginProjectRuntimeObservation,
+  ) {
+    this.#assertOpen();
+    const source = qualifyPluginProjectRuntimeObservation(ref);
+    await source.assertCurrent();
+    const result = readSqliteLegacyCreativeProject(this.#database, () => {
+      const access = sqliteRuntimeFoundationAccess(this.#database, ref);
+      const value = loadSqliteFoundationRun(
+        this.#database,
+        runtimeFoundationLocator(source),
+        access,
+      );
+      assertRuntimeFoundationPair(source, value);
+      source.assertActive();
+      return value;
+    });
+    await source.assertCurrent();
+    this.#assertOpen();
+    return result;
+  }
   async readRequiredFoundationDigest(scope: ProjectFoundationRunLocator) {
     return (
       (await this.loadFoundationRunAdmission(scope))?.contentDigest ?? null
@@ -214,6 +245,41 @@ export class PostgresProjectFoundationRunStore
     } finally {
       c.release();
     }
+  }
+  async loadRuntimeFoundationRunAdmission(
+    ref: PluginProjectRuntimeObservation,
+  ) {
+    this.#assertOpen();
+    const source = qualifyPluginProjectRuntimeObservation(ref);
+    await source.assertCurrent();
+    const c = await this.#pool.connect();
+    let result;
+    try {
+      await c.query("BEGIN ISOLATION LEVEL READ COMMITTED");
+      const access = await postgresRuntimeFoundationAccess(
+        c,
+        this.#schema,
+        ref,
+      );
+      result = await loadPostgresFoundationRun(
+        c,
+        this.#schema,
+        runtimeFoundationLocator(source),
+        access,
+      );
+      assertRuntimeFoundationPair(source, result);
+      source.assertActive();
+      this.#assertOpen();
+      await c.query("COMMIT");
+    } catch (error) {
+      await rollbackPostgres(c);
+      throw error;
+    } finally {
+      c.release();
+    }
+    await source.assertCurrent();
+    this.#assertOpen();
+    return result;
   }
   async readRequiredFoundationDigest(scope: ProjectFoundationRunLocator) {
     return (

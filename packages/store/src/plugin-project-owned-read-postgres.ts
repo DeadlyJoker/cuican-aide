@@ -189,7 +189,7 @@ import { assertPostgresPluginProjectRunRead } from "./plugin-project-run-read.ts
 export async function capturePostgresOwnedProjectAccess(
   c: import("pg").PoolClient,
   schema: string,
-  source: ReturnType<typeof qualifyPluginProjectReadScope>,
+  source: Pick<ReturnType<typeof qualifyPluginProjectReadScope>, "scope">,
 ) {
   const prefix = `${creativeProjectSchemaName(schema)}.`;
   const columns = [

@@ -168,7 +168,7 @@ export async function readSqliteOwnedCreativeProject<T>(
 
 export function captureSqliteOwnedProjectAccess(
   db: DatabaseSync,
-  source: ReturnType<typeof qualifyPluginProjectReadScope>,
+  source: Pick<ReturnType<typeof qualifyPluginProjectReadScope>, "scope">,
 ): CreativeProjectLegacyAccess {
   if (!db.isTransaction || !hasSqlitePluginProjectMetadataOwnerSchema(db))
     throw new Error("plugin_project_owned_access_schema_required");

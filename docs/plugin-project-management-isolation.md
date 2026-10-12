@@ -324,3 +324,13 @@ trusted backend issuer 要求调用方已经完成原 runtime 身份/安装/PDP�
 用例使用原 SQLite actual Task/Run/Tool/sidecar fixture 和具名 PDP，验证不可变数据捕获、复制 token 拒绝、不能转换为 Tool scope、换身份/来源/getter/撤权拒绝。与独立 Tool read authority、原 runtime 授权顺序用例 3/3、零跳过；新增 execute action 限定后专项一项再通过。Application 类型、边界与格式检查通过。本次没有新 PG 集群、真实模型调用、服务重启或桌面更新。
 
 接下来需把它限定在已授权 runtime 初始化的实际生命周期内签发，并在原 paired Store 事务中复核原 Task/binding/Run、安装和八项 owner，再完成 composer 接线。完整目标仍未达到，业务插件保持卸除。
+
+### 原 paired Store 消费 runtime metadata observation
+
+原 `ProjectFoundationRunAdmissionStore` 新增可选 backend-only `loadRuntimeFoundationRunAdmission(ref)`，locator 只能由真正 WeakMap ref 推导，不能由插件提供。SQLite/PG 使用原连接、原事务和原 Task/package/Stage/binding/Run codec，复核 captured 与 actual indexed 记录、原 Run 归属与 target；借用原七项 scope/八项 metadata owner predicate，读取原 required/admission 配对并匹配完整 discussion Stage 身份。原普通读取仍拒绝 protected 数据。没有新增持久化表、连接池、正文读取能力或 Tool/lease grant。
+
+PG 沿用原 READ COMMITTED 协议及 metadata schema shared lock，owner/project 原 shared locks 在该事务内；没有使用原协议不支持的 REPEATABLE READ。current/PDP 在事务前及提交后再次检查，生命周期在关键 awaited 读取后检查；读取后撤权不能向调用方发布结果。原历史包观察规则不被新的 strict installation admission 校验替代。Run 检查限定归属/target，不宣称完整 Tool receipt/执行证明。
+
+新增两库用例使用原真实 Task/Run/discussion sidecar，之后加具名 immutable metadata owner 约束；原 reader 拒绝、runtime ref 可读、冷 Store 可读，复制 ref/有效但不匹配的 Stage/撤权/读取后撤权/失效生命周期拒绝，记录数量不变。owner 行仍为约束 fixture，不是首个 owned project producer 验收。与原 paired reader/legacy denial/原 runtime 授权顺序/原 checked Tool read 回归 22/22、零跳过；证据 `output/plugin-foundation/runtime-metadata-20261012/tests.txt`，专属 PG 已停止删除。
+
+实际 runtime context 签发和 composer 选择仍待接线，此增量不能等同于真实 Worker 初始化、模型调用或 Web/桌面验收。未重启用户服务、未更新桌面，业务插件保持卸除。
