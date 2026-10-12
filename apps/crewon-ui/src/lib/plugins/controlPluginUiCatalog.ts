@@ -3,6 +3,10 @@ import {
   parsePluginUiCatalogResponse,
   type PluginUiCatalogItem,
 } from "@crewon/contracts";
+import type {
+  PluginNavigationIcon,
+  PluginUiSurface,
+} from "@crewon/contracts/plugins";
 import { uiFailure } from "./pluginUiValidation";
 import {
   assertPluginUiCurrent,
@@ -20,6 +24,8 @@ export type ControlPluginUiModule = Readonly<{
   key: string;
   mountKey: string;
   title: string;
+  icon?: PluginNavigationIcon;
+  surfaces?: readonly PluginUiSurface[];
   contributionId: string;
   plugin: PluginUiCatalogItem;
 }>;
@@ -83,6 +89,10 @@ export async function readControlPluginUiCatalog(
               plugin.packageDigest,
             ]),
             title: contribution.title,
+            ...(contribution.icon ? { icon: contribution.icon } : {}),
+            ...(contribution.surfaces
+              ? { surfaces: contribution.surfaces }
+              : {}),
             contributionId: contribution.id,
             plugin,
           }),

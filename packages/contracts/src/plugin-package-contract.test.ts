@@ -734,3 +734,77 @@ test("bounds traversal before serializing and rejects cycles, sparse arrays and 
   for (const extra of [undefined, 1n, () => undefined, new Date(), Number.NaN])
     rejected({ ...fixture(), extra }, "plugin_package_json_invalid");
 });
+
+test("optional navigation glyph survives metadata parsing without changing legacy contributions", () => {
+  const original = fixture();
+  const legacy = parsePluginPackageDescriptor(original);
+  assert.equal(Object.hasOwn(legacy.contributions[0]!, "icon"), false);
+  const input = {
+    ...original,
+    contributions: [{ ...original.contributions[0], icon: "film" }],
+  };
+  const parsed = parsePluginPackageDescriptor(input);
+  assert.equal(parsed.contributions[0]!.icon, "film");
+  input.contributions[0]!.icon = "image";
+  assert.equal(parsed.contributions[0]!.icon, "film");
+  assert.equal(Object.isFrozen(parsed.contributions[0]), true);
+});
+for (const icon of [
+  "https://example.com/icon.svg",
+  "<svg onload='run()'>",
+  "Film",
+  "",
+  null,
+  {},
+  ["film"],
+])
+  test(`rejects executable, remote or unknown navigation glyph ${JSON.stringify(icon)}`, () => {
+    const input = fixture();
+    assert.throws(
+      () =>
+        parsePluginPackageDescriptor({
+          ...input,
+          contributions: [{ ...input.contributions[0], icon }],
+        }),
+      (error: unknown) =>
+        error instanceof PluginPackageContractError &&
+        error.code === "plugin_package_navigation_icon_invalid",
+    );
+  });
+
+test("optional sidebar surface is frozen and never added to a legacy module implicitly", () => {
+  const input = fixture();
+  assert.equal(
+    Object.hasOwn(
+      parsePluginPackageDescriptor(input).contributions[0]!,
+      "surfaces",
+    ),
+    false,
+  );
+  const requested = ["workbench", "sidebar"];
+  const parsed = parsePluginPackageDescriptor({
+    ...input,
+    contributions: [{ ...input.contributions[0], surfaces: requested }],
+  });
+  requested.pop();
+  assert.deepEqual(parsed.contributions[0]!.surfaces, ["workbench", "sidebar"]);
+  assert.equal(Object.isFrozen(parsed.contributions[0]!.surfaces), true);
+});
+for (const surfaces of [
+  ["sidebar"],
+  ["workbench", "global"],
+  ["workbench", "workbench"],
+  [],
+  ["workbench", "sidebar", "sidebar"],
+])
+  test(`rejects undeclared global or duplicate surfaces ${JSON.stringify(surfaces)}`, () => {
+    const input = fixture();
+    assert.throws(
+      () =>
+        parsePluginPackageDescriptor({
+          ...input,
+          contributions: [{ ...input.contributions[0], surfaces }],
+        }),
+      PluginPackageContractError,
+    );
+  });

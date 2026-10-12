@@ -285,6 +285,103 @@ describe("plugin panels in the formal Agent shell", () => {
     ).toBeNull();
   });
 
+  it("confines custom project navigation to the left context while preserving the central Agent and withdrawing it on plugin switch", async () => {
+    const first = {
+      ...contribution("first", "插件 A"),
+      icon: "film" as const,
+      sidebarContent: (
+        <nav aria-label="插件 A 项目">
+          <button>项目 A</button>
+        </nav>
+      ),
+    };
+    const second = {
+      ...contribution("second", "插件 B"),
+      sidebarContent: (
+        <nav aria-label="插件 B 目录">
+          <button>目录 B</button>
+        </nav>
+      ),
+    };
+    await render({ hostModules: [first, second] });
+    const composer = container.querySelector(
+      '[data-shell-view="command"] textarea',
+    );
+    await click('[data-plugin-navigation-target="first"]');
+    expect(
+      container.querySelector(
+        '[data-plugin-navigation-target="first"] .lucide-film',
+      ),
+    ).not.toBeNull();
+    expect(
+      container.querySelector(
+        '[data-plugin-sidebar="first"] [aria-label="插件 A 项目"]',
+      ),
+    ).not.toBeNull();
+    expect(
+      container.querySelector('[data-plugin-sidebar="second"]'),
+    ).toBeNull();
+    await click('[data-plugin-navigation-target="second"]');
+    expect(
+      container.querySelector('[data-plugin-sidebar="second"]')?.outerHTML,
+    ).toMatchSnapshot();
+    expect(container.querySelector('[data-plugin-sidebar="first"]')).toBeNull();
+    expect(
+      container.querySelector(
+        '[data-plugin-sidebar="second"] [aria-label="插件 B 目录"]',
+      ),
+    ).not.toBeNull();
+    expect(
+      container.querySelector('[data-shell-view="command"] textarea'),
+    ).toBe(composer);
+    const sidebar = container.querySelector('[data-plugin-sidebar="second"]');
+    await click('[aria-label="关闭插件面板"]');
+    expect(container.querySelector('[data-plugin-sidebar="second"]')).toBe(
+      sidebar,
+    );
+    expect(container.querySelector(".command-plugin-panel-header")).toBeNull();
+    await click('.command-navigation-rail [data-nav-key="command"]');
+    expect(container.querySelector("[data-plugin-sidebar]")).toBeNull();
+    expect(
+      container.querySelector('[data-shell-view="command"] textarea'),
+    ).toBe(composer);
+  });
+
+  it("opens a plugin from the global rail and switches back to a retained tool tab without replacing the Agent composer", async () => {
+    await render({
+      platform: "mac",
+      capabilityDrawer: {
+        ...base.capabilityDrawer,
+        open: true,
+        panel: { title: "文件", body: "原有文件页面" },
+      },
+      hostModules: [contribution("fixture", "项目产物")],
+    });
+    const composer = container.querySelector(
+      '[data-shell-view="command"] textarea',
+    );
+    const originalPanel = container.querySelector(".command-workbench-panel");
+    await click('[data-plugin-navigation-target="fixture"]');
+    expect(
+      container
+        .querySelector('[data-plugin-navigation-target="fixture"]')
+        ?.getAttribute("aria-current"),
+    ).toBe("page");
+    const otherTab = container.querySelector<HTMLButtonElement>(
+      '.command-plugin-panel-header [role="tab"]',
+    );
+    expect(otherTab).not.toBeNull();
+    expect(otherTab?.textContent).toContain("文件");
+    await act(async () => otherTab!.click());
+    expect(container.querySelector(".command-plugin-panel-header")).toBeNull();
+    expect(container.querySelector(".command-workbench-panel")).toBe(
+      originalPanel,
+    );
+    expect(
+      container.querySelector('[data-shell-view="command"] textarea'),
+    ).toBe(composer);
+  });
+
   it("uses the original resizer and restores already open desktop tool tabs after closing a plugin", async () => {
     const capabilityClose = vi.fn();
     const capabilityDrawer = {

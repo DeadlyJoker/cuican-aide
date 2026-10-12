@@ -1,3 +1,5 @@
+import { PluginNavigationGlyph } from "./PluginNavigationGlyph";
+import type { PluginNavigationIcon } from "@crewon/contracts/plugins";
 import { commandNavigationNextIndex } from "./commandNavigationKeyboard";
 import { CalendarDays, Home, ListChecks, Shapes, Sparkles } from "lucide-react";
 import { useEffect, useRef, type ComponentProps, type ReactNode } from "react";
@@ -32,6 +34,7 @@ export function CommandRailButton({
 export function CommandNavigationRail({
   activeView,
   hostModuleActive = false,
+  plugins = [],
   collapsed,
   locale,
   taskAttentionCount,
@@ -41,6 +44,13 @@ export function CommandNavigationRail({
 }: {
   activeView: CommandShellView;
   hostModuleActive?: boolean;
+  plugins?: readonly Readonly<{
+    id: string;
+    label: string;
+    active: boolean;
+    icon?: PluginNavigationIcon;
+    onOpen(): void;
+  }>[];
   collapsed: boolean;
   locale: Locale;
   taskAttentionCount: number;
@@ -82,7 +92,9 @@ export function CommandNavigationRail({
       key: "agents" as const,
       label: locale === "zh" ? "资源" : "Resources",
       Icon: Shapes,
-      active: hostModuleActive || section === "resources",
+      active:
+        (hostModuleActive && plugins.length === 0) ||
+        (!hostModuleActive && section === "resources"),
     },
   ];
   return (
@@ -146,6 +158,20 @@ export function CommandNavigationRail({
                   className="sidebar-task-attention"
                 />
               ) : null}
+            </CommandRailButton>
+          ))}
+          {plugins.map((plugin) => (
+            <CommandRailButton
+              key={plugin.id}
+              label={plugin.label}
+              aria-current={plugin.active ? "page" : undefined}
+              data-plugin-navigation-target={plugin.id}
+              onClick={() => {
+                plugin.onOpen();
+                if (collapsed) onToggleCollapse();
+              }}
+            >
+              <PluginNavigationGlyph icon={plugin.icon} />
             </CommandRailButton>
           ))}
         </div>

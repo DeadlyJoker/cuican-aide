@@ -605,6 +605,37 @@ export function useInstalledPluginModules({
         Object.freeze({
           id: module.key,
           label: module.title,
+          icon: module.icon,
+          ...(module.surfaces?.includes("sidebar")
+            ? {
+                sidebarContent: ({ active }: Readonly<{ active: boolean }>) => (
+                  <InstalledPluginModule
+                    key={`${module.mountKey}:sidebar`}
+                    surface="sidebar"
+                    host={host}
+                    module={module}
+                    active={active}
+                    theme={presentation}
+                    locale={locale}
+                    onDiagnostic={onDiagnostic}
+                    taskPorts={taskPorts}
+                    generationPorts={generationPorts}
+                    projectQueryPorts={projectQueryPorts}
+                    historicalQueryPorts={historicalQueryPorts}
+                    selectionPorts={selectionPorts}
+                    selectedThreadId={selectedTaskThreadId}
+                    runIds={taskRunIds}
+                    projectConversationContext={projectConversationContext}
+                    projectPlanningDraft={planning.draftFor(module)}
+                    onOpenTask={(threadId) => {
+                      taskPorts?.assertSessionCurrent();
+                      if (taskPorts)
+                        taskContextRef.current?.onOpenTask(threadId);
+                    }}
+                  />
+                ),
+              }
+            : {}),
           content: ({ active }: Readonly<{ active: boolean }>) => (
             <InstalledPluginModule
               key={module.mountKey}

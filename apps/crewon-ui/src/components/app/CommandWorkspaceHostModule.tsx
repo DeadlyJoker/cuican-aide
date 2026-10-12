@@ -6,6 +6,7 @@ import {
   useRef,
   type ReactNode,
 } from "react";
+import type { PluginNavigationIcon } from "@crewon/contracts/plugins";
 import { classNames } from "./commandWorkspaceUtils";
 import type { AgentPlatformSnapshot } from "../../lib/agent-platform/agentPlatformClient";
 
@@ -19,8 +20,25 @@ export type CommandWorkspaceHostModule = Readonly<{
   /** Stable host route identity, including plugin AND contribution; version belongs to the mount key. */
   id: string;
   label: string;
+  icon?: PluginNavigationIcon;
+  sidebarContent?:
+    | ReactNode
+    | ((state: Readonly<{ active: boolean }>) => ReactNode);
   content: ReactNode | ((state: Readonly<{ active: boolean }>) => ReactNode);
 }>;
+
+/** Presentation is selected by the host; returning sidebar content supplies no service authority. */
+export function commandWorkspaceHostModuleSidebar({
+  module,
+  active,
+}: Readonly<{
+  module: CommandWorkspaceHostModule;
+  active: boolean;
+}>): ReactNode {
+  return typeof module.sidebarContent === "function"
+    ? module.sidebarContent({ active })
+    : module.sidebarContent;
+}
 
 /** Directory availability affects callable content; the owner identifies the current host session only. */
 export type CommandWorkspaceHostModuleAvailability = Readonly<{
@@ -61,6 +79,7 @@ export function useCommandWorkspaceHostModules(
   const [selection, setSelection] = useState<Readonly<{
     id: string;
     label: string;
+    panelOpen: boolean;
     navigationScope: string | null;
     ownerKey: object | null;
   }> | null>(null);
@@ -85,6 +104,23 @@ export function useCommandWorkspaceHostModules(
     );
   }, [ids, navigationScope, ownerKey, unavailable]);
   const close = useCallback(() => setSelection(null), []);
+  const sidebarIdsKey = JSON.stringify(
+    modules
+      .filter((module) => module.sidebarContent !== undefined)
+      .map((module) => module.id),
+  );
+  const sidebarIds = useMemo(
+    () => new Set<string>(JSON.parse(sidebarIdsKey)),
+    [sidebarIdsKey],
+  );
+  const closePanel = useCallback(() => {
+    setSelection((current) => {
+      if (!current) return null;
+      // Legacy workbench-only contributions retain their original close behavior.
+      const hasSidebar = sidebarIds.has(current.id);
+      return hasSidebar ? { ...current, panelOpen: false } : null;
+    });
+  }, [sidebarIds]);
   const lastRequestKey = useRef<string | null>(null);
   useEffect(() => {
     if (
@@ -96,6 +132,7 @@ export function useCommandWorkspaceHostModules(
       lastRequestKey.current = request.requestKey;
       setSelection({
         id: request.id,
+        panelOpen: true,
         label: modules.find((module) => module.id === request.id)!.label,
         navigationScope,
         ownerKey,
@@ -108,6 +145,7 @@ export function useCommandWorkspaceHostModules(
         throw new Error("command_workspace_host_module_unavailable");
       setSelection({
         id,
+        panelOpen: true,
         label: modules.find((module) => module.id === id)!.label,
         navigationScope,
         ownerKey,
@@ -117,6 +155,8 @@ export function useCommandWorkspaceHostModules(
   );
   return {
     selectedId,
+    panelOpen: selectedId !== null && selection?.panelOpen === true,
+    closePanel,
     active: selectedId !== null,
     unavailableSelection:
       unavailable && selectedId !== null && selection

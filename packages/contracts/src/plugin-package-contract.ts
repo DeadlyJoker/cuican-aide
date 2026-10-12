@@ -37,10 +37,25 @@ export type PluginServiceProvision = Readonly<{
   /** Opaque service protocol identifier; metadata does not prove an implementation exists. */
   apiVersion: string;
 }>;
+export const PLUGIN_NAVIGATION_ICONS = Object.freeze([
+  "book-open",
+  "film",
+  "image",
+  "folder",
+  "layout",
+  "puzzle",
+] as const);
+export type PluginNavigationIcon = (typeof PLUGIN_NAVIGATION_ICONS)[number];
+export type PluginUiSurface = "workbench" | "sidebar";
+
 export type PluginUiContribution = Readonly<{
   /** Unique within this plugin; it conveys no host registration authority. */
   id: string;
   title: string;
+  /** Host-rendered glyph only; no URLs, SVG or executable icon content. */
+  icon?: PluginNavigationIcon;
+  /** Optional host surfaces. Legacy modules remain workbench-only. */
+  surfaces?: readonly PluginUiSurface[];
 }> &
   (
     | Readonly<{ kind: "module"; slot: "main.content" }>
@@ -226,8 +241,45 @@ function parseProvision(input: unknown): PluginServiceProvision {
   });
 }
 function parseContribution(input: unknown): PluginUiContribution {
-  const value = record(input, ["id", "kind", "slot", "title"]);
-  const common = { id: identifier(value.id), title: title(value.title) };
+  const hasIcon =
+    input !== null && typeof input === "object" && Object.hasOwn(input, "icon");
+  const hasSurfaces =
+    input !== null &&
+    typeof input === "object" &&
+    Object.hasOwn(input, "surfaces");
+  const value = record(input, [
+    "id",
+    "kind",
+    "slot",
+    "title",
+    ...(hasIcon ? ["icon"] : []),
+    ...(hasSurfaces ? ["surfaces"] : []),
+  ]);
+  if (
+    hasIcon &&
+    !PLUGIN_NAVIGATION_ICONS.includes(value.icon as PluginNavigationIcon)
+  )
+    fail("plugin_package_navigation_icon_invalid");
+  let surfaces: readonly PluginUiSurface[] | undefined;
+  if (hasSurfaces) {
+    const requested = array(value.surfaces, 1, 2);
+    if (
+      value.kind !== "module" ||
+      !requested.includes("workbench") ||
+      new Set(requested).size !== requested.length ||
+      requested.some(
+        (surface) => surface !== "workbench" && surface !== "sidebar",
+      )
+    )
+      fail("plugin_package_ui_surfaces_invalid");
+    surfaces = Object.freeze([...requested] as PluginUiSurface[]);
+  }
+  const common = {
+    id: identifier(value.id),
+    title: title(value.title),
+    ...(hasIcon ? { icon: value.icon as PluginNavigationIcon } : {}),
+    ...(surfaces ? { surfaces } : {}),
+  };
   if (value.kind === "module" && value.slot === "main.content")
     return Object.freeze({ ...common, kind: value.kind, slot: value.slot });
   if (value.kind === "settings" && value.slot === "settings.section")

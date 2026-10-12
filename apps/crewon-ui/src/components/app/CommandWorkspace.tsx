@@ -48,6 +48,7 @@ import {
 } from "./CommandWorkspaceChrome";
 import {
   mergeCommandWorkspaceHostModules,
+  commandWorkspaceHostModuleSidebar,
   useCommandWorkspaceHostModules,
   type CommandWorkspaceHostModule,
   type CommandWorkspaceHostModuleAvailability,
@@ -3374,6 +3375,11 @@ export function CommandWorkspace({
           hostModules={modules.map((module) => ({
             id: module.id,
             label: module.label,
+            icon: module.icon,
+            sidebarContent: commandWorkspaceHostModuleSidebar({
+              module,
+              active: hostModuleView.selectedId === module.id,
+            }),
             active: hostModuleView.selectedId === module.id,
             onOpen: () => {
               closeComposerPalette();
@@ -4386,11 +4392,13 @@ export function CommandWorkspace({
       </section>
       <CommandWorkspacePluginPanel
         modules={modules}
-        selectedId={hostModuleView.selectedId}
-        unavailableSelection={hostModuleView.unavailableSelection}
+        selectedId={hostModuleView.panelOpen ? hostModuleView.selectedId : null}
+        unavailableSelection={
+          hostModuleView.panelOpen ? hostModuleView.unavailableSelection : null
+        }
         target={hostModulePanelTarget}
         locale={locale}
-        onClose={hostModuleView.close}
+        onClose={hostModuleView.closePanel}
         onRetry={hostModuleAvailability?.retry}
         onSelectionChange={onHostModulePanelSelectionChange}
       />

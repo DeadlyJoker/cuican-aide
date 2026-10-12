@@ -677,6 +677,14 @@ export function CommandWorkspaceCapabilityDrawer({
           <CommandWorkspacePluginPanelHeader
             selection={pluginPanel}
             locale={locale}
+            existingTabs={tabs.map((tab) => ({
+              id: tab.id,
+              label: tabLabel(tab, locale),
+              activate: () => {
+                pluginPanel.close();
+                setActiveTabId(tab.id);
+              },
+            }))}
           />
         ) : tabs.length > 0 ? (
           <header

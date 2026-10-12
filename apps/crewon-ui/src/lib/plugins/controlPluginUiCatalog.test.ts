@@ -242,3 +242,24 @@ describe("bounded authenticated UI catalog snapshots (real Control client)", () 
     expect(vi.getTimerCount()).toBe(0);
   });
 });
+
+it("carries the installed package glyph into the host navigation model", async () => {
+  const original = item(1);
+  const withIcon = {
+    ...original,
+    descriptor: {
+      ...original.descriptor,
+      contributions: original.descriptor.contributions.map((contribution) => ({
+        ...contribution,
+        icon: "film" as const,
+        surfaces: ["workbench", "sidebar"] as const,
+      })),
+    },
+  };
+  const { client } = controlUiClient(() =>
+    controlUiResponse({ plugins: [withIcon], next: null }),
+  );
+  const result = await read(client);
+  expect(result.modules[0]!.icon).toBe("film");
+  expect(result.modules[0]!.surfaces).toEqual(["workbench", "sidebar"]);
+});

@@ -10,7 +10,7 @@ import { CommandRailAccount } from "./CommandRailAccount";
 import { TooltipProvider } from "@/components/ui/tooltip";
 import { createPortal } from "react-dom";
 import { PanelLeft, Search } from "lucide-react";
-import { useRef } from "react";
+import { useRef, type ReactNode } from "react";
 
 import { mergeCommandWorkspaceHostModules } from "./CommandWorkspaceHostModule";
 import {
@@ -171,12 +171,16 @@ export function CommandSidebar({
   hostModule?: Readonly<{
     id: string;
     label: string;
+    icon?: import("@crewon/contracts/plugins").PluginNavigationIcon;
+    sidebarContent?: ReactNode;
     active: boolean;
     onOpen(): void;
   }>;
   hostModules?: readonly Readonly<{
     id: string;
     label: string;
+    icon?: import("@crewon/contracts/plugins").PluginNavigationIcon;
+    sidebarContent?: ReactNode;
     active: boolean;
     onOpen(): void;
   }>[];
@@ -207,7 +211,12 @@ export function CommandSidebar({
   const modules = mergeCommandWorkspaceHostModules({ hostModule, hostModules });
   const contextCollapsed = collapsed ?? sidebarCollapsed;
   const section = commandSidebarSection(activeView);
-  const hasContext = commandSidebarHasContext(activeView);
+  const activePlugin = modules.find((module) => module.active);
+  const pluginSidebar = activePlugin?.sidebarContent;
+  const hasPluginSidebar =
+    pluginSidebar !== null && pluginSidebar !== undefined;
+  const hasContext =
+    activePlugin !== undefined || commandSidebarHasContext(activeView);
   const account = useAgentPlatformAccount();
   const localManagement = useDesktopLocalManagementAccess();
   /*
@@ -441,6 +450,8 @@ export function CommandSidebar({
     >
       {chromeTarget ? createPortal(chrome, chromeTarget) : chrome}
       <CommandNavigationRail
+        plugins={modules}
+        hostModuleActive={modules.some((module) => module.active)}
         activeView={activeView}
         collapsed={contextCollapsed}
         locale={locale}
@@ -484,11 +495,13 @@ export function CommandSidebar({
               onSwitchView("command");
             }}
           >
-            {section === "resources"
-              ? locale === "zh"
-                ? "资源"
-                : "Resources"
-              : "CrewON"}
+            {activePlugin
+              ? activePlugin.label
+              : section === "resources"
+                ? locale === "zh"
+                  ? "资源"
+                  : "Resources"
+                : "CrewON"}
           </a>
           <div className="sidebar-tools" aria-label={copy.sidebarTools}>
             <button
@@ -537,15 +550,28 @@ export function CommandSidebar({
           onQueryChange={onQueryChange}
         />
 
-        <CommandSidebarNavigation
-          activeView={activeView}
-          hostModules={modules}
-          locale={locale}
-          onNewThread={() => onNewThread(null)}
-          onSwitchView={onSwitchView}
-        />
+        {hasPluginSidebar ? (
+          <section
+            className="command-sidebar-workspaces"
+            aria-label={activePlugin!.label}
+            data-plugin-sidebar={activePlugin!.id}
+          >
+            {pluginSidebar}
+          </section>
+        ) : (
+          <CommandSidebarNavigation
+            activeView={activeView}
+            hostModules={modules}
+            locale={locale}
+            onNewThread={() => onNewThread(null)}
+            onSwitchView={onSwitchView}
+          />
+        )}
 
-        <div className="command-sidebar-workspaces" hidden={section !== "work"}>
+        <div
+          className="command-sidebar-workspaces"
+          hidden={section !== "work" || hasPluginSidebar}
+        >
           <CommandSidebarWorkspaceTree
             workspaceAuthority={workspaceAuthority}
             copy={copy}

@@ -77,7 +77,13 @@ export function CommandWorkspacePluginPanel({
 export function CommandWorkspacePluginPanelHeader({
   selection,
   locale,
+  existingTabs = [],
 }: Readonly<{
+  existingTabs?: readonly Readonly<{
+    id: string;
+    label: string;
+    activate(): void;
+  }>[];
   selection: CommandWorkspacePluginPanelSelection;
   locale: Locale;
 }>) {
@@ -87,6 +93,28 @@ export function CommandWorkspacePluginPanelHeader({
       data-desktop-drag-region=""
     >
       <strong>{selection.label}</strong>
+      {existingTabs.length > 0 ? (
+        <div
+          className="command-workbench-tabs"
+          role="tablist"
+          aria-label={
+            locale === "zh" ? "其他工作台页面" : "Other workbench pages"
+          }
+        >
+          {existingTabs.map((tab) => (
+            <button
+              key={tab.id}
+              type="button"
+              role="tab"
+              aria-selected={false}
+              className="command-workbench-tab"
+              onClick={tab.activate}
+            >
+              {tab.label}
+            </button>
+          ))}
+        </div>
+      ) : null}
       <button
         aria-label={locale === "zh" ? "关闭插件面板" : "Close plugin panel"}
         className="command-workbench-close"

@@ -135,6 +135,28 @@ describe("two-level command navigation", () => {
     expect(context.match(/aria-current="page"/g)).toHaveLength(1);
     expect(context).not.toContain("新建任务");
   });
+  it("places installed plugin entries directly in the global rail with a book icon and an exclusive selection", () => {
+    const markup = renderToStaticMarkup(
+      <CommandNavigationRail
+        activeView="command"
+        hostModuleActive
+        collapsed
+        locale="zh"
+        taskAttentionCount={0}
+        plugins={[
+          { id: "short", label: "AI 短剧", active: true, onOpen: vi.fn() },
+        ]}
+        onSwitchView={vi.fn()}
+        onToggleCollapse={vi.fn()}
+        accountMenu={null}
+      />,
+    );
+    expect(markup).toContain('data-plugin-navigation-target="short"');
+    expect(markup).toContain("lucide-book-open");
+    expect(markup.match(/aria-current="page"/g)).toHaveLength(1);
+    expect(markup).toMatchSnapshot();
+  });
+
   it("keeps installed plugins reachable from the resource directory when inactive", () => {
     const markup = renderToStaticMarkup(
       <CommandSidebarNavigation

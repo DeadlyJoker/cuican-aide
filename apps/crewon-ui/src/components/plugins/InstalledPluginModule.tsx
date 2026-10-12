@@ -51,6 +51,7 @@ export function InstalledPluginModule({
   host,
   module,
   active,
+  surface = "workbench",
   theme,
   locale,
   onDiagnostic,
@@ -68,6 +69,7 @@ export function InstalledPluginModule({
   host: ControlPluginUiHost;
   module: ControlPluginUiModule;
   active: boolean;
+  surface?: import("@crewon/contracts/plugins").PluginUiSurface;
   theme: PluginUiTheme;
   locale: Locale;
   onDiagnostic(error: unknown): void;
@@ -297,6 +299,9 @@ export function InstalledPluginModule({
       theme,
       data: Object.freeze({
         locale,
+        ...(surface === "sidebar"
+          ? { hostPresentation: Object.freeze({ surface }) }
+          : {}),
         pluginUiReady: ready === context,
         ...(module.plugin.descriptor.requires.some(
           (requirement) =>
@@ -335,6 +340,7 @@ export function InstalledPluginModule({
     }),
     [
       module.contributionId,
+      surface,
       theme,
       locale,
       taskEnabled,

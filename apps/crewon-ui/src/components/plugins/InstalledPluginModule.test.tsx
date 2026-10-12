@@ -58,6 +58,7 @@ function fixture(
   selectionEnabled = false,
   options: Readonly<{
     associationEnabled?: boolean;
+    surface?: "workbench" | "sidebar";
     foundation?: "required" | "optional";
   }> = {},
 ) {
@@ -184,6 +185,7 @@ function fixture(
           host={host}
           module={currentModule}
           active={active}
+          surface={options.surface}
           theme={theme}
           locale={locale}
           onDiagnostic={onDiagnostic}
@@ -357,6 +359,18 @@ describe("installed module composition (real authenticated host, explicit import
       pluginUiReady: true,
       projectFoundationConnected: true,
     });
+  });
+
+  it("passes sidebar presentation through the original leased mount and closes it with the original lifecycle", async () => {
+    const f = fixture(false, { surface: "sidebar" });
+    await f.render(true);
+    expect(f.opened()).toHaveLength(1);
+    expect(f.h.instances[0].props.data).toMatchObject({
+      hostPresentation: { surface: "sidebar" },
+    });
+    await f.render(false);
+    expect(f.closed()).toHaveLength(1);
+    expect(f.h.instances[0].dispose).toHaveBeenCalledTimes(1);
   });
 
   it("loads only an active module, updates host props, and closes every lease when leaving", async () => {
