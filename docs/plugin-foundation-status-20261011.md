@@ -145,3 +145,13 @@ CrewON 继续使用现有 Node、Run、Tool、Store 与 SSE 路径。业务插�
 原 SQLite 的受保护改名、归档与恢复已增量接通，具体边界见[metadata 修改](./plugin-project-owned-metadata-mutations.md)。其他写入与生产交付尚未完成。
 
 原 CreativeProject 的 SQLite 内容与概念素材/版本写入已增量接通，仍复用原 Store、事务与独立 write 策略。[具体范围与证据](./plugin-project-owned-content-mutations.md)。其他产物服务、后端及正式产品闭环未完成。
+
+### 2026-10-12：当前源码 UI 与现有 Web 后端分开验收
+
+实际 `5730` 的 Vite 和 Control 进程工作目录均为 `short16-desktop-verification`，并非当前 `incremental-extensions` 工作树；它们仍使用已有 Web SQLite 数据。当前分支的 UI 已通过原 `pnpm --filter @crewon/ui build` 构建，以任务专属生成资源在同一站点临时验收，保持原登录恢复流程，没有复制凭据、修改登录或替换后端。页面自动恢复原 admin 及历史会话。另一个端口的临时预览需要不同 origin 的登录状态，已关闭并停止；同站点生成资源也在验收后校验内容并清理，原页面、后台和数据库保留。
+
+当前源码 UI 打开原工作台后，1280×720 页面中的右栏为 x=800、宽 480，中央输入框为 x=312.5、宽 443，没有覆盖。在实际新建会话点击后的第一次页面观察（约 316 ms；这是工具观察耗时，不是端到端埋点指标）中，已显示用户消息和执行状态。真实 `gpt-6.1-sol` 回复“基础对话正常”，原 SQLite 保存一次 completed 模型调用观察与 4 条输出 delta；Run 从 started 到首段 3379 ms、到 completed 3539 ms。刷新后恢复同一 Thread、回复、模型及原 admin。回执见[当前源码 UI 验收](../output/plugin-foundation/source-web-20261012/acceptance.json)，截图见[中央对话与右栏](../output/plugin-foundation/source-web-20261012/current-source-agent-workbench.png)。此短回复不证明长流、并行恢复、物理 HTTP 重试次数或新的插件执行已通过。
+
+正式原数据库的新只读核对显示 3 个 plugin selection 全为 `uninstalled`，没有启用插件，没有更改账号或历史。Web 开发启动器还残留 `gpt-5.5` 隐式默认，本轮移除该过期回退：保留原 `CREWON_MODEL_ID` / `CREWON_DESKTOP_DEV_PROVIDER_MODEL_ID` 的配置优先级，未选模型时在启动前明确提示选择可用网关模型，不替用户猜测另一个模型。未收窄已有网关目录或聊天框模型列表。启动器专项 25/25、UI 原构建、边界检查通过。
+
+范围仍未放行：当前后端未替换为当前分支，所以本轮不能证明新 Host 协议、Native 分配、项目→会话→中央 Agent/Tool/产物闭环或正式桌面已可用。下一步须统一实际运行基线并验收最小插件，保持业务插件卸除；不能把这次 UI 与既有后端回归当成完整插件产品完成。Mac 仍锁屏，未更新或重开正式 App；当前工作区其他 UI/启动改动仍保留，未纳入本轮提交。

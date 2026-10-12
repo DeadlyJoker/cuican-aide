@@ -53,6 +53,18 @@ const PROVIDER_PROBE_ENVIRONMENT_NAMES = [
   "CREWON_PROVIDER_PROBE_CREDENTIAL_ENVIRONMENT",
 ];
 
+/** Use the operator's selected gateway model; never silently select a retired model. */
+export function developmentConfiguredModelId(environment) {
+  const modelId =
+    environment.CREWON_MODEL_ID?.trim() ||
+    environment.CREWON_DESKTOP_DEV_PROVIDER_MODEL_ID?.trim();
+  if (!modelId)
+    throw new Error(
+      "CREWON_MODEL_ID or CREWON_DESKTOP_DEV_PROVIDER_MODEL_ID is required; choose a current gateway model",
+    );
+  return modelId;
+}
+
 export function developmentRuntimeWorkerCount(value) {
   const normalized = value?.trim() || "1";
   if (!/^\d+$/u.test(normalized)) {
@@ -471,10 +483,7 @@ export async function main() {
     process.env.CREWON_PROVIDER_ID?.trim() ||
     process.env.CREWON_DESKTOP_DEV_PROVIDER_ID?.trim() ||
     "aicuican";
-  const modelId =
-    process.env.CREWON_MODEL_ID?.trim() ||
-    process.env.CREWON_DESKTOP_DEV_PROVIDER_MODEL_ID?.trim() ||
-    "gpt-5.5";
+  const modelId = developmentConfiguredModelId(process.env);
   const apiKey = requireSecret(
     process.env.CREWON_MODEL_API_KEY ?? process.env.AICUICAN_API_KEY,
     "CREWON_MODEL_API_KEY or AICUICAN_API_KEY",

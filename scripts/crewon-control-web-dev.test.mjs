@@ -10,6 +10,7 @@ import { fileURLToPath } from "node:url";
 
 import {
   createControlDevEnvironment,
+  developmentConfiguredModelId,
   defaultControlDataDirectory,
   developmentAgentVersionId,
   developmentExtensionsEnabled,
@@ -787,3 +788,27 @@ test(
     assert.equal(await fixturePortAcceptsConnections(occupiedPort), true);
   },
 );
+
+test("Web development uses the configured gateway selection without a retired hard-coded fallback", () => {
+  assert.throws(
+    () => developmentConfiguredModelId({}),
+    /choose a current gateway model/,
+  );
+  assert.throws(
+    () => developmentConfiguredModelId({ CREWON_MODEL_ID: "  " }),
+    /required/,
+  );
+  assert.equal(
+    developmentConfiguredModelId({
+      CREWON_MODEL_ID: " gpt-6.1-sol ",
+      CREWON_DESKTOP_DEV_PROVIDER_MODEL_ID: "gpt-6-astra",
+    }),
+    "gpt-6.1-sol",
+  );
+  assert.equal(
+    developmentConfiguredModelId({
+      CREWON_DESKTOP_DEV_PROVIDER_MODEL_ID: " gpt-6-astra ",
+    }),
+    "gpt-6-astra",
+  );
+});
