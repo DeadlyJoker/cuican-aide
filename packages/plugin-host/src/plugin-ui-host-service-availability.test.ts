@@ -818,3 +818,28 @@ test("workspace target service needs its independent live assembly; conversation
     false,
   );
 });
+
+test("UI-only modules may declare optional local navigation, without Node or business authority", () => {
+  assert.doesNotThrow(() =>
+    assertUiOnlyServiceDeclarations(
+      descriptor({
+        requires: [
+          {
+            service: "crewon.plugin-navigation",
+            apiVersion: "1",
+            optional: true,
+          },
+        ],
+      }),
+    ),
+  );
+  for (const requires of [
+    [{ service: "crewon.plugin-navigation", apiVersion: "2", optional: true }],
+    [{ service: "crewon.plugin-navigation", apiVersion: "1", optional: false }],
+  ]) {
+    assert.throws(
+      () => assertUiOnlyServiceDeclarations(descriptor({ requires })),
+      { code: "plugin_ui_only_services_unsupported" },
+    );
+  }
+});

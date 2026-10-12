@@ -76,7 +76,7 @@ test("the real tarball installs offline outside the workspace, compiles independ
       await readFile(join(sdk, "package.json"), "utf8"),
     );
     assert.equal(manifest.private, false);
-    assert.equal(manifest.version, "0.1.2");
+    assert.equal(manifest.version, "0.1.3");
     assert.deepEqual(manifest.dependencies ?? {}, {});
     assert.deepEqual(manifest.peerDependencies ?? {}, {});
     assert.deepEqual(Object.keys(manifest.exports).sort(), [

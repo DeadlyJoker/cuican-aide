@@ -36,6 +36,30 @@ const conflict = () =>
 describe.each([false, true])(
   "durable recovery %s (real Web/Native Control client)",
   (native) => {
+    it("an absent optional recovery route leaves the UI visible but blocks staged model execution", async () => {
+      const f = recoveryHostFixture(native);
+      f.setRead(() =>
+        controlUiResponse(
+          {
+            error: {
+              code: "route_not_found",
+              category: "notFound",
+              message: "Route absent",
+              requestId: "optional-recovery-absent",
+            },
+          },
+          404,
+        ),
+      );
+      handles.push(await f.mount());
+      expect(f.importer).toHaveBeenCalledOnce();
+      const request = recoveryRequests[0];
+      await expect(
+        f.h.instances[0].services.invoke(request.action, request.input, {}),
+      ).rejects.toThrow("plugin_ui_recovery_not_ready");
+      expect(f.wire("/actions")).toHaveLength(0);
+    });
+
     it("a package without the capability performs zero recovery reads or stages", async () => {
       const f = recoveryHostFixture(native, false);
       handles.push(await f.mount());

@@ -490,3 +490,36 @@ describe("plugin panels in the formal Agent shell", () => {
     ).toMatchSnapshot();
   });
 });
+
+it("snapshots independent plugin page tabs alongside existing tools", () => {
+  expect(
+    renderToStaticMarkup(
+      <CommandWorkspacePluginPanelHeader
+        locale="zh"
+        selection={{
+          id: "plan",
+          label: "需求与方案",
+          close: noop,
+          createPage: noop,
+          pages: [
+            {
+              id: "home",
+              label: "我的行程",
+              active: false,
+              activate: noop,
+              close: noop,
+            },
+            {
+              id: "plan",
+              label: "需求与方案",
+              active: true,
+              activate: noop,
+              close: noop,
+            },
+          ],
+        }}
+        existingTabs={[{ id: "files", label: "文件", activate: noop }]}
+      />,
+    ),
+  ).toMatchSnapshot();
+});

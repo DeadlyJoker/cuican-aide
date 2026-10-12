@@ -127,7 +127,22 @@ export function ShortDramaPersistentWorkbench({
   association,
   associationReady = false,
   associationThreadId = null,
+  hostSurface = "workbench",
+  hostPageContext = null,
+  onOpenHostPage,
 }: {
+  hostSurface?: "workbench" | "sidebar";
+  hostPageContext?: Readonly<{
+    projectId?: string;
+    stage?: ShortDramaProjectPage;
+  }> | null;
+  onOpenHostPage?(
+    input: Readonly<{
+      key: string;
+      title: string;
+      context: { projectId?: string; stage?: ShortDramaProjectPage };
+    }>,
+  ): void;
   controller: CreativeProjectController;
   texts: ProjectTextController;
   outlines?: ProjectOutlineController;
@@ -316,8 +331,108 @@ export function ShortDramaPersistentWorkbench({
     }
   }, [snapshot.notice, snapshot.details]);
 
+  useEffect(() => {
+    const projectId = hostPageContext?.projectId;
+    if (!projectId) return;
+    setShowProject(true);
+    if (
+      snapshot.phase === "ready" &&
+      snapshot.details?.project.projectId !== projectId &&
+      !snapshot.opening
+    )
+      void controller.openProject(projectId);
+  }, [controller, hostPageContext?.projectId, snapshot.phase]);
+  useEffect(() => {
+    if (
+      hostPageContext?.stage &&
+      details?.project.projectId === hostPageContext.projectId
+    )
+      setPage(hostPageContext.stage);
+  }, [
+    details?.project.projectId,
+    hostPageContext?.stage,
+    hostPageContext?.projectId,
+  ]);
+  if (hostSurface === "sidebar")
+    return (
+      <section
+        className="drama-workbench drama-host-sidebar"
+        aria-label="短剧项目导航"
+      >
+        <h2>AI 短剧</h2>
+        <p className="detail-note">与 Agent 讨论，查看项目成果。</p>
+        <button
+          className="drama-sidebar-item"
+          onClick={() =>
+            onOpenHostPage?.({ key: "home", title: "我的项目", context: {} })
+          }
+        >
+          <FolderOpen size={16} />
+          我的项目
+        </button>
+        <div className="drama-sidebar-projects">
+          {snapshot.projects.map((project) => (
+            <div key={project.projectId}>
+              <button
+                className="drama-sidebar-item"
+                onClick={() =>
+                  onOpenHostPage?.({
+                    key: `project:${project.projectId}`,
+                    title: project.title,
+                    context: {
+                      projectId: project.projectId,
+                      stage: "overview",
+                    },
+                  })
+                }
+              >
+                <Layers3 size={16} />
+                <span>{project.title}</span>
+              </button>
+              {hostPageContext?.projectId === project.projectId && (
+                <nav aria-label="项目制作阶段">
+                  {projectPagesFor(
+                    foundationSnapshot?.origins.get(project.projectId) ?? null,
+                  ).map((item) => (
+                    <button
+                      key={item.id}
+                      className="drama-sidebar-item drama-sidebar-stage"
+                      onClick={() =>
+                        onOpenHostPage?.({
+                          key: `${project.projectId}:${item.id}`,
+                          title: item.title,
+                          context: {
+                            projectId: project.projectId,
+                            stage: item.id,
+                          },
+                        })
+                      }
+                    >
+                      {item.title}
+                    </button>
+                  ))}
+                </nav>
+              )}
+            </div>
+          ))}
+        </div>
+        {snapshot.phase === "waiting" && <p role="status">正在读取项目…</p>}
+        {snapshot.phase === "unavailable" && (
+          <button
+            className="button secondary"
+            onClick={() => void controller.loadProjects()}
+          >
+            重新读取项目
+          </button>
+        )}
+      </section>
+    );
   return (
-    <section className="drama-workbench" aria-label="AI 短剧工作台">
+    <section
+      className="drama-workbench"
+      data-host-layout={onOpenHostPage ? "integrated" : undefined}
+      aria-label="AI 短剧工作台"
+    >
       <div className="drama-main" inert={dialog !== null || newOrigin !== null}>
         <header className="drama-topbar" data-plugin-header-insets="inline">
           <nav className="breadcrumbs" aria-label="AI 短剧路径">

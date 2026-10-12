@@ -27,6 +27,7 @@ import {
   parseProjectGenerationHostContext,
   type ProjectGenerationHostContext,
   defineUiPlugin,
+  createPluginUiNavigationClient,
   type PluginUiProps,
 } from "@crewon/plugin-sdk/ui";
 import { flushSync } from "react-dom";
@@ -470,6 +471,36 @@ export default defineUiPlugin({
         reactRoot.render(
           controller && texts && conversations && plans ? (
             <ShortDramaPersistentWorkbench
+              hostSurface={
+                (
+                  next.data as {
+                    hostPresentation?: { surface?: string };
+                  } | null
+                )?.hostPresentation?.surface === "sidebar"
+                  ? "sidebar"
+                  : "workbench"
+              }
+              hostPageContext={
+                (
+                  next.data as {
+                    hostPresentation?: {
+                      context?: {
+                        projectId?: string;
+                        stage?: import("./workbench/ShortDramaProjectNavigation").ShortDramaProjectPage;
+                      };
+                    };
+                  } | null
+                )?.hostPresentation?.context ?? null
+              }
+              onOpenHostPage={(page) => {
+                void createPluginUiNavigationClient(services)
+                  .openPage({
+                    contributionId: "workbench",
+                    mode: "reuse",
+                    ...page,
+                  })
+                  .catch(() => undefined);
+              }}
               controller={controller}
               texts={texts}
               outlines={outlines ?? undefined}

@@ -20,6 +20,11 @@ export type CommandWorkspaceHostModule = Readonly<{
   /** Stable host route identity, including plugin AND contribution; version belongs to the mount key. */
   id: string;
   label: string;
+  pluginId?: string;
+  navigationLabel?: string;
+  pageId?: string;
+  createPage?(): void;
+  closePage?(): void;
   icon?: PluginNavigationIcon;
   sidebarContent?:
     | ReactNode
@@ -68,7 +73,13 @@ export function useCommandWorkspaceHostModules(
     availability,
   }: Readonly<{
     navigationScope?: string | null;
-    request?: Readonly<{ id: string; requestKey: string }> | null;
+    request?: Readonly<{
+      id: string;
+      requestKey: string;
+      panelOpen?: boolean;
+      hideOnlyGroup?: string;
+      activateOnlyIfSelectedId?: string;
+    }> | null;
     availability?: CommandWorkspaceHostModuleAvailability;
   }> = {},
 ) {
@@ -80,6 +91,7 @@ export function useCommandWorkspaceHostModules(
     id: string;
     label: string;
     panelOpen: boolean;
+    pluginId?: string;
     navigationScope: string | null;
     ownerKey: object | null;
   }> | null>(null);
@@ -98,11 +110,16 @@ export function useCommandWorkspaceHostModules(
       current &&
       (current.navigationScope !== navigationScope ||
         current.ownerKey !== ownerKey ||
-        (!unavailable && !ids.has(current.id)))
+        (!unavailable &&
+          !ids.has(current.id) &&
+          !(
+            request?.activateOnlyIfSelectedId === current.id &&
+            ids.has(request.id)
+          )))
         ? null
         : current,
     );
-  }, [ids, navigationScope, ownerKey, unavailable]);
+  }, [ids, navigationScope, ownerKey, unavailable, request]);
   const close = useCallback(() => setSelection(null), []);
   const sidebarIdsKey = JSON.stringify(
     modules
@@ -130,15 +147,42 @@ export function useCommandWorkspaceHostModules(
       ids.has(request.id)
     ) {
       lastRequestKey.current = request.requestKey;
-      setSelection({
-        id: request.id,
-        panelOpen: true,
-        label: modules.find((module) => module.id === request.id)!.label,
-        navigationScope,
-        ownerKey,
+      setSelection((current) => {
+        if (
+          request.activateOnlyIfSelectedId &&
+          current?.id !== request.activateOnlyIfSelectedId
+        )
+          return current;
+        if (
+          request.hideOnlyGroup &&
+          current?.pluginId !== request.hideOnlyGroup
+        )
+          return current;
+        return {
+          id: request.id,
+          pluginId: modules.find((module) => module.id === request.id)
+            ?.pluginId,
+          panelOpen: request.panelOpen ?? true,
+          label: modules.find((module) => module.id === request.id)!.label,
+          navigationScope,
+          ownerKey,
+        };
       });
     }
   }, [request, ids, modules, navigationScope, ownerKey, unavailable]);
+  const labelsKey = JSON.stringify(
+    modules.map((module) => [
+      module.id,
+      { label: module.label, pluginId: module.pluginId },
+    ]),
+  );
+  const labels = useMemo(
+    () =>
+      new Map<string, { label: string; pluginId?: string }>(
+        JSON.parse(labelsKey),
+      ),
+    [labelsKey],
+  );
   const open = useCallback(
     (id: string) => {
       if (unavailable || !ids.has(id))
@@ -146,12 +190,13 @@ export function useCommandWorkspaceHostModules(
       setSelection({
         id,
         panelOpen: true,
-        label: modules.find((module) => module.id === id)!.label,
+        label: labels.get(id)!.label,
+        pluginId: labels.get(id)!.pluginId,
         navigationScope,
         ownerKey,
       });
     },
-    [ids, modules, navigationScope, ownerKey, unavailable],
+    [ids, labels, navigationScope, ownerKey, unavailable],
   );
   return {
     selectedId,

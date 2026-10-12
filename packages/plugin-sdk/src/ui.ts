@@ -118,3 +118,4 @@ export type {
   ProjectWorkspaceTargetRequest,
   ProjectWorkspaceTargetResponse,
 } from "./project-workspace-target-ui.js";
+export { createPluginUiNavigationClient } from "./ui-navigation.js";

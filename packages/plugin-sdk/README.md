@@ -1,6 +1,6 @@
 # @crewon/plugin-sdk
 
-CrewON 插件开发接口，当前源码候选版本为 `0.1.2`，尚未发布到公共 registry。插件可以在 CrewON 源码仓库外开发；SDK 的分发包包含 ESM JavaScript、TypeScript 声明、LICENSE 和 NOTICE，不依赖宿主源码、私有运行时包或 React。原 `0.1.0`、已冻结插件 39 使用的 `0.1.1` 分发包保持独立。
+CrewON 插件开发接口，当前源码候选版本为 `0.1.3`，尚未发布到公共 registry。插件可以在 CrewON 源码仓库外开发；SDK 的分发包包含 ESM JavaScript、TypeScript 声明、LICENSE 和 NOTICE，不依赖宿主源码、私有运行时包或 React。原 `0.1.0`、已冻结插件 39 使用的 `0.1.1` 分发包保持独立。
 
 SDK 可打包为本地 `.tgz`，供独立开发项目安装，尚未发布到 npm registry。业务插件的安装器目前接收预构建目录；SDK 的安装命令不表示业务插件已支持压缩包输入或正式页面安装。
 
@@ -32,10 +32,10 @@ mkdir -p ../../output/extensions/installable-plugins/sdk
 pnpm pack --pack-destination ../../output/extensions/installable-plugins/sdk
 ```
 
-`pack` 会通过 `prepack` 重新构建。将生成的 `crewon-plugin-sdk-0.1.2.tgz` 交给独立插件项目，再在该项目中执行：
+`pack` 会通过 `prepack` 重新构建。将生成的 `crewon-plugin-sdk-0.1.3.tgz` 交给独立插件项目，再在该项目中执行：
 
 ```sh
-pnpm add /absolute/path/crewon-plugin-sdk-0.1.2.tgz
+pnpm add /absolute/path/crewon-plugin-sdk-0.1.3.tgz
 pnpm add -D typescript@5.9.3 esbuild@0.27.7
 ```
 
@@ -275,3 +275,22 @@ pnpm exec esbuild src/node.ts src/ui.ts --bundle --format=esm --platform=neutral
 Node 插件运行在受信任的宿主进程中。公开 ABI 不是沙箱，也不提供文件系统、网络或权限隔离；安装信任、启停授权以及每次业务调用的身份检查由宿主负责。
 
 任务和执行工厂 ABI 之外，当前 SDK 没有工作流调度、配置管理或计费服务端口。`services.get` / `provide` 只能访问宿主实际装配、且包中声明的命名服务，不意味着这些能力已经可用。
+
+### 插件导航与页面（0.1.3）
+
+模块可声明 `icon: "book-open"` 和 `surfaces: ["workbench", "sidebar"]`。宿主向两种挂载传入 `data.hostPresentation.surface`；新页面另外携带宿主签发的 `pageId`、有界展示 `context` 和 `visible`。中间 Agent、模型选择和会话管理由原宿主负责。
+
+声明可选依赖 `{ service: "crewon.plugin-navigation", apiVersion: "1", optional: true }` 后，通过 `createPluginUiNavigationClient(services)` 打开页面：
+
+```ts
+const navigation = createPluginUiNavigationClient(services);
+await navigation.openPage({
+  contributionId: "travel",
+  key: "plan",
+  title: "需求与方案",
+  mode: "reuse",
+  context: { view: "plan" },
+});
+```
+
+同一个 `key` 使用 `reuse` 会切回已有页面并更新展示上下文，保留挂载和本地草稿；`new` 创建独立实例。`activatePage`、`closePage`、`listPages` 只访问发起插件所属页面，`toggleWorkbench` 开关右侧插件工作台，不覆盖原工具标签。每插件最多八个托管页面，全局最多三十二个。导航上下文不能用于签发工作空间、会话、文件或执行权限；所有业务操作仍走原有服务和租约检查。

@@ -139,3 +139,11 @@ export {
   parseDesktopPluginCompositionConfiguration,
   type DesktopPluginCompositionConfiguration,
 } from "./desktop-plugin-composition-configuration.ts";
+export {
+  PLUGIN_UI_NAVIGATION_SERVICE,
+  PLUGIN_UI_NAVIGATION_API_VERSION,
+  PLUGIN_UI_NAVIGATION_ACTIONS,
+  parsePluginUiNavigationRequest,
+  isPluginUiNavigationAction,
+  type PluginUiNavigationRequest,
+} from "./plugin-ui-navigation-contract.ts";

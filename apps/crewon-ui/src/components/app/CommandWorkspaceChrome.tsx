@@ -1,3 +1,4 @@
+import { commandPluginNavigationGroups } from "./commandPluginNavigationGroups";
 import type { ThreadCatalogNavigation } from "../../lib/thread/threadCatalogNavigation";
 import type { ControlWorkspaceMutationAuthority } from "../../lib/control-runtime/useControlWorkspaceRuntime";
 import { CommandSearchCatalogNavigation } from "./CommandSearchCatalogNavigation";
@@ -171,6 +172,8 @@ export function CommandSidebar({
   hostModule?: Readonly<{
     id: string;
     label: string;
+    pluginId?: string;
+    navigationLabel?: string;
     icon?: import("@crewon/contracts/plugins").PluginNavigationIcon;
     sidebarContent?: ReactNode;
     active: boolean;
@@ -179,6 +182,8 @@ export function CommandSidebar({
   hostModules?: readonly Readonly<{
     id: string;
     label: string;
+    pluginId?: string;
+    navigationLabel?: string;
     icon?: import("@crewon/contracts/plugins").PluginNavigationIcon;
     sidebarContent?: ReactNode;
     active: boolean;
@@ -209,6 +214,7 @@ export function CommandSidebar({
   onToggleSearch: () => void;
 }) {
   const modules = mergeCommandWorkspaceHostModules({ hostModule, hostModules });
+  const navigationModules = commandPluginNavigationGroups(modules);
   const contextCollapsed = collapsed ?? sidebarCollapsed;
   const section = commandSidebarSection(activeView);
   const activePlugin = modules.find((module) => module.active);
@@ -450,7 +456,7 @@ export function CommandSidebar({
     >
       {chromeTarget ? createPortal(chrome, chromeTarget) : chrome}
       <CommandNavigationRail
-        plugins={modules}
+        plugins={navigationModules}
         hostModuleActive={modules.some((module) => module.active)}
         activeView={activeView}
         collapsed={contextCollapsed}
@@ -561,7 +567,7 @@ export function CommandSidebar({
         ) : (
           <CommandSidebarNavigation
             activeView={activeView}
-            hostModules={modules}
+            hostModules={navigationModules}
             locale={locale}
             onNewThread={() => onNewThread(null)}
             onSwitchView={onSwitchView}

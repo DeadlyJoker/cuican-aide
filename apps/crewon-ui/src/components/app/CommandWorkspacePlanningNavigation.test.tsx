@@ -75,3 +75,41 @@ it("opens only a new explicit host request and does not reopen after closing, sc
   await render("chat-a", { ...request, requestKey: "new-user-click" }, false);
   expect(pane().hidden).toBe(true);
 });
+
+it("closing a removed selected page returns to its remaining page without losing the plugin sidebar", async () => {
+  container = document.createElement("div");
+  document.body.append(container);
+  root = createRoot(container);
+  const home = {
+    id: "home",
+    label: "首页",
+    pluginId: "example.pages",
+    sidebarContent: <p>目录</p>,
+    content: <p>首页内容</p>,
+  };
+  const page = { ...home, id: "page", label: "方案" };
+  function Pages({ removed = false }: { removed?: boolean }) {
+    const state = useCommandWorkspaceHostModules(
+      removed ? [home] : [home, page],
+      {
+        request: removed
+          ? {
+              id: "home",
+              requestKey: "close-page",
+              panelOpen: true,
+              activateOnlyIfSelectedId: "page",
+            }
+          : { id: "page", requestKey: "open-page" },
+      },
+    );
+    return (
+      <output>
+        {state.selectedId}:{String(state.panelOpen)}
+      </output>
+    );
+  }
+  await act(() => root!.render(<Pages />));
+  expect(container.textContent).toBe("page:true");
+  await act(() => root!.render(<Pages removed />));
+  expect(container.textContent).toBe("home:true");
+});

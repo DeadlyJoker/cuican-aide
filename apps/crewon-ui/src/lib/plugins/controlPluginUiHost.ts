@@ -1,3 +1,8 @@
+import { isPluginUiNavigationAction } from "@crewon/contracts/plugins";
+import {
+  invokePluginUiNavigation,
+  type PluginUiNavigationHandler,
+} from "./pluginUiNavigationTransport";
 import { createInstalledPluginSourceUploadPartTransport } from "./installedPluginSourceUploadTransport";
 import { createInstalledPluginMediaResultTransport } from "./installedPluginMediaResultTransport";
 import { isProjectMediaResultUiNamespaceAction } from "@crewon/contracts/project-media-results-ui";
@@ -74,6 +79,7 @@ export function createControlPluginUiHost(
     client: ControlApiClient;
     assertCurrent: PluginUiCurrentScope;
     onDiagnostic(error: unknown): void;
+    onNavigation?: PluginUiNavigationHandler;
     onTaskReceipt?(event: InstalledPluginTaskReceiptEvent): void;
     onProjectConversationOpen?(
       event: InstalledPluginConversationOpenEvent,
@@ -156,6 +162,8 @@ export function createControlPluginUiHost(
       },
       async invoke(originalLease, input) {
         return leases.run(originalLease, input.signal, async (lease) => {
+          if (isPluginUiNavigationAction(input.action))
+            return invokePluginUiNavigation(lease, input, options.onNavigation);
           if (isProjectMediaResultUiNamespaceAction(input.action))
             return mediaResults.invoke(lease, input);
           if (input.action === PROJECT_MEDIA_GENERATE_UI_ACTION)

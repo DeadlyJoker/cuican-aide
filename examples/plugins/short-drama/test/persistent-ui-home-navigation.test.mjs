@@ -353,3 +353,15 @@ test("cold entry and re-entry land on home while delayed recovery stays collapse
     await f.dispose();
   }
 });
+
+test("host sidebar reads original projects and opens pages through the common navigation protocol without an Agent composer",async()=>{
+ const service=metadataService();const first=await ready(service);
+ await first.input(first.container.querySelector('#drama-project-idea'),'侧栏项目验收');await first.click(first.button('确认创作需求'));await first.click(first.button('创建项目'));await first.instance.dispose();
+ const navigation=[];
+ const services={...service.services,invoke:async(action,input,options)=>{
+  if(action==='crewon.plugin-navigation.open-page'){navigation.push({action,input});return {version:'crewon.plugin-ui-navigation.v1',pageId:'page-one'}}
+  return service.services.invoke(action,input,options);
+ }};
+ const f=fixture(definition,{props:{...persistentProps(true),data:{...persistentProps(true).data,hostPresentation:{surface:'sidebar'}}},services});
+ try{await settle();assert.ok(f.container.querySelector('[aria-label="短剧项目导航"]'));assert.equal(f.container.querySelector('textarea'),null);await f.click(f.button('侧栏项目验收'));assert.equal(navigation.length,1);assert.equal(navigation[0].input.contributionId,'workbench');assert.equal(navigation[0].input.mode,'reuse');assert.equal(navigation[0].input.context.stage,'overview');assert.equal(service.methodCalls('createProject').length,1);}finally{await f.instance.dispose();}
+});

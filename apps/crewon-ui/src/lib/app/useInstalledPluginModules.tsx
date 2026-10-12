@@ -1,10 +1,16 @@
 import {
+  PluginUiPageNavigation,
+  EMPTY_PLUGIN_UI_PAGE_SNAPSHOT,
+} from "../plugins/pluginUiPageNavigation";
+import { installedPluginSurfaceModules } from "./installedPluginSurfaceModules";
+import {
   useCallback,
   useEffect,
   useLayoutEffect,
   useMemo,
   useRef,
   useState,
+  useSyncExternalStore,
 } from "react";
 import {
   ControlApiClientError,
@@ -248,6 +254,28 @@ export function useInstalledPluginModules({
     historicalQueryJournal,
     selectionJournal,
   ]);
+  const catalogForPages = useRef<ControlPluginUiCatalog | null>(null);
+  const pageNavigation = useMemo(
+    () =>
+      scope
+        ? new PluginUiPageNavigation({
+            catalog: () => catalogForPages.current,
+            assertCurrent: () => {
+              if (current.current !== scope || mountedScope.current !== scope)
+                throw new PluginUiLoaderError("plugin_ui_session_changed");
+            },
+          })
+        : null,
+    [scope],
+  );
+  useLayoutEffect(() => {
+    pageNavigation?.activate();
+    return () => pageNavigation?.close();
+  }, [pageNavigation]);
+  const pages = useSyncExternalStore(
+    pageNavigation?.subscribe ?? emptyPageSubscribe,
+    pageNavigation?.snapshot ?? emptyPageSnapshot,
+  );
   const host = useMemo(
     () =>
       scope
@@ -265,6 +293,9 @@ export function useInstalledPluginModules({
                 throw new PluginUiLoaderError("plugin_ui_session_changed");
             },
             onDiagnostic,
+            ...(pageNavigation
+              ? { onNavigation: pageNavigation.invoke.bind(pageNavigation) }
+              : {}),
             ...(receipts ? { onTaskReceipt: receipts.observe } : {}),
             ...(generationJournal ? { generationJournal } : {}),
             ...(projectQueryJournal ? { projectQueryJournal } : {}),
@@ -289,6 +320,7 @@ export function useInstalledPluginModules({
       projectQueryJournal,
       historicalQueryJournal,
       selectionJournal,
+      pageNavigation,
     ],
   );
   useLayoutEffect(() => {
@@ -427,6 +459,11 @@ export function useInstalledPluginModules({
     };
   }, [scope, host, onDiagnostic, catalogRevision]);
   const catalog = snapshot?.scope === scope ? snapshot.catalog : null;
+  catalogForPages.current = catalog;
+  useLayoutEffect(
+    () => pageNavigation?.synchronize(),
+    [pageNavigation, catalog],
+  );
   const retryDirectory = useCallback(() => {
     if (scope === null || current.current !== scope) return;
     catalogGeneration.current += 1;
@@ -599,73 +636,55 @@ export function useInstalledPluginModules({
     [taskRunIdsKey],
   );
   const hostModules = useMemo<readonly CommandWorkspaceHostModule[]>(() => {
-    if (!host || !catalog) return EMPTY_MODULES;
-    return Object.freeze(
-      catalog.modules.map((module) =>
-        Object.freeze({
-          id: module.key,
-          label: module.title,
-          icon: module.icon,
-          ...(module.surfaces?.includes("sidebar")
-            ? {
-                sidebarContent: ({ active }: Readonly<{ active: boolean }>) => (
-                  <InstalledPluginModule
-                    key={`${module.mountKey}:sidebar`}
-                    surface="sidebar"
-                    host={host}
-                    module={module}
-                    active={active}
-                    theme={presentation}
-                    locale={locale}
-                    onDiagnostic={onDiagnostic}
-                    taskPorts={taskPorts}
-                    generationPorts={generationPorts}
-                    projectQueryPorts={projectQueryPorts}
-                    historicalQueryPorts={historicalQueryPorts}
-                    selectionPorts={selectionPorts}
-                    selectedThreadId={selectedTaskThreadId}
-                    runIds={taskRunIds}
-                    projectConversationContext={projectConversationContext}
-                    projectPlanningDraft={planning.draftFor(module)}
-                    onOpenTask={(threadId) => {
-                      taskPorts?.assertSessionCurrent();
-                      if (taskPorts)
-                        taskContextRef.current?.onOpenTask(threadId);
-                    }}
-                  />
-                ),
-              }
-            : {}),
-          content: ({ active }: Readonly<{ active: boolean }>) => (
-            <InstalledPluginModule
-              key={module.mountKey}
-              host={host}
-              module={module}
-              active={active}
-              theme={presentation}
-              locale={locale}
-              onDiagnostic={onDiagnostic}
-              taskPorts={taskPorts}
-              generationPorts={generationPorts}
-              projectQueryPorts={projectQueryPorts}
-              historicalQueryPorts={historicalQueryPorts}
-              selectionPorts={selectionPorts}
-              selectedThreadId={selectedTaskThreadId}
-              runIds={taskRunIds}
-              projectConversationContext={projectConversationContext}
-              projectPlanningDraft={planning.draftFor(module)}
-              onOpenTask={(threadId) => {
-                taskPorts?.assertSessionCurrent();
-                if (taskPorts) taskContextRef.current?.onOpenTask(threadId);
-              }}
-            />
-          ),
-        }),
+    if (!host || !catalog || !pageNavigation) return EMPTY_MODULES;
+    return installedPluginSurfaceModules({
+      catalog,
+      pages,
+      navigation: pageNavigation,
+      render: (module, state) => (
+        <InstalledPluginModule
+          key={
+            state.surface === "sidebar"
+              ? `${module.mountKey}:sidebar`
+              : module.mountKey
+          }
+          host={host}
+          module={module}
+          active={state.active}
+          surface={state.surface}
+          uiPage={
+            state.page
+              ? {
+                  pageId: state.page.pageId,
+                  context: state.page.context,
+                  visible: state.visible,
+                }
+              : undefined
+          }
+          theme={presentation}
+          locale={locale}
+          onDiagnostic={onDiagnostic}
+          taskPorts={taskPorts}
+          generationPorts={generationPorts}
+          projectQueryPorts={projectQueryPorts}
+          historicalQueryPorts={historicalQueryPorts}
+          selectionPorts={selectionPorts}
+          selectedThreadId={selectedTaskThreadId}
+          runIds={taskRunIds}
+          projectConversationContext={projectConversationContext}
+          projectPlanningDraft={planning.draftFor(module)}
+          onOpenTask={(threadId) => {
+            taskPorts?.assertSessionCurrent();
+            if (taskPorts) taskContextRef.current?.onOpenTask(threadId);
+          }}
+        />
       ),
-    );
+    });
   }, [
     host,
     catalog,
+    pageNavigation,
+    pages,
     presentation,
     locale,
     onDiagnostic,
@@ -679,11 +698,25 @@ export function useInstalledPluginModules({
     projectConversationContext,
     planning.revision,
   ]);
+  const [surfaceRequest, setSurfaceRequest] =
+    useState<typeof pages.request>(null);
+  useEffect(() => setSurfaceRequest(pages.request), [pages.request]);
+  useEffect(() => {
+    if (planning.request)
+      setSurfaceRequest({ ...planning.request, panelOpen: true });
+  }, [planning.request]);
   return {
     hostModules,
     hostModuleAvailability,
     planningNavigation: planning.navigation,
-    planningRequest: planning.request,
+    planningRequest: surfaceRequest,
     getDiagnostics: () => diagnostics.current,
   };
+}
+
+function emptyPageSubscribe() {
+  return () => {};
+}
+function emptyPageSnapshot() {
+  return EMPTY_PLUGIN_UI_PAGE_SNAPSHOT;
 }

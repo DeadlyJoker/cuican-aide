@@ -62,7 +62,7 @@ test("creative project declarations and UI methods work from a real offline tarb
     const manifest = JSON.parse(
       await readFile(join(sdk, "package.json"), "utf8"),
     );
-    assert.equal(manifest.version, "0.1.2");
+    assert.equal(manifest.version, "0.1.3");
     assert.deepEqual(manifest.dependencies ?? {}, {});
     assert.deepEqual(manifest.peerDependencies ?? {}, {});
     assert.deepEqual(Object.keys(manifest.exports).sort(), [

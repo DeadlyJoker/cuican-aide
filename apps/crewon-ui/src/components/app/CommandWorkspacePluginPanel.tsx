@@ -1,6 +1,6 @@
-import { useLayoutEffect, useMemo } from "react";
+import { useLayoutEffect, useMemo, useRef, useCallback } from "react";
 import { createPortal } from "react-dom";
-import { PanelRight } from "lucide-react";
+import { PanelRight, Plus, X } from "lucide-react";
 import {
   CommandWorkspaceHostModulePane,
   CommandWorkspaceHostModuleUnavailablePane,
@@ -14,6 +14,14 @@ export type CommandWorkspacePluginPanelSelection = Readonly<{
   id: string;
   label: string;
   close(): void;
+  createPage?(): void;
+  pages?: readonly Readonly<{
+    id: string;
+    label: string;
+    active: boolean;
+    activate(): void;
+    close(): void;
+  }>[];
 }>;
 
 export function CommandWorkspacePluginPanel({
@@ -23,6 +31,7 @@ export function CommandWorkspacePluginPanel({
   target,
   locale,
   onClose,
+  onSelect,
   onRetry,
   onSelectionChange,
 }: Readonly<{
@@ -32,6 +41,7 @@ export function CommandWorkspacePluginPanel({
   target: HTMLElement | null;
   locale: Locale;
   onClose(): void;
+  onSelect?(id: string): void;
   onRetry?(): void;
   onSelectionChange?(
     selection: CommandWorkspacePluginPanelSelection | null,
@@ -41,12 +51,50 @@ export function CommandWorkspacePluginPanel({
     unavailableSelection?.label ??
     modules.find((module) => module.id === selectedId)?.label ??
     null;
+  const latestModules = useRef(modules);
+  latestModules.current = modules;
+  const pageKey = JSON.stringify(
+    modules
+      .filter((module) => module.pageId)
+      .map((module) => ({ id: module.id, label: module.label })),
+  );
+  const canCreate = modules.some(
+    (module) => module.id === selectedId && !!module.createPage,
+  );
+  const createPage = useCallback(
+    () =>
+      latestModules.current
+        .find((module) => module.id === selectedId)
+        ?.createPage?.(),
+    [selectedId],
+  );
+  const pageTabs = useMemo(
+    () =>
+      JSON.parse(pageKey).map(
+        (page: Readonly<{ id: string; label: string }>) => ({
+          ...page,
+          active: page.id === selectedId,
+          activate: () => onSelect?.(page.id),
+          close: () =>
+            latestModules.current
+              .find((module) => module.id === page.id)
+              ?.closePage?.(),
+        }),
+      ),
+    [pageKey, selectedId, onSelect],
+  );
   const selection = useMemo(
     () =>
       selectedId !== null && label !== null
-        ? { id: selectedId, label, close: onClose }
+        ? {
+            id: selectedId,
+            label,
+            close: onClose,
+            ...(canCreate ? { createPage } : {}),
+            pages: pageTabs,
+          }
         : null,
-    [selectedId, label, onClose],
+    [selectedId, label, onClose, canCreate, createPage, pageTabs],
   );
   useLayoutEffect(() => {
     onSelectionChange?.(selection);
@@ -92,7 +140,46 @@ export function CommandWorkspacePluginPanelHeader({
       className="command-workbench-tabbar command-plugin-panel-header"
       data-desktop-drag-region=""
     >
-      <strong>{selection.label}</strong>
+      {!selection.pages?.length && <strong>{selection.label}</strong>}
+      {selection.pages?.length ? (
+        <div
+          className="command-workbench-tabs"
+          role="tablist"
+          aria-label={locale === "zh" ? "插件页面" : "Plugin pages"}
+        >
+          {selection.pages.map((page) => (
+            <div
+              key={page.id}
+              className="command-workbench-tab"
+              role="tab"
+              aria-selected={page.active}
+              data-active={page.active ? "true" : undefined}
+            >
+              <button type="button" onClick={page.activate}>
+                {page.label}
+              </button>
+              <button
+                type="button"
+                className="command-workbench-tab-close"
+                aria-label={`${locale === "zh" ? "关闭" : "Close"} ${page.label}`}
+                onClick={page.close}
+              >
+                <X aria-hidden="true" />
+              </button>
+            </div>
+          ))}
+        </div>
+      ) : null}
+      {selection.createPage ? (
+        <button
+          type="button"
+          className="command-workbench-add"
+          aria-label={locale === "zh" ? "新建插件页面" : "New plugin page"}
+          onClick={selection.createPage}
+        >
+          <Plus aria-hidden="true" />
+        </button>
+      ) : null}
       {existingTabs.length > 0 ? (
         <div
           className="command-workbench-tabs"

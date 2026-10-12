@@ -3,6 +3,8 @@ import {
   preserveProjectHistoricalQueryHostAvailability,
 } from "./plugin-project-historical-query-host-availability.ts";
 import {
+  PLUGIN_UI_NAVIGATION_SERVICE,
+  PLUGIN_UI_NAVIGATION_API_VERSION,
   CREWON_PROJECT_HISTORICAL_QUERIES_SERVICE,
   CREWON_PROJECT_HISTORICAL_QUERIES_API_VERSION,
 } from "@crewon/contracts/plugins";
@@ -288,6 +290,9 @@ export function assertUiOnlyServiceDeclarations(
             CREWON_PROJECT_GENERATION_SELECTIONS_SERVICE &&
             requirement.apiVersion ===
               CREWON_PROJECT_GENERATION_SELECTIONS_API_VERSION) ||
+          (requirement.service === PLUGIN_UI_NAVIGATION_SERVICE &&
+            requirement.apiVersion === PLUGIN_UI_NAVIGATION_API_VERSION &&
+            requirement.optional) ||
           (requirement.service === CREWON_PLUGIN_UI_RECOVERY_SERVICE &&
             requirement.apiVersion === CREWON_PLUGIN_UI_RECOVERY_API_VERSION) ||
           (requirement.service === CREWON_PROJECT_TEXTS_SERVICE &&

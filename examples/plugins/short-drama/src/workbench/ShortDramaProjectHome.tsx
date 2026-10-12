@@ -92,45 +92,48 @@ export function ShortDramaProjectHome({
             aria-describedby="drama-idea-help"
           />
           {creativeDraft && onCreativeDraftChange && (
-            <div className="drama-home-creation-fields">
-              <label className="form-field">
-                参考文字（可选）
-                <textarea
-                  className="drama-short-input"
-                  value={creativeDraft.reference}
+            <details className="drama-home-settings">
+              <summary>更多创作设置</summary>
+              <div className="drama-home-creation-fields">
+                <label className="form-field">
+                  参考文字（可选）
+                  <textarea
+                    className="drama-short-input"
+                    value={creativeDraft.reference}
+                    disabled={!canCreate}
+                    onChange={(event) =>
+                      onCreativeDraftChange({
+                        ...creativeDraft,
+                        reference: event.target.value,
+                      })
+                    }
+                    placeholder="补充参考故事、风格或画面要求"
+                  />
+                </label>
+                <ProjectCreationParametersFields
+                  origin="creative"
+                  value={creativeDraft.parameters}
                   disabled={!canCreate}
-                  onChange={(event) =>
-                    onCreativeDraftChange({
-                      ...creativeDraft,
-                      reference: event.target.value,
-                    })
-                  }
-                  placeholder="补充参考故事、风格或画面要求"
-                />
-              </label>
-              <ProjectCreationParametersFields
-                origin="creative"
-                value={creativeDraft.parameters}
-                disabled={!canCreate}
-                onChange={(parameters) =>
-                  onCreativeDraftChange({ ...creativeDraft, parameters })
-                }
-              />
-              <label className="drama-checkbox-row">
-                <input
-                  type="checkbox"
-                  checked={creativeDraft.direct}
-                  disabled={!canCreate}
-                  onChange={(event) =>
-                    onCreativeDraftChange({
-                      ...creativeDraft,
-                      direct: event.target.checked,
-                    })
+                  onChange={(parameters) =>
+                    onCreativeDraftChange({ ...creativeDraft, parameters })
                   }
                 />
-                跳过方案确认，直接写剧本
-              </label>
-            </div>
+                <label className="drama-checkbox-row">
+                  <input
+                    type="checkbox"
+                    checked={creativeDraft.direct}
+                    disabled={!canCreate}
+                    onChange={(event) =>
+                      onCreativeDraftChange({
+                        ...creativeDraft,
+                        direct: event.target.checked,
+                      })
+                    }
+                  />
+                  跳过方案确认，直接写剧本
+                </label>
+              </div>
+            </details>
           )}
           <div className="drama-idea-actions">
             <span id="drama-idea-help">先确认需求，再开始制作</span>
@@ -153,14 +156,6 @@ export function ShortDramaProjectHome({
             >
               <BookOpen size={16} />
               从小说创建短剧
-            </button>
-            <button
-              type="button"
-              className="text-button"
-              disabled
-              title="模板暂未开放"
-            >
-              模板暂未开放
             </button>
           </div>
         )}

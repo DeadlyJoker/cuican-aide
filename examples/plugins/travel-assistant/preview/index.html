@@ -1,0 +1,103 @@
+<!doctype html>
+<html lang="zh-CN">
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width,initial-scale=1" />
+  <title>出行助手 · 插件演示</title>
+  <style>
+    body {
+      margin: 0;
+      background: #f3f4f6;
+      font-family: system-ui;
+      color: #25282e;
+    }
+    .preview-bar {
+      display: flex;
+      justify-content: space-between;
+      align-items: center;
+      gap: 12px;
+      padding: 10px 24px;
+      font-size: 12px;
+      background: #25282e;
+      color: #fff;
+    }
+    .preview-bar button {
+      padding: 5px 12px;
+      color: inherit;
+      background: transparent;
+      border: 1px solid #6d717b;
+      border-radius: 6px;
+      cursor: pointer;
+    }
+    #root {
+      max-width: 1400px;
+      margin: 18px auto;
+      background: white;
+      border: 1px solid #e4e6eb;
+      border-radius: 12px;
+      overflow: hidden;
+      min-height: 90vh;
+    }
+    @media (max-width: 650px) {
+      #root {
+        margin: 0;
+        border: 0;
+        border-radius: 0;
+      }
+      .preview-bar {
+        padding: 10px 16px;
+      }
+    }
+  </style>
+  <div class="preview-bar">
+    <span>CrewON 插件预览容器 · 非正式宿主安装</span
+    ><button id="theme" type="button">切换明暗主题</button>
+  </div>
+  <div id="root"></div>
+  <script type="module">
+    import plugin from "/ui.mjs";
+    let dark = false;
+    const props = () => ({
+      schemaVersion: "crewon.plugin-ui-props.v1",
+      contributionId: "travel",
+      theme: {
+        mode: dark ? "dark" : "light",
+        tokens: dark
+          ? {
+              "--surface": "#191b20",
+              "--surface-raised": "#24272e",
+              "--text": "#eceef2",
+              "--text-muted": "#a0a4ad",
+              "--border": "#353841",
+              "--accent": "#e8ebf0",
+              "--accent-ink": "#191b20",
+            }
+          : {
+              "--surface": "#fff",
+              "--surface-raised": "#f7f8fa",
+              "--text": "#202124",
+              "--text-muted": "#73757c",
+              "--border": "#e6e7eb",
+              "--accent": "#23272c",
+              "--accent-ink": "#fff",
+            },
+      },
+      data: null,
+    });
+    const instance = await plugin.mount(
+      document.getElementById("root"),
+      props(),
+      {
+        invoke: async () => {
+          throw new Error("demo_must_not_call_host");
+        },
+      },
+    );
+    document.getElementById("theme").onclick = () => {
+      dark = !dark;
+      instance.update(props());
+    };
+    window.addEventListener("pagehide", () => instance.dispose(), {
+      once: true,
+    });
+  </script>
+</html>

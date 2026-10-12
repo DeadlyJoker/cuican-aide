@@ -317,7 +317,10 @@ type CommandWorkspaceProps = {
   hostModule?: CommandWorkspaceHostModule;
   hostModules?: readonly CommandWorkspaceHostModule[];
   hostModuleAvailability?: CommandWorkspaceHostModuleAvailability;
-  hostModuleRequest?: Readonly<{ id: string; requestKey: string }> | null;
+  hostModuleRequest?:
+    | import("../../lib/plugins/pluginUiPageNavigation").PluginUiPageRequest
+    | Readonly<{ id: string; requestKey: string }>
+    | null;
   hostModulePanelTarget?: HTMLElement | null;
   onHostModulePanelSelectionChange?: (
     selection: CommandWorkspacePluginPanelSelection | null,
@@ -3375,6 +3378,8 @@ export function CommandWorkspace({
           hostModules={modules.map((module) => ({
             id: module.id,
             label: module.label,
+            pluginId: module.pluginId,
+            navigationLabel: module.navigationLabel,
             icon: module.icon,
             sidebarContent: commandWorkspaceHostModuleSidebar({
               module,
@@ -4399,6 +4404,7 @@ export function CommandWorkspace({
         target={hostModulePanelTarget}
         locale={locale}
         onClose={hostModuleView.closePanel}
+        onSelect={hostModuleView.open}
         onRetry={hostModuleAvailability?.retry}
         onSelectionChange={onHostModulePanelSelectionChange}
       />
