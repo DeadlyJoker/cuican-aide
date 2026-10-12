@@ -369,7 +369,7 @@ it("revoked binding and transient get failure stay blocked instead of defaulting
     Response.json({ binding: { ...binding, state: "revoked" } }),
   );
   expect(f.current().blocked).toBe(true);
-  expect(f.container.textContent).toContain("暂不可用");
+  expect(f.container.textContent).toContain("暂时无法读取项目会话");
 });
 it("explicit readonly refresh observes manual project source changes without changing the selected phase or Thread", async () => {
   let edited = false;
@@ -579,4 +579,41 @@ it("original Composer selects reviewed media preparation, requires D18 script, a
   } finally {
     await turns.close();
   }
+});
+
+it("a changed plugin source explains recovery and reloads the same Thread after its authorized association is updated", async () => {
+  let refreshed = false;
+  const f = await fixture(async (url) => {
+    const path = new URL(String(url)).pathname;
+    if (path.endsWith("project-conversation"))
+      return refreshed
+        ? Response.json({ binding: { ...binding, revision: 2 } })
+        : Response.json(
+            {
+              error: {
+                category: "authorization",
+                requestId: "source-changed-test",
+                code: "project_conversation_authority_changed",
+                message: "changed",
+              },
+            },
+            { status: 403 },
+          );
+    return Response.json(
+      path.endsWith("outline") ? { view: publicTextView } : { project },
+    );
+  });
+  expect(f.current().blocked).toBe(true);
+  expect(f.container.textContent).toContain("插件已更新");
+  expect(f.container.textContent).not.toContain("重新进入会话");
+  refreshed = true;
+  await act(async () => {
+    notifyProjectConversationBindingChanged(f.client, binding.threadId);
+    await new Promise((resolve) => setTimeout(resolve, 0));
+  });
+  expect(f.current().blocked).toBe(false);
+  expect(f.current().selection?.binding.threadId).toBe(binding.threadId);
+  expect(f.current().selection?.binding.workspaceId).toBe(binding.workspaceId);
+  expect(f.current().selection?.binding.revision).toBe(2);
+  expect(f.container.querySelector('[role="alert"]')).toBeNull();
 });

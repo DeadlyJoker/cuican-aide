@@ -44,7 +44,9 @@ export function useProjectConversationComposer(
   const [generationBusy, setGenerationBusy] = useState(false);
   const busy = input.busy || generationBusy;
   const [snapshot, setSnapshot] = useState<Snapshot | null>(null),
-    [failure, setFailure] = useState(false),
+    [failure, setFailure] = useState<"source-changed" | "unavailable" | null>(
+      null,
+    ),
     [loading, setLoading] = useState(
       input.client !== null && input.threadId !== null,
     ),
@@ -74,7 +76,7 @@ export function useProjectConversationComposer(
   }, [owner]);
   useEffect(() => {
     setSnapshot(null);
-    setFailure(false);
+    setFailure(null);
     setSnapshotOwner(owner);
     setKind("discussion");
     setEpisode("");
@@ -83,7 +85,7 @@ export function useProjectConversationComposer(
   useEffect(() => {
     const controller = new AbortController();
     let alive = true;
-    setFailure(false);
+    setFailure(null);
     setLoading(owner.client !== null && owner.threadId !== null);
     if (owner.client === null || owner.threadId === null)
       return () => {
@@ -138,7 +140,13 @@ export function useProjectConversationComposer(
           error.code === "route_not_found"
         )
           return;
-        setFailure(true);
+        setFailure(
+          error instanceof ControlApiClientError &&
+            error.status === 403 &&
+            error.code === "project_conversation_authority_changed"
+            ? "source-changed"
+            : "unavailable",
+        );
       })
       .finally(() => {
         if (alive && current.current === owner) setLoading(false);
@@ -219,9 +227,13 @@ export function useProjectConversationComposer(
     actual === null ? (
       failure && snapshotOwner === owner ? (
         <span role="alert" className="composer-state">
-          {zh
-            ? "项目会话状态暂不可用，请重新进入会话"
-            : "Project conversation unavailable. Reopen the conversation."}
+          {failure === "source-changed"
+            ? zh
+              ? "插件已更新，请在项目页选择「继续与 Agent 对话」，再更新会话关联。历史和工作空间会保留。"
+              : "The plugin changed. Continue the Agent conversation from the project page to update its association. History and workspace are preserved."
+            : zh
+              ? "暂时无法读取项目会话，请稍后重试。"
+              : "Unable to read the project conversation. Try again shortly."}
         </span>
       ) : null
     ) : (
@@ -409,7 +421,7 @@ export function useProjectConversationComposer(
         assets.blocked ||
         media.blocked ||
         snapshotOwner !== owner ||
-        failure ||
+        failure !== null ||
         loading ||
         (retained === null &&
           kind === "script" &&
