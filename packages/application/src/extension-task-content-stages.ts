@@ -80,6 +80,9 @@ export function extensionContentStageCommitOptions(
   return {
     ...financialOptions,
     projectStageAuthority: request.conversation.authority,
+    ...(request.conversation.projectReadScope === undefined
+      ? {}
+      : { projectStageReadScope: request.conversation.projectReadScope }),
     ...(request.projectTextPlan == null
       ? {}
       : { projectTextPlanAuthority: request.projectTextPlan }),

@@ -1,3 +1,7 @@
+import {
+  qualifyPluginProjectReadScope,
+  type PluginProjectReadScope,
+} from "./plugin-project-read-scope.ts";
 import { pluginTaskModelId } from "./plugin-task-model-selection.ts";
 import { uiRecord } from "./plugin-ui-application-support.ts";
 import {
@@ -27,6 +31,7 @@ export type ProjectConversationTask = Readonly<{
   sources: ProjectStageSources;
   content: string;
   modelId?: string;
+  projectReadScope?: PluginProjectReadScope;
   authority: ProjectConversationCommitAuthority;
   conversations: Pick<
     ProjectConversationStore,
@@ -45,6 +50,7 @@ export function captureProjectConversationTask(
     "authority",
     "conversations",
     ...(Object.hasOwn(input, "modelId") ? ["modelId"] : []),
+    ...(Object.hasOwn(input, "projectReadScope") ? ["projectReadScope"] : []),
   ]) as unknown as ProjectConversationTask;
   const binding = parseProjectConversationBinding(input.binding, digester),
     authority = captureProjectConversationAuthority(input.authority),
@@ -62,7 +68,12 @@ export function captureProjectConversationTask(
       extensionCanonicalJson(authority.installation)
   )
     fail();
+  if (Object.hasOwn(input, "projectReadScope"))
+    qualifyPluginProjectReadScope(input.projectReadScope!);
   return Object.freeze({
+    ...(Object.hasOwn(input, "projectReadScope")
+      ? { projectReadScope: input.projectReadScope! }
+      : {}),
     binding,
     authority,
     stage,
@@ -224,6 +235,7 @@ export async function prepareProjectConversationTask(
       "authority",
       "conversations",
       ...(Object.hasOwn(input, "modelId") ? ["modelId"] : []),
+      ...(Object.hasOwn(input, "projectReadScope") ? ["projectReadScope"] : []),
     ]) as unknown as ProjectConversationTaskPreparation,
     binding = parseProjectConversationBinding(task.binding, digester),
     authority = captureProjectConversationAuthority(task.authority),
@@ -292,6 +304,9 @@ export async function prepareProjectConversationTask(
       sources,
       content: task.content,
       conversations: task.conversations,
+      ...(Object.hasOwn(task, "projectReadScope")
+        ? { projectReadScope: task.projectReadScope! }
+        : {}),
       ...(Object.hasOwn(task, "modelId")
         ? { modelId: pluginTaskModelId(task.modelId) }
         : {}),

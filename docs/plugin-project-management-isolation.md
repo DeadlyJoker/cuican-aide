@@ -296,3 +296,13 @@ SQLite/PostgreSQL 专项使用原人工命令保存两个 immutable 方案后加
 SQLite/PostgreSQL actual checked Tool dispatch 专项验证已准备的真实 Run/Tool/sidecar 后加具名 owner 约束，原 owner 读取 Unicode 原文页、冷 owner 下一页；复制 command/外国项目在创建 readService 前拒绝，缺少绑定、独立 service 撤权拒绝，读取不增加记录。基础小说仍由具名 canonical source fixture 准备；这里没有调用模型或证明 protected 项目首次 Task/sidecar 创建。部署/原 owner/原投影/方案写入与 unknown-outcome 恢复回归 25/25，零跳过；Worker 类型、架构边界与格式通过。证据 `output/plugin-foundation/foundation-owner-20261012/tests.txt`，专属 PG 已停止并删除。
 
 尚未完成：真实 runtime context 在创建 owner 前读取 protected paired facts 的接线、Control/Task 的 protected Foundation 准备和 sidecar 生产、protected 保存/首个 creator、v2 全流程、实际 Worker loop/模型/Web/正式桌面闭环。现有专项是原分发链中的完整 Tool owner 调用，不能等同于实际安装包的模型执行。业务插件继续卸除，未启用用户环境归属模式或更新桌面。
+
+### 原新任务事务生产 protected Foundation sidecar
+
+原 Conversation Application 把真实 Control startStage 的 opaque source 沿原 Task preparation/capture、content-stage commit options 和原 Stage writer 内存传递；不写入事件/数据库或接受公共 HTTP 字段。新增 `projectStageReadScope` 原 options 严格拒绝缺少对应 Stage、显式 undefined、继承/getter 来源。讨论阶段只增加 Foundation 内部准备方法，不成为正文/方案保存权限。
+
+原 Foundation turn 的 attach/current/replay 配方借用同一调用事务的原 owner access，继续捕获当前原 Foundation/source/proposal/binding，并生成原 required/admission 配对记录。借用前匹配真实 Control action、actor/安装完整快照、project/thread/binding revision、原 stage、内容 digest 以及原 `pluginTaskReceiptKey` 推导后的 idempotency 身份；保留原 Stage write authority 和最后检查。原 PG owner predicate 提取为同一 private builder，继续原 SQL quoting/八项 owner/record decoder，不额外打开连接。
+
+SQLite/PostgreSQL actual original Task/Run/SQL 专项在具名 canonical source 与原普通创建、绑定之后加入 owner 约束：新的 protected discussion 提交一份 Foundation admission 和 mandatory marker，同 key 冷 Application 重放同 Run、同配对 digest；原普通 paired reader 仍拒绝。复制 scope 拒绝。与原 script/discussion、paired facts/legacy、lease 和 owner 回归 31/31、零跳过，证据 `output/plugin-foundation/foundation-stage-20261012/tests.txt`，专属 PG 已停止删除。之后补了 common dangling/getter options 负例，纯校验用例及 SQLite 新任务再通过，单独命令中的 PG 跳过不计入前述 31。
+
+Application/Store/Worker/Control 类型、边界和格式检查通过。此处没有实际 Node 包或模型调用，source 为具名 canonical fixture，metadata owner 仍非首个 producer 证明；protected 保存、actual runtime context 的 paired-fact setup 读取、真实 Worker 冷恢复/Web/正式桌面仍待接线验收。业务插件继续卸除，用户环境未启用新模式，未更新桌面。

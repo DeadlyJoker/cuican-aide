@@ -16,6 +16,7 @@ import type {
   CommitExtensionTurnInput,
   CommitExtensionTurnOptions,
   ProjectConversationCommitAuthority,
+  PluginProjectReadScope,
 } from "@crewon/application";
 import {
   createProjectStageRunAdmission,
@@ -60,6 +61,7 @@ type PreparedStage = Readonly<{
   admission: ProjectStageRunAdmission;
   authority: ProjectConversationCommitAuthority;
   binding: CommitExtensionTurnInput["binding"];
+  readScope?: PluginProjectReadScope;
 }>;
 export function captureProjectStageTurn(
   input: CommitExtensionTurnInput,
@@ -84,8 +86,23 @@ export function captureProjectStageTurn(
       (a !== undefined && (!a.enumerable || !Object.hasOwn(a, "value"))))
   )
     conversationFail("project_conversation_authority_required");
+  const readScope =
+    options === undefined
+      ? undefined
+      : Object.getOwnPropertyDescriptor(options, "projectStageReadScope");
+  if (
+    (readScope === undefined &&
+      options !== undefined &&
+      "projectStageReadScope" in options) ||
+    (readScope !== undefined &&
+      (!readScope.enumerable ||
+        !Object.hasOwn(readScope, "value") ||
+        readScope.value === undefined))
+  )
+    conversationFail("project_foundation_stage_read_scope_invalid");
   if (d?.value === undefined) {
-    if (a !== undefined) conversationFail("project_stage_admission_required");
+    if (a !== undefined || readScope !== undefined)
+      conversationFail("project_stage_admission_required");
     return { stage: null, options };
   }
   if (
@@ -99,7 +116,10 @@ export function captureProjectStageTurn(
   if (
     options === undefined ||
     Reflect.ownKeys(options).some(
-      (k) => k !== "projectStageAuthority" && k !== "unmeteredAuthority",
+      (k) =>
+        k !== "projectStageAuthority" &&
+        k !== "projectStageReadScope" &&
+        k !== "unmeteredAuthority",
     )
   )
     conversationFail("project_conversation_authority_required");
@@ -127,7 +147,7 @@ export function captureProjectStageTurn(
     Object.getPrototypeOf(options),
     Object.fromEntries(
       Object.entries(Object.getOwnPropertyDescriptors(options)).filter(
-        ([k]) => k !== "projectStageAuthority",
+        ([k]) => k !== "projectStageAuthority" && k !== "projectStageReadScope",
       ),
     ),
   ) as CommitExtensionTurnOptions;
@@ -136,6 +156,9 @@ export function captureProjectStageTurn(
       admission,
       authority,
       binding: structuredClone(input.binding),
+      ...(readScope === undefined
+        ? {}
+        : { readScope: readScope.value as PluginProjectReadScope }),
     }),
     options: Reflect.ownKeys(remaining).length === 0 ? undefined : remaining,
   };

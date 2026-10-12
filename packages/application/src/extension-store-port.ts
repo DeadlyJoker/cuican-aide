@@ -135,6 +135,8 @@ export type CommitExtensionTurnOptions = Readonly<{
   /** Opaque Host-issued negative instance fence; never serialized or accepted from HTTP. */
   pluginTaskCommitAuthority?: import("./plugin-task-commit-authority.ts").PreparedPluginTaskCommitAuthority;
   projectStageAuthority?: ProjectConversationCommitAuthority;
+  /** Private Control read source for preparation inside the original Stage transaction. */
+  projectStageReadScope?: import("./plugin-project-read-scope.ts").PluginProjectReadScope;
   projectAssetStageAuthority?: ProjectAssetStageCommitAuthority;
   projectMediaInputStageAuthority?: ProjectMediaInputStageCommitAuthority;
   projectTextPlanAuthority?: ProjectTextPlanTurnCommitAuthority;

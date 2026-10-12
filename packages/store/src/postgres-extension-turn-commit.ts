@@ -1,3 +1,4 @@
+import { postgresFoundationStageReadAccess } from "./project-foundation-stage-read.ts";
 import { assertPluginTaskCommitActive } from "@crewon/application";
 import { capturePluginTaskCommitAuthorityOption } from "./plugin-task-commit-authority-option.ts";
 import {
@@ -461,6 +462,14 @@ export async function commitPostgresExtensionTurn(
           host.schema,
           stage?.admission ?? null,
           frozenInput,
+          stage?.readScope === undefined ||
+            stage.admission.stage.kind !== "discussion"
+            ? undefined
+            : await postgresFoundationStageReadAccess(client, host.schema, {
+                scope: stage.readScope,
+                stage: stage.admission,
+                authority: stage.authority,
+              }),
         );
         await stage?.authority.assertTransactionCurrent();
         await assetStage?.authority.assertTransactionCurrent();
@@ -734,6 +743,14 @@ export async function commitPostgresExtensionTurn(
         host.schema,
         stage?.admission ?? null,
         frozenInput,
+        stage?.readScope === undefined ||
+          stage.admission.stage.kind !== "discussion"
+          ? undefined
+          : await postgresFoundationStageReadAccess(client, host.schema, {
+              scope: stage.readScope,
+              stage: stage.admission,
+              authority: stage.authority,
+            }),
       );
       if (prepared !== null)
         await assertCreativeProjectCommitCurrent(prepared.authority);
@@ -754,6 +771,14 @@ export async function commitPostgresExtensionTurn(
         host.schema,
         stage?.admission ?? null,
         foundationRun,
+        stage?.readScope === undefined ||
+          stage.admission.stage.kind !== "discussion"
+          ? undefined
+          : await postgresFoundationStageReadAccess(client, host.schema, {
+              scope: stage.readScope,
+              stage: stage.admission,
+              authority: stage.authority,
+            }),
       );
       return {
         ...result,

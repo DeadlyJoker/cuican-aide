@@ -1,3 +1,7 @@
+import type {
+  CreativeProjectLegacyAccess,
+  PostgresCreativeProjectLegacyAccess,
+} from "./creative-project-legacy-access.ts";
 import type { DatabaseSync } from "node:sqlite";
 import type { PoolClient } from "pg";
 import type { CommitExtensionTurnInput } from "@crewon/application";
@@ -64,6 +68,7 @@ export function attachSqliteFoundationRun(
   db: DatabaseSync,
   stage: ProjectStageRunAdmission | null,
   input: CommitExtensionTurnInput,
+  options?: Readonly<{ projectAccess: CreativeProjectLegacyAccess }>,
 ): Attached | null {
   if (
     stage?.stage.kind !== "discussion" ||
@@ -73,7 +78,7 @@ export function attachSqliteFoundationRun(
   const result = prepare(
     stage,
     input,
-    captureSqliteFoundationRunFacts(db, stage, true),
+    captureSqliteFoundationRunFacts(db, stage, true, options),
   );
   if (result === null) return null;
   db.prepare(
@@ -89,6 +94,7 @@ export async function attachPostgresFoundationRun(
   schema: string,
   stage: ProjectStageRunAdmission | null,
   input: CommitExtensionTurnInput,
+  options?: Readonly<{ projectAccess: PostgresCreativeProjectLegacyAccess }>,
 ): Promise<Attached | null> {
   if (
     stage?.stage.kind !== "discussion" ||
@@ -98,7 +104,7 @@ export async function attachPostgresFoundationRun(
   const result = prepare(
     stage,
     input,
-    await capturePostgresFoundationRunFacts(c, schema, stage, true),
+    await capturePostgresFoundationRunFacts(c, schema, stage, true, options),
   );
   if (result === null) return null;
   const p = `${creativeProjectSchemaName(schema)}.`;
@@ -116,11 +122,12 @@ export function assertSqliteFoundationTurnCurrent(
   db: DatabaseSync,
   stage: ProjectStageRunAdmission | null,
   attached: Attached | null,
+  options?: Readonly<{ projectAccess: CreativeProjectLegacyAccess }>,
 ): void {
   if (attached !== null && stage !== null)
     assertFoundationRunFactsUnchanged(
       attached.facts,
-      captureSqliteFoundationRunFacts(db, stage, true),
+      captureSqliteFoundationRunFacts(db, stage, true, options),
     );
 }
 export async function assertPostgresFoundationTurnCurrent(
@@ -128,11 +135,12 @@ export async function assertPostgresFoundationTurnCurrent(
   schema: string,
   stage: ProjectStageRunAdmission | null,
   attached: Attached | null,
+  options?: Readonly<{ projectAccess: PostgresCreativeProjectLegacyAccess }>,
 ): Promise<void> {
   if (attached !== null && stage !== null)
     assertFoundationRunFactsUnchanged(
       attached.facts,
-      await capturePostgresFoundationRunFacts(c, schema, stage, true),
+      await capturePostgresFoundationRunFacts(c, schema, stage, true, options),
     );
 }
 function replay(
@@ -151,14 +159,19 @@ export function assertSqliteFoundationTurnReplay(
   db: DatabaseSync,
   stage: ProjectStageRunAdmission | null,
   input: CommitExtensionTurnInput,
+  options?: Readonly<{ projectAccess: CreativeProjectLegacyAccess }>,
 ): void {
   replay(
     stage,
-    loadSqliteFoundationRun(db, {
-      tenantId: input.binding.tenantId,
-      spaceId: input.binding.spaceId,
-      runId: input.binding.runId,
-    }),
+    loadSqliteFoundationRun(
+      db,
+      {
+        tenantId: input.binding.tenantId,
+        spaceId: input.binding.spaceId,
+        runId: input.binding.runId,
+      },
+      options,
+    ),
   );
 }
 export async function assertPostgresFoundationTurnReplay(
@@ -166,14 +179,20 @@ export async function assertPostgresFoundationTurnReplay(
   schema: string,
   stage: ProjectStageRunAdmission | null,
   input: CommitExtensionTurnInput,
+  options?: Readonly<{ projectAccess: PostgresCreativeProjectLegacyAccess }>,
 ): Promise<void> {
   replay(
     stage,
-    await loadPostgresFoundationRun(c, schema, {
-      tenantId: input.binding.tenantId,
-      spaceId: input.binding.spaceId,
-      runId: input.binding.runId,
-    }),
+    await loadPostgresFoundationRun(
+      c,
+      schema,
+      {
+        tenantId: input.binding.tenantId,
+        spaceId: input.binding.spaceId,
+        runId: input.binding.runId,
+      },
+      options,
+    ),
   );
 }
 function invalid(): never {

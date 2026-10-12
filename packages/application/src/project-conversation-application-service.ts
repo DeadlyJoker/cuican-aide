@@ -633,6 +633,9 @@ export class ProjectConversationApplicationService {
           },
           {
             binding: b,
+            ...(options.projectReadScope === undefined
+              ? {}
+              : { projectReadScope: options.projectReadScope }),
             stage: request.stage,
             prepareSources: () =>
               projectConversationStageSources({

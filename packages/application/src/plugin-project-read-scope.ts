@@ -547,6 +547,7 @@ export function issuePluginProjectConversationStageReadScope(
     methods: Object.freeze([
       "loadProject",
       "loadBrief",
+      ...(request.input.stage.kind === "discussion" ? ["loadFoundation"] : []),
       ...(request.input.stage.kind === "script" &&
       request.input.stage.outline !== null
         ? ["loadOutline", "loadOutlineSourceRevision", "loadRevision"]

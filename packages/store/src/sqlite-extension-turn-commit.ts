@@ -1,3 +1,4 @@
+import { sqliteFoundationStageReadAccess } from "./project-foundation-stage-read.ts";
 import { assertProjectStageTurnCurrent } from "./project-stage-turn-current.ts";
 import type { ExtensionCompositionAdmissionOptions } from "./plugin-query-run-composition-store-support.ts";
 import { assertPluginTaskCommitActive } from "@crewon/application";
@@ -436,6 +437,14 @@ export async function commitSqliteExtensionTurn(
           host.database,
           stage?.admission ?? null,
           input,
+          stage?.readScope === undefined ||
+            stage.admission.stage.kind !== "discussion"
+            ? undefined
+            : sqliteFoundationStageReadAccess(host.database, {
+                scope: stage.readScope,
+                stage: stage.admission,
+                authority: stage.authority,
+              }),
         );
         const savedMediaInput = loadSqliteMediaInputStage(
           host.database,
@@ -602,6 +611,14 @@ export async function commitSqliteExtensionTurn(
         host.database,
         stage?.admission ?? null,
         input,
+        stage?.readScope === undefined ||
+          stage.admission.stage.kind !== "discussion"
+          ? undefined
+          : sqliteFoundationStageReadAccess(host.database, {
+              scope: stage.readScope,
+              stage: stage.admission,
+              authority: stage.authority,
+            }),
       );
       if (historicalLink !== undefined)
         host.database
@@ -659,6 +676,14 @@ export async function commitSqliteExtensionTurn(
           host.database,
           stage?.admission ?? null,
           foundationRun,
+          stage?.readScope === undefined ||
+            stage.admission.stage.kind !== "discussion"
+            ? undefined
+            : sqliteFoundationStageReadAccess(host.database, {
+                scope: stage.readScope,
+                stage: stage.admission,
+                authority: stage.authority,
+              }),
         );
         assertPluginTaskCommitActive(
           invocation.authority,

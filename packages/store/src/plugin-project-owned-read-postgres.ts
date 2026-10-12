@@ -120,61 +120,16 @@ export async function readPostgresOwnedCreativeProject<T>(
         source.foundationRunAuthority,
       );
     }
-    const columns = [
-      "tenant_id",
-      "space_id",
-      "principal_id",
-      "actor_id",
-      "profile_id",
-      "plugin_id",
-      "publisher_id",
-    ];
-    const values = [
-      source.scope.tenantId,
-      source.scope.spaceId,
-      source.scope.principalId,
-      source.scope.actorId,
-      source.scope.profileId,
-      source.scope.pluginId,
-      source.scope.publisherId,
-    ];
-    const literals = (
-      await c.query<{ v: string }>(
-        "SELECT quote_literal(v) v FROM unnest($1::text[]) WITH ORDINALITY AS s(v,n) ORDER BY n",
-        [values],
-      )
-    ).rows.map((row) => row.v);
-    const predicate = (alias: string) => {
-      if (!/^[a-z][a-z0-9_]{0,62}$/u.test(alias))
-        throw new Error("plugin_project_read_alias_invalid");
-      return `EXISTS(SELECT 1 FROM ${prefix}${PLUGIN_PROJECT_METADATA_OWNER_TABLE} owned_metadata WHERE owned_metadata.tenant_id=${alias}.tenant_id AND owned_metadata.space_id=${alias}.space_id AND owned_metadata.project_id=${alias}.project_id AND ${columns.map((column, i) => `owned_metadata.${column}=${literals[i]}`).join(" AND ")})`;
-    };
-    const assertProject = async (scope: { projectId: string }) => {
-      const owner = parsePluginProjectWorkspaceOwner({
-        ...source.scope,
-        projectId: scope.projectId,
-      });
-      const row = (
-        await c.query<Record<string, unknown>>(
-          `SELECT o.*,p.owner_principal_id AS stored_principal FROM ${prefix}${PLUGIN_PROJECT_METADATA_OWNER_TABLE} o JOIN ${prefix}creative_projects p ON p.tenant_id=o.tenant_id AND p.space_id=o.space_id AND p.project_id=o.project_id WHERE o.tenant_id=$1 AND o.space_id=$2 AND o.project_id=$3 AND ${predicate("p")} FOR SHARE OF o,p`,
-          [owner.tenantId, owner.spaceId, owner.projectId],
-        )
-      ).rows[0];
-      if (!row || typeof row.stored_principal !== "string")
-        throw new Error("creative_project_not_found");
-      if (
-        decodePluginProjectMetadataOwnerRecord(row, {
-          expectedOwner: owner,
-          storedProjectPrincipalId: row.stored_principal,
-        }) === null
-      )
-        throw new Error("creative_project_not_found");
-    };
+    const access = await capturePostgresOwnedProjectAccess(
+      c,
+      input.schema,
+      source,
+    );
+    const assertProject = access.assertProject;
     if (call.query.projectId !== undefined)
       await assertProject({ projectId: call.query.projectId });
     source.assertActive();
     input.assertOpen();
-    const access = Object.freeze({ predicate, assertProject });
     if (source.foundationRunAuthority !== undefined)
       await assertPostgresFoundationRunRead(
         c,
@@ -229,3 +184,63 @@ export async function readPostgresOwnedCreativeProject<T>(
   return result;
 }
 import { assertPostgresPluginProjectRunRead } from "./plugin-project-run-read.ts";
+
+/** Same borrowed transaction and original owner predicate; no new connection or grant. */
+export async function capturePostgresOwnedProjectAccess(
+  c: import("pg").PoolClient,
+  schema: string,
+  source: ReturnType<typeof qualifyPluginProjectReadScope>,
+) {
+  const prefix = `${creativeProjectSchemaName(schema)}.`;
+  const columns = [
+    "tenant_id",
+    "space_id",
+    "principal_id",
+    "actor_id",
+    "profile_id",
+    "plugin_id",
+    "publisher_id",
+  ];
+  const values = [
+    source.scope.tenantId,
+    source.scope.spaceId,
+    source.scope.principalId,
+    source.scope.actorId,
+    source.scope.profileId,
+    source.scope.pluginId,
+    source.scope.publisherId,
+  ];
+  const literals = (
+    await c.query<{ v: string }>(
+      "SELECT quote_literal(v) v FROM unnest($1::text[]) WITH ORDINALITY AS s(v,n) ORDER BY n",
+      [values],
+    )
+  ).rows.map((row) => row.v);
+  const predicate = (alias: string) => {
+    if (!/^[a-z][a-z0-9_]{0,62}$/u.test(alias))
+      throw new Error("plugin_project_read_alias_invalid");
+    return `EXISTS(SELECT 1 FROM ${prefix}${PLUGIN_PROJECT_METADATA_OWNER_TABLE} owned_metadata WHERE owned_metadata.tenant_id=${alias}.tenant_id AND owned_metadata.space_id=${alias}.space_id AND owned_metadata.project_id=${alias}.project_id AND ${columns.map((column, i) => `owned_metadata.${column}=${literals[i]}`).join(" AND ")})`;
+  };
+  const assertProject = async (scope: { projectId: string }) => {
+    const owner = parsePluginProjectWorkspaceOwner({
+      ...source.scope,
+      projectId: scope.projectId,
+    });
+    const row = (
+      await c.query<Record<string, unknown>>(
+        `SELECT o.*,p.owner_principal_id AS stored_principal FROM ${prefix}${PLUGIN_PROJECT_METADATA_OWNER_TABLE} o JOIN ${prefix}creative_projects p ON p.tenant_id=o.tenant_id AND p.space_id=o.space_id AND p.project_id=o.project_id WHERE o.tenant_id=$1 AND o.space_id=$2 AND o.project_id=$3 AND ${predicate("p")} FOR SHARE OF o,p`,
+        [owner.tenantId, owner.spaceId, owner.projectId],
+      )
+    ).rows[0];
+    if (!row || typeof row.stored_principal !== "string")
+      throw new Error("creative_project_not_found");
+    if (
+      decodePluginProjectMetadataOwnerRecord(row, {
+        expectedOwner: owner,
+        storedProjectPrincipalId: row.stored_principal,
+      }) === null
+    )
+      throw new Error("creative_project_not_found");
+  };
+  return Object.freeze({ predicate, assertProject });
+}
