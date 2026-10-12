@@ -104,7 +104,10 @@ export interface ProjectFoundationStore {
   /** Original immutable dependency reader, bound to one qualified project source. */
   bindProjectReads?(
     scope: PluginProjectReadScope,
-  ): Pick<ProjectFoundationStore, "loadFoundation">;
+  ): Pick<
+    ProjectFoundationStore,
+    "loadFoundation" | "loadSource" | "readSourcePage" | "listSourceChapters"
+  >;
   /** null means no attached foundation; it never creates or classifies an existing project. */
   loadFoundation(
     input: ProjectFoundationReadScope,

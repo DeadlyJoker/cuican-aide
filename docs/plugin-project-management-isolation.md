@@ -246,3 +246,13 @@ SQLite 和 PostgreSQL 原读取事务在数据读取前及返回前使用同一�
 Worker 专项现在实际经过原分片上传 Application、解析器、Foundation bridge 和 strict 来源采用 Store，把同一上传采用到两个真实小说项目后再加入具名 owner 约束。在同一 owner/plugin 下，Tool 生命周期内可读取原 Foundation 及其 manifest 依赖；共享上传关联到 foreign plugin 时拒绝。测试使用具名策略和 owner 约束 fixture，保留原 owner immutable 规则，没有修改或删除归属来凑负例。冷 owner、跨项目/主体和过期 source 拒绝继续覆盖。SQLite/PostgreSQL 专项及原 Text/Foundation/upload legacy/run 拒绝回归 65/65，零跳过，Store/Worker 类型与边界通过；证据 `output/plugin-foundation/source-read-20261012/tests.txt`，专属 PG 已停止并删除。
 
 这解决的是上传来源的 immutable manifest 依赖读取，不等同于原文分页 Tool 或模型执行。原文/章节分页授权、protected v2 全流程、受保护产物保存、真实 Worker loop/冷恢复、Web 与正式桌面生命周期仍待验收。业务插件保持卸除，未切换用户环境归属模式或更新桌面。
+
+### 原文与章节的 bounded 依赖读取
+
+原 Foundation 绑定视图扩展 `loadSource`、`readSourcePage`、`listSourceChapters`，仍不包含上传、prepared factory、方案或写入端口。原文本 Run 的内部项目依赖范围追加这三项方法；源仍由 actual Run/Tool/receipt/lease/stage 和八项 owner 检查签发，不能从公开请求序列化还原。它允许同项目的必要小说依赖读取，不替代 Foundation Tools 自己的独立 operation/sidecar admission。
+
+读取配方继续使用原 SQL/decoder/页长限制、原 source revision/digest、Unicode scalar offset 与上传所有关联检查；公共数据形状不变。共用的 private read-view helper 借用同一数据库连接/pool，未引入第二份原文、分页器或无边界上下文注入。普通端口保留原 legacy 拒绝；缺少真实 source 或使用结束后再读拒绝。
+
+在原上传/解析/采用 + actual Worker owner 的具名观察 wrapper 内，SQLite/PostgreSQL 验证带 emoji 的原文按 5 字符分页完整还原、两个章节的单条分页、错误 digest、超限页长、跨项目/主体、foreign plugin 共享关联和已结束调用的拒绝。与原 Text/Foundation/upload 以及普通 Foundation Tools owner 回归 70/70、零跳过；普通 Foundation Tools 用例自身为 SQLite，其余相应 backend 专项同时验证 PG，不能把总数当成 70 个 PG 用例。Application/Store/Worker 类型、边界与格式检查通过。证据 `output/plugin-foundation/source-pages-20261012/tests.txt`，专属 PG 已停止并删除。
+
+尚未完成：独立 Foundation Tools 受保护项目的 read source 签发及 SQL sidecar fence、protected v2 保存/读取全流程、产物写入、真实模型/Web/正式桌面生命周期。这些页面读取测试是在原 Tool 生命周期内的内部依赖验证，不等同于 Agent 通过独立小说 Tool 的实际执行。业务插件继续卸除，未切换用户环境归属模式或更新桌面。

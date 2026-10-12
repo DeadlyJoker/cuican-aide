@@ -28,6 +28,7 @@ for (const backend of ["sqlite", "postgres"] as const)
         let stage: ProjectStageRunAdmission | null = null;
         let created: ProjectFoundationMutationResult | undefined;
         const projectId = "owned-foundation-dependency";
+        const novelText = "第一章 雨夜\n雨😀夜重逢。\n第二章 来信\n未来来信。";
         const sharedProjectId = "shared-source-foundation";
         const f = await projectToolsOwnerFixture(t, {
           backend,
@@ -57,7 +58,7 @@ for (const backend of ["sqlite", "postgres"] as const)
             });
             const uploaded = await prepareOwnedUpload(
               uploadService,
-              Buffer.from("第一章 雨夜\n两人在雨夜重逢。"),
+              Buffer.from(novelText),
               "worker-source-upload",
               base.actor,
             );
@@ -149,7 +150,25 @@ for (const backend of ["sqlite", "postgres"] as const)
           },
           projectId,
         };
-        await assert.rejects(original.loadFoundation(query));
+        const sourceQuery = {
+          ...query,
+          revision: created!.source!.revision,
+          digest: created!.source!.digest,
+        };
+        const pageQuery = { ...sourceQuery, startOffset: 0, limit: 5 };
+        const chapterQuery = {
+          ...sourceQuery,
+          afterStartOffset: null,
+          limit: 1,
+        };
+        for (const read of [
+          () => original.loadFoundation(query),
+          () =>
+            original.loadSource({ ...query, revision: sourceQuery.revision }),
+          () => original.readSourcePage(pageQuery),
+          () => original.listSourceChapters(chapterQuery),
+        ])
+          await assert.rejects(read());
         let observed = 0;
         let retained: ReturnType<typeof original.bindProjectReads> | undefined;
         const ownerInstance = () =>
@@ -158,7 +177,12 @@ for (const backend of ["sqlite", "postgres"] as const)
             readServices: (scope) => {
               const bound = original.bindProjectReads(scope);
               retained = bound;
-              assert.deepEqual(Object.keys(bound), ["loadFoundation"]);
+              assert.deepEqual(Object.keys(bound), [
+                "loadFoundation",
+                "loadSource",
+                "readSourcePage",
+                "listSourceChapters",
+              ]);
               const services = projectToolBoundReadServices(
                 {
                   store: f.parent,
@@ -170,11 +194,85 @@ for (const backend of ["sqlite", "postgres"] as const)
                 ...services,
                 outlines: {
                   getOutline: async (actor, input) => {
+                    if (sharedOwner === "foreign") {
+                      for (const read of [
+                        () =>
+                          bound.loadSource({
+                            ...query,
+                            revision: sourceQuery.revision,
+                          }),
+                        () => bound.readSourcePage(pageQuery),
+                        () => bound.listSourceChapters(chapterQuery),
+                      ])
+                        await assert.rejects(
+                          read(),
+                          /project_source_upload_not_found/u,
+                        );
+                    }
                     assert.deepEqual(
                       await bound.loadFoundation(query),
                       created!.foundation,
                     );
                     observed++;
+                    assert.deepEqual(
+                      await bound.loadSource({
+                        ...query,
+                        revision: sourceQuery.revision,
+                      }),
+                      created!.source,
+                    );
+                    let offset = 0,
+                      full = "";
+                    while (offset < created!.source!.characterLength) {
+                      const page = await bound.readSourcePage({
+                        ...pageQuery,
+                        startOffset: offset,
+                      });
+                      assert.ok(
+                        Array.from(page.content).length <= pageQuery.limit,
+                      );
+                      assert.equal(page.startOffset, offset);
+                      full += page.content;
+                      assert.ok(page.endOffset > offset);
+                      offset = page.endOffset;
+                      assert.equal(
+                        page.nextOffset,
+                        offset === created!.source!.characterLength
+                          ? null
+                          : offset,
+                      );
+                    }
+                    assert.equal(full, novelText);
+                    const chapters =
+                      await bound.listSourceChapters(chapterQuery);
+                    assert.equal(chapters.chapters.length, 1);
+                    assert.ok(chapters.nextStartOffset !== null);
+                    const next = await bound.listSourceChapters({
+                      ...chapterQuery,
+                      afterStartOffset: chapters.nextStartOffset,
+                    });
+                    assert.equal(next.chapters.length, 1);
+                    assert.equal(next.nextStartOffset, null);
+                    assert.ok(
+                      next.chapters[0]!.startOffset >
+                        chapters.chapters[0]!.startOffset,
+                    );
+                    await assert.rejects(
+                      bound.readSourcePage({
+                        ...pageQuery,
+                        digest: "sha256:" + "0".repeat(64),
+                      }),
+                      /project_foundation_source_digest_mismatch/u,
+                    );
+                    await assert.rejects(
+                      bound.readSourcePage({
+                        ...pageQuery,
+                        projectId: f.reference.projectId,
+                      }),
+                    );
+                    await assert.rejects(
+                      bound.readSourcePage({ ...pageQuery, limit: 1025 }),
+                    );
                     await assert.rejects(
                       bound.loadFoundation({
                         ...query,
@@ -223,6 +321,7 @@ for (const backend of ["sqlite", "postgres"] as const)
             f.service(owner).readOutline({ command, request: { projectId } }),
           );
           await assert.rejects(retained!.loadFoundation(query));
+          await assert.rejects(retained!.readSourcePage(pageQuery));
         }
         assert.equal(observed, 2);
         await assert.rejects(original.loadFoundation(query));

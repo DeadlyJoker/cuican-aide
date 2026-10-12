@@ -1,4 +1,7 @@
-import { readSqliteOwnedCreativeProject } from "./plugin-project-owned-read-sqlite.ts";
+import {
+  bindProjectFoundationReadView,
+  readSqliteOwnedProjectFoundation,
+} from "./plugin-project-foundation-read-view.ts";
 import {
   assertSqliteSavedSourceUploadProjectAccess,
   assertSqliteSavedSourceUploadLegacyAccess,
@@ -30,7 +33,6 @@ import {
   type ProjectFoundationCommitOptions,
   type ProjectFoundationMutationResult,
   type ProjectFoundationStore,
-  qualifyPluginProjectReadScope,
   type PluginProjectReadScope,
 } from "@crewon/application";
 import {
@@ -123,11 +125,7 @@ export class SqliteProjectFoundationStore implements ProjectFoundationStore {
     });
   }
   bindProjectReads(scope: PluginProjectReadScope) {
-    qualifyPluginProjectReadScope(scope);
-    return Object.freeze({
-      loadFoundation: (input: Input<"loadFoundation">) =>
-        this.loadFoundation(input, scope),
-    });
+    return bindProjectFoundationReadView(this, scope);
   }
   async loadFoundation(
     input: Input<"loadFoundation">,
@@ -135,39 +133,41 @@ export class SqliteProjectFoundationStore implements ProjectFoundationStore {
   ) {
     this.#assertOpen();
     const q = foundationRead(input);
-    if (scope === undefined)
-      return readSqliteLegacyCreativeProject(this.#database, (access) => {
-        access.assertProject(foundationLegacyScope(q.owner, q.projectId));
-        if (!assertSqliteProjectFoundationSchema(this.#database)) return null;
-        return this.#foundation(q.owner, q.projectId, access);
-      });
-    const result = await readSqliteOwnedCreativeProject(
-      this.#database,
-      { scope, method: "loadFoundation", query: q },
-      (access) => {
-        access.assertProject(foundationLegacyScope(q.owner, q.projectId));
-        return {
-          projectId: q.projectId,
-          value: assertSqliteProjectFoundationSchema(this.#database)
-            ? this.#foundation(q.owner, q.projectId, access)
-            : null,
-        };
-      },
-      this.#assertOpen,
-    );
-    return result.value;
+    const read = (access: CreativeProjectLegacyAccess) => {
+      access.assertProject(foundationLegacyScope(q.owner, q.projectId));
+      if (!assertSqliteProjectFoundationSchema(this.#database)) return null;
+      return this.#foundation(q.owner, q.projectId, access);
+    };
+    return scope === undefined
+      ? readSqliteLegacyCreativeProject(this.#database, read)
+      : readSqliteOwnedProjectFoundation(
+          { database: this.#database, assertOpen: this.#assertOpen },
+          { scope, method: "loadFoundation", query: q },
+          read,
+        );
   }
-  async loadSource(input: Input<"loadSource">) {
+
+  async loadSource(input: Input<"loadSource">, scope?: PluginProjectReadScope) {
     this.#assertOpen();
     const q = foundationRead(input, ["revision"]);
     const revision = creativeProjectRevision(q.revision);
-    return readSqliteLegacyCreativeProject(this.#database, (access) => {
+    const read = (access: CreativeProjectLegacyAccess) => {
       access.assertProject(foundationLegacyScope(q.owner, q.projectId));
       if (!assertSqliteProjectFoundationSchema(this.#database)) return null;
       return this.#source(q.owner, q.projectId, revision, access);
-    });
+    };
+    return scope === undefined
+      ? readSqliteLegacyCreativeProject(this.#database, read)
+      : readSqliteOwnedProjectFoundation(
+          { database: this.#database, assertOpen: this.#assertOpen },
+          { scope, method: "loadSource", query: q },
+          read,
+        );
   }
-  async readSourcePage(input: Input<"readSourcePage">) {
+  async readSourcePage(
+    input: Input<"readSourcePage">,
+    scope?: PluginProjectReadScope,
+  ) {
     this.#assertOpen();
     const q = foundationRead(input, [
       "revision",
@@ -179,7 +179,7 @@ export class SqliteProjectFoundationStore implements ProjectFoundationStore {
     const digest = creativeProjectDigest(q.digest);
     const startOffset = creativeProjectRevision(q.startOffset, { minimum: 0 });
     const limit = foundationLimit(q.limit, 1_024);
-    return readSqliteLegacyCreativeProject(this.#database, (access) => {
+    const read = (access: CreativeProjectLegacyAccess) => {
       access.assertProject(foundationLegacyScope(q.owner, q.projectId));
       if (!assertSqliteProjectFoundationSchema(this.#database))
         foundationFailure("project_foundation_source_not_found");
@@ -206,9 +206,19 @@ export class SqliteProjectFoundationStore implements ProjectFoundationStore {
         );
       const chunks = rows.map((row) => this.#chunk(row));
       return readProjectSourcePage({ source, chunks, startOffset, limit });
-    });
+    };
+    return scope === undefined
+      ? readSqliteLegacyCreativeProject(this.#database, read)
+      : readSqliteOwnedProjectFoundation(
+          { database: this.#database, assertOpen: this.#assertOpen },
+          { scope, method: "readSourcePage", query: q },
+          read,
+        );
   }
-  async listSourceChapters(input: Input<"listSourceChapters">) {
+  async listSourceChapters(
+    input: Input<"listSourceChapters">,
+    scope?: PluginProjectReadScope,
+  ) {
     this.#assertOpen();
     const q = foundationRead(input, [
       "revision",
@@ -223,7 +233,7 @@ export class SqliteProjectFoundationStore implements ProjectFoundationStore {
         ? -1
         : creativeProjectRevision(q.afterStartOffset, { minimum: 0 });
     const limit = foundationLimit(q.limit);
-    return readSqliteLegacyCreativeProject(this.#database, (access) => {
+    const read = (access: CreativeProjectLegacyAccess) => {
       access.assertProject(foundationLegacyScope(q.owner, q.projectId));
       if (!assertSqliteProjectFoundationSchema(this.#database))
         foundationFailure("project_foundation_source_not_found");
@@ -261,7 +271,14 @@ export class SqliteProjectFoundationStore implements ProjectFoundationStore {
         nextStartOffset:
           rows.length > limit ? chapters.at(-1)!.startOffset : null,
       });
-    });
+    };
+    return scope === undefined
+      ? readSqliteLegacyCreativeProject(this.#database, read)
+      : readSqliteOwnedProjectFoundation(
+          { database: this.#database, assertOpen: this.#assertOpen },
+          { scope, method: "listSourceChapters", query: q },
+          read,
+        );
   }
   async loadProposal(input: Input<"loadProposal">) {
     this.#assertOpen();

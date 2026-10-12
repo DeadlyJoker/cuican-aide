@@ -1,4 +1,8 @@
-import { readPostgresOwnedCreativeProject } from "./plugin-project-owned-read-postgres.ts";
+import {
+  bindProjectFoundationReadView,
+  readPostgresOwnedProjectFoundation,
+  type ProjectFoundationSourceReadMethod,
+} from "./plugin-project-foundation-read-view.ts";
 import {
   assertPostgresSavedSourceUploadProjectAccess,
   assertPostgresSavedSourceUploadLegacyAccess,
@@ -21,7 +25,6 @@ import {
   type ProjectFoundationCommitOptions,
   type ProjectFoundationMutationResult,
   type ProjectFoundationStore,
-  qualifyPluginProjectReadScope,
   type PluginProjectReadScope,
 } from "@crewon/application";
 import {
@@ -137,52 +140,36 @@ export class PostgresProjectFoundationStore implements ProjectFoundationStore {
   }
 
   bindProjectReads(scope: PluginProjectReadScope) {
-    qualifyPluginProjectReadScope(scope);
-    return Object.freeze({
-      loadFoundation: (input: Input<"loadFoundation">) =>
-        this.loadFoundation(input, scope),
-    });
+    return bindProjectFoundationReadView(this, scope);
   }
   async loadFoundation(
     input: Input<"loadFoundation">,
     scope?: PluginProjectReadScope,
   ) {
     const query = foundationRead(input);
-    if (scope === undefined)
-      return this.#read(
-        query,
-        (client, access) => this.#foundation(client, query, access),
-        null,
-      );
-    const result = await readPostgresOwnedCreativeProject(
-      { pool: this.#pool, schema: this.#schema, assertOpen: this.#assertOpen },
-      { scope, method: "loadFoundation", query },
-      async (client, access) => {
-        await access.assertProject(
-          foundationLegacyScope(query.owner, query.projectId),
-        );
-        return {
-          projectId: query.projectId,
-          value: (await this.#schemaConfigured(client))
-            ? await this.#foundation(client, query, access)
-            : null,
-        };
-      },
+    return this.#read(
+      query,
+      (client, access) => this.#foundation(client, query, access),
+      null,
+      { method: "loadFoundation", scope },
     );
-    return result.value;
   }
 
-  async loadSource(input: Input<"loadSource">) {
+  async loadSource(input: Input<"loadSource">, scope?: PluginProjectReadScope) {
     const query = foundationRead(input, ["revision"]);
     const revision = creativeProjectRevision(query.revision);
     return this.#read(
       query,
       (client, access) => this.#source(client, query, revision, access),
       null,
+      { method: "loadSource", scope },
     );
   }
 
-  async listSourceChapters(input: Input<"listSourceChapters">) {
+  async listSourceChapters(
+    input: Input<"listSourceChapters">,
+    scope?: PluginProjectReadScope,
+  ) {
     const query = foundationRead(input, [
       "revision",
       "digest",
@@ -232,10 +219,14 @@ export class PostgresProjectFoundationStore implements ProjectFoundationStore {
         });
       },
       () => foundationFailure("project_foundation_source_not_found"),
+      { method: "listSourceChapters", scope },
     );
   }
 
-  async readSourcePage(input: Input<"readSourcePage">) {
+  async readSourcePage(
+    input: Input<"readSourcePage">,
+    scope?: PluginProjectReadScope,
+  ) {
     const query = foundationRead(input, [
       "revision",
       "digest",
@@ -281,6 +272,7 @@ export class PostgresProjectFoundationStore implements ProjectFoundationStore {
         return readProjectSourcePage({ source, chunks, startOffset, limit });
       },
       () => foundationFailure("project_foundation_source_not_found"),
+      { method: "readSourcePage", scope },
     );
   }
 
@@ -812,7 +804,26 @@ export class PostgresProjectFoundationStore implements ProjectFoundationStore {
       access: PostgresCreativeProjectLegacyAccess,
     ) => Promise<T>,
     absent: T | (() => never),
+    binding?: Readonly<{
+      method: ProjectFoundationSourceReadMethod;
+      scope: PluginProjectReadScope | undefined;
+    }>,
   ): Promise<T> {
+    if (binding?.scope !== undefined)
+      return readPostgresOwnedProjectFoundation(
+        {
+          pool: this.#pool,
+          schema: this.#schema,
+          assertOpen: this.#assertOpen,
+        },
+        { scope: binding.scope, method: binding.method, query: scope },
+        async (client, access) =>
+          (await this.#schemaConfigured(client))
+            ? body(client, access)
+            : typeof absent === "function"
+              ? (absent as () => never)()
+              : absent,
+      );
     return readPostgresFoundationLegacy(
       { pool: this.#pool, schema: this.#schema, assertOpen: this.#assertOpen },
       foundationLegacyScope(scope.owner, scope.projectId),

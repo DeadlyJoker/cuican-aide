@@ -1,3 +1,4 @@
+import type { ProjectFoundationSourceReadMethod } from "./plugin-project-foundation-read-view.ts";
 import type { DatabaseSync } from "node:sqlite";
 import type { ProjectTextReadMethod } from "./plugin-project-text-read-view.ts";
 import {
@@ -24,7 +25,10 @@ import type { CreativeProjectLegacyAccess } from "./creative-project-legacy-acce
 
 export type PluginProjectReadCall = Readonly<{
   scope: PluginProjectReadScope | PluginProjectMutationScope;
-  method: PluginProjectReadMethod | ProjectTextReadMethod | "loadFoundation";
+  method:
+    | PluginProjectReadMethod
+    | ProjectTextReadMethod
+    | ProjectFoundationSourceReadMethod;
   query: Readonly<{
     owner: CreativeProjectOwnerScope;
     projectId?: string;
