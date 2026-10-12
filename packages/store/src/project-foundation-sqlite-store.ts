@@ -1,5 +1,6 @@
 import { readSqliteOwnedCreativeProject } from "./plugin-project-owned-read-sqlite.ts";
 import {
+  assertSqliteSavedSourceUploadProjectAccess,
   assertSqliteSavedSourceUploadLegacyAccess,
   foundationResultSavedSource,
 } from "./project-source-upload-legacy-access.ts";
@@ -566,11 +567,15 @@ export class SqliteProjectFoundationStore implements ProjectFoundationStore {
       )
       .get(...creativeOwnerValues(owner), projectId, revision);
     if (row === undefined) return null;
-    assertSqliteSavedSourceUploadLegacyAccess(this.#database, {
-      owner,
-      projectId,
-      sourceRevision: revision,
-    });
+    assertSqliteSavedSourceUploadProjectAccess(
+      this.#database,
+      {
+        owner,
+        projectId,
+        sourceRevision: revision,
+      },
+      access,
+    );
     const source = parseProjectSource(JSON.parse(String(row.record_json)));
     foundationEqual(
       [

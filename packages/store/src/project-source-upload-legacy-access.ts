@@ -152,9 +152,20 @@ export function assertSqliteSavedSourceUploadLegacyAccess(
   db: DatabaseSync,
   input: Source,
 ): void {
+  assertSqliteSavedSourceUploadProjectAccess(
+    db,
+    input,
+    captureSqliteCreativeProjectLegacyAccess(db),
+  );
+}
+/** Borrow only the original caller's transaction access; never an upload-by-id grant. */
+export function assertSqliteSavedSourceUploadProjectAccess(
+  db: DatabaseSync,
+  input: Source,
+  access: CreativeProjectLegacyAccess,
+): void {
   if (!db.isTransaction)
     throw new Error("project_source_upload_legacy_transaction_required");
-  const access = captureSqliteCreativeProjectLegacyAccess(db);
   if (assertSqliteProjectSourceUploadSchema(db) === false) return;
   const projectId = creativeProjectOpaqueId(input.projectId),
     revision = creativeProjectRevision(input.sourceRevision);
@@ -177,6 +188,21 @@ export async function assertPostgresSavedSourceUploadLegacyAccess(
     client,
     schema,
   );
+  await assertPostgresSavedSourceUploadProjectAccess(
+    client,
+    schema,
+    input,
+    access,
+  );
+}
+/** Same borrowed snapshot, original upload locks and all saved associations. */
+export async function assertPostgresSavedSourceUploadProjectAccess(
+  client: PoolClient,
+  schema: string,
+  input: Source,
+  access: PostgresCreativeProjectLegacyAccess,
+): Promise<void> {
+  await lockPostgresCreativeProjectLegacySchema(client, schema);
   if ((await assertPostgresProjectSourceUploadSchema(client, schema)) === false)
     return;
   const prefix = `${creativeProjectSchemaName(schema)}.`,

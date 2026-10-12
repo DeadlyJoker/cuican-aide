@@ -1,5 +1,6 @@
 import { readPostgresOwnedCreativeProject } from "./plugin-project-owned-read-postgres.ts";
 import {
+  assertPostgresSavedSourceUploadProjectAccess,
   assertPostgresSavedSourceUploadLegacyAccess,
   foundationResultSavedSource,
 } from "./project-source-upload-legacy-access.ts";
@@ -600,11 +601,16 @@ export class PostgresProjectFoundationStore implements ProjectFoundationStore {
     const row = rows.rows[0];
     if (row === undefined) return null;
     if (row !== undefined)
-      await assertPostgresSavedSourceUploadLegacyAccess(client, this.#schema, {
-        owner: scope.owner,
-        projectId: scope.projectId,
-        sourceRevision: revision,
-      });
+      await assertPostgresSavedSourceUploadProjectAccess(
+        client,
+        this.#schema,
+        {
+          owner: scope.owner,
+          projectId: scope.projectId,
+          sourceRevision: revision,
+        },
+        access,
+      );
     return decodePostgresFoundationSource(row, scope, revision);
   }
 

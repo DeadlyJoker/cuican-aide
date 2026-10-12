@@ -238,3 +238,11 @@ SQLite 和 PostgreSQL 原读取事务在数据读取前及返回前使用同一�
 `project-tools-owned-foundation.test.ts` 在真实 Task/Run/queue/Tool 与原 owner 上验证已保存 creative 基础资料读取，冷 owner 再读、拒绝另一项目/主体、调用结束后的来源不可复用；具名观察 wrapper 在 Tool 生命周期内调用真实 Foundation reader。Foundation 仍由原人工提交在 owner 约束前创建，owner 行是具名约束 fixture。该测试没有保存 protected v2 大纲，没有调用模型，不证明小说上传来源或 protected 写入。专项连同原文本读取、Foundation store、legacy access/snapshot 回归 55/55，零跳过；Application/Store/Worker 类型与架构边界通过。证据 `output/plugin-foundation/foundation-read-20261012/tests.txt`，专属 PG 已停止并删除。
 
 小说原文的生产创建要求原上传 provenance，当前独立上传关联检查仍拒绝受保护来源，不能改用普通端口绕过；需要继续在原上传/关联服务补齐同一隔离授权。protected v2 完整读取与真实 Worker/模型/Web/桌面闭环仍未验收。业务插件保持卸除，用户运行环境未启用新归属模式，未更新桌面。
+
+### 已上传小说来源的依赖关联检查
+
+后续补齐原 Foundation `loadFoundation` 的已上传来源依赖校验：saved association 检查可借用原调用事务的 project access，沿用原上传关联 SQL、所有共享 upload 的关联谓词和 PG 上传共享锁；不是公开上传凭证，不放行 upload-by-id、原始 bytes、prepared factory 或采用/写入。普通/回执/提交最后一道检查继续显式使用原 legacy access，未将 read grant 传播给写入。Foundation 的 scoped reader 借用之前已经检查的八项 owner、安装与实际 Run/Tool/lease/stage；原资料不存在、schema 损坏与 foreign association 的拒绝不改成 fallback。
+
+Worker 专项现在实际经过原分片上传 Application、解析器、Foundation bridge 和 strict 来源采用 Store，把同一上传采用到两个真实小说项目后再加入具名 owner 约束。在同一 owner/plugin 下，Tool 生命周期内可读取原 Foundation 及其 manifest 依赖；共享上传关联到 foreign plugin 时拒绝。测试使用具名策略和 owner 约束 fixture，保留原 owner immutable 规则，没有修改或删除归属来凑负例。冷 owner、跨项目/主体和过期 source 拒绝继续覆盖。SQLite/PostgreSQL 专项及原 Text/Foundation/upload legacy/run 拒绝回归 65/65，零跳过，Store/Worker 类型与边界通过；证据 `output/plugin-foundation/source-read-20261012/tests.txt`，专属 PG 已停止并删除。
+
+这解决的是上传来源的 immutable manifest 依赖读取，不等同于原文分页 Tool 或模型执行。原文/章节分页授权、protected v2 全流程、受保护产物保存、真实 Worker loop/冷恢复、Web 与正式桌面生命周期仍待验收。业务插件保持卸除，未切换用户环境归属模式或更新桌面。
