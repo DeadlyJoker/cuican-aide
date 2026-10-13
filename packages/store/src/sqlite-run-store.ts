@@ -1,3 +1,4 @@
+import { sqliteOrdinaryThreadCatalogTables } from "./plugin-thread-catalog-scope.ts";
 import { SqliteProjectAssetV2RecoveryStore } from "./project-asset-vtwo-recovery-store.ts";
 import { SqliteProjectMediaInputStageStore } from "./project-media-input-stage-store.ts";
 import { SqliteProjectAssetUiIntentJournalStore } from "./project-asset-ui-intent-sqlite-store.ts";
@@ -2277,7 +2278,12 @@ export class SqliteRunStore implements DomainStore {
     this.#assertOpen();
     validateThreadListQuery(query);
     try {
-      const statement = threadListSql(query, "threads", "sqlite");
+      const statement = threadListSql(
+        query,
+        "threads",
+        "sqlite",
+        sqliteOrdinaryThreadCatalogTables(this.#database),
+      );
       const rows = this.#database
         .prepare(statement.sql)
         .all(...statement.values) as unknown as ThreadSnapshotRow[];

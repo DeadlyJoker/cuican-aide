@@ -1,3 +1,4 @@
+import { postgresOrdinaryThreadCatalogTables } from "./plugin-thread-catalog-scope.ts";
 import { PostgresOfficeThreadStore } from "./postgres-office-thread-store.ts";
 import { PostgresPluginProjectWorkspaceStore } from "./postgres-plugin-project-workspace-store.ts";
 import {
@@ -289,8 +290,26 @@ export class PostgresThreadStore
     this.assertOpen();
     validateThreadListQuery(query);
     try {
-      const statement = threadListSql(query, this.#tableSql("threads"), "postgres");
-      const result = await this.pool.query<PostgresThreadRow>(statement.sql, statement.values);
+      const client = await this.pool.connect();
+      let result;
+      try {
+        const ownership = await postgresOrdinaryThreadCatalogTables(
+          client,
+          this.schema,
+        );
+        const statement = threadListSql(
+          query,
+          this.#tableSql("threads"),
+          "postgres",
+          ownership,
+        );
+        result = await client.query<PostgresThreadRow>(
+          statement.sql,
+          statement.values,
+        );
+      } finally {
+        client.release();
+      }
       if (query.after != null) result.rows.reverse();
       return result.rows.map((row) =>
         decodePostgresThreadState(row, {

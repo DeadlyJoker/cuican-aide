@@ -1,11 +1,13 @@
 import type { ThreadListQuery } from "@crewon/application";
 import type { ThreadState } from "@crewon/domain";
+import type { OrdinaryThreadCatalogTables } from "./plugin-thread-catalog-scope.ts";
 
 /** Table identifiers come exclusively from the adapter's validated schema. Values are bound. */
 export function threadListSql(
   query: ThreadListQuery,
   table: string,
   dialect: "sqlite" | "postgres",
+  ordinaryCatalog: OrdinaryThreadCatalogTables = {},
 ): { sql: string; values: (string | number)[] } {
   const values: (string | number)[] = [];
   const bind = (value: string | number) => {
@@ -17,6 +19,21 @@ export function threadListSql(
     `space_id = ${bind(query.spaceId)}`,
     "status != 'deleted'",
   ];
+  // Ownership, including revoked bindings, survives plugin disable/uninstall.
+  // Apply before LIMIT so hidden rows never consume a page or leak through search.
+  if (ordinaryCatalog.conversations !== undefined)
+    conditions.push(
+      `NOT EXISTS (SELECT 1 FROM ${ordinaryCatalog.conversations} AS plugin_binding WHERE plugin_binding.tenant_id = ${table}.tenant_id AND plugin_binding.space_id = ${table}.space_id AND plugin_binding.thread_id = ${table}.thread_id)`,
+    );
+  if (ordinaryCatalog.workspaces !== undefined) {
+    const workspace =
+      dialect === "sqlite"
+        ? `${table}.state_json ->> '$.workspaceId'`
+        : `${table}.state_json ->> 'workspaceId'`;
+    conditions.push(
+      `NOT EXISTS (SELECT 1 FROM ${ordinaryCatalog.workspaces} AS plugin_workspace WHERE plugin_workspace.tenant_id = ${table}.tenant_id AND plugin_workspace.space_id = ${table}.space_id AND plugin_workspace.workspace_id = ${workspace})`,
+    );
+  }
   if (query.filter !== undefined) {
     conditions.push(`status = ${bind(query.filter.status)}`);
     if (query.filter.excludeForks)
