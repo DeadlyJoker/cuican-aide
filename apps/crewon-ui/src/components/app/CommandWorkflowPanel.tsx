@@ -1,5 +1,5 @@
 import { ArrowLeft, RotateCw, Square, Workflow } from "lucide-react";
-import { useEffect, useMemo, useState } from "react";
+import { useEffect, useMemo, useRef, useState } from "react";
 
 import { renderMarkdown } from "../TranscriptMarkdown";
 import { CommandWorkflowNodeOutputs } from "./CommandWorkflowNodeOutputs";
@@ -20,6 +20,7 @@ import { currentWorkflowExecution } from "../../lib/workflow/currentWorkflowExec
 
 export function CommandWorkflowPanel({
   active = true,
+  openRequest,
   workflows,
   status,
   onRun,
@@ -31,6 +32,7 @@ export function CommandWorkflowPanel({
   defaultOpenWorkflowId = null,
 }: {
   active?: boolean;
+  openRequest?: Readonly<{ workflowId: string; revision: number }> | null;
   workflows: CrewonWorkflowRecord[];
   status: "loading" | "ready" | "unavailable";
   onRun: (
@@ -53,6 +55,7 @@ export function CommandWorkflowPanel({
   onRoomOpenChange?: (open: boolean) => void;
   defaultOpenWorkflowId?: string | null;
 }) {
+  const consumedOpenRequest = useRef<typeof openRequest>(null);
   const available = useMemo(() => workflows, [workflows]);
   const [openedId, setOpenedId] = useState<string | null>(
     defaultOpenWorkflowId,
@@ -123,6 +126,29 @@ export function CommandWorkflowPanel({
       onRoomOpenChange?.(false);
     }
   }, [onRoomOpenChange, openedId, selected]);
+
+  useEffect(() => {
+    if (
+      !active ||
+      !openRequest ||
+      consumedOpenRequest.current === openRequest ||
+      !available.some(
+        (record) => record.config.workflowId === openRequest.workflowId,
+      )
+    )
+      return;
+    consumedOpenRequest.current = openRequest;
+    if (runActive) {
+      setError("当前协作流正在执行，请完成或取消后再切换。");
+      return;
+    }
+    setOpenedId(openRequest.workflowId);
+    setExecution(null);
+    setError(null);
+    setSubmittedInput(null);
+    setExcludedExecutionId(null);
+    onRoomOpenChange?.(true);
+  }, [active, available, openRequest, onRoomOpenChange, runActive]);
 
   async function submit(value: string) {
     const prompt = value.trim();

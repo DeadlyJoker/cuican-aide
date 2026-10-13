@@ -1264,6 +1264,7 @@ export function KnowledgeCatalogView({
 
 export function TeamView({
   active,
+  workflowOpenRequest,
   officeRuntime,
   officeRoomId,
   teamMode,
@@ -1283,6 +1284,10 @@ export function TeamView({
   onTeamModeChange,
 }: {
   active: boolean;
+  workflowOpenRequest?: Readonly<{
+    workflowId: string;
+    revision: number;
+  }> | null;
   officeRuntime: Omit<CommandOfficeRoomProps, "isOpen"> | null;
   officeRoomId: string | null;
   teamMode: TeamMode;
@@ -1490,6 +1495,7 @@ export function TeamView({
           hidden={visibleTeamMode !== "workflow"}
         >
           <CommandWorkflowPanel
+            openRequest={workflowOpenRequest}
             active={active && visibleTeamMode === "workflow"}
             status={workflowStatus}
             workflows={workflows}

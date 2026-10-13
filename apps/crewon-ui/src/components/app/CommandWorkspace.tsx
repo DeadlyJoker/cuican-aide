@@ -1,3 +1,4 @@
+import { CommandTeamSidebar } from "./CommandTeamSidebar";
 import type { ThreadCatalogNavigation } from "../../lib/thread/threadCatalogNavigation";
 import type { RecordedTaskChanges } from "../../lib/task-detail/recordedTaskChanges";
 import { useCommandSidebarCollapse } from "./useCommandSidebarCollapse";
@@ -1129,6 +1130,10 @@ export function CommandWorkspace({
   >(null);
   const scheduleDraftRequestIdRef = useRef(0);
   const [teamMode, setTeamMode] = useState<TeamMode>("office");
+  const [workflowOpenRequest, setWorkflowOpenRequest] = useState<{
+    workflowId: string;
+    revision: number;
+  } | null>(null);
   const [teamCatalog, setTeamCatalog] = useState<CommandDomainCatalog>({
     activeAgentVersions: [],
     agents: [],
@@ -3373,6 +3378,82 @@ export function CommandWorkspace({
         data-od-id="desktop-window"
       >
         <CommandSidebar
+          teamSidebar={
+            <CommandTeamSidebar
+              locale={locale}
+              mode={teamMode}
+              onSelectMode={(mode) => {
+                setTeamMode(mode);
+                setOfficeRoomId(null);
+                setOfficeRoomError(null);
+                setOfficeRoomWarning(null);
+              }}
+              groups={[
+                {
+                  mode: "office",
+                  status: teamCatalog.officeStatus,
+                  entries: teamCatalog.offices.flatMap((record) => {
+                    const id = officeRecordKey(record);
+                    return id === null
+                      ? []
+                      : [
+                          {
+                            id,
+                            title: record.config.title,
+                            selected: id === selectedOfficeRecordKey,
+                            onOpen: () => {
+                              setTeamMode("office");
+                              void openRuntimeOffice(record);
+                            },
+                          },
+                        ];
+                  }),
+                  onCreate: officeRuntime?.onCreate,
+                },
+                {
+                  mode: "workflow",
+                  status: workflowsStatus,
+                  entries: workflows.map((record) => ({
+                    id: record.config.workflowId,
+                    title: record.config.name,
+                    onOpen: () => {
+                      setTeamMode("workflow");
+                      setOfficeRoomId(null);
+                      setWorkflowOpenRequest((previous) => ({
+                        workflowId: record.config.workflowId,
+                        revision: (previous?.revision ?? 0) + 1,
+                      }));
+                    },
+                  })),
+                  onCreate: canCreateWorkflow
+                    ? () => {
+                        setWorkflowCreateError(null);
+                        setWorkflowCreateOpen(true);
+                      }
+                    : undefined,
+                },
+                {
+                  mode: "experts",
+                  status: expertTeamsStatus,
+                  entries: expertTeams.map((record) => ({
+                    id: record.config.expertsId,
+                    title: record.config.title,
+                    onOpen: () => {
+                      setTeamMode("experts");
+                      setOfficeRoomId(null);
+                      openExpertTeam(record);
+                    },
+                  })),
+                  onCreate: canCreateExpertTeam
+                    ? () => {
+                        setExpertCreateError(null);
+                        setExpertCreateOpen(true);
+                      }
+                    : undefined,
+                },
+              ]}
+            />
+          }
           chromeTarget={panelHeaderTarget}
           activeView={activeView}
           hostModules={modules.map((module) => ({
@@ -4194,6 +4275,7 @@ export function CommandWorkspace({
             onOpenThread={onSelectLinkedThread}
           />
           <TeamView
+            workflowOpenRequest={workflowOpenRequest}
             active={activeView === "team"}
             officeRuntime={officeRuntime}
             officeRoomId={officeRoomId}

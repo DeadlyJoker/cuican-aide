@@ -139,6 +139,7 @@ export function CommandSidebar({
   threadCatalogNavigation,
   chromeTarget,
   activeView,
+  teamSidebar,
   hostModule,
   hostModules,
   collapsed,
@@ -168,6 +169,7 @@ export function CommandSidebar({
   threadCatalogNavigation?: ThreadCatalogNavigation;
   chromeTarget?: HTMLElement | null;
   activeView: CommandShellView;
+  teamSidebar?: ReactNode;
   collapsed?: boolean;
   hostModule?: Readonly<{
     id: string;
@@ -568,6 +570,8 @@ export function CommandSidebar({
           >
             {pluginSidebar}
           </section>
+        ) : section === "team" && teamSidebar ? (
+          teamSidebar
         ) : (
           <CommandSidebarNavigation
             activeView={activeView}
