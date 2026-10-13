@@ -17,10 +17,11 @@ server {
     client_max_body_size 100m;
 
     gzip on;
+    gzip_static on;
     gzip_comp_level 6;
     gzip_min_length 1024;
     gzip_vary on;
-    gzip_types application/javascript application/json image/svg+xml text/css;
+    gzip_types application/javascript text/javascript application/json image/svg+xml text/css;
 
     add_header X-Content-Type-Options nosniff always;
     add_header Referrer-Policy strict-origin-when-cross-origin always;
