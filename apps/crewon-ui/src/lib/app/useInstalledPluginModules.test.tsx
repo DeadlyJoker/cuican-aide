@@ -312,6 +312,33 @@ describe("installed plugin directory App composition (real Control client)", () 
     expect(container.textContent).toBe("");
   });
 
+  it("retains the mounted directory on transient discovery failure, but withdraws on an explicit denial", async () => {
+    let status = 200;
+    const wire = controlUiClient(() =>
+      status === 200
+        ? controlUiResponse({ plugins: [item("example.a")], next: null })
+        : controlUiResponse(
+            {
+              error: {
+                category: status === 503 ? "providerUnavailable" : "forbidden",
+                code: "unavailable",
+                requestId: "test-discovery",
+              },
+            },
+            status,
+          ),
+    );
+    await render(wire.client);
+    const modules = state.hostModules;
+    status = 503;
+    await refresh();
+    expect(state.hostModules).toBe(modules);
+    expect(state.hostModuleAvailability.state).toBe("available");
+    status = 403;
+    await refresh();
+    expect(state.hostModules).toEqual([]);
+    expect(state.hostModuleAvailability.state).toBe("unavailable");
+  });
   it("fails closed on a refresh error, bounds diagnostics and restores the directory only from a successful new snapshot", async () => {
     let failing = false;
     const wire = controlUiClient(() =>

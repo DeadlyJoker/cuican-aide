@@ -11,6 +11,48 @@ const expired = () =>
 const parseSession = (value: unknown) =>
   value as { baseUrl: string; csrfToken: string };
 describe("Web Control account session transport", () => {
+  it("synchronizes a marked CSRF rejection from another tab once before replaying the original mutation", async () => {
+    const attempts: RequestInit[] = [];
+    let bootstraps = 0;
+    const t = createWebControlSessionTransport({
+      pageOrigin: origin,
+      parseSession,
+      fetch: async (input, init) => {
+        if (String(input).endsWith("/control-api/session"))
+          return session(
+            ++bootstraps === 1 ? "old-tab-csrf" : "current-cookie-csrf",
+          );
+        attempts.push(init!);
+        if (attempts.length === 1)
+          return Response.json(
+            { error: { code: "browser_csrf_invalid" } },
+            {
+              status: 403,
+              headers: { "x-crewon-account-exchange": "required" },
+            },
+          );
+        return Response.json({ saved: true });
+      },
+    });
+    await t.bootstrap();
+    const response = await t.fetch(origin + "/api/v1/threads", {
+      method: "POST",
+      body: '{"request":"same"}',
+      headers: {
+        "x-csrf-token": "old-tab-csrf",
+        "idempotency-key": "save-once",
+      },
+    });
+    expect(response.status).toBe(200);
+    expect(attempts).toHaveLength(2);
+    expect(attempts[1].body).toBe(attempts[0].body);
+    expect(new Headers(attempts[1].headers).get("idempotency-key")).toBe(
+      "save-once",
+    );
+    expect(new Headers(attempts[1].headers).get("x-csrf-token")).toBe(
+      "current-cookie-csrf",
+    );
+  });
   it("keeps the existing successful bootstrap as one GET", async () => {
     const calls: RequestInit[] = [];
     const t = createWebControlSessionTransport({

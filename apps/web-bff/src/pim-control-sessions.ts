@@ -53,7 +53,7 @@ export class PimControlSessions implements WebIdentitySessionPort {
   readonly #capacity: number;
   readonly #sessions = new Map<string, Session>();
   readonly #tokens = new Map<string, Session>();
-  readonly #packages: ReadonlyMap<string, string>;
+  readonly #packages: ReadonlyMap<string, ReadonlySet<string>>;
   constructor(input: {
     accounts: Pick<PimAccountAuthority, "verify">;
     profiles: PimPluginProfilePort;
@@ -63,7 +63,7 @@ export class PimControlSessions implements WebIdentitySessionPort {
       ): Promise<PimControlActor>;
     };
     issuer: string;
-    packages: ReadonlyMap<string, string>;
+    packages: ReadonlyMap<string, string | readonly string[]>;
     now?: () => number;
     capacity?: number;
   }) {
@@ -88,13 +88,19 @@ export class PimControlSessions implements WebIdentitySessionPort {
       this.#capacity > 10000
     )
       throw new Error("pim_control_session_capacity_invalid");
-    const packages = new Map(input.packages);
-    for (const [id, digest] of packages) {
+    const packages = new Map<string, ReadonlySet<string>>();
+    let count = 0;
+    for (const [id, value] of input.packages) {
+      const digests = typeof value === "string" ? [value] : [...value];
       if (
         !/^[a-zA-Z0-9][a-zA-Z0-9_.-]{0,127}$/u.test(id) ||
-        !/^sha256:[a-f0-9]{64}$/u.test(digest)
+        digests.length === 0 ||
+        new Set(digests).size !== digests.length ||
+        digests.some((digest) => !/^sha256:[a-f0-9]{64}$/u.test(digest)) ||
+        (count += digests.length) > 32
       )
         throw new Error("pim_control_package_invalid");
+      packages.set(id, new Set(digests));
     }
     this.#packages = packages;
   }
@@ -103,7 +109,12 @@ export class PimControlSessions implements WebIdentitySessionPort {
     signal: AbortSignal,
   ): Promise<{ session: WebIdentitySession; setCookie: string }> {
     this.#prune();
-    if (this.#sessions.size >= this.#capacity)
+    if (
+      this.#sessions.size >= this.#capacity &&
+      ![...this.#sessions.values()].some(
+        (session) => session.accountToken === accountToken,
+      )
+    )
       throw new Error("pim_control_session_capacity_exceeded");
     const account = await this.#accounts.verify(accountToken, signal);
     const actor = await this.#accountActor(account);
@@ -115,6 +126,17 @@ export class PimControlSessions implements WebIdentitySessionPort {
     signal.throwIfAborted();
     // Recheck after both awaits: concurrent exchanges cannot overrun the limit.
     this.#prune();
+    const existing = [...this.#sessions.values()].find(
+      (session) =>
+        session.accountToken === accountToken &&
+        sameActor(session.actor, actor) &&
+        Date.parse(session.web.expiresAt) - this.#now() >= 1000,
+    );
+    if (existing)
+      return {
+        session: existing.web,
+        setCookie: `${COOKIE_NAME}=${existing.web.sessionId}; Path=/; HttpOnly; Secure; SameSite=Strict; Max-Age=${Math.floor((Date.parse(existing.web.expiresAt) - this.#now()) / 1000)}`,
+      };
     if (this.#sessions.size >= this.#capacity)
       throw new Error("pim_control_session_capacity_exceeded");
     const issuedAt = this.#now();
@@ -235,7 +257,9 @@ export class PimControlSessions implements WebIdentitySessionPort {
     } else if (
       typeof pluginId !== "string" ||
       !this.#packages.has(pluginId) ||
-      (digest !== null && digest !== this.#packages.get(pluginId))
+      (digest !== null &&
+        (typeof digest !== "string" ||
+          !this.#packages.get(pluginId)?.has(digest)))
     )
       return denied("plugin_policy_package_denied");
     if (

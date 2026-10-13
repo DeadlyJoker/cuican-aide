@@ -97,20 +97,11 @@ export class PluginUiPageNavigation {
     let pages = this.#snapshot.pages;
     if (
       !pages.some(
-        (page) =>
-          page.sourceKey === source &&
-          page.home &&
-          page.moduleKey === moduleKey,
+        (page) => page.moduleKey === moduleKey && page.sourceKey === source,
       )
     ) {
-      this.#capacity(source, 1);
-      const home = this.#page(module, {
-        key: "home",
-        title: module.title,
-        context: null,
-        home: true,
-      });
-      pages = [...pages, home];
+      this.openHomeFromHost(moduleKey);
+      return;
     }
     this.#capacity(source, 1, pages);
     const page = this.#page(
@@ -124,6 +115,38 @@ export class PluginUiPageNavigation {
       pages,
     );
     this.#publish([...pages, page], this.#request(page.routeId, true));
+  }
+  openHomeFromHost(moduleKey: string): void {
+    const module = this.#modules().find((item) => item.key === moduleKey);
+    if (!module) fail("plugin_ui_page_unavailable");
+    const sourceKey = pluginUiPageSourceKey(module);
+    const existing = this.#snapshot.pages.find(
+      (page) =>
+        page.home &&
+        page.moduleKey === moduleKey &&
+        page.sourceKey === sourceKey,
+    );
+    if (existing) {
+      this.activateFromHost(existing.pageId);
+      return;
+    }
+    this.#capacity(sourceKey, 1);
+    const home = this.#page(module, {
+      key: "home",
+      title: module.title,
+      context: null,
+      home: true,
+    });
+    this.#publish(
+      [...this.#snapshot.pages, home],
+      this.#request(home.routeId, true),
+    );
+  }
+  activateFromHost(pageId: string): void {
+    this.#modules();
+    const page = this.#snapshot.pages.find((item) => item.pageId === pageId);
+    if (!page) fail("plugin_ui_page_unavailable");
+    this.#publish(this.#snapshot.pages, this.#request(page.routeId, true));
   }
   async invoke(
     lease: PluginUiLease,
@@ -216,7 +239,14 @@ export class PluginUiPageNavigation {
     const page = this.#snapshot.pages.find((item) => item.pageId === pageId);
     if (!page) fail("plugin_ui_page_unavailable");
     const pages = this.#snapshot.pages.filter((item) => item.pageId !== pageId),
-      next = pages.filter((item) => item.sourceKey === page.sourceKey).at(-1);
+      next =
+        pages.filter((item) => item.sourceKey === page.sourceKey).at(-1) ??
+        pages[
+          Math.min(
+            this.#snapshot.pages.findIndex((item) => item.pageId === pageId),
+            pages.length - 1,
+          )
+        ];
     const module = this.#modules().find((item) => item.key === page.moduleKey);
     if (!module) fail("plugin_ui_page_unavailable");
     this.#publish(pages, {

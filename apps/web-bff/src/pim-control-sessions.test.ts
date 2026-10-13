@@ -8,7 +8,14 @@ import {
 } from "./pim-control-sessions.ts";
 import type { PimAccountScope } from "./pim-account-authority.ts";
 
-function fixture(capacity = 1000) {
+function fixture(
+  capacity = 1000,
+  packages: ConstructorParameters<
+    typeof PimControlSessions
+  >[0]["packages"] = new Map([
+    ["crewon.short-drama", `sha256:${"a".repeat(64)}`],
+  ]),
+) {
   let now = Date.parse("2026-10-13T00:00:00Z");
   const account: {
     -readonly [K in keyof PimAccountScope]: PimAccountScope[K];
@@ -31,7 +38,7 @@ function fixture(capacity = 1000) {
     issuer: "https://crewon.example/identity/pim",
     capacity,
     now: () => now,
-    packages: new Map([["crewon.short-drama", `sha256:${"a".repeat(64)}`]]),
+    packages,
     accounts: {
       verify: async (token, signal) => {
         signal.throwIfAborted();
@@ -170,6 +177,37 @@ test("profiles and plugin policy isolate accounts, reject unapproved packages an
       "deny",
     );
 });
+test("upgrading permits both explicitly approved versions without admitting another digest or retaining caller mutations", async () => {
+  const digests = [`sha256:${"a".repeat(64)}`, `sha256:${"b".repeat(64)}`];
+  const { sessions, account } = fixture(
+    1000,
+    new Map([["crewon.short-drama", digests]]),
+  );
+  digests.push(`sha256:${"c".repeat(64)}`);
+  await sessions.exchange("account", signal());
+  const actor = pimControlAccountActor(account),
+    profile = await sessions.pluginProfile(actor, signal());
+  for (const [packageDigest, outcome] of [
+    [digests[0], "allow"],
+    [digests[1], "allow"],
+    [digests[2], "deny"],
+  ]) {
+    const decision = await sessions.pluginPolicy(
+      {
+        actor,
+        action: "pluginInstallation:install",
+        resource: {
+          kind: "pluginInstallation",
+          ...profile,
+          pluginId: "crewon.short-drama",
+          packageDigest,
+        },
+      },
+      signal(),
+    );
+    assert.equal(decision.outcome, outcome);
+  }
+});
 test("live account rejection and durable profile revocation fail closed", async () => {
   const { sessions, account, profiles, denyAccount } = fixture();
   const created = await sessions.exchange("account", signal());
@@ -242,6 +280,24 @@ test("bounds session capacity, expires credentials and rejects duplicate cookies
   await assert.rejects(
     sessions.verifyControlToken(next.session.controlAccessToken, signal()),
     /session_required/,
+  );
+});
+test("tabs sharing the same verified account reuse one Cookie without extending its lifetime", async () => {
+  const f = fixture(1);
+  const [a, b] = await Promise.all([
+    f.sessions.exchange("account", signal()),
+    f.sessions.exchange("account", signal()),
+  ]);
+  assert.equal(a.session.sessionId, b.session.sessionId);
+  assert.equal(a.session.controlAccessToken, b.session.controlAccessToken);
+  f.setTime(f.getTime() + 60000);
+  const c = await f.sessions.exchange("account", signal());
+  assert.equal(c.session.expiresAt, a.session.expiresAt);
+  assert.match(c.setCookie, /Max-Age=420(?:;|$)/);
+  f.denyAccount();
+  await assert.rejects(
+    f.sessions.exchange("account", signal()),
+    /pim_account_denied/,
   );
 });
 

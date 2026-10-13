@@ -1,6 +1,6 @@
 # Web 插件账号基础
 
-2026-10-13，公共站点 https://crewon.aicuican.com 已切换到 PIM 账号授权的 BFF、Control 与 PostgreSQL。AI 短剧 50.0.0 和出行助手 0.2.3 均已实际安装、启用，浏览器设置页和导航入口已核验。原 SQLite 与旧部署配置保留为回退材料。
+2026-10-13，公共站点 https://crewon.aicuican.com 已切换到 PIM 账号授权的 BFF、Control 与 PostgreSQL。AI 短剧 51.0.0 和出行助手 0.2.3 均已实际安装、启用，浏览器设置页和导航入口已核验。原 SQLite 与旧部署配置保留为回退材料。
 
 账号基础显式接入现有 PIM，不使用固定公网身份或浏览器中的 Control 密钥。
 
@@ -8,7 +8,7 @@
 - `PostgresWebPluginProfileStore` 在独立、显式迁移的 schema 内持久化账号与插件 profile 的绑定。不同 principal 不共享 profile；身份不可原地改写；权限成员摘要改变或撤权时必须更换 epoch；重新登录不能恢复明确撤销的 profile。构造和读取都不自动迁移。
 - `PimControlSessions` 将已验证 PIM 账号交换成最长八分钟的随机 Control 凭据。凭据仅保留在服务端，浏览器只获得 HttpOnly、Secure、SameSite=Strict 的 host cookie 和原来的 CSRF 返回值。业务请求的 Cookie 还必须与当前 PIM 凭据对应，退出或切换账号不能沿用旧账号会话。原生 ESM 导入无法附带 bearer；仅显式公开、已审批的插件不可变资源 GET 可使用 Cookie，并重新核验真实账号、持久 profile 和 epoch。此端口不能读取项目、会话、目录或提交动作，也不延长八分钟会话期限。
 - BFF 的 `accountExchange` 是显式 opt-in。启用后，`POST /control-api/session` 必须来自当前 origin、携带原 PIM 凭据且不含身份/业务 body。未启用时仍返回 405，旧 Identity Center 路径不变。Control 代理只收到内部短期凭据，不会收到 PIM bearer。
-- Web 客户端只有收到 BFF 自己生成的 `x-crewon-account-exchange: required` 与 `identity_session_required` 时才交换或续期。这个判定发生在转发前，Control 响应不能透传该标记。并发续期合并为一个操作，最多重发一次，保留业务 body 与幂等键并更新 CSRF；普通账号、模型或网络错误不触发反复重试。
+- Web 客户端只有收到 BFF 自己生成的 `x-crewon-account-exchange: required` 与 `identity_session_required` 或明确的 `browser_csrf_invalid` 时才交换或续期。这个判定发生在转发前，Control 响应不能透传该标记。并发续期合并为一个操作，最多重发一次，保留业务 body 与幂等键并更新 CSRF；普通账号、模型或网络错误不触发反复重试。
 
 ## 线上权限服务修复
 
@@ -31,3 +31,5 @@
 新增接口和存储默认关闭，现有登录、注册、桌面与 Web 原成功启动路径保持兼容。验收覆盖真实 PostgreSQL 的账号隔离、并发 profile、冷启动读取、角色摘要更新和撤权；BFF 覆盖当前账号绑定、来源/包拒绝、到期、容量、跨 origin 与 body 注入以及未启用模式；UI 覆盖原成功 GET、显式交换、保持幂等性的单次续期和拒绝普通错误重试。真实上游验证与本地命名夹具分别记录，不将夹具当作上线凭证。
 
 并行请求可共享同一令牌正在执行的真实账号校验，但不延长从首次请求开始计算的 250ms 新鲜度窗口；每个调用者独立取消，最后一个调用者取消时才终止上游。默认零缓存模式不启用合并。Profile、绑定与授权 epoch 仍逐次查询持久存储。
+
+同一有效 PIM 凭据的并行页面复用当前 Control 会话，不延长原八分钟期限，仍重新核验账号、成员资格与 profile。其他页面更新共享 Cookie 后，旧 CSRF 的同源、已认证请求在转发前被拒绝并收到同步标记；客户端仅同步一次并保留原业务 body 和幂等键。缺少 Origin、缺少 CSRF、其他来源、普通服务错误和未启用模式不触发此同步。包审批按精确 pluginId/摘要对保存，支持旧新版共存升级；未知摘要及重复审批仍拒绝。

@@ -1004,11 +1004,27 @@ export function CommandWorkspace({
   const hostModuleView = useCommandWorkspaceHostModules(modules, {
     request: hostModuleRequest,
     availability: hostModuleAvailability,
+    // Plugin navigation belongs to the account, not the currently viewed work thread.
+    // Opening its authenticated project conversation must not unmount its pages.
     navigationScope: JSON.stringify([
       selectedThreadId ?? selectedThread?.id ?? null,
       scene,
     ]),
   });
+  const activePluginModule = hostModuleView.active
+    ? modules.find(
+        (module) => module.id === hostModuleView.selectedId && module.pluginId,
+      )
+    : undefined;
+  const pluginSceneActive = Boolean(
+    hostModuleView.active && hostModuleView.pluginId,
+  );
+  const pluginConversationMissing = Boolean(
+    pluginSceneActive &&
+      !activePluginModule?.conversationThreadIds?.includes(
+        selectedThreadId ?? selectedThread?.id ?? "",
+      ),
+  );
   useEffect(() => {
     if (!hostModuleView.active || activeView === "command") return;
     setActiveView("command");
@@ -2390,7 +2406,12 @@ export function CommandWorkspace({
 
   function sendComposerValue(submittedValue = composerValue) {
     const trimmed = submittedValue.trim();
-    if (isSending || !trimmed || executionIntentBlocked) {
+    if (
+      isSending ||
+      !trimmed ||
+      executionIntentBlocked ||
+      pluginConversationMissing
+    ) {
       return;
     }
     onChangeComposerValue("");
@@ -3141,13 +3162,15 @@ export function CommandWorkspace({
   const showCommandThread =
     activeView === "command" &&
     (Boolean(selectedThread) || pendingNewThread) &&
-    !newTaskDraft;
+    !newTaskDraft &&
+    !pluginConversationMissing;
   const taskDetailAvailable = showCommandThread && Boolean(selectedThread);
   useEffect(() => {
     onTaskDetailAvailabilityChange?.(taskDetailAvailable);
     return () => onTaskDetailAvailabilityChange?.(false);
   }, [onTaskDetailAvailabilityChange, taskDetailAvailable]);
   const commandThreadRunning =
+    !pluginConversationMissing &&
     !composerShouldCreateNewThread &&
     (Boolean(activeTurnId) ||
       Boolean(
@@ -3209,7 +3232,9 @@ export function CommandWorkspace({
   const goalBar = showCommandThread
     ? composerGoalBarState(threadGoal, locale)
     : null;
-  const goalThreadId = selectedThread?.id ?? null;
+  const goalThreadId = pluginConversationMissing
+    ? null
+    : (selectedThread?.id ?? null);
   const reasoningEffortOptions =
     workspaceAuthority === "legacy"
       ? commandReasoningEffortOptions(effectiveModelOptions, model, locale)
@@ -3313,6 +3338,7 @@ export function CommandWorkspace({
       data-od-id="desktop-command-screen"
       data-force-new-task={newTaskDraft ? "true" : "false"}
       data-locale={locale}
+      data-plugin-scene={pluginSceneActive ? "true" : undefined}
     >
       {panelHeaderTarget
         ? createPortal(
@@ -3339,11 +3365,13 @@ export function CommandWorkspace({
               actions={
                 showCommandThread ? (
                   <>
-                    <CommandPanelSceneControl
-                      locale={locale}
-                      scene={scene}
-                      onSceneChange={switchScene}
-                    />
+                    {!pluginSceneActive && (
+                      <CommandPanelSceneControl
+                        locale={locale}
+                        scene={scene}
+                        onSceneChange={switchScene}
+                      />
+                    )}
                     {panelHeaderActions}
                   </>
                 ) : null
@@ -3471,6 +3499,7 @@ export function CommandWorkspace({
               closeComposerPalette();
               setSidebarSearchOpen(false);
               hostModuleView.open(module.id);
+              module.activatePage?.();
             },
           }))}
           collapsed={sidebarCollapsed}
@@ -3568,11 +3597,13 @@ export function CommandWorkspace({
                   </strong>
                 </div>
                 <div className="command-thread-actions">
-                  <CommandThreadSceneSwitcher
-                    locale={locale}
-                    scene={scene}
-                    onSceneChange={switchScene}
-                  />
+                  {!pluginSceneActive && (
+                    <CommandThreadSceneSwitcher
+                      locale={locale}
+                      scene={scene}
+                      onSceneChange={switchScene}
+                    />
+                  )}
                   {taskDetailTrigger}
                 </div>
               </div>
@@ -3588,14 +3619,29 @@ export function CommandWorkspace({
                 commandThreadRoom
               ) : (
                 <>
-                  <CommandSceneHeader
-                    locale={locale}
-                    scene={scene}
-                    onQuickAction={(action) =>
-                      prefillScenario(action.prompt, scene, action.mode)
-                    }
-                    onSceneChange={switchScene}
-                  />
+                  {pluginSceneActive ? (
+                    <header className="home-title">
+                      <h1>
+                        {activePluginModule?.navigationLabel ??
+                          activePluginModule?.label ??
+                          hostModuleView.unavailableSelection?.label}
+                      </h1>
+                      <p className="scene-subtitle">
+                        {locale === "zh"
+                          ? "选择左侧项目，在项目中开启 Agent 对话。成果在右侧查看与编辑。"
+                          : "Choose a project to open its Agent conversation. View and edit results on the right."}
+                      </p>
+                    </header>
+                  ) : (
+                    <CommandSceneHeader
+                      locale={locale}
+                      scene={scene}
+                      onQuickAction={(action) =>
+                        prefillScenario(action.prompt, scene, action.mode)
+                      }
+                      onSceneChange={switchScene}
+                    />
+                  )}
                 </>
               )}
 
@@ -3612,7 +3658,8 @@ export function CommandWorkspace({
                     onOpenChanges={onOpenTaskChanges}
                   />
                 ) : null}
-                {!composerShouldCreateNewThread &&
+                {!pluginConversationMissing &&
+                !composerShouldCreateNewThread &&
                 toolApproval &&
                 onToolApprovalDecision ? (
                   <ComposerToolApprovalBar
@@ -3787,7 +3834,7 @@ export function CommandWorkspace({
                     </>
                   }
                   dataOdId="ai-composer"
-                  disabled={isSending}
+                  disabled={isSending || pluginConversationMissing}
                   id="desktop-task-input"
                   palettes={
                     <>
@@ -3856,7 +3903,13 @@ export function CommandWorkspace({
                     </>
                   }
                   paletteOpen={Boolean(openPalette)}
-                  placeholder={scenePreset.placeholder}
+                  placeholder={
+                    pluginSceneActive
+                      ? locale === "zh"
+                        ? "与当前项目的 Agent 讨论想法与修改"
+                        : "Discuss ideas and changes with this project's Agent"
+                      : scenePreset.placeholder
+                  }
                   sendLabel={
                     showCommandThread
                       ? composerSendLabel
@@ -3940,7 +3993,7 @@ export function CommandWorkspace({
                 ) : null}
               </div>
 
-              {showCommandThread ? null : (
+              {showCommandThread || pluginSceneActive ? null : (
                 <CommandSceneQuickRow
                   locale={locale}
                   scene={scene}

@@ -10,6 +10,7 @@ import {
 import { PimAccountAuthority } from "./pim-account-authority.ts";
 import { PimControlSessions } from "./pim-control-sessions.ts";
 import { createPimAuthorityHttp } from "./pim-authority-http.ts";
+import { readWebPluginPackageApprovals } from "./web-plugin-package-approvals.ts";
 
 export type WebIdentityRuntime = Readonly<{
   identity: WebIdentitySessionPort;
@@ -35,7 +36,7 @@ export async function createWebIdentityRuntime(
     };
   }
   if (mode !== "pim") throw new Error("web_identity_mode_invalid");
-  const approval = packages(
+  const approval = readWebPluginPackageApprovals(
     required(environment, "CREWON_WEB_PIM_APPROVED_PACKAGES_JSON"),
   );
   const pool = new Pool({
@@ -110,31 +111,4 @@ function required(environment: NodeJS.ProcessEnv, name: string): string {
   const value = environment[name];
   if (!value?.trim()) throw new Error(`${name}_required`);
   return value;
-}
-function packages(json: string): ReadonlyMap<string, string> {
-  if (Buffer.byteLength(json) > 16384)
-    throw new Error("web_identity_packages_invalid");
-  let value: unknown;
-  try {
-    value = JSON.parse(json);
-  } catch {
-    throw new Error("web_identity_packages_invalid");
-  }
-  if (!Array.isArray(value) || value.length > 32)
-    throw new Error("web_identity_packages_invalid");
-  const result = new Map<string, string>();
-  for (const item of value) {
-    if (
-      !item ||
-      typeof item !== "object" ||
-      Array.isArray(item) ||
-      Object.keys(item).sort().join(",") !== "packageDigest,pluginId" ||
-      typeof item.pluginId !== "string" ||
-      typeof item.packageDigest !== "string" ||
-      result.has(item.pluginId)
-    )
-      throw new Error("web_identity_packages_invalid");
-    result.set(item.pluginId, item.packageDigest);
-  }
-  return result;
 }

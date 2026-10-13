@@ -22,6 +22,10 @@ export function ProjectHomeRecovery({
   const { submissions, queries, historicalQueries, images } =
     controller.concepts;
   const project = controller.getSnapshot().details;
+  if (!project && !submissions.getSnapshot().request && !queries.getSnapshot().request &&
+    !historicalQueries.getSnapshot().request && !images.getSnapshot().request &&
+    !assets?.getSnapshot().pending && !assets?.recovery.getSnapshot().intent)
+    return null;
   return (
     <details className="drama-plan-disclosure drama-recovery-disclosure">
       <summary>

@@ -21,10 +21,13 @@ export type CommandWorkspaceHostModule = Readonly<{
   id: string;
   label: string;
   pluginId?: string;
+  /** Threads opened through the authenticated plugin conversation/task port. */
+  conversationThreadIds?: readonly string[];
   navigationLabel?: string;
   pageId?: string;
   createPage?(): void;
   closePage?(): void;
+  activatePage?(): void;
   icon?: PluginNavigationIcon;
   sidebarContent?:
     | ReactNode
@@ -100,7 +103,7 @@ export function useCommandWorkspaceHostModules(
   // Failed reads withdraw callable content without turning a selected module into a chat navigation.
   const selectedId =
     selection &&
-    selection.navigationScope === navigationScope &&
+    (selection.pluginId || selection.navigationScope === navigationScope) &&
     selection.ownerKey === ownerKey &&
     (unavailable || ids.has(selection.id))
       ? selection.id
@@ -108,7 +111,7 @@ export function useCommandWorkspaceHostModules(
   useEffect(() => {
     setSelection((current) =>
       current &&
-      (current.navigationScope !== navigationScope ||
+      ((!current.pluginId && current.navigationScope !== navigationScope) ||
         current.ownerKey !== ownerKey ||
         (!unavailable &&
           !ids.has(current.id) &&
@@ -200,6 +203,7 @@ export function useCommandWorkspaceHostModules(
   );
   return {
     selectedId,
+    pluginId: selectedId !== null ? (selection?.pluginId ?? null) : null,
     panelOpen: selectedId !== null && selection?.panelOpen === true,
     closePanel,
     active: selectedId !== null,

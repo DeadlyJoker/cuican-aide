@@ -486,13 +486,14 @@ export default defineUiPlugin({
                     hostPresentation?: {
                       context?: {
                         projectId?: string;
+                        createOrigin?: "creative" | "novel";
                         stage?: import("./workbench/ShortDramaProjectNavigation").ShortDramaProjectPage;
                       };
                     };
                   } | null
                 )?.hostPresentation?.context ?? null
               }
-              onOpenHostPage={(page) => {
+              onOpenHostPage={(next.data as {hostPresentation?: unknown} | null)?.hostPresentation ? (page) => {
                 void createPluginUiNavigationClient(services)
                   .openPage({
                     contributionId: "workbench",
@@ -500,7 +501,7 @@ export default defineUiPlugin({
                     ...page,
                   })
                   .catch(() => undefined);
-              }}
+              } : undefined}
               controller={controller}
               texts={texts}
               outlines={outlines ?? undefined}

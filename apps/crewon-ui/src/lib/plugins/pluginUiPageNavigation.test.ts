@@ -60,6 +60,57 @@ function fixture() {
   };
 }
 describe("leased plugin page lifecycle", () => {
+  it("closing the last page of one plugin activates another plugin page instead of hiding the whole workbench", () => {
+    const f = fixture(),
+      first = controlUiItem(f.lease),
+      second = controlUiItem({
+        ...f.lease,
+        descriptor: { ...f.lease.descriptor, pluginId: "example.other" },
+      });
+    f.setCatalog({
+      plugins: [first, second],
+      modules: [
+        {
+          key: "module",
+          mountKey: "first",
+          title: "短剧",
+          contributionId: "workbench",
+          plugin: first,
+        },
+        {
+          key: "other",
+          mountKey: "second",
+          title: "出行",
+          contributionId: "workbench",
+          plugin: second,
+        },
+      ],
+      fingerprint: "two",
+    });
+    f.pages.openHomeFromHost("other");
+    f.pages.openHomeFromHost("module");
+    const [other, current] = f.pages.snapshot().pages;
+    f.pages.closeFromHost(current.pageId);
+    expect(f.pages.snapshot().pages).toEqual([other]);
+    expect(f.pages.snapshot().request).toMatchObject({
+      id: other.routeId,
+      panelOpen: true,
+    });
+  });
+  it("opens one home tab from navigation and closing one page preserves another page", () => {
+    const f = fixture();
+    f.pages.openHomeFromHost("module");
+    f.pages.openHomeFromHost("module");
+    expect(f.pages.snapshot().pages).toHaveLength(1);
+    f.pages.openFromHost("module");
+    const pages = f.pages.snapshot().pages;
+    expect(pages).toHaveLength(2);
+    f.pages.closeFromHost(pages[1].pageId);
+    expect(f.pages.snapshot().pages).toEqual([pages[0]]);
+    expect(f.pages.snapshot().request?.id).toBe(pages[0].routeId);
+    f.pages.activateFromHost(pages[0].pageId);
+    expect(f.pages.snapshot().request?.panelOpen).toBe(true);
+  });
   it("reuses requested pages and supports independent new instances", async () => {
     const f = fixture();
     await f.open();
@@ -71,6 +122,8 @@ describe("leased plugin page lifecycle", () => {
   });
   it("keeps the original home instance and differentiates additional pages", () => {
     const f = fixture();
+    f.pages.openFromHost("module");
+    expect(f.pages.snapshot().pages).toHaveLength(1);
     f.pages.openFromHost("module");
     const pages = f.pages.snapshot().pages;
     expect(pages).toHaveLength(2);
@@ -150,10 +203,11 @@ describe("leased plugin page lifecycle", () => {
       assertCurrent() {},
       nextId: () => "same",
     });
+    duplicate.openFromHost("module");
     expect(() => duplicate.openFromHost("module")).toThrow(
       "plugin_ui_page_identity_duplicate",
     );
-    expect(duplicate.snapshot().pages).toHaveLength(0);
+    expect(duplicate.snapshot().pages).toHaveLength(1);
   });
 });
 

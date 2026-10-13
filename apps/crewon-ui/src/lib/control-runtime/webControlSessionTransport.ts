@@ -66,7 +66,7 @@ export function createWebControlSessionTransport(input: {
 }
 async function requiresExchange(response: Response): Promise<boolean> {
   if (
-    response.status !== 401 ||
+    ![401, 403].includes(response.status) ||
     response.headers.get("x-crewon-account-exchange") !== "required"
   )
     return false;
@@ -79,7 +79,9 @@ async function requiresExchange(response: Response): Promise<boolean> {
       typeof body.error === "object" &&
       body.error !== null &&
       "code" in body.error &&
-      body.error.code === "identity_session_required"
+      ((response.status === 401 &&
+        body.error.code === "identity_session_required") ||
+        (response.status === 403 && body.error.code === "browser_csrf_invalid"))
     );
   } catch {
     return false;

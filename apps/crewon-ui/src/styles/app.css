@@ -123,6 +123,10 @@
   text-rendering: geometricPrecision;
 }
 
+.screen-shell.command-screen[data-plugin-scene="true"] .mode-switch {
+  display: none;
+}
+
 /* CrewON enterprise account entry */
 .crewon-auth-shell {
   min-height: 100vh;

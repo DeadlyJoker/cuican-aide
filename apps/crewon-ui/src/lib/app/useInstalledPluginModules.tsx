@@ -109,6 +109,29 @@ export function useInstalledPluginModules({
   }, [client, suspendedClient, sessionKey]);
   const current = useRef(scope);
   current.current = scope;
+  const [openedConversations, setOpenedConversations] = useState<Readonly<{
+    scope: typeof scope;
+    threads: ReadonlyMap<string, readonly string[]>;
+  }> | null>(null);
+  const rememberConversation = useCallback(
+    (pluginId: string, threadId: string) => {
+      if (!scope || current.current !== scope) return;
+      setOpenedConversations((previous) => {
+        const threads = new Map(
+          previous?.scope === scope ? previous.threads : [],
+        );
+        threads.set(
+          pluginId,
+          [...new Set([threadId, ...(threads.get(pluginId) ?? [])])].slice(
+            0,
+            100,
+          ),
+        );
+        return { scope, threads };
+      });
+    },
+    [scope],
+  );
   const directoryOwnerKey = useMemo(
     () => (scope === null ? null : Object.freeze({})),
     [scope],
@@ -296,7 +319,19 @@ export function useInstalledPluginModules({
             ...(pageNavigation
               ? { onNavigation: pageNavigation.invoke.bind(pageNavigation) }
               : {}),
-            ...(receipts ? { onTaskReceipt: receipts.observe } : {}),
+            ...(receipts
+              ? {
+                  onTaskReceipt: (
+                    event: Parameters<typeof receipts.observe>[0],
+                  ) => {
+                    receipts.observe(event);
+                    rememberConversation(
+                      event.lease.descriptor.pluginId,
+                      event.receipt.threadId,
+                    );
+                  },
+                }
+              : {}),
             ...(generationJournal ? { generationJournal } : {}),
             ...(projectQueryJournal ? { projectQueryJournal } : {}),
             ...(historicalQueryJournal ? { historicalQueryJournal } : {}),
@@ -308,6 +343,10 @@ export function useInstalledPluginModules({
                 taskContextRef.current?.runtime == null
               )
                 throw new PluginUiLoaderError("plugin_ui_session_changed");
+              rememberConversation(
+                event.lease.descriptor.pluginId,
+                event.binding.threadId,
+              );
               taskContextRef.current.onOpenTask(event.binding.threadId);
             },
           })
@@ -321,6 +360,7 @@ export function useInstalledPluginModules({
       historicalQueryJournal,
       selectionJournal,
       pageNavigation,
+      rememberConversation,
     ],
   );
   useLayoutEffect(() => {
@@ -432,7 +472,17 @@ export function useInstalledPluginModules({
           current.current === scope &&
           catalogGeneration.current === generation
         ) {
-          setSnapshot(null);
+          // A failed background discovery is not a new package or account. Keep
+          // its mounted identity; the independent live lease monitor and every
+          // action still recheck authority. Explicit denials/schema errors withdraw.
+          const transient =
+            (error instanceof ControlApiClientError && error.status >= 500) ||
+            (error instanceof PluginUiLoaderError &&
+              [
+                "plugin_ui_control_timeout",
+                "plugin_ui_operation_aborted",
+              ].includes(error.code));
+          if (!transient) setSnapshot(null);
           // Only an authenticated, explicit host configuration response can
           // pause discovery. Missing routes and actual failures remain retryable.
           notConfigured =
@@ -641,6 +691,10 @@ export function useInstalledPluginModules({
       catalog,
       pages,
       navigation: pageNavigation,
+      conversationThreads:
+        openedConversations?.scope === scope
+          ? openedConversations.threads
+          : undefined,
       render: (module, state) => (
         <InstalledPluginModule
           key={
@@ -697,6 +751,7 @@ export function useInstalledPluginModules({
     taskRunIds,
     projectConversationContext,
     planning.revision,
+    openedConversations,
   ]);
   const [surfaceRequest, setSurfaceRequest] =
     useState<typeof pages.request>(null);

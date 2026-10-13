@@ -54,6 +54,7 @@ function fixture(native: boolean) {
     expiresAt: new Date(Date.now() + 300_000).toISOString(),
   };
   let revoked = false;
+  let unavailable = false;
   let renewalGate: ReturnType<typeof deferred<PluginUiLease>> | null = null;
   const renew = vi.fn(async () => {
     const next = {
@@ -67,6 +68,17 @@ function fixture(native: boolean) {
   const fetch = vi.fn(async (input: RequestInfo | URL, init?: RequestInit) => {
     const url = new URL(String(input));
     if (init?.method === "DELETE") return controlUiResponse({ closed: true });
+    if (unavailable)
+      return controlUiResponse(
+        {
+          error: {
+            category: "providerUnavailable",
+            code: "control_api_unavailable",
+            requestId: "test-service-outage",
+          },
+        },
+        503,
+      );
     if (url.pathname.endsWith("/renew")) {
       expect(JSON.parse(String(init?.body))).toEqual({
         expectedExpiresAt: lease.expiresAt,
@@ -176,6 +188,9 @@ function fixture(native: boolean) {
     assets,
     fetch,
     services: () => services,
+    setUnavailable: (value: boolean) => {
+      unavailable = value;
+    },
     revoke: () => {
       revoked = true;
     },
@@ -190,6 +205,33 @@ function fixture(native: boolean) {
 describe.each([false, true])(
   "installed module authenticated renewal native=%s",
   (native) => {
+    it("keeps the unsaved form through a transient outage but withdraws at the finite lease deadline", async () => {
+      const f = fixture(native);
+      await f.render(true);
+      const draft = f.container.querySelector("textarea")!;
+      draft.value = "保留草稿";
+      f.setUnavailable(true);
+      await act(async () => {
+        await vi.advanceTimersByTimeAsync(11_000);
+        await flush();
+      });
+      expect(f.container.querySelector("textarea")).toBe(draft);
+      expect(f.dispose).not.toHaveBeenCalled();
+      f.setUnavailable(false);
+      await act(async () => {
+        await vi.advanceTimersByTimeAsync(5_000);
+        await flush();
+      });
+      expect(f.mount).toHaveBeenCalledTimes(1);
+      expect(draft.value).toBe("保留草稿");
+      f.setUnavailable(true);
+      await act(async () => {
+        await vi.advanceTimersByTimeAsync(285_000);
+        await flush();
+      });
+      expect(f.container.querySelector("textarea")).toBeNull();
+      expect(f.dispose).toHaveBeenCalledTimes(1);
+    });
     it("preserves the same live form past the original five minutes and still withdraws on revocation", async () => {
       const f = fixture(native);
       await f.render(true);

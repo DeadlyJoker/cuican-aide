@@ -34,6 +34,8 @@ import {
 } from "../../lib/plugins/useInstalledPluginProjectSelectionContext";
 
 import styles from "./InstalledPluginModule.module.css";
+import { ControlApiClientError } from "@crewon/control-client";
+import { PluginUiLoaderError } from "../../lib/plugins/pluginUiValidation";
 import { InstalledPluginUnavailable } from "./InstalledPluginUnavailable";
 import { InstalledPluginLegacyTaskControls } from "./InstalledPluginLegacyTaskControls";
 import { needsInstalledPluginLegacyTaskNavigation } from "./installedPluginLegacyTaskNavigation";
@@ -289,8 +291,21 @@ export function InstalledPluginModule({
             !owned.controller.signal.aborted &&
             monitor.current === owned &&
             current.current === context
-          )
-            report(error);
+          ) {
+            const transient =
+              (error instanceof ControlApiClientError && error.status >= 500) ||
+              (error instanceof PluginUiLoaderError &&
+                error.code === "plugin_ui_control_timeout");
+            const remaining = Date.parse(lease.expiresAt) - Date.now();
+            // Cached presentation is not an execution grant. Every action keeps
+            // its live authorization check; never outlive the finite lease.
+            if (transient && remaining > 0) {
+              owned.timer = setTimeout(
+                () => void check(),
+                Math.min(5_000, remaining),
+              );
+            } else report(error);
+          }
         }
       };
       owned.timer = setTimeout(() => void check(), LEASE_CHECK_INTERVAL_MS);

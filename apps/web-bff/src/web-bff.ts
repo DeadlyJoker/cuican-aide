@@ -4,7 +4,7 @@ import {
   boundedProjectConversationProxyResponse,
   PROJECT_CONVERSATION_PROXY_DEADLINE_MS,
 } from "./project-conversation-proxy-policy.ts";
-import { createHmac, timingSafeEqual } from "node:crypto";
+import { createHmac, timingSafeEqual, randomUUID } from "node:crypto";
 
 import type {
   WebIdentitySession,
@@ -215,7 +215,16 @@ export function createWebBff(config: {
           csrf === null ||
           !safeEqual(csrf, expectedCsrf)
         ) {
-          return errorResponse(403, "browser_csrf_invalid");
+          const response = errorResponse(403, "browser_csrf_invalid");
+          // Same-origin, already authenticated PIM callers can synchronize the
+          // shared Cookie's CSRF after another tab renews it. Never forward here.
+          if (
+            config.accountExchange &&
+            origin === publicOrigin &&
+            csrf !== null
+          )
+            response.headers.set("x-crewon-account-exchange", "required");
+          return response;
         }
       }
 
@@ -465,7 +474,21 @@ function jsonResponse(status: number, body: unknown): Response {
 }
 
 function errorResponse(status: number, code: string): Response {
-  return jsonResponse(status, { error: { code } });
+  const category =
+    status === 401
+      ? "authentication"
+      : status === 403
+        ? "authorization"
+        : status === 404
+          ? "notFound"
+          : status === 429
+            ? "rateLimit"
+            : status >= 500
+              ? "providerUnavailable"
+              : "validation";
+  return jsonResponse(status, {
+    error: { code, category, message: code, requestId: randomUUID() },
+  });
 }
 
 function secureHeaders(): Headers {

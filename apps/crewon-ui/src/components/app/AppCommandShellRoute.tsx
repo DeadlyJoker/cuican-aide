@@ -113,23 +113,20 @@ export function AppCommandShellRoute({
   } | null>(null);
   const [taskDetailOpen, setTaskDetailOpen] = useState(false);
   const [activeOverlay, setActiveOverlay] = useState<CommandShellOverlay>(
-    !compactWeb && capabilityDrawer.open ? "workbench" : null,
+    capabilityDrawer.open ? "workbench" : null,
   );
   const [narrowOverlayMode, setNarrowOverlayMode] = useState(false);
   const [stoppingTurnKeys, setStoppingTurnKeys] = useState<string[]>([]);
-  const capabilityOpenRef = useRef(!compactWeb && capabilityDrawer.open);
+  const capabilityOpenRef = useRef(capabilityDrawer.open);
   const taskDetailLastFocusRef = useRef<HTMLElement | null>(null);
   const workbenchLastFocusRef = useRef<HTMLElement | null>(null);
   const triggerRef = useRef<HTMLButtonElement>(null);
-  const previousCapabilityOpenRef = useRef(
-    !compactWeb && capabilityDrawer.open,
-  );
+  const previousCapabilityOpenRef = useRef(capabilityDrawer.open);
   const stoppingTurnKeysRef = useRef(new Set<string>());
   const taskDetailAvailabilityCallbackRef = useRef(
     commandWorkspaceProps.onTaskDetailAvailabilityChange,
   );
-  capabilityOpenRef.current =
-    pluginPanel !== null || (!compactWeb && capabilityDrawer.open);
+  capabilityOpenRef.current = pluginPanel !== null || capabilityDrawer.open;
   taskDetailAvailabilityCallbackRef.current =
     commandWorkspaceProps.onTaskDetailAvailabilityChange;
   const selectedThread = commandWorkspaceProps.selectedThread ?? null;
@@ -286,7 +283,6 @@ export function AppCommandShellRoute({
     [],
   );
   const openCapability = useCallback(() => {
-    if (compactWeb) return;
     pluginPanel?.close();
     setActiveOverlay("workbench");
     capabilityDrawer.onOpen();
@@ -295,7 +291,6 @@ export function AppCommandShellRoute({
   const closeCapability = useCallback(() => {
     if (pluginPanel) {
       pluginPanel.close();
-      return;
     }
     setActiveOverlay(taskDetailOpen ? "task-detail" : null);
     capabilityDrawer.onClose();
@@ -399,14 +394,12 @@ export function AppCommandShellRoute({
   useEffect(() => {
     if (compactWeb || !selectedThread) {
       setTaskDetailOpen(false);
-      setActiveOverlay(
-        !compactWeb && capabilityDrawer.open ? "workbench" : null,
-      );
+      setActiveOverlay(capabilityDrawer.open ? "workbench" : null);
     }
   }, [capabilityDrawer.open, compactWeb, selectedThread]);
 
   useEffect(() => {
-    const workbenchOpen = !compactWeb && capabilityDrawer.open;
+    const workbenchOpen = capabilityDrawer.open;
     if (previousCapabilityOpenRef.current === workbenchOpen) return;
     previousCapabilityOpenRef.current = workbenchOpen;
     setActiveOverlay(
@@ -430,8 +423,7 @@ export function AppCommandShellRoute({
       const target = resolveCommandShellEscapeTarget({
         activeOverlay,
         taskDetailOpen,
-        workbenchOpen:
-          pluginPanel !== null || (!compactWeb && capabilityDrawer.open),
+        workbenchOpen: pluginPanel !== null || capabilityDrawer.open,
       });
       if (!target) return;
       event.preventDefault();
@@ -497,9 +489,7 @@ export function AppCommandShellRoute({
         className="command-shell-route"
         data-active-overlay={activeOverlay ?? "none"}
         data-capability-sidebar-open={
-          pluginPanel || (!compactWeb && capabilityDrawer.open)
-            ? "true"
-            : "false"
+          pluginPanel || capabilityDrawer.open ? "true" : "false"
         }
         data-plugin-panel-open={pluginPanel ? "true" : undefined}
         data-task-detail-open={taskDetailOpen ? "true" : "false"}
@@ -618,10 +608,32 @@ export function AppCommandShellRoute({
         commandWorkspaceProps.hostModules?.length ? (
           <CommandWorkspaceCapabilityDrawer
             {...capabilityDrawer}
-            open={
-              pluginPanel !== null || (!compactWeb && capabilityDrawer.open)
-            }
-            hideTrigger={compactWeb}
+            open={pluginPanel !== null || capabilityDrawer.open}
+            hideTrigger={false}
+            pluginPages={commandWorkspaceProps.hostModules
+              ?.filter(
+                (module, index, all) =>
+                  module.pluginId &&
+                  all.findIndex((item) => item.pluginId === module.pluginId) ===
+                    index,
+              )
+              .map((module) => ({
+                id: module.id,
+                label: module.navigationLabel ?? module.label,
+                open: () => module.createPage?.(),
+              }))}
+            pluginTabs={commandWorkspaceProps.hostModules
+              ?.filter(
+                (module) =>
+                  module.pageId && module.activatePage && module.closePage,
+              )
+              .map((module) => ({
+                id: module.id,
+                label: module.label,
+                active: pluginPanel?.id === module.id,
+                activate: () => module.activatePage?.(),
+                close: () => module.closePage?.(),
+              }))}
             pluginPanel={
               pluginPanel
                 ? { ...pluginPanel, close: closeCapabilityAndRestoreFocus }

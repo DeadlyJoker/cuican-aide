@@ -200,6 +200,51 @@ test("fails closed before proxying mutations with missing origin or invalid CSRF
   assert.equal(badCsrf.status, 403);
   assert.equal(fetchCalls, 0);
 });
+test("PIM marks a same-origin stale CSRF for synchronization without forwarding the mutation", async () => {
+  let calls = 0;
+  const bff = createWebBff({
+    publicOrigin: PUBLIC_ORIGIN,
+    controlTarget: CONTROL_TARGET,
+    controlBffToken: CONTROL_BFF_TOKEN,
+    controlCsrfToken: CONTROL_CSRF,
+    csrfSecret: CSRF_SECRET,
+    identity: fixedIdentity(SESSION),
+    accountExchange: {
+      async exchange() {
+        throw new Error("unused");
+      },
+    },
+    fetch: async () => {
+      calls++;
+      return new Response(null, { status: 204 });
+    },
+  });
+  const response = await bff.handle(
+    request("/api/v1/threads", {
+      method: "POST",
+      headers: {
+        "cookie": COOKIE,
+        "origin": PUBLIC_ORIGIN,
+        "x-csrf-token": "previous-tab-csrf",
+      },
+    }),
+  );
+  assert.equal(response.status, 403);
+  assert.equal(response.headers.get("x-crewon-account-exchange"), "required");
+  assert.equal(calls, 0);
+  const foreign = await bff.handle(
+    request("/api/v1/threads", {
+      method: "POST",
+      headers: {
+        "cookie": COOKIE,
+        "origin": "https://other.example",
+        "x-csrf-token": "previous-tab-csrf",
+      },
+    }),
+  );
+  assert.equal(foreign.headers.get("x-crewon-account-exchange"), null);
+  assert.equal(calls, 0);
+});
 
 test("preserves bounded SSE streams without buffering them into JSON", async () => {
   const bff = testBff({

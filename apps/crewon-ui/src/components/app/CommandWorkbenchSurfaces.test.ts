@@ -60,19 +60,14 @@ describe("workbench tool launcher", () => {
       new URL("./CommandWorkbenchTools.tsx", import.meta.url),
       "utf8",
     );
-    const tabbar = drawerSource.slice(
-      drawerSource.indexOf('className="command-workbench-tabbar"'),
-      drawerSource.indexOf(
-        '<div className="command-workbench-window-actions">',
-      ),
+    const tabbar = readFileSync(
+      new URL("./CommandWorkbenchTabStrip.tsx", import.meta.url),
+      "utf8",
     );
 
-    expect(tabbar).toContain("onClick={toggleLauncher}");
+    expect(tabbar).toContain("onClick={onToggleLauncher}");
     expect(tabbar).not.toContain('activeTab?.toolId === "web"');
-    expect(tabbar.indexOf("command-workbench-launcher-menu")).toBeGreaterThan(
-      tabbar.indexOf('className="command-workbench-tabs"'),
-    );
-    expect(tabbar.indexOf("command-workbench-launcher-menu")).toBeGreaterThan(
+    expect(tabbar.indexOf("{launcherOpen ? launcher : null}")).toBeGreaterThan(
       tabbar.indexOf('className="command-workbench-launcher-anchor"'),
     );
     expect(drawerSource).toContain(
@@ -82,7 +77,9 @@ describe("workbench tool launcher", () => {
     expect(surfaceSource).toContain(
       "obscured={workbenchOverlayOpen || interactionInactive}",
     );
-    expect(drawerSource).toContain("active={open && activeTabId === tab.id}");
+    expect(drawerSource).toContain(
+      "active={interactiveOpen && activeTabId === tab.id}",
+    );
     expect(surfaceSource).toContain(
       "interactive={active && !interactionInactive}",
     );

@@ -1,4 +1,7 @@
 /* Extracted from artifacts/desktop-command-home-scene-update/desktop-command.css. */
+.screen-shell.command-screen[data-plugin-scene="true"] .mode-switch {
+  display: none;
+}
 .command-window {
   position: relative;
   display: grid;

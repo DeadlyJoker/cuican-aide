@@ -106,9 +106,12 @@ test("native raw BFF rejects upstream success or error JSON above 60 KiB and pre
     f.reply.body = { result: "x".repeat(60 * 1024) };
     const response = await f.fetch();
     assert.equal(response.status, 502);
-    assert.deepEqual(await response.json(), {
-      error: { code: "control_api_response_invalid" },
-    });
+    const body = (await response.json()) as {
+      error: { code: string; category: string; requestId: string };
+    };
+    assert.equal(body.error.code, "control_api_response_invalid");
+    assert.equal(body.error.category, "providerUnavailable");
+    assert.match(body.error.requestId, /^[0-9a-f-]{36}$/);
   }
   f.reply.status = 409;
   f.reply.body = { error: { code: "upload_revision_conflict" } };

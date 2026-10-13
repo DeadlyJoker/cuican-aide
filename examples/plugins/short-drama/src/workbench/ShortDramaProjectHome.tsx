@@ -31,6 +31,7 @@ export function ShortDramaProjectHome({
   onCreativeDraftChange,
   onCreateNovel,
   origins,
+  integrated = false,
 }: {
   snapshot: ProjectSnapshot;
   locked: boolean;
@@ -46,6 +47,7 @@ export function ShortDramaProjectHome({
   onCreativeDraftChange?(draft: CreativeCreationDraft): void;
   onCreateNovel?(): void;
   origins?: ReadonlyMap<string, "creative" | "novel" | null>;
+  integrated?: boolean;
 }) {
   const visibleProjects = snapshot.projects.filter(
     (project) =>
@@ -56,12 +58,12 @@ export function ShortDramaProjectHome({
   return (
     <div className="drama-project-home">
       <section className="drama-home-hero" aria-label="开始新的短剧">
-        <span className="drama-home-eyebrow">
+        {!integrated && <span className="drama-home-eyebrow">
           <Film size={17} /> AI 短剧工作台
-        </span>
-        <h1>从一个想法，开始你的短剧</h1>
+        </span>}
+        <h1>{integrated ? "新建短剧" : "从一个想法，开始你的短剧"}</h1>
         <p>
-          写下创作想法，确认后建立项目。进入项目，与 Agent 创作或逐项编辑成果。
+          {integrated ? "填写故事想法，或导入小说。创建后在中间与 Agent 协作。" : "写下创作想法，确认后建立项目。进入项目，与 Agent 创作或逐项编辑成果。"}
         </p>
         <form
           className="drama-idea-composer"
@@ -165,7 +167,7 @@ export function ShortDramaProjectHome({
           </p>
         )}
       </section>
-      <section className="drama-home-projects" aria-label="项目列表">
+      {!integrated && <section className="drama-home-projects" aria-label="项目列表">
         <div className="section-row">
           <h2>{snapshot.state === "archived" ? "已归档项目" : "继续创作"}</h2>
           <button
@@ -274,7 +276,7 @@ export function ShortDramaProjectHome({
             加载更多项目
           </button>
         )}
-      </section>
+      </section>}
     </div>
   );
 }

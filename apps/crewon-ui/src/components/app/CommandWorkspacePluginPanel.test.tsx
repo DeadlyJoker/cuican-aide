@@ -130,6 +130,35 @@ async function openPlugin(id: string) {
 }
 
 describe("plugin panels in the formal Agent shell", () => {
+  it("isolates plugin conversations and keeps the shared composer while opening an owned thread", async () => {
+    const module = {
+      ...contribution("scoped", "短剧"),
+      pluginId: "example.drama",
+      conversationThreadIds: [],
+    };
+    await render({ hostModules: [module] });
+    await openPlugin("scoped");
+    const composer = container.querySelector(
+      '[data-shell-view="command"] textarea',
+    );
+    expect(container.querySelector(".command-thread-room")).toBeNull();
+    expect(container.querySelector('[data-od-id="scene-tabs"]')).toBeNull();
+    await render({
+      hostModules: [{ ...module, conversationThreadIds: [thread.id] }],
+    });
+    expect(
+      container
+        .querySelector(".command-screen")
+        ?.getAttribute("data-plugin-scene"),
+    ).toBe("true");
+    expect(container.querySelector(".command-thread-room")).not.toBeNull();
+    expect(
+      container.querySelector('[data-shell-view="command"] textarea'),
+    ).toBe(composer);
+    expect(
+      container.querySelector('[data-od-id="thread-scene-tabs"]'),
+    ).toBeNull();
+  });
   it("contains original absolute shell views inside the plugin content row instead of covering the host header", async () => {
     const style = document.createElement("style");
     style.textContent =
@@ -148,7 +177,7 @@ describe("plugin panels in the formal Agent shell", () => {
       expect(getComputedStyle(pane).position).toBe("relative");
       expect(getComputedStyle(pane).inset).toBe("auto");
       expect(
-        container.querySelector(".command-plugin-panel-header"),
+        container.querySelector(".command-workbench-tabbar"),
       ).not.toBeNull();
     } finally {
       style.remove();
@@ -224,7 +253,7 @@ describe("plugin panels in the formal Agent shell", () => {
           ).overflow,
         ).toBe("auto");
         expect(composer).not.toBeNull();
-        await click('[aria-label="关闭插件面板"]');
+        await click('[aria-label="收起工作台"]');
         expect(route.hasAttribute("data-plugin-panel-open")).toBe(false);
         expect(window.getComputedStyle(route).overflow).toBe("hidden");
         expect(
@@ -262,7 +291,9 @@ describe("plugin panels in the formal Agent shell", () => {
       container.querySelector(".command-panel-heading > strong")?.textContent,
     ).toBe("原 Agent 会话");
     expect(
-      panel.querySelector(".command-plugin-panel-header > strong")?.textContent,
+      panel.querySelector(
+        '.command-workbench-tabbar [role="tab"][data-active="true"] > button',
+      )?.textContent,
     ).toBe("项目 A");
     expect(panel.querySelector('[aria-label="全屏工作台"]')).toBeNull();
     await click('[data-plugin-fixture="fixture-a"] button');
@@ -275,7 +306,7 @@ describe("plugin panels in the formal Agent shell", () => {
     );
     await openPlugin("fixture-a");
     expect(fixture.querySelector("output")?.textContent).toBe("2");
-    await click('[aria-label="关闭插件面板"]');
+    await click('[aria-label="收起工作台"]');
     expect(panel.hidden).toBe(true);
     expect(conversation!.querySelector("textarea")).toBe(composer);
     expect(
@@ -335,11 +366,15 @@ describe("plugin panels in the formal Agent shell", () => {
       container.querySelector('[data-shell-view="command"] textarea'),
     ).toBe(composer);
     const sidebar = container.querySelector('[data-plugin-sidebar="second"]');
-    await click('[aria-label="关闭插件面板"]');
+    await click('[aria-label="收起工作台"]');
     expect(container.querySelector('[data-plugin-sidebar="second"]')).toBe(
       sidebar,
     );
-    expect(container.querySelector(".command-plugin-panel-header")).toBeNull();
+    expect(
+      container
+        .querySelector(".command-plugin-panel-target")
+        ?.hasAttribute("hidden"),
+    ).toBe(true);
     await click('.command-navigation-rail [data-nav-key="command"]');
     expect(container.querySelector("[data-plugin-sidebar]")).toBeNull();
     expect(
@@ -367,13 +402,19 @@ describe("plugin panels in the formal Agent shell", () => {
         .querySelector('[data-plugin-navigation-target="fixture"]')
         ?.getAttribute("aria-current"),
     ).toBe("page");
-    const otherTab = container.querySelector<HTMLButtonElement>(
-      '.command-plugin-panel-header [role="tab"]',
-    );
-    expect(otherTab).not.toBeNull();
+    const otherTab = [
+      ...container.querySelectorAll<HTMLButtonElement>(
+        '.command-workbench-tabbar [role="tab"] > button',
+      ),
+    ].find((button) => button.textContent?.includes("文件"));
+    expect(otherTab).toBeDefined();
     expect(otherTab?.textContent).toContain("文件");
     await act(async () => otherTab!.click());
-    expect(container.querySelector(".command-plugin-panel-header")).toBeNull();
+    expect(
+      container
+        .querySelector(".command-plugin-panel-target")
+        ?.hasAttribute("hidden"),
+    ).toBe(true);
     expect(container.querySelector(".command-workbench-panel")).toBe(
       originalPanel,
     );
@@ -405,7 +446,7 @@ describe("plugin panels in the formal Agent shell", () => {
       ),
     );
     expect(panel.style.width).toBe(`${width - 24}px`);
-    await click('[aria-label="关闭插件面板"]');
+    await click('[aria-label="收起工作台"]');
     expect(panel.hidden).toBe(false);
     expect(panel.querySelector(".command-workbench-launcher")).toBe(
       toolSurface,

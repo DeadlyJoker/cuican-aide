@@ -1,4 +1,5 @@
-import { Maximize2, Minimize2, PanelRight, Plus, X } from "lucide-react";
+import { CommandWorkbenchTabStrip } from "./CommandWorkbenchTabStrip";
+import { PanelRight, Maximize2, Minimize2 } from "lucide-react";
 import {
   type KeyboardEvent as ReactKeyboardEvent,
   type PointerEvent as ReactPointerEvent,
@@ -39,10 +40,7 @@ import {
 import { CommandWorkbenchReview } from "./CommandWorkbenchReview";
 import type { RecordedReviewRequest } from "./commandWorkbenchTabs";
 import type { RecordedTaskChanges } from "../../lib/task-detail/recordedTaskChanges";
-import {
-  CommandWorkspacePluginPanelHeader,
-  type CommandWorkspacePluginPanelSelection,
-} from "./CommandWorkspacePluginPanel";
+import { type CommandWorkspacePluginPanelSelection } from "./CommandWorkspacePluginPanel";
 
 type WorkbenchTab = BaseWorkbenchTab & {
   recordedChanges?: RecordedTaskChanges;
@@ -111,6 +109,18 @@ function persistWorkbenchWidth(width: number) {
 
 export type CommandWorkspaceCapabilityDrawerProps = {
   pluginPanel?: CommandWorkspacePluginPanelSelection | null;
+  pluginPages?: readonly Readonly<{
+    id: string;
+    label: string;
+    open(): void;
+  }>[];
+  pluginTabs?: readonly Readonly<{
+    id: string;
+    label: string;
+    active: boolean;
+    activate(): void;
+    close(): void;
+  }>[];
   pluginPanelTargetRef?: (target: HTMLDivElement | null) => void;
   hideTrigger?: boolean;
   taskSnapshot?: TaskWorkbenchSnapshot | null;
@@ -146,6 +156,8 @@ export type CommandWorkspaceCapabilityDrawerProps = {
 
 export function CommandWorkspaceCapabilityDrawer({
   pluginPanel = null,
+  pluginPages = [],
+  pluginTabs,
   pluginPanelTargetRef,
   hideTrigger = false,
   taskSnapshot = null,
@@ -494,6 +506,10 @@ export function CommandWorkspaceCapabilityDrawer({
   }
 
   function openTool(toolId: WorkbenchToolId) {
+    if (pluginPanel) {
+      pluginPanel.close();
+      onOpen();
+    }
     setLauncherOpen(false);
     dismissedToolIdsRef.current.delete(toolId);
     if (toolId === "web") {
@@ -673,87 +689,66 @@ export function CommandWorkspaceCapabilityDrawer({
             onPointerUp={finishResize}
           />
         ) : null}
-        {pluginPanel ? (
-          <CommandWorkspacePluginPanelHeader
-            selection={pluginPanel}
-            locale={locale}
-            existingTabs={tabs.map((tab) => ({
+        <CommandWorkbenchTabStrip
+          locale={locale}
+          launcherOpen={launcherOpen}
+          launcherRef={launcherRef}
+          onToggleLauncher={toggleLauncher}
+          onHide={onClose}
+          tabs={[
+            ...(pluginTabs ?? pluginPanel?.pages ?? []).map((page) => ({
+              ...page,
+              close: () => {
+                page.close();
+                if (
+                  page.active &&
+                  (pluginTabs ?? pluginPanel?.pages ?? []).length === 1 &&
+                  tabs.length > 0
+                ) {
+                  pluginPanel?.close();
+                  onOpen();
+                }
+              },
+              closeLabel: (locale === "zh" ? "关闭 " : "Close ") + page.label,
+            })),
+            ...(pluginPanel && !pluginPanel.pages?.length && !pluginTabs?.length
+              ? [
+                  {
+                    id: pluginPanel.id,
+                    label: pluginPanel.label,
+                    active: true,
+                    activate: () => {},
+                    close: pluginPanel.close,
+                    closeLabel:
+                      (locale === "zh" ? "关闭 " : "Close ") +
+                      pluginPanel.label,
+                  },
+                ]
+              : []),
+            ...tabs.map((tab) => ({
               id: tab.id,
-              label: tabLabel(tab, locale),
+              label: (
+                <>
+                  {toolIcon(tab.toolId)}
+                  <span>{tabLabel(tab, locale)}</span>
+                </>
+              ),
+              closeLabel:
+                (locale === "zh" ? "关闭 " : "Close ") + tabLabel(tab, locale),
+              active: !pluginPanel && activeTabId === tab.id,
               activate: () => {
-                pluginPanel.close();
+                pluginPanel?.close();
+                onOpen();
                 setActiveTabId(tab.id);
               },
-            }))}
-          />
-        ) : tabs.length > 0 ? (
-          <header
-            className="command-workbench-tabbar"
-            data-desktop-drag-region=""
-          >
-            <div className="command-workbench-tabs" role="tablist">
-              {tabs.map((tab) => (
-                <div
-                  aria-selected={activeTabId === tab.id}
-                  className="command-workbench-tab"
-                  data-active={activeTabId === tab.id ? "true" : undefined}
-                  key={tab.id}
-                  role="tab"
-                >
-                  <button type="button" onClick={() => setActiveTabId(tab.id)}>
-                    {toolIcon(tab.toolId)}
-                    <span>{tabLabel(tab, locale)}</span>
-                  </button>
-                  <button
-                    aria-label={
-                      (locale === "zh" ? "关闭 " : "Close ") +
-                      tabLabel(tab, locale)
-                    }
-                    className="command-workbench-tab-close"
-                    type="button"
-                    onClick={() => closeTab(tab.id)}
-                  >
-                    <X aria-hidden="true" />
-                  </button>
-                </div>
-              ))}
-              <div
-                className="command-workbench-launcher-anchor"
-                ref={launcherRef}
-              >
-                <button
-                  aria-controls="command-workbench-launcher-menu"
-                  aria-expanded={launcherOpen}
-                  aria-haspopup="menu"
-                  aria-label={locale === "zh" ? "打开工具" : "Open tool"}
-                  className="command-workbench-add"
-                  type="button"
-                  onClick={toggleLauncher}
-                >
-                  <Plus aria-hidden="true" />
-                </button>
-              </div>
-            </div>
-            {launcherOpen ? (
-              <div
-                className="command-workbench-launcher-menu"
-                id="command-workbench-launcher-menu"
-                ref={launcherMenuRef}
-                style={{ left: launcherMenuLeft }}
-              >
-                <WorkbenchLauncher
-                  busyToolId={busyToolId}
-                  disabled={disabled}
-                  locale={locale}
-                  menu
-                  panelToolAvailable={panelToolAvailable}
-                  tools={sceneTools}
-                  onSelect={openTool}
-                />
-              </div>
-            ) : null}
-            <div className="command-workbench-window-actions">
+              close: () => closeTab(tab.id),
+            })),
+          ]}
+          windowActions={
+            !pluginPanel && tabs.length > 0 ? (
               <button
+                type="button"
+                className="command-workbench-maximize"
                 aria-label={
                   maximized
                     ? locale === "zh"
@@ -763,9 +758,7 @@ export function CommandWorkspaceCapabilityDrawer({
                       ? "全屏工作台"
                       : "Fullscreen workbench"
                 }
-                className="command-workbench-maximize"
-                type="button"
-                onClick={() => setMaximized((current) => !current)}
+                onClick={() => setMaximized((value) => !value)}
               >
                 {maximized ? (
                   <Minimize2 aria-hidden="true" />
@@ -773,31 +766,40 @@ export function CommandWorkspaceCapabilityDrawer({
                   <Maximize2 aria-hidden="true" />
                 )}
               </button>
-              <button
-                aria-label={locale === "zh" ? "关闭工作台" : "Close workbench"}
-                className="command-workbench-close"
-                type="button"
-                onClick={onClose}
-              >
-                <PanelRight aria-hidden="true" />
-              </button>
-            </div>
-          </header>
-        ) : (
-          <header
-            className="command-workbench-tabbar is-empty"
-            data-desktop-drag-region=""
-          >
-            <button
-              aria-label={locale === "zh" ? "关闭工作台" : "Close workbench"}
-              className="command-workbench-close"
-              type="button"
-              onClick={onClose}
+            ) : null
+          }
+          launcher={
+            <div
+              className="command-workbench-launcher-menu"
+              id="command-workbench-launcher-menu"
+              ref={launcherMenuRef}
+              style={{ left: launcherMenuLeft }}
             >
-              <PanelRight aria-hidden="true" />
-            </button>
-          </header>
-        )}
+              {pluginPages.map((page) => (
+                <button
+                  type="button"
+                  role="menuitem"
+                  key={page.id}
+                  onClick={() => {
+                    setLauncherOpen(false);
+                    page.open();
+                  }}
+                >
+                  {page.label}
+                </button>
+              ))}
+              <WorkbenchLauncher
+                busyToolId={busyToolId}
+                disabled={disabled}
+                locale={locale}
+                menu
+                panelToolAvailable={panelToolAvailable}
+                tools={sceneTools}
+                onSelect={openTool}
+              />
+            </div>
+          }
+        />
         <div
           className="command-workbench-content"
           hidden={pluginPanel !== null}

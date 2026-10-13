@@ -24,6 +24,7 @@ export function installedPluginSurfaceModules(
     catalog: ControlPluginUiCatalog;
     pages: PluginUiPageSnapshot;
     navigation: PluginUiPageNavigation;
+    conversationThreads?: ReadonlyMap<string, readonly string[]>;
     render(
       module: ControlPluginUiModule,
       state: InstalledPluginSurfaceRenderState,
@@ -47,14 +48,20 @@ export function installedPluginSurfaceModules(
       label: page?.title ?? module.title,
       icon: module.icon,
       pluginId: module.plugin.descriptor.pluginId,
+      conversationThreadIds:
+        input.conversationThreads?.get(module.plugin.descriptor.pluginId) ?? [],
       navigationLabel: group[0]!.title,
       ...(page
         ? {
             pageId: page.pageId,
             closePage: () => input.navigation.closeFromHost(page.pageId),
+            activatePage: () => input.navigation.activateFromHost(page.pageId),
           }
         : {}),
       createPage: () => input.navigation.openFromHost(module.key),
+      ...(!page
+        ? { activatePage: () => input.navigation.openHomeFromHost(module.key) }
+        : {}),
       ...(sidebar
         ? {
             sidebarContent: ({ active }: Readonly<{ active: boolean }>) =>

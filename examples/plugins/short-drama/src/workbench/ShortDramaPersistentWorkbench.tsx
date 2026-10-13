@@ -20,7 +20,7 @@ import {
 import { ProjectMediaInputController } from "./ProjectMediaInputController";
 import { ProjectMediaInputWorkbench } from "./ProjectMediaInputWorkbench";
 import { useEffect, useRef, useState, useSyncExternalStore } from "react";
-import { ChevronRight, Clock3, FolderOpen, Layers3 } from "lucide-react";
+import { ChevronRight, Clock3, FolderOpen, Layers3, Plus } from "lucide-react";
 import {
   CreativeProjectController,
   briefBytes,
@@ -135,12 +135,13 @@ export function ShortDramaPersistentWorkbench({
   hostPageContext?: Readonly<{
     projectId?: string;
     stage?: ShortDramaProjectPage;
+    createOrigin?: "creative" | "novel";
   }> | null;
   onOpenHostPage?(
     input: Readonly<{
       key: string;
       title: string;
-      context: { projectId?: string; stage?: ShortDramaProjectPage };
+      context: { projectId?: string; stage?: ShortDramaProjectPage; createOrigin?: "creative" | "novel" };
     }>,
   ): void;
   controller: CreativeProjectController;
@@ -213,6 +214,10 @@ export function ShortDramaPersistentWorkbench({
     foundations?.getSnapshot ?? noAssetSnapshot,
   );
   const [newOrigin, setNewOrigin] = useState<"creative" | "novel" | null>(null);
+  useEffect(() => {
+    if (hostSurface === "workbench" && hostPageContext?.createOrigin)
+      setNewOrigin(hostPageContext.createOrigin);
+  }, [hostSurface, hostPageContext?.createOrigin]);
   const [creativeDraft, setCreativeDraft] = useState(() =>
     emptyCreationDraft("creative"),
   );
@@ -359,8 +364,10 @@ export function ShortDramaPersistentWorkbench({
         className="drama-workbench drama-host-sidebar"
         aria-label="短剧项目导航"
       >
-        <h2>AI 短剧</h2>
-        <p className="detail-note">与 Agent 讨论，查看项目成果。</p>
+        <div className="drama-sidebar-heading">
+          <strong>项目</strong>
+          <button type="button" aria-label="新建项目" title="新建项目" onClick={() => onOpenHostPage?.({key:"new-project",title:"新建项目",context:{createOrigin:"creative"}})}><Plus size={16} /></button>
+        </div>
         <button
           className="drama-sidebar-item"
           onClick={() =>
@@ -371,6 +378,10 @@ export function ShortDramaPersistentWorkbench({
           我的项目
         </button>
         <div className="drama-sidebar-projects">
+          <div className="filter-tabs" aria-label="项目状态">
+            <button type="button" aria-pressed={snapshot.state === "active"} onClick={() => void controller.loadProjects("active")}>进行中</button>
+            <button type="button" aria-pressed={snapshot.state === "archived"} onClick={() => void controller.loadProjects("archived")}>已归档</button>
+          </div>
           {snapshot.projects.map((project) => (
             <div key={project.projectId}>
               <button
@@ -390,7 +401,7 @@ export function ShortDramaPersistentWorkbench({
                 <span>{project.title}</span>
               </button>
               {hostPageContext?.projectId === project.projectId && (
-                <nav aria-label="项目制作阶段">
+                <><ProjectConversationActions controller={conversations} /><nav aria-label="项目制作阶段">
                   {projectPagesFor(
                     foundationSnapshot?.origins.get(project.projectId) ?? null,
                   ).map((item) => (
@@ -411,7 +422,7 @@ export function ShortDramaPersistentWorkbench({
                       {item.title}
                     </button>
                   ))}
-                </nav>
+                </nav></>
               )}
             </div>
           ))}
@@ -434,7 +445,7 @@ export function ShortDramaPersistentWorkbench({
       aria-label="AI 短剧工作台"
     >
       <div className="drama-main" inert={dialog !== null || newOrigin !== null}>
-        <header className="drama-topbar" data-plugin-header-insets="inline">
+        {!onOpenHostPage && <header className="drama-topbar" data-plugin-header-insets="inline">
           <nav className="breadcrumbs" aria-label="AI 短剧路径">
             <button
               disabled={locked}
@@ -457,7 +468,7 @@ export function ShortDramaPersistentWorkbench({
           <div className="topbar-actions">
             <span className="preview-tag">创作工作台</span>
           </div>
-        </header>
+        </header>}
         {planningDraft && (
           <ProjectPlanningDraftReview
             proposal={planningDraft}
@@ -495,6 +506,7 @@ export function ShortDramaPersistentWorkbench({
             </p>
           ) : !details ? (
             <ShortDramaProjectHome
+              integrated={Boolean(onOpenHostPage)}
               snapshot={snapshot}
               locked={locked || dialog !== null}
               idea={homeIdea}
@@ -539,10 +551,10 @@ export function ShortDramaPersistentWorkbench({
             />
           ) : (
             <div className="drama-project-focus">
-              <div className="drama-project-heading">
+              {!onOpenHostPage && <div className="drama-project-heading">
                 <h1>{details.project.title}</h1>
                 <ProjectConversationActions controller={conversations} />
-              </div>
+              </div>}
               <div
                 className="drama-project-layout"
                 data-navigation-expanded={navigationExpanded}
