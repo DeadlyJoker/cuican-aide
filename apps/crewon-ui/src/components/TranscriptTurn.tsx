@@ -1,3 +1,4 @@
+import { visibleTeamAssistantText } from "../lib/thread/teamTranscriptPresentation";
 import { memo } from "react";
 import { TranscriptProjectPlanningSuggestions } from "./project-planning/TranscriptProjectPlanningSuggestions";
 import type { ThreadItem } from "@crewon/app-server-protocol/v2/ThreadItem";
@@ -332,7 +333,7 @@ export const TranscriptTurn = memo(function TranscriptTurn({
               actions={
                 turn.status !== "inProgress" ? (
                   <MessageActions
-                    text={finalAgentMessage.item.text}
+                    text={visibleTeamAssistantText(finalAgentMessage.item.text)}
                     locale={locale}
                     visibility={isLatestResponse ? "always" : "on-hover"}
                   />

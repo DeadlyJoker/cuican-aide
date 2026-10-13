@@ -7,7 +7,9 @@ export type ControlTurnMessages = {
 };
 
 function isTeamMemberDirect(content: string): boolean {
-  return /^\[Team Runtime · [^\n]{1,256} · 成员直答\](?:\n|$)/u.test(content);
+  return /^\[Team Runtime · [^\n]{1,256} · (?:成员直答|办公室交接)\](?:\n|$)/u.test(
+    content,
+  );
 }
 
 export function isInternalUserContent(content: string): boolean {

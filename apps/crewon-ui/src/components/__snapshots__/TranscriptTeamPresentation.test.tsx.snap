@@ -1,0 +1,3 @@
+// Vitest Snapshot v1, https://vitest.dev/guide/snapshot.html
+
+exports[`renders member findings and mentions without private delegation protocol 1`] = `"<article class="message" data-kind="agentMessage" data-has-icon="false" data-transcript-variant="message" aria-label="CrewON"><div class="message-body"><div class="message-header"><span class="message-role">CrewON</span><span class="message-type">回复</span></div><div class="markdown-content"><p>苏算：运费684元。@姚客·客户服务 请核验。</p></div></div></article>"`;

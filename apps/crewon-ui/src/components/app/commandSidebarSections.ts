@@ -3,6 +3,7 @@ import type { CommandShellView } from "./commandWorkspaceState";
 export type CommandSidebarSection =
   | "work"
   | "assist"
+  | "team"
   | "schedule"
   | "resources";
 
@@ -17,8 +18,9 @@ export function commandSidebarSection(
       return "assist";
     case "schedule":
       return "schedule";
-    case "agents":
     case "team":
+      return "team";
+    case "agents":
     case "knowledge":
       return "resources";
   }
@@ -26,5 +28,5 @@ export function commandSidebarSection(
 
 export function commandSidebarHasContext(view: CommandShellView): boolean {
   const section = commandSidebarSection(view);
-  return section === "work" || section === "resources";
+  return section === "work" || section === "resources" || section === "team";
 }

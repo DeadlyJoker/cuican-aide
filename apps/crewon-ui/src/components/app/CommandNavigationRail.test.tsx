@@ -17,7 +17,7 @@ describe("two-level command navigation", () => {
     ["assist", "assist", false],
     ["schedule", "schedule", false],
     ["agents", "resources", true],
-    ["team", "resources", true],
+    ["team", "team", true],
     ["knowledge", "resources", true],
   ] as const)(
     "maps %s to its functional area and contextual sidebar",
@@ -59,7 +59,7 @@ describe("two-level command navigation", () => {
     );
     expect(markup).toContain('aria-label="全局导航"');
     expect(markup).toMatch(
-      /<button[^>]*aria-current="page"[^>]*aria-label="资源"/,
+      /<button[^>]*aria-current="page"[^>]*aria-label="团队"/,
     );
     expect(markup).toContain('aria-label="账号菜单：林晓"');
     expect(markup).not.toContain("展开侧栏");
@@ -78,15 +78,21 @@ describe("two-level command navigation", () => {
       <CommandSidebarNavigation {...props} activeView="command" />,
     );
     const resources = renderToStaticMarkup(
-      <CommandSidebarNavigation {...props} activeView="team" />,
+      <CommandSidebarNavigation {...props} activeView="agents" />,
     );
     expect(work).toContain("新建任务");
     expect(work).not.toContain("日程安排");
     expect(work).not.toContain("智能体");
     expect(resources).toContain('data-nav-key="agents"');
-    expect(resources).toContain(
+    expect(resources).not.toContain('data-nav-key="team"');
+    const team = renderToStaticMarkup(
+      <CommandSidebarNavigation {...props} activeView="team" />,
+    );
+    expect(team).toContain('aria-label="团队导航"');
+    expect(team).toContain(
       'aria-current="page" class="active" data-nav-key="team"',
     );
+    expect(team).not.toContain('data-nav-key="agents"');
     expect(resources).toContain('data-nav-key="knowledge"');
     expect(resources).not.toContain("新建任务");
   });

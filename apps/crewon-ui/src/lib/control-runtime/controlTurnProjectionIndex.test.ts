@@ -177,3 +177,29 @@ describe("Control turn projection index", () => {
     expect(reads).toBe(20_000);
   });
 });
+
+it("keeps historical Office handoff instructions private and preserves every actual member response", () => {
+  const original = message(1, "user", "核对运费");
+  const handoff = message(
+    2,
+    "user",
+    "[Team Runtime · 泊川生鲜 · 办公室交接]\n请遵循角色设定与授权成员标记",
+  );
+  const first = message(3, "assistant", "沈筹：请苏算核算");
+  const second = message(5, "assistant", "苏算：运输合计684元");
+  const groups = groupControlTurnMessages([
+    original,
+    handoff,
+    first,
+    { ...handoff, sequence: 4 },
+    second,
+  ]);
+  expect(groups).toEqual([
+    {
+      user: original,
+      assistants: [first, second],
+      hasTeamMemberDirectResponse: true,
+    },
+  ]);
+  expect(handoff.content).toContain("授权成员标记");
+});

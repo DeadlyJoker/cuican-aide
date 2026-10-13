@@ -632,13 +632,15 @@ describe("CommandWorkspace multiple host contributions", () => {
     await openModule(b.module.id);
     expect(commandWindow.classList.contains("sidebar-collapsed")).toBe(true);
     await click(container!.querySelector('[data-nav-key="team"]'));
+    expect(commandWindow.classList.contains("sidebar-collapsed")).toBe(false);
+    expect(collapse?.getAttribute("aria-label")).toBe("折叠侧栏");
+    expect(collapse?.getAttribute("aria-expanded")).toBe("true");
+    await click(collapse);
     expect(commandWindow.classList.contains("sidebar-collapsed")).toBe(true);
     expect(collapse?.getAttribute("aria-label")).toBe("展开侧栏");
     expect(collapse?.getAttribute("aria-expanded")).toBe("false");
     await click(collapse);
     expect(commandWindow.classList.contains("sidebar-collapsed")).toBe(false);
-    expect(collapse?.getAttribute("aria-label")).toBe("折叠侧栏");
-    expect(collapse?.getAttribute("aria-expanded")).toBe("true");
     expect(container!.querySelector(".command-sidebar")).toBe(sidebar);
     expect(container!.querySelectorAll(".command-sidebar")).toHaveLength(1);
   });

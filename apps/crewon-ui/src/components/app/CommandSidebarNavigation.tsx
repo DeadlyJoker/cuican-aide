@@ -25,9 +25,11 @@ export function CommandSidebarNavigation({
   const moduleActive = hostModules.some((module) => module.active);
   const resources =
     moduleActive || commandSidebarSection(activeView) === "resources";
+  const team = !moduleActive && activeView === "team";
   const items = [
-    { key: "agents" as const, label: "智能体", en: "Agents", Icon: Bot },
     { key: "team" as const, label: "团队", en: "Teams", Icon: Users },
+    { key: "agents" as const, label: "智能体", en: "Agents", Icon: Bot },
+
     {
       key: "knowledge" as const,
       label: "知识库",
@@ -35,22 +37,29 @@ export function CommandSidebarNavigation({
       Icon: BookOpen,
     },
   ];
+  const visibleItems = items.filter((item) =>
+    team ? item.key === "team" : item.key !== "team",
+  );
   return (
     <nav
       aria-label={
         locale === "zh"
-          ? resources
-            ? "资源导航"
-            : "工作导航"
-          : resources
-            ? "Resource navigation"
-            : "Work navigation"
+          ? team
+            ? "团队导航"
+            : resources
+              ? "资源导航"
+              : "工作导航"
+          : team
+            ? "Team navigation"
+            : resources
+              ? "Resource navigation"
+              : "Work navigation"
       }
       className="sidebar-nav"
       data-od-id="desktop-nav"
     >
-      {resources ? (
-        items.map(({ key, label, en, Icon }) => (
+      {resources || team ? (
+        visibleItems.map(({ key, label, en, Icon }) => (
           <button
             aria-current={
               !moduleActive && activeView === key ? "page" : undefined

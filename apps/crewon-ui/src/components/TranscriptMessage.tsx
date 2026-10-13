@@ -1,3 +1,4 @@
+import { visibleTeamAssistantText } from "../lib/thread/teamTranscriptPresentation";
 import { memo, type ReactNode } from "react";
 import {
   AlertTriangle,
@@ -169,7 +170,9 @@ function renderItemText(item: ThreadItem, locale: Locale): string {
     return userInputToText(item.content, locale);
   }
 
-  return itemPreview(item, locale);
+  return item.type === "agentMessage"
+    ? visibleTeamAssistantText(item.text)
+    : itemPreview(item, locale);
 }
 
 function renderMessageContent(item: ThreadItem, locale: Locale) {
@@ -379,11 +382,13 @@ export function TranscriptStreamingMessage({
                 : "Showing the latest live content only. Saved content is available in conversation history."}
             </p>
             <pre className="whitespace-pre-wrap break-words [font-family:inherit]">
-              {streamingText}
+              {visibleTeamAssistantText(streamingText)}
             </pre>
           </>
         ) : (
-          <TranscriptStreamingMarkdown text={streamingText} />
+          <TranscriptStreamingMarkdown
+            text={visibleTeamAssistantText(streamingText)}
+          />
         )}
       </div>
     </article>
@@ -395,7 +400,7 @@ const TranscriptStreamingMarkdown = memo(function TranscriptStreamingMarkdown({
 }: {
   text: string;
 }) {
-  return renderMarkdown(text, { streaming: true });
+  return renderMarkdown(visibleTeamAssistantText(text), { streaming: true });
 });
 
 export function TranscriptThinkingMessage({

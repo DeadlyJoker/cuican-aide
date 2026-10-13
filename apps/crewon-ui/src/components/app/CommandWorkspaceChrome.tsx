@@ -503,11 +503,15 @@ export function CommandSidebar({
           >
             {activePlugin
               ? activePlugin.label
-              : section === "resources"
+              : section === "team"
                 ? locale === "zh"
-                  ? "资源"
-                  : "Resources"
-                : "CrewON"}
+                  ? "团队"
+                  : "Teams"
+                : section === "resources"
+                  ? locale === "zh"
+                    ? "资源"
+                    : "Resources"
+                  : "CrewON"}
           </a>
           <div className="sidebar-tools" aria-label={copy.sidebarTools}>
             <button

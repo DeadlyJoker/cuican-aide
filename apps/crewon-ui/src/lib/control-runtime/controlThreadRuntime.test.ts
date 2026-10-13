@@ -6270,3 +6270,34 @@ describe("Control thread runtime", () => {
     runtime.close();
   });
 });
+
+it("rehydrates original Office history without presenting internal handoff prompts as user messages", () => {
+  const projected = controlThreadProjection(
+    threadView({ lastMessageSequence: 5 }),
+    [
+      messageView(1, "user", "核算运费"),
+      messageView(
+        2,
+        "user",
+        "[Team Runtime · 泊川生鲜 · 办公室交接]\n内部角色指令",
+      ),
+      messageView(3, "assistant", "沈筹：请苏算复核。"),
+      messageView(
+        4,
+        "user",
+        "[Team Runtime · 泊川生鲜 · 办公室交接]\n内部授权成员标记",
+      ),
+      messageView(5, "assistant", "苏算：合计684元。"),
+    ],
+    [],
+  );
+  expect(projected.turns).toHaveLength(1);
+  expect(
+    projected.turns[0]!.items.filter((i) => i.type === "userMessage"),
+  ).toHaveLength(1);
+  expect(
+    projected.turns[0]!.items.filter((i) => i.type === "agentMessage").map(
+      (i) => i.text,
+    ),
+  ).toEqual(["沈筹：请苏算复核。", "苏算：合计684元。"]);
+});

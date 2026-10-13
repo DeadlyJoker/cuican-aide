@@ -1,7 +1,14 @@
 import { PluginNavigationGlyph } from "./PluginNavigationGlyph";
 import type { PluginNavigationIcon } from "@crewon/contracts/plugins";
 import { commandNavigationNextIndex } from "./commandNavigationKeyboard";
-import { CalendarDays, Home, ListChecks, Shapes, Sparkles } from "lucide-react";
+import {
+  CalendarDays,
+  Home,
+  ListChecks,
+  Shapes,
+  Sparkles,
+  UsersRound,
+} from "lucide-react";
 import { useEffect, useRef, type ComponentProps, type ReactNode } from "react";
 import { TooltipProvider } from "@/components/ui/tooltip";
 import { CommandSidebarTooltip } from "./CommandSidebarTooltip";
@@ -87,6 +94,12 @@ export function CommandNavigationRail({
       label: locale === "zh" ? "日程安排" : "Schedule",
       Icon: CalendarDays,
       active: !hostModuleActive && section === "schedule",
+    },
+    {
+      key: "team" as const,
+      label: locale === "zh" ? "团队" : "Teams",
+      Icon: UsersRound,
+      active: !hostModuleActive && activeView === "team",
     },
     {
       key: "agents" as const,
