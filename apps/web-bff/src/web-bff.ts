@@ -10,6 +10,7 @@ import type {
   WebIdentitySession,
   WebIdentitySessionPort,
 } from "./identity-session-adapter.ts";
+import type { PimControlSessions } from "./pim-control-sessions.ts";
 import {
   boundedExtensionProxyResponse,
   extensionProxyPolicy,
@@ -70,6 +71,8 @@ export function createWebBff(config: {
   csrfSecret: string;
   fetch?: typeof globalThis.fetch;
   identity: WebIdentitySessionPort;
+  /** Explicit PIM mode only; the legacy Identity Center cookie contract is unchanged. */
+  accountExchange?: Pick<PimControlSessions, "exchange">;
   publicOrigin: string;
 }): WebBff {
   const publicOrigin = requirePublicOrigin(config.publicOrigin);
@@ -131,10 +134,47 @@ export function createWebBff(config: {
           : errorResponse(405, "method_not_allowed");
       }
       if (requestUrl.pathname === SESSION_PATH && requestUrl.search === "") {
+        if (request.method === "POST" && config.accountExchange !== undefined) {
+          if (request.headers.get("origin") !== publicOrigin)
+            return errorResponse(403, "browser_origin_invalid");
+          const credential = pimBearer(request);
+          if (credential === null)
+            return errorResponse(401, "pim_account_required");
+          const body = await boundedRequestBody(request);
+          if (body instanceof Response) return body;
+          if (body !== null && body.byteLength !== 0)
+            return errorResponse(400, "pim_account_exchange_body_invalid");
+          try {
+            const result = await config.accountExchange.exchange(
+              credential,
+              request.signal,
+            );
+            const response = jsonResponse(200, {
+              baseUrl: "/",
+              csrfToken: browserCsrf(result.session, publicOrigin, csrfSecret),
+            });
+            response.headers.set("set-cookie", result.setCookie);
+            return response;
+          } catch (error) {
+            return errorResponse(
+              error instanceof Error &&
+                /^(pim_account_denied|pim_account_token_invalid|pim_account_inactive_or_changed|pim_control_profile_denied|web_plugin_profile_revoked)$/u.test(
+                  error.message,
+                )
+                ? 401
+                : 503,
+              "pim_account_exchange_unavailable",
+            );
+          }
+        }
         if (request.method !== "GET") {
           return errorResponse(405, "method_not_allowed");
         }
-        const session = await resolveSession(config.identity, request);
+        const session = await resolveSession(
+          config.identity,
+          request,
+          config.accountExchange !== undefined,
+        );
         if (session instanceof Response) {
           return session;
         }
@@ -150,7 +190,11 @@ export function createWebBff(config: {
         return errorResponse(405, "method_not_allowed");
       }
 
-      const session = await resolveSession(config.identity, request);
+      const session = await resolveSession(
+        config.identity,
+        request,
+        config.accountExchange !== undefined,
+      );
       if (session instanceof Response) {
         return session;
       }
@@ -306,16 +350,33 @@ export function createWebBff(config: {
 async function resolveSession(
   identity: WebIdentitySessionPort,
   request: Request,
+  bindPimAccount = false,
 ): Promise<WebIdentitySession | Response> {
   try {
     const session = await identity.resolve({
       cookie: request.headers.get("cookie"),
       userAgent: request.headers.get("user-agent"),
+      ...(bindPimAccount ? { pimAccessToken: pimBearer(request) } : {}),
     });
-    return session ?? errorResponse(401, "identity_session_required");
+    if (session !== null) return session;
+    const response = errorResponse(401, "identity_session_required");
+    // Not forwarded from Control: clients may renew only a request rejected before dispatch.
+    if (bindPimAccount)
+      response.headers.set("x-crewon-account-exchange", "required");
+    return response;
   } catch {
     return errorResponse(503, "identity_session_unavailable");
   }
+}
+
+function pimBearer(request: Request): string | null {
+  const value = request.headers.get("authorization");
+  if (value === null || Buffer.byteLength(value) > 8 * 1024) return null;
+  return (
+    /^Bearer ([A-Za-z0-9_-]+\.[A-Za-z0-9_-]+\.[A-Za-z0-9_-]+)$/u.exec(
+      value,
+    )?.[1] ?? null
+  );
 }
 
 function browserCsrf(

@@ -84,6 +84,10 @@ export * from "./project-asset-stage-store.ts";
 export * from "./project-asset-ui-intent-sqlite-store.ts";
 export * from "./project-asset-ui-intent-postgres-store.ts";
 export * from "./project-media-result-store.ts";
+export {
+  PostgresWebPluginProfileStore,
+  type WebPluginProfile,
+} from "./postgres-web-plugin-profile-store.ts";
 
 export {
   SqliteProjectAssetV2RecoveryStore,

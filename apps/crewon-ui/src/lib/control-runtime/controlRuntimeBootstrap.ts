@@ -4,6 +4,7 @@ import { hasDesktopBridge } from "../platform";
 import { requireDesktopBridge } from "../desktop/desktopBridge";
 import { desktopBridgeFetch } from "../desktop/desktopFetch";
 import { AgentPlatformSessionResponse } from "./agentPlatformSessionResponse";
+import { createWebControlSessionTransport } from "./webControlSessionTransport";
 import {
   assertAgentPlatformSessionCurrent,
   captureAgentPlatformSession,
@@ -15,7 +16,6 @@ import {
   isPimLaunchSession,
 } from "../agent-platform/pimLaunchBridge";
 
-const WEB_SESSION_PATH = "/control-api/session";
 const BOOTSTRAP_TIMEOUT_MS = 5_000;
 const MAX_SESSION_SECRET_BYTES = 8 * 1024;
 const LOOPBACK_HOSTS = new Set(["127.0.0.1", "::1", "localhost"]);
@@ -114,18 +114,18 @@ export async function loadControlApiClient(
         session: credential.session,
       });
     };
-    const session = parseWebSession(
-      await withBootstrapDeadline(
-        readWebSession(authenticatedFetch, pageOrigin),
-      ),
+    const transport = createWebControlSessionTransport({
+      fetch: authenticatedFetch,
       pageOrigin,
-    );
+      parseSession: (value) => parseWebSession(value, pageOrigin),
+    });
+    const session = await withBootstrapDeadline(transport.bootstrap());
     assertAgentPlatformSessionCurrent(credential.session);
     return new ControlApiClient({
       baseUrl: session.baseUrl,
       csrfToken: session.csrfToken,
       origin: pageOrigin,
-      fetch: authenticatedFetch,
+      fetch: transport.fetch,
     });
   } catch {
     return null;
@@ -168,21 +168,6 @@ async function withBootstrapDeadline<T>(pending: Promise<T>): Promise<T> {
 
 async function readDesktopSession(): Promise<unknown> {
   return requireDesktopBridge().runtime.bootstrap();
-}
-
-async function readWebSession(
-  fetchImpl: typeof globalThis.fetch,
-  pageOrigin: string,
-): Promise<unknown> {
-  const response = await fetchImpl(new URL(WEB_SESSION_PATH, pageOrigin), {
-    cache: "no-store",
-    credentials: "same-origin",
-    headers: { Accept: "application/json" },
-  });
-  if (!response.ok || !isJson(response.headers.get("content-type"))) {
-    throw new Error("control_runtime_session_unavailable");
-  }
-  return response.json();
 }
 
 function parseDesktopSession(value: unknown): DesktopControlSession {
@@ -269,8 +254,4 @@ function requireExactObject(
   ) {
     throw new Error("control_runtime_session_invalid");
   }
-}
-
-function isJson(contentType: string | null): boolean {
-  return /^application\/json(?:;|$)/iu.test(contentType ?? "");
 }

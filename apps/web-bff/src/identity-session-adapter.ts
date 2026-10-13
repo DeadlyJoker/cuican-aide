@@ -8,6 +8,8 @@ export interface WebIdentitySessionPort {
   resolve(input: {
     cookie: string | null;
     userAgent: string | null;
+    /** Only the explicitly selected PIM adapter consumes this account binding. */
+    pimAccessToken?: string | null;
   }): Promise<WebIdentitySession | null>;
 }
 
