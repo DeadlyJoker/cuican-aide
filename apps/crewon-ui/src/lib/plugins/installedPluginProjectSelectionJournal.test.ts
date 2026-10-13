@@ -201,7 +201,7 @@ describe("account-owned exact image selection journal", () => {
     });
     void first.catch(() => {});
     await Promise.resolve();
-    await vi.advanceTimersByTimeAsync(5000);
+    await vi.advanceTimersByTimeAsync(12000);
     await expect(first).rejects.toThrow("timeout");
     expect(f.physicalSignal()?.aborted).toBe(true);
     expect(f.journal.snapshot()[0].retryable).toBe(false);

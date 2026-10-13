@@ -303,7 +303,7 @@ describe("authenticated Control plugin UI host (real client; explicit importer f
     const timedCheck = expect(timed).rejects.toThrow(
       "plugin_ui_control_timeout",
     );
-    await vi.advanceTimersByTimeAsync(5_000);
+    await vi.advanceTimersByTimeAsync(12_000);
     await timedCheck;
     expect(vi.getTimerCount()).toBe(0);
   });
@@ -319,7 +319,7 @@ describe("authenticated Control plugin UI host (real client; explicit importer f
     });
     const task = host.validateLease(uiLease(), new AbortController().signal);
     const check = expect(task).rejects.toThrow("plugin_ui_control_timeout");
-    await vi.advanceTimersByTimeAsync(5_000);
+    await vi.advanceTimersByTimeAsync(12_000);
     await check;
     expect(wire.fetch.mock.calls[0][1]?.signal?.aborted).toBe(true);
     gate.resolve(controlUiResponse(uiLease()));
@@ -529,4 +529,24 @@ describe("authenticated Control plugin UI host (real client; explicit importer f
     ).rejects.toThrow("plugin_ui_operation_aborted");
     expect(f.fetch).not.toHaveBeenCalled();
   });
+});
+
+it("accepts a valid delayed lease response within the BFF work budget instead of withdrawing the plugin at five seconds", async () => {
+  vi.useFakeTimers();
+  const wire = controlUiClient(
+    () =>
+      new Promise<Response>((resolve) =>
+        setTimeout(() => resolve(controlUiResponse(uiLease())), 6000),
+      ),
+  );
+  const host = createControlPluginUiHost({
+    client: wire.client,
+    assertCurrent() {},
+    onDiagnostic() {},
+  });
+  const result = host.validateLease(uiLease(), new AbortController().signal);
+  await flush();
+  await vi.advanceTimersByTimeAsync(6000);
+  await expect(result).resolves.toEqual(uiLease());
+  expect(vi.getTimerCount()).toBe(0);
 });

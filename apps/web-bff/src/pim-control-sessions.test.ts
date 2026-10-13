@@ -244,3 +244,35 @@ test("bounds session capacity, expires credentials and rejects duplicate cookies
     /session_required/,
   );
 });
+
+test("public module imports revalidate account and profile, and never extend expired or revoked sessions", async () => {
+  const f = fixture();
+  const created = await f.sessions.exchange("account", signal());
+  const input = { cookie: created.setCookie.split(";")[0]!, signal: signal() };
+  assert.deepEqual(
+    await f.sessions.resolvePublicPluginAsset(input),
+    created.session,
+  );
+  assert.equal(
+    await f.sessions.resolve({ cookie: input.cookie, userAgent: null }),
+    null,
+  );
+  f.denyAccount();
+  await assert.rejects(
+    f.sessions.resolvePublicPluginAsset(input),
+    /pim_account_denied/,
+  );
+  f.setTime(Date.parse(created.session.expiresAt) + 1);
+  assert.equal(await f.sessions.resolvePublicPluginAsset(input), null);
+  const other = fixture();
+  const active = await other.sessions.exchange("account", signal());
+  for (const [key, value] of other.profiles)
+    other.profiles.set(key, { ...value, revoked: true });
+  await assert.rejects(
+    other.sessions.resolvePublicPluginAsset({
+      cookie: active.setCookie.split(";")[0]!,
+      signal: signal(),
+    }),
+    /pim_control_profile_denied/,
+  );
+});

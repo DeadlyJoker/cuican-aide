@@ -100,7 +100,7 @@ describe("account-owned generation intent journal", () => {
       "plugin_ui_control_timeout",
     );
     await flush();
-    await vi.advanceTimersByTimeAsync(5000);
+    await vi.advanceTimersByTimeAsync(12000);
     await rejected;
     expect(f.physicalSignal()!.aborted).toBe(true);
     expect(f.journal.snapshot()[0]).toMatchObject({
@@ -134,7 +134,7 @@ describe("account-owned generation intent journal", () => {
         .catch(() => undefined),
     );
     await flush();
-    await vi.advanceTimersByTimeAsync(5000);
+    await vi.advanceTimersByTimeAsync(12000);
     await Promise.all(calls);
     const extra = vi.fn(async () => ({ output: generationJournalReceipt() }));
     await expect(

@@ -134,7 +134,7 @@ describe("installed task receipt hints (not Run authorization)", () => {
     const terminal = Promise.allSettled(calls);
     await flush();
     expect(request).toHaveBeenCalledTimes(16);
-    await vi.advanceTimersByTimeAsync(5_000);
+    await vi.advanceTimersByTimeAsync(12_000);
     const results = await terminal;
     expect(results.every((result) => result.status === "rejected")).toBe(true);
     expect(signals.every((signal) => signal.aborted)).toBe(true);

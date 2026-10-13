@@ -237,7 +237,7 @@ describe("bounded authenticated UI catalog snapshots (real Control client)", () 
     const timeoutCheck = expect(timeout).rejects.toThrow(
       "plugin_ui_control_timeout",
     );
-    await vi.advanceTimersByTimeAsync(5_000);
+    await vi.advanceTimersByTimeAsync(12_000);
     await timeoutCheck;
     expect(vi.getTimerCount()).toBe(0);
   });

@@ -173,7 +173,9 @@ export function createWebBff(config: {
         const session = await resolveSession(
           config.identity,
           request,
-          config.accountExchange !== undefined,
+          config.accountExchange !== undefined
+            ? "pimAccount"
+            : "identityCenter",
         );
         if (session instanceof Response) {
           return session;
@@ -193,7 +195,13 @@ export function createWebBff(config: {
       const session = await resolveSession(
         config.identity,
         request,
-        config.accountExchange !== undefined,
+        config.accountExchange === undefined
+          ? "identityCenter"
+          : pluginPolicy?.outcome === "allow" &&
+              pluginPolicy.responseKind === "asset" &&
+              request.method === "GET"
+            ? "publicPluginAsset"
+            : "pimAccount",
       );
       if (session instanceof Response) {
         return session;
@@ -350,18 +358,26 @@ export function createWebBff(config: {
 async function resolveSession(
   identity: WebIdentitySessionPort,
   request: Request,
-  bindPimAccount = false,
+  mode: "identityCenter" | "pimAccount" | "publicPluginAsset",
 ): Promise<WebIdentitySession | Response> {
   try {
-    const session = await identity.resolve({
-      cookie: request.headers.get("cookie"),
-      userAgent: request.headers.get("user-agent"),
-      ...(bindPimAccount ? { pimAccessToken: pimBearer(request) } : {}),
-    });
+    const session =
+      mode === "publicPluginAsset"
+        ? ((await identity.resolvePublicPluginAsset?.({
+            cookie: request.headers.get("cookie"),
+            signal: request.signal,
+          })) ?? null)
+        : await identity.resolve({
+            cookie: request.headers.get("cookie"),
+            userAgent: request.headers.get("user-agent"),
+            ...(mode === "pimAccount"
+              ? { pimAccessToken: pimBearer(request) }
+              : {}),
+          });
     if (session !== null) return session;
     const response = errorResponse(401, "identity_session_required");
     // Not forwarded from Control: clients may renew only a request rejected before dispatch.
-    if (bindPimAccount)
+    if (mode === "pimAccount")
       response.headers.set("x-crewon-account-exchange", "required");
     return response;
   } catch {

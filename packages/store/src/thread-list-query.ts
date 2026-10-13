@@ -21,6 +21,11 @@ export function threadListSql(
   ];
   // Ownership, including revoked bindings, survives plugin disable/uninstall.
   // Apply before LIMIT so hidden rows never consume a page or leak through search.
+  // Group conversations are owned by the Team directory. Expert collaboration uses ordinary work threads.
+  if (ordinaryCatalog.officeBindings !== undefined)
+    conditions.push(
+      `NOT EXISTS (SELECT 1 FROM ${ordinaryCatalog.officeBindings} AS team_binding WHERE team_binding.tenant_id = ${table}.tenant_id AND team_binding.space_id = ${table}.space_id AND team_binding.thread_id = ${table}.thread_id)`,
+    );
   if (ordinaryCatalog.conversations !== undefined)
     conditions.push(
       `NOT EXISTS (SELECT 1 FROM ${ordinaryCatalog.conversations} AS plugin_binding WHERE plugin_binding.tenant_id = ${table}.tenant_id AND plugin_binding.space_id = ${table}.space_id AND plugin_binding.thread_id = ${table}.thread_id)`,

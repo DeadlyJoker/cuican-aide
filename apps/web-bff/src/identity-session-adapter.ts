@@ -5,6 +5,11 @@ export type WebIdentitySession = Readonly<{
 }>;
 
 export interface WebIdentitySessionPort {
+  /** Native module imports cannot attach a bearer. Only immutable, approved public plugin assets use this port. */
+  resolvePublicPluginAsset?(input: {
+    cookie: string | null;
+    signal: AbortSignal;
+  }): Promise<WebIdentitySession | null>;
   resolve(input: {
     cookie: string | null;
     userAgent: string | null;

@@ -13,6 +13,7 @@ import { creativeProjectSchemaName } from "./creative-project-schema.ts";
 /** Only ordinary navigation uses this projection. Plugin reads retain their own qualified scope. */
 export type OrdinaryThreadCatalogTables = Readonly<{
   conversations?: string;
+  officeBindings?: string;
   workspaces?: string;
 }>;
 
@@ -20,6 +21,7 @@ export function sqliteOrdinaryThreadCatalogTables(
   db: DatabaseSync,
 ): OrdinaryThreadCatalogTables {
   return {
+    officeBindings: "office_thread_bindings",
     ...(hasSqliteConversationSchema(db)
       ? { conversations: "project_conversation_bindings" }
       : {}),
@@ -35,6 +37,7 @@ export async function postgresOrdinaryThreadCatalogTables(
 ): Promise<OrdinaryThreadCatalogTables> {
   const prefix = `${creativeProjectSchemaName(schema)}.`;
   return {
+    officeBindings: `${prefix}office_thread_bindings`,
     ...((await hasPostgresConversationSchema(client, schema))
       ? { conversations: `${prefix}project_conversation_bindings` }
       : {}),

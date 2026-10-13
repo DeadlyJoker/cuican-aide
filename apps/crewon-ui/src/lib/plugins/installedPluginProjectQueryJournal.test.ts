@@ -211,7 +211,7 @@ describe("account-owned project query journal", () => {
       "plugin_ui_control_timeout",
     );
     await flush();
-    await vi.advanceTimersByTimeAsync(5000);
+    await vi.advanceTimersByTimeAsync(12000);
     await rejected;
     expect(f.journal.snapshot()[0]).toMatchObject({
       phase: "uncertain",

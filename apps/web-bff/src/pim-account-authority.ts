@@ -1,3 +1,4 @@
+import { PimVerificationFlights } from "./pim-verification-flights.ts";
 import { createHash } from "node:crypto";
 
 /** Validates the existing PIM credential and its current tenant/space membership.
@@ -23,6 +24,7 @@ export class PimAccountAuthority {
   readonly #now: () => number;
   readonly #timeoutMs: number;
   readonly #cacheTtlMs: number;
+  readonly #flights = new PimVerificationFlights<PimAccountScope>();
   readonly #cache = new Map<
     string,
     { account: PimAccountScope; until: number }
@@ -72,9 +74,21 @@ export class PimAccountAuthority {
     if (cached !== undefined && cached.until > this.#now())
       return cached.account;
     this.#cache.delete(key);
-    const verifiedAt = this.#now();
-    const account = await this.#verifyCurrent(accessToken, signal);
+    const startedAt = this.#now();
+    const verified =
+      this.#cacheTtlMs > 0
+        ? await this.#flights.read({
+            key,
+            signal,
+            now: startedAt,
+            verify: (sharedSignal) =>
+              this.#verifyCurrent(accessToken, sharedSignal),
+          })
+        : { value: await this.#verifyCurrent(accessToken, signal), startedAt };
+    const account = verified.value;
+    const verifiedAt = verified.startedAt;
     signal.throwIfAborted();
+    claims(accessToken, this.#now());
     if (this.#cacheTtlMs > 0) {
       const now = this.#now();
       for (const [entry, value] of this.#cache)

@@ -147,6 +147,17 @@ export class PimControlSessions implements WebIdentitySessionPort {
     if (!current || input.pimAccessToken !== current.accountToken) return null;
     return current.web;
   }
+  async resolvePublicPluginAsset(input: {
+    cookie: string | null;
+    signal: AbortSignal;
+  }): Promise<WebIdentitySession | null> {
+    this.#prune();
+    const id = cookieSessionId(input.cookie);
+    const session = id === null ? undefined : this.#sessions.get(id);
+    if (!session) return null;
+    await this.#current(session, input.signal);
+    return session.web;
+  }
   async verifyControlToken(accessToken: string, signal: AbortSignal) {
     this.#prune();
     const session = this.#tokens.get(accessToken);

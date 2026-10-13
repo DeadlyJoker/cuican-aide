@@ -10,7 +10,8 @@ import {
   uiFailure,
 } from "./pluginUiValidation";
 
-export const PLUGIN_UI_CONTROL_DEADLINE_MS = 5_000;
+// The BFF permits 10s of server work; allow its response to cross the public network before withdrawing a live module.
+export const PLUGIN_UI_CONTROL_DEADLINE_MS = 12_000;
 export type PluginUiCurrentScope = () => void;
 
 /** This synchronous check belongs to the host's captured client/session, never to a plugin. */

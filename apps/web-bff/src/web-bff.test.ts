@@ -392,3 +392,79 @@ function testBff(overrides: {
     fetch: overrides.fetch,
   });
 }
+
+test("PIM native imports use the public asset session only on canonical GET assets, never business routes", async () => {
+  let assetReads = 0,
+    forwarded = 0;
+  const identity: WebIdentitySessionPort = {
+    async resolve() {
+      return null;
+    },
+    async resolvePublicPluginAsset(input) {
+      assetReads++;
+      return input.cookie === COOKIE ? SESSION : null;
+    },
+  };
+  const make = (pim: boolean) =>
+    createWebBff({
+      publicOrigin: PUBLIC_ORIGIN,
+      controlTarget: CONTROL_TARGET,
+      controlBffToken: CONTROL_BFF_TOKEN,
+      controlCsrfToken: CONTROL_CSRF,
+      csrfSecret: CSRF_SECRET,
+      identity,
+      ...(pim
+        ? {
+            accountExchange: {
+              async exchange() {
+                throw new Error("unused");
+              },
+            },
+          }
+        : {}),
+      fetch: async () => {
+        forwarded++;
+        return new Response("export const module = {};", {
+          headers: { "content-type": "text/javascript" },
+        });
+      },
+    });
+  const asset = `/api/v1/plugins/ui/mounts/${"a".repeat(43)}/assets/ui.mjs`;
+  const bff = make(true);
+  assert.equal(
+    (await bff.handle(request(asset, { headers: { cookie: COOKIE } }))).status,
+    200,
+  );
+  for (const path of [
+    "/api/v1/threads",
+    "/api/v1/plugins/ui/catalog",
+    "/control-api/session",
+  ])
+    assert.equal(
+      (await bff.handle(request(path, { headers: { cookie: COOKIE } }))).status,
+      401,
+    );
+  assert.equal(
+    (
+      await bff.handle(
+        request(asset, { method: "POST", headers: { cookie: COOKIE } }),
+      )
+    ).status,
+    405,
+  );
+  assert.equal(
+    (
+      await bff.handle(
+        request(asset + "?token=bad", { headers: { cookie: COOKIE } }),
+      )
+    ).status,
+    400,
+  );
+  assert.equal(
+    (await make(false).handle(request(asset, { headers: { cookie: COOKIE } })))
+      .status,
+    401,
+  );
+  assert.equal(assetReads, 1);
+  assert.equal(forwarded, 1);
+});
