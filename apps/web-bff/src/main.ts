@@ -7,30 +7,33 @@ import { Readable } from "node:stream";
 import { installProcessShutdown } from "@crewon/process-lifecycle";
 import type { ReadableStream as NodeReadableStream } from "node:stream/web";
 
-import { HttpIdentitySessionAdapter } from "./identity-session-adapter.ts";
+import { createWebIdentityRuntime } from "./web-identity-runtime.ts";
 import { createWebBff } from "./web-bff.ts";
 
 const MAX_INCOMING_BODY_BYTES = 64 * 1024;
 
 const publicOrigin = requiredEnvironment("CREWON_WEB_PUBLIC_ORIGIN");
-const bff = createWebBff({
-  publicOrigin,
-  controlTarget: environmentOr(
-    "CREWON_CONTROL_TARGET",
-    "http://127.0.0.1:3210",
-  ),
-  controlBffToken: requiredEnvironment("CREWON_CONTROL_BFF_TOKEN"),
-  controlCsrfToken: requiredEnvironment("CREWON_CONTROL_CSRF_TOKEN"),
-  csrfSecret: requiredEnvironment("CREWON_WEB_CSRF_SECRET"),
-  identity: new HttpIdentitySessionAdapter({
-    endpoint: requiredEnvironment("CREWON_IDENTITY_SESSION_URL"),
-    serviceToken: requiredEnvironment("CREWON_IDENTITY_SERVICE_TOKEN"),
-    timeoutMs: parsePositiveInteger(
-      process.env.CREWON_IDENTITY_TIMEOUT_MS ?? "5000",
-      "CREWON_IDENTITY_TIMEOUT_MS_invalid",
+const identityRuntime = await createWebIdentityRuntime(process.env);
+let bff: ReturnType<typeof createWebBff>;
+try {
+  bff = createWebBff({
+    publicOrigin,
+    controlTarget: environmentOr(
+      "CREWON_CONTROL_TARGET",
+      "http://127.0.0.1:3210",
     ),
-  }),
-});
+    controlBffToken: requiredEnvironment("CREWON_CONTROL_BFF_TOKEN"),
+    controlCsrfToken: requiredEnvironment("CREWON_CONTROL_CSRF_TOKEN"),
+    csrfSecret: requiredEnvironment("CREWON_WEB_CSRF_SECRET"),
+    identity: identityRuntime.identity,
+    ...(identityRuntime.accountExchange === undefined
+      ? {}
+      : { accountExchange: identityRuntime.accountExchange }),
+  });
+} catch (error) {
+  await identityRuntime.close();
+  throw error;
+}
 
 const server = createServer(async (incoming, outgoing) => {
   const controller = new AbortController();
@@ -45,7 +48,8 @@ const server = createServer(async (incoming, outgoing) => {
     );
     await writeFetchResponse(
       outgoing,
-      await bff.handle(request, { rawTarget: incoming.url ?? "/" }),
+      (await identityRuntime.authority?.handle(request)) ??
+        (await bff.handle(request, { rawTarget: incoming.url ?? "/" })),
     );
   } catch (error) {
     const bodyTooLarge = error instanceof RequestBodyTooLargeError;
@@ -67,15 +71,26 @@ server.keepAliveTimeout = 5_000;
 const port = parsePort(process.env.CREWON_WEB_BFF_PORT ?? "3211");
 const shutdown = installProcessShutdown({
   host: process,
-  close: () =>
-    new Promise<void>((resolve, reject) => {
-      server.close((error) =>
-        error === undefined ? resolve() : reject(error),
-      );
-    }),
+  close: async () => {
+    try {
+      await new Promise<void>((resolve, reject) => {
+        server.close((error) =>
+          error === undefined ? resolve() : reject(error),
+        );
+      });
+    } finally {
+      await identityRuntime.close();
+    }
+  },
   reportFailure: () => {
     process.stderr.write("CrewON Web BFF shutdown failed\n");
   },
+});
+server.once("error", () => {
+  void identityRuntime.close().finally(() => {
+    process.stderr.write("CrewON Web BFF listener unavailable\n");
+    process.exitCode = 1;
+  });
 });
 server.listen(port, "127.0.0.1", () => {
   if (shutdown.isRequested()) return;
@@ -201,14 +216,6 @@ function parsePort(value: string): number {
     throw new Error("CREWON_WEB_BFF_PORT_invalid");
   }
   return port;
-}
-
-function parsePositiveInteger(value: string, code: string): number {
-  const parsed = Number(value);
-  if (!Number.isSafeInteger(parsed) || parsed < 1) {
-    throw new Error(code);
-  }
-  return parsed;
 }
 
 class RequestBodyTooLargeError extends Error {}

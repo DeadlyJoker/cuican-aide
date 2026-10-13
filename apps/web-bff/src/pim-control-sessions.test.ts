@@ -198,12 +198,12 @@ test("membership changes move the epoch and viewer permissions never authorize m
     packageDigest: `sha256:${"a".repeat(64)}`,
   };
   const before = await sessions.pluginPolicy(
-    { actor, action: "catalog", resource },
+    { actor, action: "pluginUi:catalog", resource },
     signal(),
   );
   account.spaceRole = "viewer";
   const after = await sessions.pluginPolicy(
-    { actor, action: "catalog", resource },
+    { actor, action: "pluginUi:catalog", resource },
     signal(),
   );
   assert.equal(before.outcome, "allow");
@@ -213,7 +213,7 @@ test("membership changes move the epoch and viewer permissions never authorize m
   assert.equal(
     (
       await sessions.pluginPolicy(
-        { actor, action: "invoke", resource },
+        { actor, action: "pluginUi:invoke", resource },
         signal(),
       )
     ).outcome,

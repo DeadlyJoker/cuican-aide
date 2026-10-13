@@ -47,6 +47,41 @@ const authorization: CreativeProjectAuthorizationPort = {
     return { outcome: "deny", reasonCode: "fixture_no_authority" };
   },
 };
+test("private startup exposes only owned metadata, text and conversation publications without supplying identity or execution ports", () => {
+  const publication = { publications: [source] };
+  const doc = {
+    schemaVersion: PRODUCTION_PROJECT_COMPOSITION_CONFIG_SCHEMA,
+    pluginUi: { ...publication, creationOwnership: "plugin-project-v1" },
+    textArtifacts: { version: "crewon.project-text.v1" },
+    textUi: publication,
+    textRecovery: publication,
+    conversations: { ...publication, projectOwnership: "plugin-project-v1" },
+    textPlans: publication,
+  };
+  const snapshot = parseProductionProjectStartupConfiguration(doc);
+  const runtime = composeProductionProjectStartup(snapshot, authorization);
+  assert.equal(
+    runtime.creativeProjects?.pluginUi?.creationOwnership,
+    "plugin-project-v1",
+  );
+  assert.equal(
+    runtime.creativeProjects?.conversations?.projectOwnership,
+    "plugin-project-v1",
+  );
+  assert.deepEqual(runtime.creativeProjects?.textUi, publication);
+  assert.throws(() =>
+    parseProductionProjectStartupConfiguration({
+      ...doc,
+      textArtifacts: { version: "unknown" },
+    }),
+  );
+  assert.throws(() =>
+    parseProductionProjectStartupConfiguration({
+      ...doc,
+      pluginUi: { ...publication, creationOwnership: "automatic-adoption" },
+    }),
+  );
+});
 function document() {
   const target = {
     pluginId: "crewon.comfyui-krea2",

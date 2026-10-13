@@ -7,6 +7,7 @@ import type {
   PimAccountAuthority,
   PimAccountScope,
 } from "./pim-account-authority.ts";
+import { pimControlPolicy } from "./pim-control-policy.ts";
 
 export type PimControlActor = Readonly<{
   tenantId: string;
@@ -40,6 +41,13 @@ const COOKIE_NAME = "__Host-crewon-control";
 export class PimControlSessions implements WebIdentitySessionPort {
   readonly #accounts: Pick<PimAccountAuthority, "verify">;
   readonly #profiles: PimPluginProfilePort;
+  readonly #actorBindings:
+    | {
+        resolveVerifiedAccountActor(
+          account: PimAccountScope,
+        ): Promise<PimControlActor>;
+      }
+    | undefined;
   readonly #issuer: string;
   readonly #now: () => number;
   readonly #capacity: number;
@@ -49,6 +57,11 @@ export class PimControlSessions implements WebIdentitySessionPort {
   constructor(input: {
     accounts: Pick<PimAccountAuthority, "verify">;
     profiles: PimPluginProfilePort;
+    actorBindings?: {
+      resolveVerifiedAccountActor(
+        account: PimAccountScope,
+      ): Promise<PimControlActor>;
+    };
     issuer: string;
     packages: ReadonlyMap<string, string>;
     now?: () => number;
@@ -65,6 +78,7 @@ export class PimControlSessions implements WebIdentitySessionPort {
       throw new Error("pim_control_issuer_invalid");
     this.#accounts = input.accounts;
     this.#profiles = input.profiles;
+    this.#actorBindings = input.actorBindings;
     this.#issuer = input.issuer;
     this.#now = input.now ?? Date.now;
     this.#capacity = input.capacity ?? 1000;
@@ -92,7 +106,7 @@ export class PimControlSessions implements WebIdentitySessionPort {
     if (this.#sessions.size >= this.#capacity)
       throw new Error("pim_control_session_capacity_exceeded");
     const account = await this.#accounts.verify(accountToken, signal);
-    const actor = accountActor(account);
+    const actor = await this.#accountActor(account);
     const profile = await this.#profiles.resolveVerifiedAccount({
       actor,
       membershipDigest: membershipDigest(account),
@@ -149,6 +163,20 @@ export class PimControlSessions implements WebIdentitySessionPort {
   async pluginProfile(actor: PimControlActor, signal: AbortSignal) {
     return (await this.#current(this.#forActor(actor), signal)).profile.scope;
   }
+  async controlPolicy(
+    input: {
+      actor: PimControlActor;
+      action: string;
+      resource: Record<string, unknown>;
+    },
+    signal: AbortSignal,
+  ) {
+    const { account } = await this.#current(
+      this.#forActor(input.actor),
+      signal,
+    );
+    return pimControlPolicy({ ...input, spaceRole: account.spaceRole });
+  }
   async pluginPolicy(
     input: {
       actor: PimControlActor;
@@ -176,7 +204,12 @@ export class PimControlSessions implements WebIdentitySessionPort {
             "pluginInstallation:select",
           ]
         : resource.kind === "pluginUi"
-          ? ["catalog", "mount", "asset", "invoke"]
+          ? [
+              "pluginUi:catalog",
+              "pluginUi:mount",
+              "pluginUi:asset",
+              "pluginUi:invoke",
+            ]
           : [];
     if (!allowedActions.includes(input.action))
       return denied("plugin_policy_action_denied");
@@ -185,7 +218,7 @@ export class PimControlSessions implements WebIdentitySessionPort {
     if (pluginId === null) {
       if (
         digest !== null ||
-        !["catalog", "pluginInstallation:read"].includes(input.action)
+        !["pluginUi:catalog", "pluginInstallation:read"].includes(input.action)
       )
         return denied("plugin_policy_package_denied");
     } else if (
@@ -201,7 +234,7 @@ export class PimControlSessions implements WebIdentitySessionPort {
       [
         "pluginInstallation:install",
         "pluginInstallation:select",
-        "invoke",
+        "pluginUi:invoke",
       ].includes(input.action)
     )
       return denied("plugin_policy_read_only");
@@ -222,7 +255,7 @@ export class PimControlSessions implements WebIdentitySessionPort {
   }
   async #current(session: Session, signal: AbortSignal) {
     const account = await this.#accounts.verify(session.accountToken, signal);
-    const actor = accountActor(account);
+    const actor = await this.#accountActor(account);
     if (!sameActor(actor, session.actor))
       throw new Error("pim_control_account_changed");
     const profile = await this.#profiles.resolveVerifiedAccount({
@@ -246,6 +279,12 @@ export class PimControlSessions implements WebIdentitySessionPort {
     const latest = matches.sort((a, b) => b.issuedAt - a.issuedAt)[0];
     if (!latest) throw new Error("pim_control_session_required");
     return latest;
+  }
+  #accountActor(account: PimAccountScope): Promise<PimControlActor> {
+    return (
+      this.#actorBindings?.resolveVerifiedAccountActor(account) ??
+      Promise.resolve(accountActor(account))
+    );
   }
   #prune(): void {
     for (const session of this.#sessions.values())

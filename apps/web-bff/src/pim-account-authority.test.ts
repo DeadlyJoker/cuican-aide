@@ -186,3 +186,58 @@ test("rejects non-local plaintext origins and bounded response violations", asyn
     /pim_account_response_invalid/,
   );
 });
+
+test("explicit directory cache is bounded, expires and never retains failed or expired account validation", async () => {
+  let clock = now;
+  let active = true;
+  let calls = 0;
+  const authority = new PimAccountAuthority({
+    origin: "http://127.0.0.1:8000",
+    now: () => clock,
+    cacheTtlMs: 150,
+    fetch: async (url) => {
+      calls++;
+      return Response.json(
+        new URL(String(url)).pathname.endsWith("/me")
+          ? {
+              id: 12,
+              is_active: active,
+              approval_status: "approved",
+              role: "user",
+            }
+          : { access_token: token() },
+      );
+    },
+  });
+  await authority.verify(token(), signal());
+  await authority.verify(token(), signal());
+  assert.equal(calls, 2);
+  active = false;
+  clock += 150;
+  await assert.rejects(
+    authority.verify(token(), signal()),
+    /inactive_or_changed/u,
+  );
+  await assert.rejects(
+    authority.verify(token(), signal()),
+    /inactive_or_changed/u,
+  );
+  assert.equal(calls, 4);
+  active = true;
+  await authority.verify(token(), signal());
+  await assert.rejects(
+    authority.verify(token({ exp: clock / 1000 - 1 }), signal()),
+  );
+  const aborted = new AbortController();
+  aborted.abort();
+  await assert.rejects(authority.verify(token(), aborted.signal));
+  for (const cacheTtlMs of [-1, 251, Infinity])
+    assert.throws(
+      () =>
+        new PimAccountAuthority({
+          origin: "http://127.0.0.1:8000",
+          cacheTtlMs,
+        }),
+      /cache_invalid/u,
+    );
+});

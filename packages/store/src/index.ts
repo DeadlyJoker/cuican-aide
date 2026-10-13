@@ -88,6 +88,10 @@ export {
   PostgresWebPluginProfileStore,
   type WebPluginProfile,
 } from "./postgres-web-plugin-profile-store.ts";
+export {
+  PostgresPimActorBindings,
+  type PimAccountIdentity,
+} from "./postgres-pim-actor-bindings.ts";
 
 export {
   SqliteProjectAssetV2RecoveryStore,

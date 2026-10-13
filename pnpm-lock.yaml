@@ -349,10 +349,19 @@ importers:
       '@crewon/process-lifecycle':
         specifier: workspace:*
         version: link:../../packages/process-lifecycle
+      '@crewon/store':
+        specifier: workspace:*
+        version: link:../../packages/store
+      pg:
+        specifier: 8.22.0
+        version: 8.22.0
     devDependencies:
       '@types/node':
         specifier: ^24.10.1
         version: 24.13.3
+      '@types/pg':
+        specifier: 8.20.0
+        version: 8.20.0
       fastify:
         specifier: 5.11.0
         version: 5.11.0

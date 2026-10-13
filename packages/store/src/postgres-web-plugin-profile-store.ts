@@ -67,6 +67,14 @@ export class PostgresWebPluginProfileStore {
           FOR EACH ROW EXECUTE FUNCTION ${this.#schema}.protect_profile_identity();`);
     });
   }
+  async assertReady(): Promise<void> {
+    const client = await this.#pool.connect();
+    try {
+      await this.#version(client);
+    } finally {
+      client.release();
+    }
+  }
 
   async resolveVerifiedAccount(input: {
     actor: ActorContext;

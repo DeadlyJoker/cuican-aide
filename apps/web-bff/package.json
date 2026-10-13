@@ -10,6 +10,7 @@
     "typecheck": "tsc -p tsconfig.json --noEmit"
   },
   "devDependencies": {
+    "@types/pg": "8.20.0",
     "@types/node": "^24.10.1",
     "fastify": "5.11.0",
     "typescript": "^5.9.3"
@@ -18,7 +19,9 @@
     "node": ">=24 <25"
   },
   "dependencies": {
+    "@crewon/store": "workspace:*",
     "@crewon/contracts": "workspace:*",
-    "@crewon/process-lifecycle": "workspace:*"
+    "@crewon/process-lifecycle": "workspace:*",
+    "pg": "8.22.0"
   }
 }

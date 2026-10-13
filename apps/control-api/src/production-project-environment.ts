@@ -18,7 +18,13 @@ import {
 import {
   captureCreativeProjectPluginUiConfig,
   type CreativeProjectPluginUiConfig,
+  captureCreativeProjectManagementUiConfig,
+  type CreativeProjectManagementUiConfig,
 } from "./creative-project-plugin-ui-composition.ts";
+import {
+  captureProjectConversationConfiguration,
+  type ProjectConversationConfiguration,
+} from "./project-conversation-composition.ts";
 import {
   captureProjectGenerationPluginConfiguration,
   type ProjectGenerationPluginConfiguration,
@@ -61,7 +67,12 @@ export type ProductionProjectResultSelectionConfiguration = Readonly<{
 export type ProductionProjectStartupConfiguration = Readonly<{
   schemaVersion: typeof PRODUCTION_PROJECT_COMPOSITION_CONFIG_SCHEMA;
   foundation?: ProjectFoundationStartupConfiguration;
-  pluginUi?: CreativeProjectPluginUiConfig;
+  pluginUi?: CreativeProjectManagementUiConfig;
+  textArtifacts?: Readonly<{ version: "crewon.project-text.v1" }>;
+  textUi?: CreativeProjectPluginUiConfig;
+  textRecovery?: CreativeProjectPluginUiConfig;
+  conversations?: ProjectConversationConfiguration;
+  textPlans?: CreativeProjectPluginUiConfig;
   pluginGenerations?: ProjectGenerationPluginConfiguration;
   pluginQueries?: ProjectQueryPluginConfiguration;
   historicalQueries?: ProjectHistoricalQueryPluginConfiguration;
@@ -76,6 +87,11 @@ const allowedFields = [
   "schemaVersion",
   "foundation",
   "pluginUi",
+  "textArtifacts",
+  "textUi",
+  "textRecovery",
+  "conversations",
+  "textPlans",
   "pluginGenerations",
   "pluginQueries",
   "historicalQueries",
@@ -108,7 +124,28 @@ export function parseProductionProjectStartupConfiguration(
     const foundation = captureProjectFoundationStartupConfiguration(
       value.foundation,
     );
-    const pluginUi = captureCreativeProjectPluginUiConfig(value.pluginUi);
+    const pluginUi = captureCreativeProjectManagementUiConfig(value.pluginUi);
+    let textArtifacts: ProductionProjectStartupConfiguration["textArtifacts"];
+    if (value.textArtifacts !== undefined) {
+      const text = pluginSecurityRecord(value.textArtifacts, ["version"]);
+      if (text.version !== "crewon.project-text.v1") invalid();
+      textArtifacts = Object.freeze({ version: "crewon.project-text.v1" });
+    }
+    const textUi = captureCreativeProjectPluginUiConfig(value.textUi);
+    const textRecovery = captureCreativeProjectPluginUiConfig(
+      value.textRecovery,
+    );
+    const conversations = captureProjectConversationConfiguration(
+      value.conversations,
+    );
+    const textPlans = captureCreativeProjectPluginUiConfig(value.textPlans);
+    if (
+      (textUi !== undefined ||
+        textRecovery !== undefined ||
+        conversations !== undefined) &&
+      textArtifacts === undefined
+    )
+      invalid();
     const pluginGenerations = captureProjectGenerationPluginConfiguration(
       value.pluginGenerations,
     );
@@ -139,6 +176,11 @@ export function parseProductionProjectStartupConfiguration(
       schemaVersion: PRODUCTION_PROJECT_COMPOSITION_CONFIG_SCHEMA,
       ...(foundation === undefined ? {} : { foundation }),
       ...(pluginUi === undefined ? {} : { pluginUi }),
+      ...(textArtifacts === undefined ? {} : { textArtifacts }),
+      ...(textUi === undefined ? {} : { textUi }),
+      ...(textRecovery === undefined ? {} : { textRecovery }),
+      ...(conversations === undefined ? {} : { conversations }),
+      ...(textPlans === undefined ? {} : { textPlans }),
       ...(pluginGenerations === undefined ? {} : { pluginGenerations }),
       ...(pluginQueries === undefined ? {} : { pluginQueries }),
       ...(historicalQueries === undefined ? {} : { historicalQueries }),
