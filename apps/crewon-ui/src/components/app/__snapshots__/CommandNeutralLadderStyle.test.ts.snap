@@ -360,6 +360,16 @@ exports[`conversation surfaces follow the theme > snapshots the diff row contrac
 }"
 `;
 
+exports[`keeps the live contrast preference above the themed settings shell defaults 1`] = `
+"/* The settings shell defines local colors with theme-specific specificity.
+ * Keep the live preference above those defaults instead of shadowing it. */
+:root[data-theme] .screen-shell.command-screen.settings-command-screen {
+  --settings-muted: var(--contrast-muted);
+  --settings-faint: var(--contrast-faint);
+}
+"
+`;
+
 exports[`readable semantic text > snapshots contrast floors and text roles separately from surface colors 1`] = `
 "/*
  * Contrast mixes each theme's own muted tones toward that theme's foreground,
@@ -370,12 +380,12 @@ exports[`readable semantic text > snapshots contrast floors and text roles separ
   --contrast-fg: var(--user-foreground, #18181b);
   --contrast-faint: color-mix(
     in srgb,
-    var(--contrast-fg) calc(var(--user-contrast, 0.45) * 55%),
+    var(--contrast-fg) calc(var(--user-contrast, 0.45) * 100%),
     #505661
   );
   --contrast-muted: color-mix(
     in srgb,
-    var(--contrast-fg) calc(var(--user-contrast, 0.45) * 55%),
+    var(--contrast-fg) calc(var(--user-contrast, 0.45) * 100%),
     #303038
   );
 }
@@ -384,12 +394,12 @@ exports[`readable semantic text > snapshots contrast floors and text roles separ
   --contrast-fg: var(--user-foreground, #eeeeee);
   --contrast-faint: color-mix(
     in srgb,
-    var(--contrast-fg) calc(var(--user-contrast, 0.45) * 55%),
+    var(--contrast-fg) calc(var(--user-contrast, 0.45) * 100%),
     #c8ccd3
   );
   --contrast-muted: color-mix(
     in srgb,
-    var(--contrast-fg) calc(var(--user-contrast, 0.45) * 55%),
+    var(--contrast-fg) calc(var(--user-contrast, 0.45) * 100%),
     #e2e5ea
   );
 }"
@@ -502,6 +512,13 @@ exports[`readable semantic text > snapshots contrast floors and text roles separ
   .command-input.thread-command-input {
   border-color: var(--control-ring);
 }
+
+/* The settings shell defines local colors with theme-specific specificity.
+ * Keep the live preference above those defaults instead of shadowing it. */
+:root[data-theme] .screen-shell.command-screen.settings-command-screen {
+  --settings-muted: var(--contrast-muted);
+  --settings-faint: var(--contrast-faint);
+}
 "
 `;
 
@@ -582,6 +599,13 @@ exports[`snapshots high contrast composer controls and shared control ink 2`] = 
   .command-home-view
   .command-input.thread-command-input {
   border-color: var(--control-ring);
+}
+
+/* The settings shell defines local colors with theme-specific specificity.
+ * Keep the live preference above those defaults instead of shadowing it. */
+:root[data-theme] .screen-shell.command-screen.settings-command-screen {
+  --settings-muted: var(--contrast-muted);
+  --settings-faint: var(--contrast-faint);
 }
 "
 `;

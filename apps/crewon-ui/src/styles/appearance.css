@@ -59,12 +59,12 @@
   --contrast-fg: var(--user-foreground, #18181b);
   --contrast-faint: color-mix(
     in srgb,
-    var(--contrast-fg) calc(var(--user-contrast, 0.45) * 55%),
+    var(--contrast-fg) calc(var(--user-contrast, 0.45) * 100%),
     #505661
   );
   --contrast-muted: color-mix(
     in srgb,
-    var(--contrast-fg) calc(var(--user-contrast, 0.45) * 55%),
+    var(--contrast-fg) calc(var(--user-contrast, 0.45) * 100%),
     #303038
   );
 }
@@ -73,12 +73,12 @@
   --contrast-fg: var(--user-foreground, #eeeeee);
   --contrast-faint: color-mix(
     in srgb,
-    var(--contrast-fg) calc(var(--user-contrast, 0.45) * 55%),
+    var(--contrast-fg) calc(var(--user-contrast, 0.45) * 100%),
     #c8ccd3
   );
   --contrast-muted: color-mix(
     in srgb,
-    var(--contrast-fg) calc(var(--user-contrast, 0.45) * 55%),
+    var(--contrast-fg) calc(var(--user-contrast, 0.45) * 100%),
     #e2e5ea
   );
 }
@@ -759,4 +759,11 @@ samp,
   .command-home-view
   .command-input.thread-command-input {
   border-color: var(--control-ring);
+}
+
+/* The settings shell defines local colors with theme-specific specificity.
+ * Keep the live preference above those defaults instead of shadowing it. */
+:root[data-theme] .screen-shell.command-screen.settings-command-screen {
+  --settings-muted: var(--contrast-muted);
+  --settings-faint: var(--contrast-faint);
 }

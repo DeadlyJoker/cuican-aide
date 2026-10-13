@@ -274,3 +274,14 @@ it("snapshots high contrast composer controls and shared control ink", () => {
     styles.slice(styles.indexOf("/* Composer labels and icons")),
   ).toMatchSnapshot();
 });
+
+it("keeps the live contrast preference above the themed settings shell defaults", () => {
+  const css = readStyles("appearance.css");
+  expect(
+    css.slice(css.indexOf("/* The settings shell defines local colors")),
+  ).toMatchSnapshot();
+  expect(css).not.toContain("* 55%");
+  expect(
+    css.match(/calc\(var\(--user-contrast, 0.45\) \* 100%\)/g),
+  ).toHaveLength(4);
+});
