@@ -1,5 +1,7 @@
 // @vitest-environment happy-dom
 import { describe, it, expect, vi, afterEach } from "vitest";
+// @ts-expect-error Vitest reads the delivered document in Node; product code has no Node runtime.
+import { readFileSync } from "node:fs";
 import { createPluginEntryByteImporter } from "./pluginEntryByteImporter";
 import { uiLease } from "./pluginUiLoader.test-support";
 const bytes = new TextEncoder().encode(
@@ -53,6 +55,14 @@ const request = (serial = 1) => ({
   signal: new AbortController().signal,
 });
 describe("immutable entry bytes across page reload", () => {
+  it("permits verified native Blob modules in the delivered page without eval or inline scripts", () => {
+    const html = readFileSync(`${process.cwd()}/index.html`, "utf8");
+    const scriptPolicy = /script-src ([^;]+)/u.exec(html)?.[1].split(" ");
+    expect(scriptPolicy).toContain("blob:");
+    expect(scriptPolicy).toContain("'self'");
+    expect(scriptPolicy).not.toContain("'unsafe-eval'");
+    expect(scriptPolicy).not.toContain("'unsafe-inline'");
+  });
   afterEach(() => vi.unstubAllGlobals());
   it("uses persisted verified bytes only after revalidating the new exact mount, including a new importer instance", async () => {
     const f = fixture();
