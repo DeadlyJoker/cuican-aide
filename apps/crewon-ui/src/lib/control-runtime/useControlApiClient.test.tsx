@@ -4,6 +4,7 @@ import { createRoot, type Root } from "react-dom/client";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { useControlApiClient } from "./useControlApiClient";
 import { loadControlApiClient } from "./controlRuntimeBootstrap";
+import { AGENT_PLATFORM_SESSION_CHANGED_EVENT } from "../agent-platform/agentPlatformClient";
 
 vi.mock("./controlRuntimeBootstrap", () => ({ loadControlApiClient: vi.fn() }));
 Object.assign(globalThis, { IS_REACT_ACT_ENVIRONMENT: true });
@@ -61,6 +62,36 @@ afterEach(async () => {
 });
 
 describe("desktop Control connection recovery", () => {
+  it("adopts the original late verified Web connection without another bootstrap", async () => {
+    Reflect.deleteProperty(window, "crewonDesktop");
+    let deliver!: (client: Client) => void;
+    load.mockImplementation(async (options) => {
+      deliver = options!.onLateClient!;
+      return null;
+    });
+    await mount();
+    expect(observed).toBeNull();
+    await act(async () => deliver(clientA));
+    expect(observed).toBe(clientA);
+    await advance(60_000);
+    expect(load).toHaveBeenCalledOnce();
+  });
+  it("ignores an old late completion after the host session generation changes", async () => {
+    Reflect.deleteProperty(window, "crewonDesktop");
+    let original!: (client: Client) => void;
+    load.mockImplementationOnce(async (options) => {
+      original = options!.onLateClient!;
+      return null;
+    });
+    load.mockResolvedValueOnce(clientB);
+    await mount();
+    await act(async () => {
+      window.dispatchEvent(new Event(AGENT_PLATFORM_SESSION_CHANGED_EVENT));
+    });
+    await act(async () => original(clientA));
+    expect(load).toHaveBeenCalledTimes(2);
+    expect(observed).toBe(clientB);
+  });
   it("recovers after a transient bootstrap failure and stops polling once connected", async () => {
     load.mockResolvedValueOnce(null).mockResolvedValue(clientA);
     await mount();

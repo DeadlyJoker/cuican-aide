@@ -23,8 +23,19 @@ export function useControlApiClient(): ControlClient {
       let retry = 0;
       const discover = async () => {
         pending = true;
-        const client = await loadControlApiClient();
+        let deliveredLate = false;
+        const client = await loadControlApiClient({
+          onLateClient(resolved) {
+            if (!active || requestedGeneration !== generation) return;
+            deliveredLate = true;
+            pending = false;
+            connected = true;
+            clearTimeout(timer);
+            setControlClient(resolved);
+          },
+        });
         if (!active || requestedGeneration !== generation) return;
+        if (deliveredLate) return;
         pending = false;
         connected = client !== null;
         setControlClient(client);

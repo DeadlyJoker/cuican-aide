@@ -11,6 +11,46 @@ const expired = () =>
 const parseSession = (value: unknown) =>
   value as { baseUrl: string; csrfToken: string };
 describe("Web Control account session transport", () => {
+  it("bootstraps a PIM account with one POST, without a preliminary failing GET", async () => {
+    const calls: RequestInit[] = [];
+    const t = createWebControlSessionTransport({
+      pageOrigin: origin,
+      parseSession,
+      bootstrapMethod: "account-exchange",
+      fetch: async (_, init) => {
+        calls.push(init!);
+        return session();
+      },
+    });
+    await t.bootstrap();
+    expect(calls).toHaveLength(1);
+    expect(calls[0].method).toBe("POST");
+    expect(new Headers(calls[0].headers).get("origin")).toBe(origin);
+    expect(calls[0].body).toBeUndefined();
+  });
+  it("uses legacy cookie reading only for an explicitly unsupported exchange route", async () => {
+    for (const status of [405, 401, 403, 503]) {
+      const methods: string[] = [];
+      const t = createWebControlSessionTransport({
+        pageOrigin: origin,
+        parseSession,
+        bootstrapMethod: "account-exchange",
+        fetch: async (_, init) => {
+          methods.push(init?.method ?? "GET");
+          return methods.length === 1
+            ? new Response(null, { status })
+            : session();
+        },
+      });
+      if (status === 405) {
+        await t.bootstrap();
+        expect(methods).toEqual(["POST", "GET"]);
+      } else {
+        await expect(t.bootstrap()).rejects.toThrow("session_unavailable");
+        expect(methods).toEqual(["POST"]);
+      }
+    }
+  });
   it("synchronizes a marked CSRF rejection from another tab once before replaying the original mutation", async () => {
     const attempts: RequestInit[] = [];
     let bootstraps = 0;

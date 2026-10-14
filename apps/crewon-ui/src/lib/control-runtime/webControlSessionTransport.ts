@@ -7,6 +7,7 @@ export function createWebControlSessionTransport(input: {
   fetch: typeof globalThis.fetch;
   pageOrigin: string;
   parseSession: (value: unknown) => Session;
+  bootstrapMethod?: "account-exchange" | "cookie-read";
 }): { bootstrap(): Promise<Session>; fetch: typeof globalThis.fetch } {
   let current: Session | null = null;
   let pending: Promise<Session> | null = null;
@@ -14,18 +15,36 @@ export function createWebControlSessionTransport(input: {
     if (pending !== null) return pending;
     pending = (async () => {
       const url = new URL("/control-api/session", input.pageOrigin);
+      const directExchange = input.bootstrapMethod === "account-exchange";
+      const signal = AbortSignal.timeout(15_000);
       let response = await input.fetch(url, {
+        ...(directExchange ? { method: "POST" } : {}),
         cache: "no-store",
         credentials: "same-origin",
-        headers: { Accept: "application/json" },
+        headers: {
+          Accept: "application/json",
+          ...(directExchange ? { Origin: input.pageOrigin } : {}),
+        },
+        signal,
       });
-      if (await requiresExchange(response)) {
+      // Older cookie-only BFFs explicitly reject the opt-in exchange route.
+      // Authentication failures never fall back to another session authority.
+      if (directExchange && response.status === 405) {
+        await response.body?.cancel();
+        response = await input.fetch(url, {
+          cache: "no-store",
+          credentials: "same-origin",
+          headers: { Accept: "application/json" },
+          signal,
+        });
+      } else if (!directExchange && (await requiresExchange(response))) {
         await response.body?.cancel();
         response = await input.fetch(url, {
           method: "POST",
           cache: "no-store",
           credentials: "same-origin",
           headers: { Accept: "application/json", Origin: input.pageOrigin },
+          signal,
         });
       }
       if (!response.ok) throw new Error("control_runtime_session_unavailable");

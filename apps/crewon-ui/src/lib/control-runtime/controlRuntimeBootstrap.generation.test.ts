@@ -80,6 +80,47 @@ function replaceSession(replacement: "account B" | "logout") {
 }
 
 describe("Control bootstrap account lifetime", () => {
+  it("delivers the original verified Web result after the presentation deadline without another exchange", async () => {
+    vi.useFakeTimers();
+    const gate = deferred<Response>();
+    const late = vi.fn();
+    const fetch = vi.fn(() => gate.promise);
+    const pending = loadControlApiClient({
+      surface: "web",
+      pageOrigin: ORIGIN,
+      readWebAccessToken: async () => "access-a",
+      fetch,
+      onLateClient: late,
+    });
+    await vi.advanceTimersByTimeAsync(5000);
+    expect(await pending).toBeNull();
+    expect(late).not.toHaveBeenCalled();
+    gate.resolve(Response.json(WEB_SESSION));
+    await vi.advanceTimersByTimeAsync(0);
+    expect(late).toHaveBeenCalledTimes(1);
+    expect(late.mock.calls[0][0].requestOrigin).toBe(ORIGIN);
+    expect(fetch).toHaveBeenCalledOnce();
+  });
+  for (const replacement of ["account B", "logout"] as const) {
+    it(`does not deliver a late connection after ${replacement}`, async () => {
+      vi.useFakeTimers();
+      const gate = deferred<Response>();
+      const late = vi.fn();
+      const pending = loadControlApiClient({
+        surface: "web",
+        pageOrigin: ORIGIN,
+        readWebAccessToken: async () => "access-a",
+        fetch: () => gate.promise,
+        onLateClient: late,
+      });
+      await vi.advanceTimersByTimeAsync(5000);
+      expect(await pending).toBeNull();
+      replaceSession(replacement);
+      gate.resolve(Response.json(WEB_SESSION));
+      await vi.advanceTimersByTimeAsync(0);
+      expect(late).not.toHaveBeenCalled();
+    });
+  }
   beforeEach(() => {
     vi.stubEnv("VITE_CREWON_UNIFIED_SSO_ENABLED", "false");
     vi.stubGlobal("localStorage", memoryStorage());
@@ -89,6 +130,7 @@ describe("Control bootstrap account lifetime", () => {
   });
 
   afterEach(() => {
+    vi.useRealTimers();
     clearAgentPlatformSession();
     vi.unstubAllGlobals();
     vi.unstubAllEnvs();

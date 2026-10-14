@@ -1,4 +1,5 @@
 import { pluginUiActionInputMaximumBytes } from "@crewon/contracts/project-texts-ui";
+import { PluginUiModuleCodeCache } from "./pluginUiModuleCodeCache";
 import {
   isTransientPluginUiValidationError,
   pluginUiPropsKey,
@@ -134,6 +135,7 @@ export class TrustedPluginUiLoader {
   readonly #cleanupPending = new Set<Candidate>();
   readonly #unusedCleanup = new Map<string, Promise<void>>();
   readonly #inflight = new Set<AbortController>();
+  readonly #code = new PluginUiModuleCodeCache();
 
   constructor(
     options: Readonly<{
@@ -327,7 +329,10 @@ export class TrustedPluginUiLoader {
       progress("import");
       const imported = await this.#await(
         candidate,
-        Promise.resolve().then(() => this.#importer(url)),
+        this.#code.import(lease, () => {
+          this.#current(candidate);
+          return this.#importer(url);
+        }),
       );
       progress("authorize-instance");
       await this.#fence(candidate);
@@ -339,6 +344,7 @@ export class TrustedPluginUiLoader {
       const definition = parsePluginUiDefinition(descriptor.value);
       if (definition.pluginId !== candidate.identity.pluginId)
         uiFailure("plugin_ui_module_identity_invalid");
+      this.#code.remember(lease, imported);
       const services: PluginUiServices = Object.freeze({
         invoke: (action, value, options) =>
           this.#invoke(candidate, action, value, options),

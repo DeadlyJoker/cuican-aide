@@ -40,6 +40,8 @@ export type ControlRuntimeBootstrapDependencies = Readonly<{
   readWebAccessToken?: () => Promise<string | null>;
   readWebAccessSession?: () => Promise<AgentPlatformAccessSession>;
   surface?: "desktop" | "web";
+  /** Original verified Web bootstrap completion after the initial render deadline. */
+  onLateClient?(client: ControlApiClient): void;
 }>;
 
 /**
@@ -118,15 +120,32 @@ export async function loadControlApiClient(
       fetch: authenticatedFetch,
       pageOrigin,
       parseSession: (value) => parseWebSession(value, pageOrigin),
+      bootstrapMethod: "account-exchange",
     });
-    const session = await withBootstrapDeadline(transport.bootstrap());
-    assertAgentPlatformSessionCurrent(credential.session);
-    return new ControlApiClient({
-      baseUrl: session.baseUrl,
-      csrfToken: session.csrfToken,
-      origin: pageOrigin,
-      fetch: transport.fetch,
+    let initialDeadlineExpired = false;
+    const completion = transport.bootstrap().then((session) => {
+      assertAgentPlatformSessionCurrent(credential.session);
+      const client = new ControlApiClient({
+        baseUrl: session.baseUrl,
+        csrfToken: session.csrfToken,
+        origin: pageOrigin,
+        fetch: transport.fetch,
+      });
+      if (initialDeadlineExpired) {
+        try {
+          dependencies.onLateClient?.(client);
+        } catch {
+          // A presentation observer cannot change the authenticated result.
+        }
+      }
+      return client;
     });
+    try {
+      return await withBootstrapDeadline(completion);
+    } catch (error) {
+      initialDeadlineExpired = true;
+      throw error;
+    }
   } catch {
     return null;
   }
