@@ -75,12 +75,12 @@ describe("approved self-contained UI code reuse", () => {
     await handle.stop();
     const cache = new PluginUiModuleCodeCache();
     await expect(
-      cache.import(first, async () => {
+      cache.getOrImport(first, async () => {
         throw new Error("download failed");
       }),
     ).rejects.toThrow("download failed");
     expect(cache.get(first)).toBeUndefined();
-    expect(await cache.import(first, async () => "next result")).toBe(
+    expect(await cache.getOrImport(first, async () => "next result")).toBe(
       "next result",
     );
   });

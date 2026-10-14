@@ -5,7 +5,7 @@ export class PluginUiModuleCodeCache {
   readonly #entries = new Map<string, unknown>();
   readonly #capacity = 8;
 
-  async import(
+  async getOrImport(
     lease: PluginUiLease,
     operation: () => Promise<unknown>,
   ): Promise<unknown> {

@@ -329,7 +329,7 @@ export class TrustedPluginUiLoader {
       progress("import");
       const imported = await this.#await(
         candidate,
-        this.#code.import(lease, () => {
+        this.#code.getOrImport(lease, () => {
           this.#current(candidate);
           return this.#importer(url);
         }),
