@@ -176,3 +176,58 @@ test("conversation ACK response cannot exceed the bounded public metadata budget
     }),
   );
 });
+
+test("actual authenticated BFF proxies project chat context under its own larger budget", async () => {
+  let upstreamBody = Response.json({
+    binding: { projectId: "project-1" },
+    source: "x".repeat(70 * 1024),
+  });
+  let calls = 0;
+  const app = createWebBff({
+    publicOrigin: "https://bff.test",
+    controlTarget: "http://127.0.0.1:3210",
+    controlBffToken: "bff-service-token-at-least-32-characters",
+    controlCsrfToken: "control-csrf-token-at-least-32-characters",
+    csrfSecret: "browser-csrf-secret-at-least-32-characters",
+    identity: {
+      resolve: async ({ cookie }) =>
+        cookie === "actual-session"
+          ? {
+              sessionId: "session-identity-at-least-32-characters",
+              expiresAt: "2030-01-01T00:00:00.000Z",
+              controlAccessToken:
+                "resolved-control-actor-at-least-32-characters",
+            }
+          : null,
+    },
+    fetch: async (input, init) => {
+      const request = new Request(input, init);
+      assert.equal(request.url, `http://127.0.0.1:3210${path}/context`);
+      assert.equal(
+        request.headers.get("authorization"),
+        "Bearer resolved-control-actor-at-least-32-characters",
+      );
+      calls += 1;
+      return upstreamBody;
+    },
+  });
+  const request = (cookie = "actual-session") =>
+    new Request(`https://bff.test${path}/context`, { headers: { cookie } });
+  assert.equal((await app.handle(request("foreign-session"))).status, 401);
+  assert.equal(calls, 0);
+  const successful = await app.handle(request());
+  assert.equal(successful.status, 200);
+  assert.equal((await successful.json()).source.length, 70 * 1024);
+  upstreamBody = Response.json(
+    { error: { code: "plugin_project_scope_revoked" } },
+    { status: 403 },
+  );
+  const forbidden = await app.handle(request());
+  assert.equal(forbidden.status, 403);
+  assert.deepEqual(await forbidden.json(), {
+    error: { code: "plugin_project_scope_revoked" },
+  });
+  upstreamBody = Response.json({ source: "x".repeat(256 * 1024) });
+  assert.equal((await app.handle(request())).status, 502);
+  assert.equal(calls, 3);
+});

@@ -211,6 +211,20 @@ export default defineConfig(({ mode }) => {
       },
     },
     plugins: [
+      {
+        name: "crewon-native-module-loading",
+        // Vite rebuilds module script tags and drops attributes from the source
+        // tag. Mark its generated entry after that pass so Rocket Loader does
+        // not rewrite ES module loading or top-level await ordering.
+        transformIndexHtml: {
+          order: "post",
+          handler: (html) =>
+            html.replace(
+              /<script\b(?=[^>]*\btype="module")/gu,
+              '<script data-cfasync="false"',
+            ),
+        },
+      },
       agentPlatformProxy.lifecycle,
       localBackendRecoveryPlugin(backendRestartRequestFile),
       controlSessionPlugin({
@@ -286,7 +300,9 @@ export default defineConfig(({ mode }) => {
         output: {
           manualChunks(id) {
             if (id === "\0vite/preload-helper.js") {
-              return undefined;
+              // Keep the shared preload helper out of lazy feature chunks.
+              // Otherwise the small login entry eagerly imports all Mermaid code.
+              return "runtime";
             }
             if (!id.includes("node_modules")) {
               return undefined;

@@ -6,7 +6,7 @@ import {
   parseProjectConversationsActionRequest,
 } from "@crewon/contracts/project-conversations";
 import { boundedPluginProxyRequest } from "./plugin-proxy-policy.ts";
-import { boundedCreativeProjectProxyResponse } from "./creative-project-proxy-policy.ts";
+import { boundedExtensionProxyResponse } from "./extension-proxy-policy.ts";
 
 export const PROJECT_CONVERSATION_PROXY_DEADLINE_MS = 30_000;
 type Policy =
@@ -92,15 +92,52 @@ export async function boundedProjectConversationProxyRequest(
   signal.throwIfAborted();
   return bytes;
 }
-export function boundedProjectConversationProxyResponse(
+/** Keep this route's declared context budget independent from ordinary project metadata. */
+export async function boundedProjectConversationProxyResponse(
   input: Readonly<{
     upstream: Response;
     signal: AbortSignal;
     maximumBytes?: number;
   }>,
 ): Promise<Response> {
-  return boundedCreativeProjectProxyResponse({
-    ...input,
-    maximumBytes: input.maximumBytes ?? MAX_PROJECT_CONVERSATIONS_BYTES,
-  });
+  const maximumBytes = input.maximumBytes ?? MAX_PROJECT_CONVERSATIONS_BYTES;
+  if (
+    !Number.isSafeInteger(maximumBytes) ||
+    maximumBytes < 1 ||
+    maximumBytes > MAX_PROJECT_CONVERSATION_CONTEXT_BYTES
+  )
+    throw new Error("project_conversation_response_invalid");
+  const { upstream, signal } = input;
+  if (
+    upstream.body === null ||
+    upstream.status < 200 ||
+    (upstream.status < 300 &&
+      upstream.status !== 200 &&
+      upstream.status !== 201) ||
+    (upstream.status >= 300 && upstream.status < 400)
+  ) {
+    void upstream.body?.cancel().catch(() => {});
+    throw new Error("project_conversation_response_invalid");
+  }
+  try {
+    const finite = await boundedExtensionProxyResponse({
+      upstream,
+      signal,
+      maximumBytes,
+    });
+    const bytes = await finite.arrayBuffer();
+    signal.throwIfAborted();
+    const value: unknown = JSON.parse(
+      new TextDecoder("utf-8", { fatal: true }).decode(bytes),
+    );
+    if (value === null || typeof value !== "object" || Array.isArray(value))
+      throw new Error("project_conversation_response_invalid");
+    return new Response(bytes, {
+      status: finite.status,
+      statusText: finite.statusText,
+      headers: finite.headers,
+    });
+  } catch (cause) {
+    throw new Error("project_conversation_response_invalid", { cause });
+  }
 }
