@@ -1,7 +1,6 @@
 // @vitest-environment happy-dom
 import { describe, it, expect, vi, afterEach } from "vitest";
-// @ts-expect-error Vitest reads the delivered document in Node; product code has no Node runtime.
-import { readFileSync } from "node:fs";
+import pageDocument from "../../../index.html?raw";
 import { createPluginEntryByteImporter } from "./pluginEntryByteImporter";
 import { uiLease } from "./pluginUiLoader.test-support";
 const bytes = new TextEncoder().encode(
@@ -56,7 +55,7 @@ const request = (serial = 1) => ({
 });
 describe("immutable entry bytes across page reload", () => {
   it("permits verified native Blob modules in the delivered page without eval or inline scripts", () => {
-    const html = readFileSync(`${process.cwd()}/index.html`, "utf8");
+    const html = pageDocument;
     const scriptPolicy = /script-src ([^;]+)/u.exec(html)?.[1].split(" ");
     expect(scriptPolicy).toContain("blob:");
     expect(scriptPolicy).toContain("'self'");
