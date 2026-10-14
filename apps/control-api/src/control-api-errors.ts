@@ -32,7 +32,11 @@ export function errorResponse(
       error.category,
       error.code,
       requestId,
-      error.category === "authentication" ? 401 : 403,
+      error.category === "providerUnavailable"
+        ? 503
+        : error.category === "authentication"
+          ? 401
+          : 403,
     );
   }
   if (error instanceof PluginProjectConversationsContractError)

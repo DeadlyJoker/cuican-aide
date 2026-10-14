@@ -25,7 +25,7 @@ const unavailable = () =>
   controlUiResponse(
     {
       error: {
-        code: "service_unavailable",
+        code: "identity_authority_unavailable",
         category: "providerUnavailable",
         requestId: "test",
       },
@@ -194,6 +194,51 @@ describe("host-private validation observations", () => {
       expect(h.instances[0].update).not.toHaveBeenCalled();
     },
   );
+
+  it("discards the page on a definitive original identity_verification_failed 401 response", async () => {
+    const lease = uiLease();
+    let denied = false;
+    const wire = controlUiClient((_url, init) => {
+      if (init.method === "DELETE") return controlUiResponse({ closed: true });
+      return denied
+        ? controlUiResponse(
+            {
+              error: {
+                category: "authentication",
+                code: "identity_verification_failed",
+                requestId: "test",
+              },
+            },
+            401,
+          )
+        : controlUiResponse(lease);
+    });
+    const h = uiHarness();
+    const host = createControlPluginUiHost({
+      client: wire.client,
+      assertCurrent() {},
+      onDiagnostic() {},
+      importer: async () => ({ default: h.definition }),
+    });
+    const handle = await host.loader.mount({
+      root: h.root,
+      lease,
+      props: uiProps(),
+    });
+    handles.push(handle);
+    denied = true;
+    await expect(
+      handle.update(uiProps({ stage: "角色" })),
+    ).rejects.toMatchObject({
+      status: 401,
+      code: "identity_verification_failed",
+    });
+    expect(h.root.firstElementChild).toBeNull();
+    expect(h.instances[0].update).not.toHaveBeenCalled();
+    expect(
+      wire.fetch.mock.calls.filter(([, init]) => init?.method === "GET"),
+    ).toHaveLength(4);
+  });
 
   it("withdraws a released mount's pending read even if its transport ignores cancellation", async () => {
     const lease = uiLease();

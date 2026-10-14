@@ -1,4 +1,8 @@
 import { createHash, timingSafeEqual } from "node:crypto";
+import {
+  SecurityAuthorityTimeoutError,
+  SecurityAuthorityVerificationError,
+} from "./security-authority-errors.ts";
 
 import {
   type ActorContext,
@@ -87,7 +91,7 @@ export class AbortSecurityDeadline implements SecurityDeadlinePort {
     const timeout = new Promise<never>((_resolve, reject) => {
       timer = setTimeout(() => {
         controller.abort();
-        reject(new Error("security_authority_timeout"));
+        reject(new SecurityAuthorityTimeoutError());
       }, timeoutMs);
     });
     try {
@@ -312,8 +316,34 @@ export class ProductionControlApiIdentity implements ControlApiIdentityPort {
         },
       );
     } catch (error) {
+      signal?.throwIfAborted();
+      if (
+        error instanceof SecurityAuthorityTimeoutError ||
+        (error instanceof SecurityAuthorityVerificationError &&
+          error.kind === "unavailable")
+      ) {
+        throw new ControlApiIdentityError(
+          "providerUnavailable",
+          "identity_authority_unavailable",
+          { cause: error },
+        );
+      }
+      if (
+        error instanceof SecurityAuthorityVerificationError &&
+        error.kind === "invalidResponse"
+      ) {
+        throw new ControlApiIdentityError(
+          "authentication",
+          "identity_assertion_invalid",
+          { cause: error },
+        );
+      }
       throw new ControlApiIdentityError(
-        "authentication",
+        error instanceof SecurityAuthorityVerificationError &&
+        error.kind === "rejected" &&
+        error.httpStatus === 403
+          ? "authorization"
+          : "authentication",
         "identity_verification_failed",
         { cause: error },
       );

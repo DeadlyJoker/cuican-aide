@@ -33,11 +33,11 @@ export interface ControlApiReadinessPort {
 }
 
 export class ControlApiIdentityError extends Error {
-  readonly category: "authentication" | "authorization";
+  readonly category: "authentication" | "authorization" | "providerUnavailable";
   readonly code: string;
 
   constructor(
-    category: "authentication" | "authorization",
+    category: "authentication" | "authorization" | "providerUnavailable",
     code: string,
     options?: ErrorOptions,
   ) {

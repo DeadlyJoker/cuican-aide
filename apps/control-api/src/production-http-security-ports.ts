@@ -3,6 +3,7 @@ import type {
   ControlTokenVerifierPort,
   PolicyDecisionPort,
 } from "./production-security-adapters.ts";
+import { SecurityAuthorityVerificationError } from "./security-authority-errors.ts";
 
 const MAX_SECURITY_RESPONSE_BYTES = 16 * 1_024;
 const MAX_URL_LENGTH = 2_048;
@@ -39,6 +40,7 @@ export class HttpControlTokenVerifier implements ControlTokenVerifierPort {
       { accessToken: input.accessToken },
       input.signal,
       "identity_authority_unavailable",
+      "identity",
     );
   }
 }
@@ -86,24 +88,45 @@ async function postJson(
   body: unknown,
   signal: AbortSignal,
   errorCode: string,
+  authority?: "identity",
 ): Promise<unknown> {
-  const response = await fetchPort(url, {
-    method: "POST",
-    headers: {
-      "accept": "application/json",
-      "authorization": `Bearer ${serviceToken}`,
-      "content-type": "application/json",
-    },
-    body: JSON.stringify(body),
-    redirect: "error",
-    signal,
-  });
-  if (
-    response.status !== 200 ||
-    !isJson(response.headers.get("content-type"))
-  ) {
-    await response.body?.cancel();
-    throw new Error(errorCode);
+  const failure = (
+    kind: SecurityAuthorityVerificationError["kind"],
+    options?: ErrorOptions & Readonly<{ httpStatus?: number }>,
+  ) =>
+    authority === "identity"
+      ? new SecurityAuthorityVerificationError(kind, options)
+      : new Error(errorCode, options);
+  let response: Response;
+  try {
+    response = await fetchPort(url, {
+      method: "POST",
+      headers: {
+        "accept": "application/json",
+        "authorization": `Bearer ${serviceToken}`,
+        "content-type": "application/json",
+      },
+      body: JSON.stringify(body),
+      redirect: "error",
+      signal,
+    });
+  } catch (cause) {
+    if (authority === "identity") throw failure("unavailable", { cause });
+    throw cause;
+  }
+  if (response.status !== 200) {
+    await response.body?.cancel().catch(() => {});
+    const kind =
+      response.status === 401 || response.status === 403
+        ? "rejected"
+        : response.status >= 500 || response.status === 429
+          ? "unavailable"
+          : "invalidResponse";
+    throw failure(kind, { httpStatus: response.status });
+  }
+  if (!isJson(response.headers.get("content-type"))) {
+    await response.body?.cancel().catch(() => {});
+    throw failure("invalidResponse");
   }
   const contentLength = response.headers.get("content-length");
   if (
@@ -111,23 +134,33 @@ async function postJson(
     (!/^\d+$/u.test(contentLength) ||
       Number(contentLength) > MAX_SECURITY_RESPONSE_BYTES)
   ) {
-    await response.body?.cancel();
-    throw new Error(errorCode);
+    await response.body?.cancel().catch(() => {});
+    throw failure("invalidResponse");
   }
-  const bytes = await readBoundedBody(response, errorCode);
+  let bytes: Uint8Array;
+  try {
+    bytes = await readBoundedBody(response, () => failure("invalidResponse"));
+  } catch (cause) {
+    if (
+      authority === "identity" &&
+      !(cause instanceof SecurityAuthorityVerificationError)
+    )
+      throw failure("unavailable", { cause });
+    throw cause;
+  }
   try {
     return JSON.parse(new TextDecoder("utf-8", { fatal: true }).decode(bytes));
   } catch (cause) {
-    throw new Error(errorCode, { cause });
+    throw failure("invalidResponse", { cause });
   }
 }
 
 async function readBoundedBody(
   response: Response,
-  errorCode: string,
+  protocolFailure: () => Error,
 ): Promise<Uint8Array> {
   if (response.body === null) {
-    throw new Error(errorCode);
+    throw protocolFailure();
   }
   const reader = response.body.getReader();
   const chunks: Uint8Array[] = [];
@@ -140,8 +173,8 @@ async function readBoundedBody(
       }
       total += result.value.byteLength;
       if (total > MAX_SECURITY_RESPONSE_BYTES) {
-        await reader.cancel();
-        throw new Error(errorCode);
+        await reader.cancel().catch(() => {});
+        throw protocolFailure();
       }
       chunks.push(result.value);
     }
