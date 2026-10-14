@@ -9,7 +9,7 @@
 冻结候选40完整检查395/395通过；实际文件安装器、业务注册和Workflow DSL验证2/2通过，使用已清理的隔离目录。这些既有结果不代替41的新包检查，也不是实际用户 Agent、模型或桌面验收。用户profile安装、完整原Worker流式调用/重连、线上模型与媒体供应商仍须独立验证。本次没有更新用户桌面App，也不宣称 ReelBench 全量复刻完成。原Foundation UI v1 与SourceUploads v1保留可选声明和真实业务授权。
 
 候选41严格 UI/Node 编译与打包通过；文本、恢复、首页、创意/小说入口及模块主题检查39/39通过，包含两份大纲正文快照。原文件安装器、重复安装和已安装业务清单读取2/2通过，临时目录已清理。新包18文件、3,447,608字节，摘要 `sha256:94af444e5ac3a430fde02ff473c565a6923c26659be3cf3988d63dd47f47c3fb`；相对冻结40仅 UI 字节和业务清单版本号改变。详见[当前交付记录](../../../docs/reelbench-replication-delivery.md)。
-SDK 0.1.2 是本仓库的未公开发布候选。首次开发时先在仓库根目录执行：
+SDK 0.1.3 是本仓库的未公开发布候选。首次开发时先在仓库根目录执行：
 
 ```sh
 node --experimental-strip-types scripts/prepare-short-drama-sdk.ts
@@ -44,7 +44,7 @@ UI 声明原项目、恢复、生成、查询、选用服务，并提供独立 `
 
 ## 仓外构建
 
-使用 Node.js 24、pnpm 10.33.0。当前 SDK 0.1.2 尚未公开发布到 registry，先按上面的准备步骤生成 `.sdk/crewon-plugin-sdk.tgz`，仓外复制时保留该目录。依赖继续使用相对的 `file:./.sdk/crewon-plugin-sdk.tgz`，再执行以下命令；不能用候选版本号查询未发布的 registry 包：
+使用 Node.js 24、pnpm 10.33.0。当前 SDK 0.1.3 尚未公开发布到 registry，先按上面的准备步骤生成 `.sdk/crewon-plugin-sdk.tgz`，仓外复制时保留该目录。依赖继续使用相对的 `file:./.sdk/crewon-plugin-sdk.tgz`，再执行以下命令；不能用候选版本号查询未发布的 registry 包：
 
 ```sh
 pnpm --ignore-workspace install --ignore-scripts
@@ -52,7 +52,7 @@ pnpm --ignore-workspace build
 pnpm --ignore-workspace test
 ```
 
-默认构建生成完整预构建安装目录 `dist/41.0.0/`，并拒绝构建 19 及更早主版本。`crewon.plugin.json` 清单包含 UI/Node ESM、业务清单、工作流溯源、演示使用的已有 Krea2 示意 PNG 与依赖许可文件的实际字节数和 SHA256。构建拒绝仓外源码依赖与未打包的浏览器依赖；安装器无需执行脚本。下一次改动可以设置 `CREWON_EXAMPLE_PLUGIN_VERSION=42.0.0 pnpm --ignore-workspace build` 构建新的候选版本，测试入口默认取当前 package.json 版本，显式变量仍优先。既有完整交付目录保持冻结，不能在原交付路径重建。新清单须按实际字节重新核验 packageDigest，并同步宿主批准配置；不能沿用旧版本的 digest。独立目录即便放在 monorepo 下，也应保留 `--ignore-workspace`，避免误操作宿主依赖。
+默认构建按 package.json 版本生成完整预构建安装目录，当前为 `dist/50.1.1/`，并拒绝构建 19 及更早主版本。`crewon.plugin.json` 清单包含 UI/Node ESM、业务清单、工作流溯源、演示使用的已有 Krea2 示意 PNG 与依赖许可文件的实际字节数和 SHA256。构建拒绝仓外源码依赖与未打包的浏览器依赖；安装器无需执行脚本。下一次改动可以设置 `CREWON_EXAMPLE_PLUGIN_VERSION=50.1.2 pnpm --ignore-workspace build` 构建新的候选版本，测试入口默认取当前 package.json 版本，显式变量仍优先。既有完整交付目录保持冻结，不能在原交付路径重建。新清单须按实际字节重新核验 packageDigest，并同步宿主批准配置；不能沿用旧版本的 digest。独立目录即便放在 monorepo 下，也应保留 `--ignore-workspace`，避免误操作宿主依赖。
 
 ## 22.0.0 的参考素材确认输入页面
 

@@ -43,7 +43,7 @@ importers:
 packages:
 
   '@crewon/plugin-sdk@file:.sdk/crewon-plugin-sdk.tgz':
-    resolution: {integrity: sha512-zcyVRzgXsdcBuZn3U3P56ku0wNsZ4pVzq8eYi66TbyQyBlI1V7f92LHRVNly/Q106WIKPBD9IVGypE8Ko5u67g==, tarball: file:.sdk/crewon-plugin-sdk.tgz}
+    resolution: {integrity: sha512-YisvM74GgS58FFuWYsclzXkFwxdT5KiV+oL3QstnM1O8XCzyQKs+uIQnN+dgIO+gNDcBKz1cOa8btEsb3Wx+0g==, tarball: file:.sdk/crewon-plugin-sdk.tgz}
     version: 0.1.3
     engines: {node: '>=24 <25'}
 

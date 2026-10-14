@@ -7,7 +7,10 @@ import { parsePluginPackageDescriptor } from "@crewon/plugin-sdk/contracts";
 import { validateComfyApiGraph } from "./build-support/comfyui-api-workflow-validation.mjs";
 
 const root = dirname(fileURLToPath(import.meta.url));
-const version = process.env.CREWON_EXAMPLE_PLUGIN_VERSION ?? "50.0.0";
+const { version: defaultVersion } = JSON.parse(
+  await readFile(join(root, "package.json"), "utf8"),
+);
+const version = process.env.CREWON_EXAMPLE_PLUGIN_VERSION ?? defaultVersion;
 if (
   version.length > 64 ||
   !/^(0|[1-9][0-9]*)\.(0|[1-9][0-9]*)\.(0|[1-9][0-9]*)$/u.test(version) ||
@@ -405,7 +408,7 @@ const descriptor = parsePluginPackageDescriptor({
   },
   businessManifestPath: "business.json",
   requires: [
-    {service:"crewon.plugin-navigation",apiVersion:"1",optional:true},
+    { service: "crewon.plugin-navigation", apiVersion: "1", optional: true },
     {
       service: "crewon.project-outline-tools",
       apiVersion: "1",
@@ -485,7 +488,11 @@ const descriptor = parsePluginPackageDescriptor({
       apiVersion: "1",
       optional: true,
     },
-    { service: "crewon.project-workspace-target", apiVersion: "1", optional: true },
+    {
+      service: "crewon.project-workspace-target",
+      apiVersion: "1",
+      optional: true,
+    },
     { service: "crewon.project-context", apiVersion: "1", optional: true },
     {
       service: "crewon.project-text-recovery",
@@ -528,7 +535,14 @@ const descriptor = parsePluginPackageDescriptor({
   ],
   provides: [{ service: "crewon.short-drama", apiVersion: "1" }],
   contributions: [
-    { id: "workbench", kind: "module", slot: "main.content", title: "AI 短剧", icon:"book-open", surfaces:["workbench","sidebar"] },
+    {
+      id: "workbench",
+      kind: "module",
+      slot: "main.content",
+      title: "AI 短剧",
+      icon: "book-open",
+      surfaces: ["workbench", "sidebar"],
+    },
   ],
   files,
 });

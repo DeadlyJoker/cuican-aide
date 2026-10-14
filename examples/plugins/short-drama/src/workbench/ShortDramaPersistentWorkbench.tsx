@@ -1,3 +1,8 @@
+import { ProjectAssetRecoveryActions } from "./ProjectAssetRecoveryActions";
+import { ProjectTextRecoveryActions } from "./ProjectTextRecoveryActions";
+import { ConceptRecoveryActions } from "./ConceptRecoveryActions";
+import { ProjectOperations } from "./ProjectOperations";
+import { ProjectRecoveryRecords } from "./ProjectRecoveryRecords";
 import { ProjectDirectoryStatus } from "./ProjectDirectoryStatus";
 import type { ProjectMediaOutputController } from "./ProjectMediaOutputController";
 import { ProjectMediaOutputWorkbench } from "./ProjectMediaOutputWorkbench";
@@ -30,13 +35,11 @@ import {
 } from "./creative-project-controller";
 import { ConceptWorkbench } from "./ConceptWorkbench";
 import { ProjectHomeRecovery } from "./ProjectHomeRecovery";
-import { ConceptRecoveryActions } from "./ConceptRecoveryActions";
 import { ProjectTextController } from "./ProjectTextController";
 import { StoryScriptWorkbench } from "./StoryScriptWorkbench";
 import { ProjectOutlineWorkbench } from "./ProjectOutlineWorkbench";
 import type { ProjectOutlineController } from "./ProjectOutlineController";
 import type { ProjectOutlineEditController } from "./ProjectOutlineEditController";
-import { ProjectTextRecoveryActions } from "./ProjectTextRecoveryActions";
 import { ProjectConversationController } from "./ProjectConversationController";
 import { ProjectConversationActions } from "./ProjectConversationActions";
 import { ProjectConversationAssociationActions } from "./ProjectConversationAssociationActions";
@@ -48,7 +51,6 @@ import { ProjectPlanningDraftReview } from "./ProjectPlanningDraftReview";
 import type { ProjectPlanningProposal } from "../project-planning-service";
 import { ProjectAssetController } from "./ProjectAssetController";
 import { ProjectAssetWorkbench } from "./ProjectAssetWorkbench";
-import { ProjectAssetRecoveryActions } from "./ProjectAssetRecoveryActions";
 const emptySubscribe = () => () => undefined;
 const noAssetSnapshot = () => null;
 
@@ -148,7 +150,7 @@ export function ShortDramaPersistentWorkbench({
         createOrigin?: "creative" | "novel";
       };
     }>,
-  ): void;
+  ): void | Promise<boolean>;
   controller: CreativeProjectController;
   texts: ProjectTextController;
   outlines?: ProjectOutlineController;
@@ -279,19 +281,62 @@ export function ShortDramaPersistentWorkbench({
   const locked = otherLocked || association?.locked === true;
   const archived = details?.project.state === "archived";
   const ownsCentralChat = hostSurface === "sidebar";
+  const navigationSequence = useRef(0);
+  const navigationFlight = useRef<Promise<void>>(Promise.resolve());
+  const pendingStage = useRef<ShortDramaProjectPage | null>(null);
+  const currentProject = useRef(details?.project.projectId);
+  currentProject.current = details?.project.projectId;
+  const confirmedStage = useRef(hostPageContext?.stage);
+  confirmedStage.current = hostPageContext?.stage;
+  const [navigationError, setNavigationError] = useState<string | null>(null);
   const selectProjectPage = (next: ShortDramaProjectPage) => {
-    if (onOpenHostPage && details) {
-      onOpenHostPage({
-        key: `project:${details.project.projectId}`,
-        title: details.project.title,
-        context: { projectId: details.project.projectId, stage: next },
-      });
-      return;
-    }
+    const previous = page;
+    const projectId = details?.project.projectId;
+    const sequence = ++navigationSequence.current;
+    pendingStage.current = next;
+    setNavigationError(null);
+    setPage(next);
     if (next === "characters" || next === "art") assets?.activate();
     if (next === "references") mediaInputs?.activate();
-    setPage(next);
+    if (onOpenHostPage && details) {
+      navigationFlight.current = navigationFlight.current.then(async () => {
+        if (
+          sequence !== navigationSequence.current ||
+          currentProject.current !== projectId
+        )
+          return;
+        let accepted: boolean | void;
+        try {
+          accepted = await onOpenHostPage({
+            key: `project:${details.project.projectId}`,
+            title: details.project.title,
+            context: { projectId: details.project.projectId, stage: next },
+          });
+        } catch {
+          accepted = false;
+        }
+        if (
+          sequence !== navigationSequence.current ||
+          currentProject.current !== projectId
+        )
+          return;
+        pendingStage.current = null;
+        if (accepted === false) {
+          setPage(confirmedStage.current ?? previous);
+          setNavigationError("阶段同步未完成，请重新选择。");
+        }
+      });
+    } else pendingStage.current = null;
   };
+  useEffect(() => {
+    ++navigationSequence.current;
+    pendingStage.current = null;
+    setNavigationError(null);
+    return () => {
+      ++navigationSequence.current;
+      pendingStage.current = null;
+    };
+  }, [details?.project.projectId]);
   useEffect(() => {
     association?.setContext({
       ready: associationReady,
@@ -375,6 +420,11 @@ export function ShortDramaPersistentWorkbench({
       hostPageContext?.stage &&
       details?.project.projectId === hostPageContext.projectId
     ) {
+      if (
+        pendingStage.current &&
+        pendingStage.current !== hostPageContext.stage
+      )
+        return;
       setPage(hostPageContext.stage);
       if (hostSurface === "workbench") {
         if (
@@ -591,21 +641,50 @@ export function ShortDramaPersistentWorkbench({
             />
           ) : (
             <div className="drama-project-focus">
-              {onOpenHostPage && (
-                <nav className="drama-stage-tabs" aria-label="项目制作阶段">
-                  {projectPagesFor(origin).map((item) => (
-                    <button
-                      key={item.id}
-                      type="button"
-                      aria-current={page === item.id ? "page" : undefined}
-                      onClick={() => selectProjectPage(item.id)}
-                    >
-                      {item.title}
-                    </button>
-                  ))}
-                </nav>
-              )}
+              <div className="drama-stage-toolbar">
+                {onOpenHostPage && (
+                  <nav className="drama-stage-tabs" aria-label="项目制作阶段">
+                    {projectPagesFor(origin).map((item) => (
+                      <button
+                        key={item.id}
+                        type="button"
+                        aria-current={page === item.id ? "page" : undefined}
+                        onClick={() => selectProjectPage(item.id)}
+                      >
+                        {item.title}
+                      </button>
+                    ))}
+                  </nav>
+                )}
 
+                {onOpenHostPage && (
+                  <ProjectOperations
+                    archived={Boolean(archived)}
+                    disabled={locked || snapshot.opening}
+                    onArchive={() => void controller.setProjectState()}
+                  >
+                    <ProjectRecoveryRecords
+                      projects={controller}
+                      assets={assets}
+                      texts={texts}
+                      textSnapshot={textSnapshot}
+                      onRestoreAsset={() =>
+                        selectProjectPage(
+                          assets?.getSnapshot().draft?.kind === "scene" ||
+                            assets?.getSnapshot().draft?.kind === "prop"
+                            ? "art"
+                            : "characters",
+                        )
+                      }
+                    />
+                  </ProjectOperations>
+                )}
+              </div>
+              {navigationError && (
+                <p className="detail-note drama-navigation-error" role="alert">
+                  {navigationError}
+                </p>
+              )}
               {!onOpenHostPage && (
                 <div className="drama-project-heading">
                   <h1>{details.project.title}</h1>
@@ -628,14 +707,17 @@ export function ShortDramaPersistentWorkbench({
                   onSelect={selectProjectPage}
                 />
                 <div className="drama-project-editor">
-                  <div className="panel-heading">
-                    <h2>
-                      {
-                        projectPagesFor(origin).find((item) => item.id === page)
-                          ?.title
-                      }
-                    </h2>
-                  </div>
+                  {page !== "characters" && page !== "art" && (
+                    <div className="panel-heading">
+                      <h2>
+                        {
+                          projectPagesFor(origin).find(
+                            (item) => item.id === page,
+                          )?.title
+                        }
+                      </h2>
+                    </div>
+                  )}
                   <SaveFeedback controller={controller} snapshot={snapshot} />
                   {archived && (
                     <p className="detail-note" role="status">
@@ -907,37 +989,41 @@ export function ShortDramaPersistentWorkbench({
                   )}
                 </div>
               </div>
-              <details className="drama-secondary-disclosure">
-                <summary>项目管理与待处理记录</summary>
-                <button
-                  className="button secondary"
-                  disabled={locked || snapshot.opening}
-                  onClick={() => void controller.setProjectState()}
-                >
-                  {archived ? "恢复项目" : "归档项目"}
-                </button>
-                {details && assets && (
-                  <ProjectAssetRecoveryActions
-                    assets={assets}
-                    projects={controller}
-                    onRestore={() =>
-                      selectProjectPage(
-                        assets?.getSnapshot().draft?.kind === "scene" ||
-                          assets?.getSnapshot().draft?.kind === "prop"
-                          ? "art"
-                          : "characters",
-                      )
-                    }
-                  />
-                )}
-                {details && <ConceptRecoveryActions controller={controller} />}
-                {details && (
-                  <ProjectTextRecoveryActions
-                    controller={texts}
-                    snapshot={textSnapshot}
-                  />
-                )}
-              </details>
+              {!onOpenHostPage && (
+                <details className="drama-secondary-disclosure">
+                  <summary>项目管理与待处理记录</summary>
+                  <button
+                    className="button secondary"
+                    disabled={locked || snapshot.opening}
+                    onClick={() => void controller.setProjectState()}
+                  >
+                    {archived ? "恢复项目" : "归档项目"}
+                  </button>
+                  {details && assets && (
+                    <ProjectAssetRecoveryActions
+                      assets={assets}
+                      projects={controller}
+                      onRestore={() =>
+                        selectProjectPage(
+                          assets?.getSnapshot().draft?.kind === "scene" ||
+                            assets?.getSnapshot().draft?.kind === "prop"
+                            ? "art"
+                            : "characters",
+                        )
+                      }
+                    />
+                  )}
+                  {details && (
+                    <ConceptRecoveryActions controller={controller} />
+                  )}
+                  {details && (
+                    <ProjectTextRecoveryActions
+                      controller={texts}
+                      snapshot={textSnapshot}
+                    />
+                  )}
+                </details>
+              )}
             </div>
           )}
           {!details && (

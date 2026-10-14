@@ -1,3 +1,4 @@
+import { UsersRound, Shapes, Plus } from "lucide-react";
 import {
   useEffect,
   useId,
@@ -101,9 +102,11 @@ export function ProjectAssetWorkbench({
           刷新资产
         </button>
       </div>
-      <p className="detail-note">
-        设定与参考图分别保存版本。先确认设定，再选用参考图；后续分镜引用明确的版本。
-      </p>
+      {(visibleAssets.length > 0 || content) && (
+        <p className="detail-note">
+          设定与参考图分别保存版本。先确认设定，再选用参考图。
+        </p>
+      )}
       {state.error && (
         <p className="detail-note" role="alert">
           {state.error}
@@ -128,7 +131,15 @@ export function ProjectAssetWorkbench({
           正在读取共享资产…
         </p>
       )}
-      <div className="detail-actions">
+      <div className="drama-asset-actions">
+        {readable && !editable && (
+          <span
+            className="drama-readonly-tag"
+            title="当前项目暂不能新增或编辑资产"
+          >
+            仅查看
+          </span>
+        )}
         {(Object.keys(labels) as ProjectAssetKind[])
           .filter(matchesPage)
           .map((kind) => (
@@ -138,7 +149,7 @@ export function ProjectAssetWorkbench({
               disabled={!editable || otherDraft}
               onClick={() => controller.newAsset(kind)}
             >
-              新建{labels[kind]}
+              <Plus size={14} /> 新建{labels[kind]}
             </button>
           ))}
       </div>
@@ -184,12 +195,22 @@ export function ProjectAssetWorkbench({
         </p>
       )}
       {state.phase === "ready" && visibleAssets.length === 0 && (
-        <p className="detail-note">
-          已加载资产中暂无{page === "characters" ? "角色" : "场景或道具"}。
-          {state.nextAssetId !== null
-            ? "可继续加载更多资产。"
-            : "可以新建设定，或让项目 Agent 帮你创作。"}
-        </p>
+        <section className="drama-asset-empty" aria-label="资产列表为空">
+          {page === "characters" ? (
+            <UsersRound size={28} />
+          ) : (
+            <Shapes size={28} />
+          )}
+          <h3>
+            {state.nextAssetId !== null ? "当前列表暂无" : "还没有"}
+            {page === "characters" ? "角色" : "场景与道具"}
+          </h3>
+          <p className="detail-note">
+            {state.nextAssetId !== null
+              ? "继续加载列表，查看其他资产。"
+              : "设定和参考图创建后，会显示在这里。"}
+          </p>
+        </section>
       )}
       {content && matchesPage(content.kind) && (
         <article className="drama-output-document" aria-label="资产正文">

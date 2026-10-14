@@ -1,0 +1,184 @@
+/* Integrated editing canvas: use the panel's full width and the host theme. */
+.drama-workbench[data-host-layout="integrated"] {
+  font-size: max(14px, var(--user-ui-font-size, 14px));
+  line-height: 1.65;
+}
+.drama-workbench[data-host-layout="integrated"] .drama-content {
+  width: 100%;
+  max-width: none;
+  align-items: stretch;
+  margin: 0;
+  padding: 20px;
+  gap: 20px;
+}
+.drama-workbench[data-host-layout="integrated"] .drama-project-focus {
+  width: 100%;
+  min-width: 0;
+  max-width: none;
+  margin: 0;
+  gap: 20px;
+}
+.drama-workbench .drama-stage-toolbar {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  min-width: 0;
+}
+.drama-workbench[data-host-layout="integrated"] .drama-stage-toolbar {
+  position: sticky;
+  top: 0;
+  z-index: 4;
+  margin: -20px -20px 0;
+  padding: 12px 20px;
+  border-bottom: 1px solid var(--border-strong, var(--border));
+  background: var(--bg);
+}
+.drama-workbench .drama-stage-toolbar .drama-stage-tabs {
+  flex: 1;
+  min-width: 0;
+  gap: 4px;
+  margin: 0;
+  padding: 0;
+  border: 0;
+  scrollbar-width: thin;
+}
+.drama-workbench .drama-stage-tabs button {
+  min-height: 36px;
+  padding: 7px 12px;
+  font-size: inherit;
+  font-weight: 500;
+  color: var(--text-muted);
+}
+.drama-workbench .drama-stage-tabs button[aria-current="page"] {
+  color: var(--text);
+  background: var(--control-surface-active, var(--surface-strong));
+  font-weight: 650;
+  box-shadow: inset 0 -2px 0 var(--accent, currentColor);
+}
+.drama-workbench[data-host-layout="integrated"] .drama-project-editor {
+  width: 100%;
+  min-width: 0;
+  gap: 20px;
+  padding: 20px;
+  border: 1px solid var(--border);
+  border-radius: 12px;
+  background: var(--surface);
+}
+.drama-workbench[data-host-layout="integrated"]
+  :is(.panel-heading h2, .drama-project-editor > .panel-heading h2) {
+  font-size: 20px;
+  line-height: 1.4;
+  font-weight: 650;
+  letter-spacing: -0.02em;
+}
+.drama-workbench[data-host-layout="integrated"] :is(.detail-note, .subtle) {
+  font-size: 13px;
+  line-height: 1.7;
+  color: var(--text-muted);
+}
+.drama-workbench[data-host-layout="integrated"] .button {
+  min-height: 36px;
+  padding: 7px 12px;
+  border-color: var(--border-strong, var(--border));
+  border-radius: 8px;
+}
+.drama-workbench[data-host-layout="integrated"] .button.icon {
+  width: 36px;
+  padding: 0;
+}
+.drama-workbench[data-host-layout="integrated"] :is(input, textarea, select) {
+  min-width: 0;
+  max-width: 100%;
+  font-size: inherit;
+}
+.drama-workbench .drama-project-operations {
+  position: relative;
+  flex: none;
+}
+.drama-workbench .drama-project-menu {
+  position: absolute;
+  top: calc(100% + 6px);
+  right: 0;
+  z-index: 8;
+  display: grid;
+  min-width: 168px;
+  padding: 5px;
+  border: 1px solid var(--border-strong, var(--border));
+  border-radius: 10px;
+  background: var(--surface);
+  box-shadow: var(--shadow);
+}
+.drama-workbench .drama-project-menu button {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  min-height: 38px;
+  padding: 8px 10px;
+  border: 0;
+  border-radius: 6px;
+  background: transparent;
+  color: var(--text);
+  text-align: left;
+}
+.drama-workbench .drama-project-menu button:hover {
+  background: var(--control-surface-hover);
+}
+.drama-workbench .drama-records-body {
+  display: grid;
+  gap: 16px;
+  padding-top: 16px;
+}
+.drama-workbench .drama-navigation-error {
+  padding: 10px 12px;
+  border-left: 3px solid var(--warning, currentColor);
+  background: var(--surface);
+}
+.drama-workbench .drama-asset-empty {
+  display: grid;
+  justify-items: center;
+  gap: 8px;
+  min-height: 190px;
+  padding: 32px 20px;
+  border: 1px dashed var(--border-strong, var(--border));
+  border-radius: 10px;
+  background: var(--bg);
+  text-align: center;
+}
+.drama-workbench .drama-asset-empty > svg {
+  color: var(--text-muted);
+  margin-bottom: 4px;
+}
+.drama-workbench .drama-asset-empty h3 {
+  font-size: 16px;
+  font-weight: 600;
+}
+.drama-workbench .drama-asset-actions {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  flex-wrap: wrap;
+}
+.drama-workbench .drama-readonly-tag {
+  padding: 2px 7px;
+  border: 1px solid var(--border);
+  border-radius: 5px;
+  font-size: 12px;
+  color: var(--text-muted);
+}
+@container drama-workbench (max-width: 480px) {
+  .drama-workbench[data-host-layout="integrated"] .drama-content {
+    padding: 14px;
+  }
+  .drama-workbench[data-host-layout="integrated"] .drama-stage-toolbar {
+    margin: -14px -14px 0;
+    padding: 10px 14px;
+    gap: 8px;
+  }
+  .drama-workbench[data-host-layout="integrated"] .drama-project-editor {
+    padding: 16px;
+  }
+  .drama-workbench .drama-stage-tabs button {
+    padding-inline: 10px;
+  }
+}

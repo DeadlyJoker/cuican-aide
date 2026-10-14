@@ -35,6 +35,7 @@ import { flushSync } from "react-dom";
 import { createRoot } from "react-dom/client";
 import { ShortDramaWorkbenchPreview } from "./workbench/ShortDramaWorkbenchPreview";
 import stylesheet from "./workbench/ShortDramaWorkbenchPreview.css";
+import panelStyles from "./workbench/ShortDramaPanel.css";
 import referenceImage from "./assets/crewon-krea2-reference.png";
 import { CreativeProjectController } from "./workbench/creative-project-controller";
 import { ShortDramaPersistentWorkbench } from "./workbench/ShortDramaPersistentWorkbench";
@@ -233,7 +234,7 @@ export default defineUiPlugin({
     const owner = root.ownerDocument.createElement("div");
     owner.dataset.shortDramaPlugin = "";
     const style = root.ownerDocument.createElement("style");
-    style.textContent = stylesheet;
+    style.textContent = stylesheet + panelStyles;
     const content = root.ownerDocument.createElement("div");
     for (const element of [owner, content])
       Object.assign(element.style, {
@@ -510,13 +511,16 @@ export default defineUiPlugin({
                 (next.data as { hostPresentation?: unknown } | null)
                   ?.hostPresentation
                   ? (page) => {
-                      void createPluginUiNavigationClient(services)
+                      return createPluginUiNavigationClient(services)
                         .openPage({
                           contributionId: "workbench",
                           mode: "reuse",
                           ...page,
                         })
-                        .catch(() => undefined);
+                        .then(
+                          () => true,
+                          () => false,
+                        );
                     }
                   : undefined
               }

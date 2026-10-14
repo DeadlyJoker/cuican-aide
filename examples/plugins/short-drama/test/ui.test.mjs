@@ -268,10 +268,21 @@ test("ships a unified self-contained UI and execution package with the original 
     assert.equal(bytes.byteLength, file.byteLength);
     assert.equal(createHash("sha256").update(bytes).digest("hex"), file.sha256);
   }
-  const css = await readFile(
-    new URL("../src/workbench/ShortDramaWorkbenchPreview.css", import.meta.url),
-    "utf8",
-  );
+  const css = (
+    await Promise.all([
+      readFile(
+        new URL(
+          "../src/workbench/ShortDramaWorkbenchPreview.css",
+          import.meta.url,
+        ),
+        "utf8",
+      ),
+      readFile(
+        new URL("../src/workbench/ShortDramaPanel.css", import.meta.url),
+        "utf8",
+      ),
+    ])
+  ).join("");
   assert.doesNotMatch(
     css,
     /(?:^|\n)\s*(?:body|html|:root|\.command-|\.screen-shell)/u,
