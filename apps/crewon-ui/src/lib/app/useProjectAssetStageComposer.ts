@@ -14,6 +14,7 @@ export function useProjectAssetStageComposer(
     briefRevision: number;
     episodeIds: readonly string[];
     active: boolean;
+    preferredAssetKind?: PublicProjectAssetStage["assetKind"];
     threadRevision: number | null;
     refresh: number;
     retained: ProjectAssetStageComposerSelection | null;
@@ -160,6 +161,10 @@ export function useProjectAssetStageComposer(
     input.binding?.state === "active" &&
     sourceOwner === owner &&
     available;
+  const selectedAssetKind =
+    input.preferredAssetKind === "scene" && assetKind === "prop"
+      ? "prop"
+      : (input.preferredAssetKind ?? assetKind);
   const selection: ProjectAssetStageComposerSelection | null =
     foreignRetained ||
     input.client === null ||
@@ -171,7 +176,7 @@ export function useProjectAssetStageComposer(
           binding: input.binding,
           stage: {
             kind: "assets",
-            assetKind,
+            assetKind: selectedAssetKind,
             briefRevision: input.briefRevision,
             script: scriptOwner === scriptSource ? script : null,
           },
@@ -179,7 +184,7 @@ export function useProjectAssetStageComposer(
   return {
     available: actual,
     selection,
-    assetKind: retained?.stage.assetKind ?? assetKind,
+    assetKind: retained?.stage.assetKind ?? selectedAssetKind,
     setAssetKind,
     episodeId: retained?.stage.script?.episodeId ?? episodeId,
     setEpisodeId,

@@ -1,3 +1,4 @@
+import { ProjectDirectoryStatus } from "./ProjectDirectoryStatus";
 import type { ProjectMediaOutputController } from "./ProjectMediaOutputController";
 import { ProjectMediaOutputWorkbench } from "./ProjectMediaOutputWorkbench";
 import type { ProjectMediaResultController } from "./ProjectMediaResultController";
@@ -141,7 +142,11 @@ export function ShortDramaPersistentWorkbench({
     input: Readonly<{
       key: string;
       title: string;
-      context: { projectId?: string; stage?: ShortDramaProjectPage; createOrigin?: "creative" | "novel" };
+      context: {
+        projectId?: string;
+        stage?: ShortDramaProjectPage;
+        createOrigin?: "creative" | "novel";
+      };
     }>,
   ): void;
   controller: CreativeProjectController;
@@ -366,7 +371,21 @@ export function ShortDramaPersistentWorkbench({
       >
         <div className="drama-sidebar-heading">
           <strong>项目</strong>
-          <button type="button" aria-label="新建项目" title="新建项目" onClick={() => onOpenHostPage?.({key:"new-project",title:"新建项目",context:{createOrigin:"creative"}})}><Plus size={16} /></button>
+          <button
+            type="button"
+            aria-label="新建项目"
+            title="新建项目"
+            onClick={() =>
+              onOpenHostPage?.({
+                key: "new-project",
+                title: "新建项目",
+                context: {},
+              })
+            }
+          >
+            <Plus size={16} />
+            新建项目
+          </button>
         </div>
         <button
           className="drama-sidebar-item"
@@ -378,9 +397,25 @@ export function ShortDramaPersistentWorkbench({
           我的项目
         </button>
         <div className="drama-sidebar-projects">
+          <ProjectDirectoryStatus
+            snapshot={snapshot}
+            onRetry={() => void controller.loadProjects(snapshot.state)}
+          />
           <div className="filter-tabs" aria-label="项目状态">
-            <button type="button" aria-pressed={snapshot.state === "active"} onClick={() => void controller.loadProjects("active")}>进行中</button>
-            <button type="button" aria-pressed={snapshot.state === "archived"} onClick={() => void controller.loadProjects("archived")}>已归档</button>
+            <button
+              type="button"
+              aria-pressed={snapshot.state === "active"}
+              onClick={() => void controller.loadProjects("active")}
+            >
+              进行中
+            </button>
+            <button
+              type="button"
+              aria-pressed={snapshot.state === "archived"}
+              onClick={() => void controller.loadProjects("archived")}
+            >
+              已归档
+            </button>
           </div>
           {snapshot.projects.map((project) => (
             <div key={project.projectId}>
@@ -401,41 +436,14 @@ export function ShortDramaPersistentWorkbench({
                 <span>{project.title}</span>
               </button>
               {hostPageContext?.projectId === project.projectId && (
-                <><ProjectConversationActions controller={conversations} /><nav aria-label="项目制作阶段">
-                  {projectPagesFor(
-                    foundationSnapshot?.origins.get(project.projectId) ?? null,
-                  ).map((item) => (
-                    <button
-                      key={item.id}
-                      className="drama-sidebar-item drama-sidebar-stage"
-                      onClick={() =>
-                        onOpenHostPage?.({
-                          key: `${project.projectId}:${item.id}`,
-                          title: item.title,
-                          context: {
-                            projectId: project.projectId,
-                            stage: item.id,
-                          },
-                        })
-                      }
-                    >
-                      {item.title}
-                    </button>
-                  ))}
-                </nav></>
+                <>
+                  <ProjectConversationActions controller={conversations} />
+
+                </>
               )}
             </div>
           ))}
         </div>
-        {snapshot.phase === "waiting" && <p role="status">正在读取项目…</p>}
-        {snapshot.phase === "unavailable" && (
-          <button
-            className="button secondary"
-            onClick={() => void controller.loadProjects()}
-          >
-            重新读取项目
-          </button>
-        )}
       </section>
     );
   return (
@@ -445,30 +453,32 @@ export function ShortDramaPersistentWorkbench({
       aria-label="AI 短剧工作台"
     >
       <div className="drama-main" inert={dialog !== null || newOrigin !== null}>
-        {!onOpenHostPage && <header className="drama-topbar" data-plugin-header-insets="inline">
-          <nav className="breadcrumbs" aria-label="AI 短剧路径">
-            <button
-              disabled={locked}
-              onClick={() => {
-                setShowProject(false);
-                controller.closeProject();
-              }}
-            >
-              AI 短剧
-            </button>
-            <ChevronRight size={13} />
-            <span>
-              {details
-                ? details.project.title
-                : snapshot.state === "archived"
-                  ? "已归档"
-                  : "我的项目"}
-            </span>
-          </nav>
-          <div className="topbar-actions">
-            <span className="preview-tag">创作工作台</span>
-          </div>
-        </header>}
+        {!onOpenHostPage && (
+          <header className="drama-topbar" data-plugin-header-insets="inline">
+            <nav className="breadcrumbs" aria-label="AI 短剧路径">
+              <button
+                disabled={locked}
+                onClick={() => {
+                  setShowProject(false);
+                  controller.closeProject();
+                }}
+              >
+                AI 短剧
+              </button>
+              <ChevronRight size={13} />
+              <span>
+                {details
+                  ? details.project.title
+                  : snapshot.state === "archived"
+                    ? "已归档"
+                    : "我的项目"}
+              </span>
+            </nav>
+            <div className="topbar-actions">
+              <span className="preview-tag">创作工作台</span>
+            </div>
+          </header>
+        )}
         {planningDraft && (
           <ProjectPlanningDraftReview
             proposal={planningDraft}
@@ -551,10 +561,31 @@ export function ShortDramaPersistentWorkbench({
             />
           ) : (
             <div className="drama-project-focus">
-              {!onOpenHostPage && <div className="drama-project-heading">
-                <h1>{details.project.title}</h1>
-                <ProjectConversationActions controller={conversations} />
-              </div>}
+              {onOpenHostPage && (
+                <nav className="drama-stage-tabs" aria-label="项目制作阶段">
+                  {projectPagesFor(origin).map((item) => (
+                    <button
+                      key={item.id}
+                      type="button"
+                      aria-current={page === item.id ? "page" : undefined}
+                      onClick={() => onOpenHostPage({
+                        key: `project:${details.project.projectId}`,
+                        title: details.project.title,
+                        context: {projectId: details.project.projectId, stage: item.id},
+                      })}
+                    >
+                      {item.title}
+                    </button>
+                  ))}
+                </nav>
+              )}
+
+              {!onOpenHostPage && (
+                <div className="drama-project-heading">
+                  <h1>{details.project.title}</h1>
+                  <ProjectConversationActions controller={conversations} />
+                </div>
+              )}
               <div
                 className="drama-project-layout"
                 data-navigation-expanded={navigationExpanded}
@@ -917,6 +948,13 @@ export function ShortDramaPersistentWorkbench({
           }
           onClose={() => setNewOrigin(null)}
           onCreated={() => {
+            const project = controller.getSnapshot().details?.project;
+            if (project)
+              onOpenHostPage?.({
+                key: `project:${project.projectId}`,
+                title: project.title,
+                context: { projectId: project.projectId, stage: "overview" },
+              });
             setNewOrigin(null);
             setShowProject(true);
             setPage("overview");

@@ -951,7 +951,9 @@ export function App({
     setTerminalProcessId,
     terminalCommand,
   });
+  const [pluginConversationPage, setPluginConversationPage] = useState<Readonly<{pluginId: string; context: unknown}> | null>(null);
   const projectConversationComposer = useProjectConversationComposer({
+    pluginPage: pluginConversationPage,
     mediaGenerationPresenter: controlRuntimeConnected
       ? controlThreadRuntime
       : null,
@@ -1405,6 +1407,7 @@ export function App({
           <AppCommandShellRoute
             showSignedOutAccount={localManagementAccess !== null}
             hostModules={installedPlugins.hostModules}
+            onPluginConversationPageChange={setPluginConversationPage}
             hostModuleAvailability={installedPlugins.hostModuleAvailability}
             hostModuleRequest={installedPlugins.planningRequest}
             teamProgress={

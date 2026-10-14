@@ -6,7 +6,10 @@ import {
   useRef,
   type ReactNode,
 } from "react";
-import type { PluginNavigationIcon } from "@crewon/contracts/plugins";
+import type {
+  PluginUiJsonValue,
+  PluginNavigationIcon,
+} from "@crewon/contracts/plugins";
 import { classNames } from "./commandWorkspaceUtils";
 import type { AgentPlatformSnapshot } from "../../lib/agent-platform/agentPlatformClient";
 
@@ -25,6 +28,8 @@ export type CommandWorkspaceHostModule = Readonly<{
   conversationThreadIds?: readonly string[];
   navigationLabel?: string;
   pageId?: string;
+  /** Presentation only; never a project or tool authority. */
+  pageContext?: PluginUiJsonValue;
   createPage?(): void;
   closePage?(): void;
   activatePage?(): void;

@@ -291,10 +291,23 @@ export function AppCommandShellRoute({
   const closeCapability = useCallback(() => {
     if (pluginPanel) {
       pluginPanel.close();
+      setActiveOverlay(
+        capabilityDrawer.open
+          ? "workbench"
+          : taskDetailOpen
+            ? "task-detail"
+            : null,
+      );
+      return;
     }
     setActiveOverlay(taskDetailOpen ? "task-detail" : null);
     capabilityDrawer.onClose();
-  }, [capabilityDrawer.onClose, pluginPanel, taskDetailOpen]);
+  }, [
+    capabilityDrawer.open,
+    capabilityDrawer.onClose,
+    pluginPanel,
+    taskDetailOpen,
+  ]);
   const closeCapabilityAndRestoreFocus = useCallback(() => {
     closeCapability();
     window.requestAnimationFrame(() => {

@@ -1,3 +1,7 @@
+import {
+  projectConversationPageStage,
+  type PluginConversationPage,
+} from "./projectConversationPageStage";
 import { ProjectMediaGenerationComposer } from "./ProjectMediaGenerationComposer";
 import type { ProjectMediaGenerationPresenter } from "../control-runtime/controlProjectMediaGeneration";
 import { useProjectMediaInputStageComposer } from "./useProjectMediaInputStageComposer";
@@ -30,6 +34,7 @@ type Snapshot = Readonly<{
 /** Reads the actual selected Thread. Workspace hints and unrelated selected tasks supply no authority. */
 export function useProjectConversationComposer(
   input: Readonly<{
+    pluginPage?: PluginConversationPage | null;
     client: ControlApiClient | null;
     threadId: string | null;
     threadRevision: number | null;
@@ -171,17 +176,28 @@ export function useProjectConversationComposer(
     input.retainedMediaInputSelection?.binding.threadId === owner.threadId
       ? input.retainedMediaInputSelection
       : null;
+  const pageStage = projectConversationPageStage(
+    input.pluginPage,
+    actual?.binding ?? null,
+  );
+  const displayPageStage =
+    retained === null && retainedAsset === null && retainedMedia === null
+      ? pageStage
+      : null;
+  const effectiveKind = pageStage?.kind ?? kind;
   const selectedKind =
     retainedMedia?.stage.kind ??
     retainedAsset?.stage.kind ??
     retained?.stage.kind ??
-    kind;
+    effectiveKind;
   const assets = useProjectAssetStageComposer({
     client: owner.client,
     binding: actual?.binding ?? null,
     briefRevision: actual?.briefRevision ?? 0,
     episodeIds: actual?.outline?.episodes.map((e) => e.episodeId) ?? [],
     active: selectedKind === "assets",
+    preferredAssetKind:
+      pageStage && "assetKind" in pageStage ? pageStage.assetKind : undefined,
     threadRevision: input.threadRevision,
     refresh,
     retained: retainedAsset,
@@ -198,12 +214,12 @@ export function useProjectConversationComposer(
   });
   const stage: ProjectConversationStage =
     retained?.stage ??
-    (kind === "assets" || kind === "media-input"
+    (effectiveKind === "assets" || effectiveKind === "media-input"
       ? { kind: "discussion" }
-      : kind === "discussion"
-        ? { kind }
-        : kind === "brief" || kind === "outline"
-          ? { kind, briefRevision: actual?.briefRevision ?? 0 }
+      : effectiveKind === "discussion"
+        ? { kind: effectiveKind }
+        : effectiveKind === "brief" || effectiveKind === "outline"
+          ? { kind: effectiveKind, briefRevision: actual?.briefRevision ?? 0 }
           : {
               kind: "script",
               episodeId: episode,
@@ -246,48 +262,58 @@ export function useProjectConversationComposer(
             : undefined
         }
       >
-        <span>{zh ? "项目创作" : "Project creation"}</span>{" "}
-        <select
-          aria-label={zh ? "创作阶段" : "Creation stage"}
-          value={selectedKind}
-          disabled={
-            busy ||
-            retained !== null ||
-            retainedAsset !== null ||
-            retainedMedia !== null
-          }
-          onChange={(event) =>
-            setKind(
-              event.target.value as
-                | ProjectConversationStage["kind"]
-                | "assets"
-                | "media-input",
-            )
-          }
-        >
-          <option value="discussion">
-            {zh ? "讨论（只读）" : "Discussion (read only)"}
-          </option>
-          <option value="brief" disabled={actual.briefRevision < 1}>
-            {zh ? "需求" : "Brief"}
-          </option>
-          <option value="outline" disabled={actual.briefRevision < 1}>
-            {zh ? "大纲" : "Outline"}
-          </option>
-          <option value="script" disabled={actual.outline === null}>
-            {zh ? "分集剧本" : "Episode script"}
-          </option>
-          {assets.available || retainedAsset !== null ? (
-            <option value="assets" disabled={actual.briefRevision < 1}>
-              {zh ? "角色、场景与道具" : "Characters, scenes and props"}
+        <span role={displayPageStage ? "status" : undefined}>
+          {displayPageStage
+            ? zh
+              ? `当前阶段：${displayPageStage.label}`
+              : `Current stage: ${displayPageStage.label}`
+            : zh
+              ? "项目创作"
+              : "Project creation"}
+        </span>{" "}
+        {!displayPageStage && (
+          <select
+            aria-label={zh ? "创作阶段" : "Creation stage"}
+            value={selectedKind}
+            disabled={
+              busy ||
+              retained !== null ||
+              retainedAsset !== null ||
+              retainedMedia !== null
+            }
+            onChange={(event) =>
+              setKind(
+                event.target.value as
+                  | ProjectConversationStage["kind"]
+                  | "assets"
+                  | "media-input",
+              )
+            }
+          >
+            <option value="discussion">
+              {zh ? "讨论（只读）" : "Discussion (read only)"}
             </option>
-          ) : null}
-          {media.available || retainedMedia !== null ? (
-            <option value="media-input" disabled={actual.briefRevision < 1}>
-              {zh ? "准备生成输入" : "Prepare media input"}
+            <option value="brief" disabled={actual.briefRevision < 1}>
+              {zh ? "需求" : "Brief"}
             </option>
-          ) : null}
-        </select>
+            <option value="outline" disabled={actual.briefRevision < 1}>
+              {zh ? "大纲" : "Outline"}
+            </option>
+            <option value="script" disabled={actual.outline === null}>
+              {zh ? "分集剧本" : "Episode script"}
+            </option>
+            {assets.available || retainedAsset !== null ? (
+              <option value="assets" disabled={actual.briefRevision < 1}>
+                {zh ? "角色、场景与道具" : "Characters, scenes and props"}
+              </option>
+            ) : null}
+            {media.available || retainedMedia !== null ? (
+              <option value="media-input" disabled={actual.briefRevision < 1}>
+                {zh ? "准备生成输入" : "Prepare media input"}
+              </option>
+            ) : null}
+          </select>
+        )}
         {selectedKind === "media-input" ? (
           <ProjectMediaInputStageControls
             media={media}
@@ -311,9 +337,24 @@ export function useProjectConversationComposer(
                 )
               }
             >
-              <option value="character">{zh ? "角色" : "Character"}</option>
-              <option value="scene">{zh ? "场景" : "Scene"}</option>
-              <option value="prop">{zh ? "道具" : "Prop"}</option>
+              <option
+                value="character"
+                disabled={displayPageStage?.label === "美术"}
+              >
+                {zh ? "角色" : "Character"}
+              </option>
+              <option
+                value="scene"
+                disabled={displayPageStage?.label === "角色"}
+              >
+                {zh ? "场景" : "Scene"}
+              </option>
+              <option
+                value="prop"
+                disabled={displayPageStage?.label === "角色"}
+              >
+                {zh ? "道具" : "Prop"}
+              </option>
             </select>
             <select
               aria-label={zh ? "资产剧本来源" : "Asset script source"}
@@ -424,7 +465,7 @@ export function useProjectConversationComposer(
         failure !== null ||
         loading ||
         (retained === null &&
-          kind === "script" &&
+          effectiveKind === "script" &&
           (actual?.outline === null ||
             !actual?.outline?.episodes.some(
               (entry) => entry.episodeId === episode,

@@ -442,6 +442,9 @@ type CommandWorkspaceProps = {
   onOpenTaskChanges?: () => void;
   taskDetailTrigger?: ReactNode;
   projectConversationComposer?: ReactNode;
+  onPluginConversationPageChange?(
+    page: Readonly<{ pluginId: string; context: unknown }> | null,
+  ): void;
   /**
    * Goal steering the selected thread, when the backend reports one. The
    * composer renders it as an editable bar above the input.
@@ -909,6 +912,7 @@ export function CommandWorkspace({
   onOpenTaskChanges,
   taskDetailTrigger = null,
   projectConversationComposer = null,
+  onPluginConversationPageChange,
   onTaskDetailAvailabilityChange,
   threadGoal = null,
   threadGoalBusy = false,
@@ -1019,6 +1023,20 @@ export function CommandWorkspace({
   const pluginSceneActive = Boolean(
     hostModuleView.active && hostModuleView.pluginId,
   );
+  useEffect(() => {
+    onPluginConversationPageChange?.(
+      activePluginModule?.pluginId
+        ? {
+            pluginId: activePluginModule.pluginId,
+            context: activePluginModule.pageContext,
+          }
+        : null,
+    );
+  }, [
+    onPluginConversationPageChange,
+    activePluginModule?.pluginId,
+    activePluginModule?.pageContext,
+  ]);
   const pluginConversationMissing = Boolean(
     pluginSceneActive &&
       !activePluginModule?.conversationThreadIds?.includes(

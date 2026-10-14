@@ -297,6 +297,7 @@ const result = await build({
   format: "esm",
   platform: "browser",
   target: "es2022",
+  minify: true,
   jsx: "automatic",
   loader: { ".css": "text", ".png": "file" },
   assetNames: "assets/[name]-[hash]",

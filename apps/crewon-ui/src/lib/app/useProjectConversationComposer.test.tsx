@@ -1,3 +1,4 @@
+import type { PluginConversationPage } from "./projectConversationPageStage";
 // @vitest-environment happy-dom
 import { act } from "react";
 import { createRoot } from "react-dom/client";
@@ -130,10 +131,12 @@ async function fixture(
     threadId,
     revision,
     retainedSelection,
+    pluginPage,
   }: {
     threadId: string;
     revision: number;
     retainedSelection?: ProjectConversationComposerSelection | null;
+    pluginPage?: PluginConversationPage | null;
   }) {
     latest = useProjectConversationComposer({
       client,
@@ -142,6 +145,7 @@ async function fixture(
       locale: "zh",
       busy: false,
       retainedSelection,
+      pluginPage,
     });
     return latest.view;
   }
@@ -149,6 +153,7 @@ async function fixture(
     threadId = "actual-project-thread",
     revision = 1,
     retainedSelection?: ProjectConversationComposerSelection | null,
+    pluginPage?: PluginConversationPage | null,
   ) => {
     await act(async () => {
       root.render(
@@ -156,6 +161,7 @@ async function fixture(
           threadId={threadId}
           revision={revision}
           retainedSelection={retainedSelection}
+          pluginPage={pluginPage}
         />,
       );
       await new Promise((r) => setTimeout(r, 0));
@@ -616,4 +622,50 @@ it("a changed plugin source explains recovery and reloads the same Thread after 
   expect(f.current().selection?.binding.workspaceId).toBe(binding.workspaceId);
   expect(f.current().selection?.binding.revision).toBe(2);
   expect(f.container.querySelector('[role="alert"]')).toBeNull();
+});
+
+it("right page navigation changes the bound composer stage without executing or replacing its thread; pending retry keeps its original stage", async () => {
+  let writes = 0;
+  const f = await fixture(async (url, options) => {
+    if (options?.method && options.method !== "GET") ++writes;
+    const path = new URL(String(url)).pathname;
+    return Response.json(
+      path.endsWith("project-conversation")
+        ? { binding }
+        : path.endsWith("outline")
+          ? { view: publicTextView }
+          : { project },
+    );
+  });
+  const page = (stage: string, id = projectId): PluginConversationPage => ({
+    pluginId: binding.source.pluginId,
+    context: { projectId: id, stage },
+  });
+  await f.render(binding.threadId, 1, null, page("outline"));
+  expect(f.current().selection?.stage).toEqual({
+    kind: "outline",
+    briefRevision: 1,
+  });
+  expect(f.container.textContent).toContain("当前阶段：改编大纲");
+  await f.render(binding.threadId, 1, null, page("script"));
+  expect(f.current().selection?.stage.kind).toBe("script");
+  expect(f.current().selection?.binding.threadId).toBe(binding.threadId);
+  await f.render(binding.threadId, 1, null, page("characters"));
+  expect(f.current().assetSelection?.stage.assetKind).toBe("character");
+  await f.render(binding.threadId, 1, null, page("art"));
+  expect(f.current().assetSelection?.stage.assetKind).toBe("scene");
+  await f.render(
+    binding.threadId,
+    1,
+    {
+      binding: { ...binding, state: "active" },
+      stage: { kind: "outline", briefRevision: 1 },
+    },
+    page("script"),
+  );
+  expect(f.current().selection?.stage.kind).toBe("outline");
+  await f.render(binding.threadId, 1, null, page("outline", "another-project"));
+  expect(f.current().selection?.stage.kind).toBe("discussion");
+  expect(f.container.textContent).not.toContain("当前阶段：");
+  expect(writes).toBe(0);
 });

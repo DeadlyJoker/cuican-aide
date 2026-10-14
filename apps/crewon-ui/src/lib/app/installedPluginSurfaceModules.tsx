@@ -54,6 +54,7 @@ export function installedPluginSurfaceModules(
       ...(page
         ? {
             pageId: page.pageId,
+            pageContext: page.context,
             closePage: () => input.navigation.closeFromHost(page.pageId),
             activatePage: () => input.navigation.activateFromHost(page.pageId),
           }
