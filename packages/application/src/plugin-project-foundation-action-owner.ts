@@ -1,3 +1,4 @@
+import { capturePluginProjectFoundationScope } from "./plugin-project-foundation-scope.ts";
 import {
   CREWON_PROJECT_FOUNDATION_SERVICE,
   CREWON_PROJECT_FOUNDATION_API_VERSION,
@@ -56,6 +57,7 @@ export interface PluginProjectFoundationActionAuthorizationPort {
 }
 export type PluginProjectFoundationActionOwnerDependencies = Readonly<{
   foundations: ProjectFoundationApplicationService;
+  creationOwnership?: "plugin-project-v1";
   publications: readonly PluginProjectFoundationActionPublication[];
   authorization: PluginProjectFoundationActionAuthorizationPort;
 }>;
@@ -75,6 +77,7 @@ export function isPluginProjectFoundationActionOwner(
 export class PluginProjectFoundationActionOwner {
   readonly actions: PluginUiActionPort;
   readonly committedMetadata: PluginUiCommittedMetadataPort;
+  readonly #creationOwnership: boolean;
   readonly #foundations: ReturnType<typeof captureFoundations>;
   readonly #publications: readonly PluginProjectFoundationActionPublication[];
   readonly #authorize: PluginProjectFoundationActionAuthorizationPort["authorize"];
@@ -88,9 +91,18 @@ export class PluginProjectFoundationActionOwner {
     try {
       const value = uiRecord(input, [
         "foundations",
+        ...(Object.hasOwn(input, "creationOwnership")
+          ? ["creationOwnership"]
+          : []),
         "publications",
         "authorization",
       ]);
+      if (
+        value.creationOwnership !== undefined &&
+        value.creationOwnership !== "plugin-project-v1"
+      )
+        throw new Error("plugin_project_foundation_ownership_invalid");
+      this.#creationOwnership = value.creationOwnership === "plugin-project-v1";
       this.#foundations = captureFoundations(value.foundations);
       this.#publications = captureFoundationPublications(value.publications);
       this.#authorize = captureFoundationAuthorization(value.authorization);
@@ -242,7 +254,7 @@ export class PluginProjectFoundationActionOwner {
     this.#pending++;
     try {
       await authority.assertCurrent();
-      const result = await this.#dispatch(snapshot.context, request, authority);
+      const result = await this.#dispatch(invocation, request, authority);
       if (result.kind === "read") await authority.assertCurrent();
       const output = parsePluginUiJsonValue(
         projectFoundationUiCodec.parseResponse(result.output, request),
@@ -329,61 +341,61 @@ export class PluginProjectFoundationActionOwner {
     request: ProjectFoundationUiRequest,
     authority: ProjectFoundationCommitAuthority,
   ): Promise<Readonly<{ kind: "read" | "metadata"; output: unknown }>> {
+    const projectScope = this.#creationOwnership
+      ? capturePluginProjectFoundationScope(context, authority)
+      : undefined;
+    const foundations =
+      projectScope === undefined
+        ? this.#foundations
+        : captureFoundations(
+            this.#foundations.bindPluginProjectScope(projectScope),
+          );
     const actor = context.actor,
-      options = Object.freeze({ authority });
+      options = Object.freeze({
+        authority,
+        ...(projectScope === undefined ? {} : { projectScope }),
+      });
     switch (request.action) {
       case "crewon.project-foundation.v1.createProject":
         return {
           kind: "metadata",
           output: foundationActionMutation(
-            await this.#foundations.createProject(
-              actor,
-              request.input,
-              options,
-            ),
+            await foundations.createProject(actor, request.input, options),
           ),
         };
       case "crewon.project-foundation.v1.updateParameters":
         return {
           kind: "metadata",
           output: foundationActionMutation(
-            await this.#foundations.updateParameters(
-              actor,
-              request.input,
-              options,
-            ),
+            await foundations.updateParameters(actor, request.input, options),
           ),
         };
       case "crewon.project-foundation.v1.appendSource":
         return {
           kind: "metadata",
           output: foundationActionMutation(
-            await this.#foundations.appendSource(actor, request.input, options),
+            await foundations.appendSource(actor, request.input, options),
           ),
         };
       case "crewon.project-foundation.v1.saveProposal":
         return {
           kind: "metadata",
           output: foundationActionMutation(
-            await this.#foundations.saveProposal(actor, request.input, options),
+            await foundations.saveProposal(actor, request.input, options),
           ),
         };
       case "crewon.project-foundation.v1.confirmProposal":
         return {
           kind: "metadata",
           output: foundationActionMutation(
-            await this.#foundations.confirmProposal(
-              actor,
-              request.input,
-              options,
-            ),
+            await foundations.confirmProposal(actor, request.input, options),
           ),
         };
       case "crewon.project-foundation.v1.chooseDirectScript":
         return {
           kind: "metadata",
           output: foundationActionMutation(
-            await this.#foundations.chooseCreativeStartMode(
+            await foundations.chooseCreativeStartMode(
               actor,
               request.input,
               options,
@@ -391,10 +403,7 @@ export class PluginProjectFoundationActionOwner {
           ),
         };
       case "crewon.project-foundation.v1.getFoundation": {
-        const value = await this.#foundations.getFoundation(
-          actor,
-          request.input,
-        );
+        const value = await foundations.getFoundation(actor, request.input);
         return {
           kind: "read",
           output: {
@@ -404,7 +413,7 @@ export class PluginProjectFoundationActionOwner {
         };
       }
       case "crewon.project-foundation.v1.getSource": {
-        const value = await this.#foundations.getSource(actor, request.input);
+        const value = await foundations.getSource(actor, request.input);
         return {
           kind: "read",
           output: {
@@ -416,11 +425,11 @@ export class PluginProjectFoundationActionOwner {
         return {
           kind: "read",
           output: {
-            page: await this.#foundations.readSourcePage(actor, request.input),
+            page: await foundations.readSourcePage(actor, request.input),
           },
         };
       case "crewon.project-foundation.v1.listSourceChapters": {
-        const value = await this.#foundations.listSourceChapters(
+        const value = await foundations.listSourceChapters(
           actor,
           request.input,
         );
@@ -438,7 +447,7 @@ export class PluginProjectFoundationActionOwner {
         };
       }
       case "crewon.project-foundation.v1.getProposal": {
-        const value = await this.#foundations.getProposal(actor, request.input);
+        const value = await foundations.getProposal(actor, request.input);
         return {
           kind: "read",
           output: {
@@ -447,10 +456,7 @@ export class PluginProjectFoundationActionOwner {
         };
       }
       case "crewon.project-foundation.v1.listProposals": {
-        const value = await this.#foundations.listProposals(
-          actor,
-          request.input,
-        );
+        const value = await foundations.listProposals(actor, request.input);
         return {
           kind: "read",
           output: foundationActionPage({
@@ -472,6 +478,7 @@ function captureFoundations(input: unknown) {
     throw new Error("plugin_project_foundation_service_invalid");
   const proto = ProjectFoundationApplicationService.prototype;
   return Object.freeze({
+    bindPluginProjectScope: proto.bindPluginProjectScope.bind(input),
     createProject: proto.createProject.bind(input),
     updateParameters: proto.updateParameters.bind(input),
     appendSource: proto.appendSource.bind(input),

@@ -1,5 +1,11 @@
+import { capturePostgresFoundationOwnedAccess } from "./project-foundation-owned-postgres.ts";
+import {
+  qualifyPluginProjectFoundationScope,
+  type PluginProjectFoundationScope,
+} from "@crewon/application";
 import {
   assertPostgresSavedSourceUploadLegacyAccess,
+  assertPostgresSavedSourceUploadProjectAccess,
   foundationResultSavedSource,
 } from "./project-source-upload-legacy-access.ts";
 import type { Pool, PoolClient } from "pg";
@@ -82,8 +88,11 @@ export async function transactPostgresFoundationLegacy<
   context: Context,
   body: Body<T>,
   authority?: ProjectFoundationCommitAuthority,
+  projectScope?: PluginProjectFoundationScope,
 ): Promise<T> {
   context.assertOpen();
+  if (projectScope !== undefined)
+    qualifyPluginProjectFoundationScope(projectScope).assertActive();
   await assertProjectFoundationCommitCurrent(authority);
   assertProjectFoundationCommitActive(authority);
   context.assertOpen();
@@ -91,12 +100,30 @@ export async function transactPostgresFoundationLegacy<
   try {
     await client.query("BEGIN ISOLATION LEVEL READ COMMITTED");
     await lockPostgresCreativeProjectLegacySchema(client, context.schema);
-    const access = await capturePostgresCreativeProjectLegacyAccess(
-      client,
-      context.schema,
-    );
+    const owned =
+      projectScope === undefined
+        ? undefined
+        : await capturePostgresFoundationOwnedAccess(
+            client,
+            context.schema,
+            projectScope,
+            authority,
+          );
+    const access =
+      owned ??
+      (await capturePostgresCreativeProjectLegacyAccess(
+        client,
+        context.schema,
+      ));
     context.assertOpen();
     const result = await body(client, access);
+    if (
+      owned !== undefined &&
+      result != null &&
+      result.kind === "create-project" &&
+      result.disposition === "committed"
+    )
+      await owned.insertOwnership(result);
     await assertProjectFoundationCommitTransactionCurrent(authority);
     assertProjectFoundationCommitActive(authority);
     await assertPostgresFoundationRunCommit(
@@ -111,12 +138,21 @@ export async function transactPostgresFoundationLegacy<
       );
     const savedSource =
       result == null ? null : foundationResultSavedSource(result);
-    if (savedSource !== null)
-      await assertPostgresSavedSourceUploadLegacyAccess(
-        client,
-        context.schema,
-        savedSource,
-      );
+    if (savedSource !== null) {
+      if (owned === undefined)
+        await assertPostgresSavedSourceUploadLegacyAccess(
+          client,
+          context.schema,
+          savedSource,
+        );
+      else
+        await assertPostgresSavedSourceUploadProjectAccess(
+          client,
+          context.schema,
+          savedSource,
+          access,
+        );
+    }
     // The final asynchronous SQL check must not weaken the original authorization fence.
     await assertProjectFoundationCommitTransactionCurrent(authority);
     assertProjectFoundationCommitActive(authority);

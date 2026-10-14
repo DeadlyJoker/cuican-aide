@@ -1,3 +1,4 @@
+import { qualifyPluginProjectFoundationScope } from "./plugin-project-foundation-scope.ts";
 import {
   parseInstalledPluginPackage,
   parsePluginSelection,
@@ -29,7 +30,9 @@ export function captureProjectFoundationCommitAuthority(
   options: ProjectFoundationCommitOptions | undefined,
 ): ProjectFoundationCommitAuthority | undefined {
   if (options === undefined) return undefined;
-  const fields = ownDataFields(options, ["authority"]);
+  const fields = ownDataFields(options, ["authority", "projectScope"]);
+  if (options.projectScope !== undefined)
+    qualifyPluginProjectFoundationScope(options.projectScope);
   if (fields.authority === undefined) return undefined;
   const input = fields.authority;
   const methods = ownDataFields(

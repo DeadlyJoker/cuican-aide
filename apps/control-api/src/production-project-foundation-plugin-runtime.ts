@@ -84,6 +84,9 @@ export function createProductionProjectFoundationPluginRuntime(
   const currentRequests = requests;
   const runtime = createProjectFoundationPluginUiRuntime({
     foundations: foundation.service,
+    ...(input.projects.pluginUi?.creationOwnership === undefined
+      ? {}
+      : { creationOwnership: input.projects.pluginUi.creationOwnership }),
     configuration: foundation.pluginUi,
     ...(input.hostUiServices === undefined
       ? {}

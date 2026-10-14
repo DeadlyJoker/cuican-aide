@@ -1,3 +1,4 @@
+import type { ProjectFoundationApplicationService } from "./project-foundation-application-service.ts";
 import { parsePluginPackageDescriptor } from "@crewon/contracts/plugins";
 import {
   PROJECT_FOUNDATION_UI_METHOD_ACTIONS,
@@ -29,6 +30,8 @@ import {
  * The explicitly trusted source recipes prove Application behavior, not durable ledger or SQL admission. */
 export async function projectFoundationActionFixture(
   options: Readonly<{
+    foundationService?: ProjectFoundationApplicationService;
+    creationOwnership?: "plugin-project-v1";
     assertActive?: PluginProjectFoundationActionAuthorizationPort["assertActive"];
   }> = {},
 ) {
@@ -73,7 +76,10 @@ export async function projectFoundationActionFixture(
     },
   ];
   const owner = new PluginProjectFoundationActionOwner({
-    foundations: foundations.service,
+    foundations: options.foundationService ?? foundations.service,
+    ...(options.creationOwnership === undefined
+      ? {}
+      : { creationOwnership: options.creationOwnership }),
     publications,
     authorization: {
       ...(options.assertActive === undefined

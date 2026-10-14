@@ -29,6 +29,7 @@ export function createProjectFoundationPluginUiRuntime(
   input: Readonly<{
     configuration: ProjectFoundationPluginUiConfig;
     foundations: ProjectFoundationApplicationService;
+    creationOwnership?: "plugin-project-v1";
     authorization: PluginProjectFoundationActionOwnerDependencies["authorization"];
     hostUiServices?: PluginUiHostServiceAvailabilityPort;
   }>,
@@ -42,6 +43,9 @@ export function createProjectFoundationPluginUiRuntime(
     foundations: input.foundations,
     publications: configuration.publications,
     authorization: input.authorization,
+    ...(input.creationOwnership === undefined
+      ? {}
+      : { creationOwnership: input.creationOwnership }),
   });
   const hostUiServices = appendProjectFoundationUiServiceAvailability({
     foundations: Object.freeze({

@@ -1,3 +1,4 @@
+import type { PluginProjectFoundationScope } from "./plugin-project-foundation-scope.ts";
 import type {
   CreativeProject,
   InstalledPluginPackage,
@@ -64,6 +65,7 @@ export type ProjectFoundationCommitAuthority = Readonly<{
 }>;
 
 export type ProjectFoundationCommitOptions = Readonly<{
+  projectScope?: PluginProjectFoundationScope;
   authority?: ProjectFoundationCommitAuthority;
 }>;
 

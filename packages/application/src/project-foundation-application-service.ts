@@ -1,3 +1,10 @@
+import type { PluginProjectReadStoreBinding } from "./creative-project-store-port.ts";
+import { bindFoundationPluginStores } from "./project-foundation-plugin-store-view.ts";
+import {
+  qualifyPluginProjectFoundationScope,
+  type PluginProjectFoundationScope,
+} from "./plugin-project-foundation-scope.ts";
+import { derivePluginProjectCreationReceipt } from "./plugin-project-creation-receipt.ts";
 import {
   appendProjectBriefRevision,
   confirmProjectProposal,
@@ -74,7 +81,8 @@ import {
 } from "./project-source-adoption-authority.ts";
 
 export type ProjectFoundationApplicationDependencies = Readonly<{
-  projects: Pick<CreativeProjectStore, "loadProject">;
+  projects: Pick<CreativeProjectStore, "loadProject"> &
+    Partial<PluginProjectReadStoreBinding>;
   store: ProjectFoundationStore;
   sourcePreparation: ProjectSourcePreparationPort;
   authorization: CreativeProjectAuthorizationPort;
@@ -123,6 +131,13 @@ export class ProjectFoundationApplicationService {
         this.#authorize(actor, "creativeProject:read", projectId),
     });
     actualFoundationServices.add(this);
+  }
+  /** Internal facade over the same original stores, bound to a genuine installed invocation. */
+  bindPluginProjectScope(scope: PluginProjectFoundationScope) {
+    return new ProjectFoundationApplicationService({
+      ...this.#dependencies,
+      ...bindFoundationPluginStores(this.#dependencies, scope),
+    });
   }
   createProject(
     actor: ActorContext,
@@ -213,8 +228,13 @@ export class ProjectFoundationApplicationService {
           : "creativeProject:write";
       const current = () => this.#authorize(actor, action, projectId);
       const authority = bindPolicy(captured, current);
-      const commitOptions = Object.freeze({ authority });
-      const receipt = Object.freeze({
+      const commitOptions = Object.freeze({
+        authority,
+        ...(options?.projectScope === undefined
+          ? {}
+          : { projectScope: options.projectScope }),
+      });
+      const externalReceipt = Object.freeze({
         idempotencyKey: command.idempotencyKey,
         requestDigest: this.#dependencies.digester.sha256(
           extensionCanonicalJson({
@@ -225,6 +245,18 @@ export class ProjectFoundationApplicationService {
           }),
         ),
       });
+      const receipt =
+        options?.projectScope === undefined
+          ? externalReceipt
+          : derivePluginProjectCreationReceipt(
+              {
+                scope: qualifyPluginProjectFoundationScope(options.projectScope)
+                  .scope,
+                entryPoint: "project-foundation",
+                externalReceipt,
+              },
+              this.#dependencies.digester,
+            ).receipt;
       await assertProjectFoundationCommitCurrent(authority);
       const previous = await this.#dependencies.store.loadMutationReceipt(
         { actor, kind, receipt },

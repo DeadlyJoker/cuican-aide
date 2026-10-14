@@ -50,6 +50,9 @@ export function bindSourceAdoption(
   if (adoption === null) return options;
   const original = options.authority;
   return Object.freeze({
+    ...(options.projectScope === undefined
+      ? {}
+      : { projectScope: options.projectScope }),
     authority: Object.freeze({
       async assertCurrent() {
         await assertProjectFoundationCommitCurrent(original);

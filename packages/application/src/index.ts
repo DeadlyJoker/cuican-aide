@@ -377,3 +377,8 @@ export {
 } from "./plugin-project-read-scope.ts";
 
 export { scopedPluginMetadataReceipt } from "./plugin-project-mutation-scope-support.ts";
+
+export {
+  qualifyPluginProjectFoundationScope,
+  type PluginProjectFoundationScope,
+} from "./plugin-project-foundation-scope.ts";

@@ -1,4 +1,9 @@
 import {
+  foundationProjectReadSource,
+  type PluginProjectFoundationScope,
+} from "./plugin-project-foundation-scope.ts";
+import type { ProjectFoundationUiRequest } from "@crewon/contracts/project-foundation";
+import {
   captureProjectFoundationRunReadAuthority,
   type ProjectFoundationRunReadAuthority,
 } from "./project-foundation-run-commit-authority.ts";
@@ -112,6 +117,7 @@ type Qualified = Readonly<{
           digest?: string;
         }>;
       }>
+    | ProjectFoundationUiRequest
     | ReturnType<typeof parseCreativeProjectUiActionRequest>
     | ReturnType<typeof parseProjectConversationsActionRequest>
     | Readonly<{
@@ -588,4 +594,16 @@ export function qualifyPluginProjectMutationScope(
   const source = qualifyPluginProjectReadScope(ref);
   if (source.purpose !== "mutation") unavailable();
   return source;
+}
+
+/** Internal Foundation adapter; ownership and actual invocation come from the opaque source. */
+export function issueFoundationProjectReadScope(
+  reference: PluginProjectFoundationScope,
+): PluginProjectReadScope {
+  const source = foundationProjectReadSource(reference);
+  const ref: PluginProjectReadScope = Object.freeze({
+    version: "crewon.plugin-project-read-scope.v1",
+  });
+  references.set(ref, source);
+  return ref;
 }

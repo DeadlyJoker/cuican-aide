@@ -1,3 +1,8 @@
+import { captureSqliteFoundationOwnedAccess } from "./project-foundation-owned-sqlite.ts";
+import {
+  qualifyPluginProjectFoundationScope,
+  type PluginProjectFoundationScope,
+} from "@crewon/application";
 import {
   bindProjectFoundationReadView,
   readSqliteOwnedProjectFoundation,
@@ -351,6 +356,8 @@ export class SqliteProjectFoundationStore implements ProjectFoundationStore {
       identity.actor,
       identity.kind,
     );
+    if (options?.projectScope !== undefined)
+      qualifyPluginProjectFoundationScope(options.projectScope).assertActive();
     await this.#externalCurrent(authority, qualification);
     return this.#transaction(
       (access) =>
@@ -359,6 +366,7 @@ export class SqliteProjectFoundationStore implements ProjectFoundationStore {
           : null,
       authority,
       qualification,
+      options?.projectScope,
     );
   }
   async commitCreation(
@@ -368,6 +376,7 @@ export class SqliteProjectFoundationStore implements ProjectFoundationStore {
     return this.#commit(
       prepareFoundation("create-project", input),
       captureProjectFoundationCommitAuthority(options),
+      options?.projectScope,
     );
   }
   async commitProposal(
@@ -377,6 +386,7 @@ export class SqliteProjectFoundationStore implements ProjectFoundationStore {
     return this.#commit(
       prepareFoundation("save-proposal", input),
       captureProjectFoundationCommitAuthority(options),
+      options?.projectScope,
     );
   }
   async commitFoundationChange(
@@ -391,6 +401,7 @@ export class SqliteProjectFoundationStore implements ProjectFoundationStore {
     return this.#commit(
       prepareFoundation(kind, input),
       captureProjectFoundationCommitAuthority(options),
+      options?.projectScope,
     );
   }
 
@@ -405,6 +416,7 @@ export class SqliteProjectFoundationStore implements ProjectFoundationStore {
   async #commit(
     prepared: FoundationPrepared,
     authority: ProjectFoundationCommitAuthority | undefined,
+    projectScope?: PluginProjectFoundationScope,
   ): Promise<ProjectFoundationMutationResult> {
     const sourceAdoption = prepareFoundationSourceAdoption(
       prepared,
@@ -421,6 +433,8 @@ export class SqliteProjectFoundationStore implements ProjectFoundationStore {
       prepared.actor,
       prepared.kind,
     );
+    if (projectScope !== undefined)
+      qualifyPluginProjectFoundationScope(projectScope).assertActive();
     await this.#externalCurrent(authority, qualification);
     this.#assertOpen();
     return this.#transaction(
@@ -516,6 +530,7 @@ export class SqliteProjectFoundationStore implements ProjectFoundationStore {
       },
       authority,
       qualification,
+      projectScope,
     );
   }
   #project(
@@ -815,12 +830,22 @@ export class SqliteProjectFoundationStore implements ProjectFoundationStore {
     work: (access: CreativeProjectLegacyAccess) => T,
     authority?: ProjectFoundationCommitAuthority,
     qualification?: Qualification,
+    projectScope?: PluginProjectFoundationScope,
   ): T {
     this.#assertOpen();
     assertProjectFoundationCommitActive(authority);
     this.#database.exec("BEGIN IMMEDIATE");
     try {
-      const access = captureSqliteCreativeProjectLegacyAccess(this.#database);
+      const owned =
+        projectScope === undefined
+          ? undefined
+          : captureSqliteFoundationOwnedAccess(
+              this.#database,
+              projectScope,
+              authority,
+            );
+      const access =
+        owned ?? captureSqliteCreativeProjectLegacyAccess(this.#database);
       if (qualification !== undefined) {
         assertSqlitePluginInstallationPinSchema(this.#database);
         const installation = admitSqlitePluginInstallationPin(
@@ -837,16 +862,31 @@ export class SqliteProjectFoundationStore implements ProjectFoundationStore {
         "receipt-publication",
       );
       const result = work(access);
+      if (
+        owned !== undefined &&
+        result != null &&
+        result.kind === "create-project" &&
+        result.disposition === "committed"
+      )
+        owned.insertOwnership(result);
       if (result != null) {
         access.assertProject(
           foundationLegacyScope(result.project, result.project.projectId),
         );
         const savedSource = foundationResultSavedSource(result);
-        if (savedSource !== null)
-          assertSqliteSavedSourceUploadLegacyAccess(
-            this.#database,
-            savedSource,
-          );
+        if (savedSource !== null) {
+          if (owned === undefined)
+            assertSqliteSavedSourceUploadLegacyAccess(
+              this.#database,
+              savedSource,
+            );
+          else
+            assertSqliteSavedSourceUploadProjectAccess(
+              this.#database,
+              savedSource,
+              access,
+            );
+        }
       }
       assertProjectFoundationCommitActive(authority);
       assertSqliteFoundationRunCommit(
