@@ -75,6 +75,8 @@ export type PluginUiModuleImporter = (url: string) => Promise<unknown>;
 export type PluginUiMountPhase =
   | "authorize-import"
   | "import"
+  | "entry-downloaded"
+  | "entry-revalidated"
   | "authorize-instance"
   | "mount"
   | "authorize-publish";
@@ -133,6 +135,7 @@ export class TrustedPluginUiLoader {
           url: string;
           lease: PluginUiLease;
           signal: AbortSignal;
+          onEntryRead?(kind: "entry-downloaded" | "entry-revalidated"): void;
         }>,
       ) => Promise<unknown>)
     | undefined;
@@ -153,6 +156,7 @@ export class TrustedPluginUiLoader {
           url: string;
           lease: PluginUiLease;
           signal: AbortSignal;
+          onEntryRead?(kind: "entry-downloaded" | "entry-revalidated"): void;
         }>,
       ) => Promise<unknown>;
       routeStyle?: PluginUiAssetRouteStyle;
@@ -351,6 +355,7 @@ export class TrustedPluginUiLoader {
                 url,
                 lease: candidate.lease,
                 signal: candidate.controller.signal,
+                onEntryRead: progress,
               })
             : this.#importer(url);
         }),

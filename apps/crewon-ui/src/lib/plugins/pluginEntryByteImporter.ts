@@ -13,6 +13,7 @@ export type PluginUiEntryImport = Readonly<{
   url: string;
   lease: PluginUiLease;
   signal: AbortSignal;
+  onEntryRead?(kind: "entry-downloaded" | "entry-revalidated"): void;
 }>;
 export function createPluginEntryByteImporter(input: {
   ownerKey: string;
@@ -36,6 +37,7 @@ export function createPluginEntryByteImporter(input: {
     url,
     lease,
     signal,
+    onEntryRead,
   }: PluginUiEntryImport): Promise<unknown> => {
     const entry = lease.descriptor.entrypoints.ui;
     const file = lease.descriptor.files.find((v) => v.path === entry?.path);
@@ -87,8 +89,10 @@ export function createPluginEntryByteImporter(input: {
       },
     });
     let bytes: ArrayBuffer;
-    if (response.status === 304 && cached) bytes = cached;
-    else {
+    if (response.status === 304 && cached) {
+      bytes = cached;
+      onEntryRead?.("entry-revalidated");
+    } else {
       if (
         response.status !== 200 ||
         !/^(application|text)\/javascript(?:;|$)/iu.test(
@@ -123,6 +127,7 @@ export function createPluginEntryByteImporter(input: {
       bytes = value.buffer;
       if (length !== file.byteLength || (await hash(bytes)) !== file.sha256)
         throw new Error("plugin_ui_asset_integrity_failed");
+      onEntryRead?.("entry-downloaded");
       // Persist immutable bytes in the background; quota or storage contention
       // must not hold an already verified online module on the loading screen.
       void store.put(key, bytes).catch(() => undefined);
