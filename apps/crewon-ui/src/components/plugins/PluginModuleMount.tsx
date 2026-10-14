@@ -93,7 +93,18 @@ export function PluginModuleMount({
       !controller.signal.aborted &&
       epoch.current === generation &&
       committedOwner.current === owner;
+    const started = performance.now();
+    const timing: Readonly<[number, string]>[] = [];
+    const traceLoading =
+      new URLSearchParams(location.search).get("pluginLoadTiming") === "1";
+    const progress = (phase: string) => {
+      if (!traceLoading || !isCurrent() || !root.current) return;
+      timing.push([Math.round(performance.now() - started), phase]);
+      root.current.dataset.pluginLoadPhase = phase;
+      root.current.dataset.pluginLoadTiming = JSON.stringify(timing.slice(-8));
+    };
     const mount = async () => {
+      progress("acquire");
       const lease = await acquireMount(controller.signal);
       if (!isCurrent() || !root.current) {
         await loader.closeUnusedMount(lease);
@@ -105,22 +116,27 @@ export function PluginModuleMount({
         lease,
         props: initialProps,
         signal: controller.signal,
+        onProgress: progress,
       });
       if (!isCurrent()) {
         await handle.stop();
         return;
       }
       published = true;
-      current.current = { handle, owner };
+      const owned = { handle, owner };
+      current.current = owned;
+      progress("published");
       if (pending.current === controller) pending.current = null;
-      if (latestProps.current !== initialProps) {
-        try {
-          await handle.update(latestProps.current);
-        } catch (error) {
-          if (!(error instanceof PluginUiUpdateDeferredError)) throw error;
-        }
-      }
+      // Publication has already passed the loader's live authorization fences.
+      // Readiness must not wait for a props update: subsequent hydration can
+      // supersede that update, otherwise a mounted module stays waiting forever.
       if (isCurrent()) mountedHandler.current?.();
+      if (latestProps.current !== initialProps) {
+        void handle.update(latestProps.current).catch((error) => {
+          if (committedOwner.current === owner && current.current === owned)
+            report(error);
+        });
+      }
     };
     void mount().catch((error) => {
       if (isCurrent()) report(error);

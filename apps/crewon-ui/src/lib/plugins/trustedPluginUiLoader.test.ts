@@ -33,6 +33,30 @@ async function mount(harness: ReturnType<typeof uiHarness>, lease = uiLease()) {
 }
 
 describe("trusted UI loader (explicit importer unit tests)", () => {
+  it("phase diagnostics cannot skip live fences or interrupt publication", async () => {
+    const h = uiHarness();
+    const phases: string[] = [];
+    const handle = await h.loader.mount({
+      root: h.root,
+      lease: uiLease(),
+      props: uiProps(),
+      onProgress(phase) {
+        phases.push(phase);
+        throw new Error("diagnostic sink failed");
+      },
+    });
+    handles.push(handle);
+    expect(phases).toEqual([
+      "authorize-import",
+      "import",
+      "authorize-instance",
+      "mount",
+      "authorize-publish",
+    ]);
+    expect(h.ports.validateMount).toHaveBeenCalledTimes(3);
+    expect(h.instances).toHaveLength(1);
+    expect(h.root.querySelector("[data-plugin-ui-root]")).not.toBeNull();
+  });
   it("keeps stop idempotent when an abort listener synchronously re-enters cleanup", async () => {
     const h = uiHarness();
     const handle = await mount(h);

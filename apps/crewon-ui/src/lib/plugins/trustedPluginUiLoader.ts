@@ -72,11 +72,19 @@ export async function importTrustedPluginUiModule(
 }
 
 export type PluginUiModuleImporter = (url: string) => Promise<unknown>;
+export type PluginUiMountPhase =
+  | "authorize-import"
+  | "import"
+  | "authorize-instance"
+  | "mount"
+  | "authorize-publish";
 export type PluginUiMountInput = Readonly<{
   root: HTMLElement;
   lease: PluginUiLease;
   props: PluginUiProps;
   signal?: AbortSignal;
+  /** Host diagnostics only; never supplied to plugin code or used as authorization. */
+  onProgress?(phase: PluginUiMountPhase): void;
 }>;
 export type PluginUiMountHandle = Readonly<{
   identity: PluginIdentity;
@@ -305,12 +313,23 @@ export class TrustedPluginUiLoader {
       candidate.unlinkSignal = () =>
         input.signal?.removeEventListener("abort", abort);
     }
+    const progress = (phase: PluginUiMountPhase) => {
+      this.#current(candidate);
+      try {
+        input.onProgress?.(phase);
+      } catch {
+        // Observability cannot change an authorization or lifecycle outcome.
+      }
+    };
     try {
+      progress("authorize-import");
       await this.#fence(candidate);
+      progress("import");
       const imported = await this.#await(
         candidate,
         Promise.resolve().then(() => this.#importer(url)),
       );
+      progress("authorize-instance");
       await this.#fence(candidate);
       if (!imported || typeof imported !== "object")
         uiFailure("plugin_ui_module_invalid");
@@ -342,6 +361,7 @@ export class TrustedPluginUiLoader {
               }),
             }),
       });
+      progress("mount");
       candidate.instanceTask = Promise.resolve()
         .then(() => {
           this.#current(candidate);
@@ -358,6 +378,7 @@ export class TrustedPluginUiLoader {
         });
       const instance = await this.#await(candidate, candidate.instanceTask);
       candidate.instance = instance;
+      progress("authorize-publish");
       await this.#fence(candidate);
       this.#current(candidate);
       const previous = slot.current;

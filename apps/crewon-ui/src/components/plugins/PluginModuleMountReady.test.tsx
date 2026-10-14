@@ -106,17 +106,17 @@ describe("PluginModuleMount completion notification", () => {
     expect(
       h.instances[0].update.mock.calls.map(([props]) => props.data),
     ).toEqual([{ title: "old-current" }]);
-    expect(originalCallback).not.toHaveBeenCalled();
+    expect(originalCallback).toHaveBeenCalledTimes(1);
     expect(newCallback).not.toHaveBeenCalled();
     replacement.resolve(uiLease(2));
     await act(settle);
     expect(newCallback).toHaveBeenCalledTimes(1);
-    expect(originalCallback).not.toHaveBeenCalled();
+    expect(originalCallback).toHaveBeenCalledTimes(1);
     expect(onError).not.toHaveBeenCalled();
     expect(mounted.container.textContent).toContain("new-owner");
   });
 
-  it("notifies the latest host callback only after publication and the awaited current props update", async () => {
+  it("notifies after authorized publication without waiting for slow or superseded props delivery", async () => {
     const imported = deferred<unknown>();
     const updating = deferred<void>();
     const h = uiHarness(() => imported.promise);
@@ -170,10 +170,12 @@ describe("PluginModuleMount completion notification", () => {
       mounted.container.querySelector("[data-plugin-ui-root]"),
     ).not.toBeNull();
     expect(originalCallback).not.toHaveBeenCalled();
-    expect(latestCallback).not.toHaveBeenCalled();
+    expect(latestCallback).toHaveBeenCalledTimes(1);
+    await render(uiProps({ title: "最终宿主内容" }), latestCallback);
+    expect(latestCallback).toHaveBeenCalledTimes(1);
     updating.resolve();
     await act(settle);
-    expect(mounted.container.textContent).toContain("最新宿主内容");
+    expect(mounted.container.textContent).toContain("最终宿主内容");
     expect(originalCallback).not.toHaveBeenCalled();
     expect(latestCallback).toHaveBeenCalledTimes(1);
     expect(onError).not.toHaveBeenCalled();
