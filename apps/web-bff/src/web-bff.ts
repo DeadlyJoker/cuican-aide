@@ -324,6 +324,7 @@ export function createWebBff(config: {
           upstream = await boundedProjectConversationProxyResponse({
             upstream,
             signal: upstreamSignal,
+            maximumBytes: conversationPolicy.responseMaxBytes,
           });
         } catch {
           return errorResponse(502, "control_api_response_invalid");

@@ -1,5 +1,11 @@
 import { projectConversationStageSources } from "./project-conversation-stage-sources.ts";
 import { conversationStageProjectReader } from "./project-conversation-stage-project-reader.ts";
+import {
+  conversationContextProjectReader,
+  readProjectConversationContextResponse,
+  readProjectConversationPublicBinding,
+} from "./project-conversation-context-reader.ts";
+import type { ProjectFoundationStore } from "./project-foundation-store-port.ts";
 import { resolvePluginProjectWorkspaceTarget } from "./plugin-project-workspace-target.ts";
 import { projectConversationCall } from "./project-conversation-call.ts";
 import { captureProjectConversationDependencies } from "./project-conversation-dependencies.ts";
@@ -17,6 +23,7 @@ import {
   type ProjectConversationsResponses,
   type ProjectConversationsUiMethod,
   type PublicProjectConversationBinding,
+  type ProjectConversationContextResponse,
 } from "@crewon/contracts/project-conversations";
 import {
   createProjectConversationBinding,
@@ -65,7 +72,6 @@ import {
   assertProjectConversationActor,
 } from "./project-conversation-authority.ts";
 import { ApplicationError } from "./application-error.ts";
-import { readProjectConversationBinding } from "./project-conversation-binding-reader.ts";
 import { creativeOwner } from "./creative-project-application-support.ts";
 export type ProjectConversationApplicationDependencies = Readonly<{
   conversations: ProjectConversationStore;
@@ -79,6 +85,10 @@ export type ProjectConversationApplicationDependencies = Readonly<{
     | "loadRevision"
     | "loadOutlineSourceRevision"
     | "bindProjectReads"
+  >;
+  foundations?: Pick<
+    ProjectFoundationStore,
+    "loadFoundation" | "bindProjectReads"
   >;
   tasks: Pick<
     ExtensionTaskApplicationService,
@@ -319,8 +329,35 @@ export class ProjectConversationApplicationService {
     actor: ActorContext,
     input: ProjectConversationsRequests["getBinding"],
     authority: ProjectConversationCommitAuthority,
+    options: Readonly<{ projectReadScope?: PluginProjectReadScope }> = {},
   ): Promise<ProjectConversationsResponses["getBinding"]> {
-    return this.#getBinding(actor, input, authority, this.#d.projects);
+    const projects =
+      options.projectReadScope === undefined
+        ? this.#d.projects
+        : await conversationContextProjectReader({
+            projects: this.#d.projects,
+            authority,
+            threadId: input.threadId,
+            scope: options.projectReadScope,
+          });
+    return this.#getBinding(actor, input, authority, projects);
+  }
+  async getContext(
+    actor: ActorContext,
+    input: ProjectConversationsRequests["getBinding"],
+    authority: ProjectConversationCommitAuthority,
+    options: Readonly<{ projectReadScope?: PluginProjectReadScope }> = {},
+  ): Promise<ProjectConversationContextResponse> {
+    return projectConversationCall(() =>
+      readProjectConversationContextResponse({
+        dependencies: this.#d,
+        actor,
+        authority,
+        ...options,
+        readBinding: (current) =>
+          this.getBinding(actor, input, current, options),
+      }),
+    );
   }
   async #getBinding(
     actor: ActorContext,
@@ -331,24 +368,14 @@ export class ProjectConversationApplicationService {
     return projectConversationCall(async () => {
       const request = this.#input("getBinding", input),
         q = await this.#authority(actor, authority),
-        b = await readProjectConversationBinding({
+        result = await readProjectConversationPublicBinding({
+          dependencies: this.#d,
           authority: q,
           threadId: request.threadId,
-          conversations: this.#d.conversations,
-          readProject: (projectId) =>
-            this.#project(q, projectId, "creativeProject:read", projects),
+          projects,
           readThread: (binding) => this.#thread(q, binding),
-          assertProjectCurrent: (projectId) =>
-            authorizeConversationProject({
-              authority: q,
-              projectId,
-              action: "creativeProject:read",
-              authorization: this.#d.authorization,
-            }),
         });
-      return this.#output("getBinding", request, {
-        binding: b === null ? null : this.#public(b),
-      });
+      return this.#output("getBinding", request, result);
     });
   }
   async listConversations(

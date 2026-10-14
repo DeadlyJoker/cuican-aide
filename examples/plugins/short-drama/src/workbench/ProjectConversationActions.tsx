@@ -3,8 +3,10 @@ import type { ProjectConversationController } from "./ProjectConversationControl
 
 export function ProjectConversationActions({
   controller,
+  presentation = "manual",
 }: {
   controller: ProjectConversationController;
+  presentation?: "automatic" | "manual";
 }) {
   const snapshot = useSyncExternalStore(
     controller.subscribe,
@@ -12,6 +14,7 @@ export function ProjectConversationActions({
     controller.getSnapshot,
   );
   if (!snapshot.projectId) return null;
+  const automatic = presentation === "automatic";
   const active = snapshot.bindings.find(
     (binding) => binding.state === "active",
   );
@@ -19,6 +22,17 @@ export function ProjectConversationActions({
     active !== undefined &&
     snapshot.sourceRefreshThreadId === active.threadId &&
     !snapshot.pendingSourceRefresh;
+  const connecting =
+    snapshot.resolvingWorkspace ||
+    snapshot.creating ||
+    snapshot.openingThreadId !== null ||
+    snapshot.refreshingSource ||
+    snapshot.automaticConnecting;
+  const status = automatic
+    ? snapshot.openedThreadId
+      ? "项目对话已就绪"
+      : snapshot.notice
+    : snapshot.notice;
   return (
     <section className="drama-agent-entry" aria-label="项目 Agent 对话">
       {snapshot.phase === "waiting" && (
@@ -26,9 +40,9 @@ export function ProjectConversationActions({
           正在等待模块就绪…
         </p>
       )}
-      {snapshot.phase === "loading" && (
+      {(snapshot.phase === "loading" || (automatic && connecting)) && (
         <p className="detail-note" role="status">
-          正在读取项目对话…
+          {automatic ? "正在连接项目对话…" : "正在读取项目对话…"}
         </p>
       )}
       {snapshot.error && (
@@ -36,55 +50,78 @@ export function ProjectConversationActions({
           {snapshot.error}
         </p>
       )}
-      {snapshot.notice && (
+      {status && (!automatic || (!connecting && !snapshot.error)) && (
         <p className="detail-note" role="status">
-          {snapshot.notice}
+          {status}
         </p>
       )}
       <div className="detail-actions">
-        <button
-          className="button primary"
-          disabled={
-            activeSourceExpired
-              ? !controller.canRefreshSource
-              : active
-                ? controller.locked || snapshot.phase !== "ready"
-                : !controller.canCreate
-          }
-          onClick={() =>
-            void (activeSourceExpired && active
-              ? controller.refreshSourceAndOpen(active.threadId)
-              : active
-                ? controller.open(active.threadId)
-                : controller.begin())
-          }
-        >
-          {snapshot.creating || snapshot.openingThreadId
-            ? "正在打开…"
-            : activeSourceExpired
-              ? "更新关联并进入"
-              : active
-                ? "继续与 Agent 对话"
-                : "开始与 Agent 对话"}
-        </button>
-        {snapshot.phase === "unavailable" && (
+        {!automatic && (
           <button
-            className="button secondary"
-            onClick={() => void controller.refresh()}
+            className="button primary"
+            disabled={
+              activeSourceExpired
+                ? !controller.canRefreshSource
+                : active
+                  ? controller.locked || snapshot.phase !== "ready"
+                  : !controller.canCreate
+            }
+            onClick={() =>
+              void (activeSourceExpired && active
+                ? controller.refreshSourceAndOpen(active.threadId)
+                : active
+                  ? controller.open(active.threadId)
+                  : controller.begin())
+            }
           >
-            重新连接
+            {snapshot.creating || snapshot.openingThreadId
+              ? "正在打开…"
+              : activeSourceExpired
+                ? "更新关联并进入"
+                : active
+                  ? "继续与 Agent 对话"
+                  : "开始与 Agent 对话"}
           </button>
         )}
-        {snapshot.pendingCreation && (
+        {automatic &&
+          activeSourceExpired &&
+          active &&
+          !connecting &&
+          controller.canRefreshSource && (
+            <button
+              className="button secondary"
+              disabled={!controller.canRefreshSource}
+              onClick={() =>
+                void controller.refreshSourceAndOpen(active.threadId)
+              }
+            >
+              更新关联并重新连接
+            </button>
+          )}
+        {(automatic ? snapshot.error : snapshot.phase === "unavailable") &&
+          !connecting &&
+          !snapshot.pendingCreation &&
+          !snapshot.pendingSourceRefresh &&
+          !activeSourceExpired && (
+            <button
+              className="button secondary"
+              onClick={() =>
+                void (automatic ? controller.reconnect() : controller.refresh())
+              }
+            >
+              重新连接
+            </button>
+          )}
+        {snapshot.pendingCreation && (!automatic || !connecting) && (
           <button
             className="button secondary"
-            disabled={snapshot.creating}
+            disabled={!controller.canRetryCreation}
             onClick={() => void controller.retryCreation()}
           >
-            重试原创建请求
+            {automatic ? "重新连接" : "重试原创建请求"}
           </button>
         )}
-        {snapshot.pendingSourceRefresh && (
+        {snapshot.pendingSourceRefresh && (!automatic || !connecting) && (
           <button
             className="button secondary"
             disabled={
@@ -94,7 +131,11 @@ export function ProjectConversationActions({
             }
             onClick={() => void controller.retrySourceRefresh()}
           >
-            {snapshot.refreshingSource ? "正在更新关联…" : "重试原关联更新"}
+            {automatic
+              ? "重试关联更新"
+              : snapshot.refreshingSource
+                ? "正在更新关联…"
+                : "重试原关联更新"}
           </button>
         )}
       </div>

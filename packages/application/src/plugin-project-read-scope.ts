@@ -25,6 +25,7 @@ import {
   type PluginProjectWorkspaceOwnerScope,
 } from "@crewon/domain";
 import { parseCreativeProjectUiActionRequest } from "@crewon/contracts/plugins";
+import { parseProjectTextId } from "@crewon/contracts";
 import { ApplicationError } from "./application-error.ts";
 import type { PluginUiActionContext } from "./plugin-ui-ports.ts";
 import { capturePluginUiInvocationCommitAuthority } from "./plugin-ui-invocation-authority.ts";
@@ -120,6 +121,10 @@ type Qualified = Readonly<{
     | ProjectFoundationUiRequest
     | ReturnType<typeof parseCreativeProjectUiActionRequest>
     | ReturnType<typeof parseProjectConversationsActionRequest>
+    | Readonly<{
+        action: "crewon.project-conversation-context.v1";
+        input: Readonly<{ projectId: string; threadId: string }>;
+      }>
     | Readonly<{
         action: typeof PROJECT_WORKSPACE_TARGET_ACTION;
         input: ReturnType<typeof parseProjectWorkspaceTargetRequest>;
@@ -568,6 +573,67 @@ export function issuePluginProjectConversationStageReadScope(
     },
   });
   source.assertActive();
+  references.set(ref, source);
+  return ref;
+}
+
+/** Private authenticated Host read, limited to one actual bound Thread and its project. No invocation or execution grant is fabricated. */
+export function issuePluginProjectConversationContextReadScope(
+  input: Readonly<{
+    authority: ProjectConversationCommitAuthority;
+    projectId: string;
+    threadId: string;
+  }>,
+): PluginProjectReadScope {
+  const authority = captureProjectConversationAuthority(input.authority);
+  const request = Object.freeze({
+    action: "crewon.project-conversation-context.v1" as const,
+    input: Object.freeze({
+      projectId: parseProjectTextId(input.projectId),
+      threadId: parseProjectTextId(input.threadId),
+    }),
+  });
+  const pin = authority.pin;
+  const source: Qualified = Object.freeze({
+    purpose: "read",
+    scope: parsePluginProjectWorkspaceOwnerScope({
+      tenantId: pin.tenantId,
+      spaceId: pin.spaceId,
+      principalId: pin.principalId,
+      actorId: pin.actorId,
+      profileId: pin.profileId,
+      pluginId: pin.pluginId,
+      publisherId: pin.publisherId,
+    }),
+    snapshot: Object.freeze({
+      pin,
+      context: Object.freeze({
+        selection: authority.selection,
+        package: authority.package,
+      }),
+      fingerprint: extensionCanonicalJson({ pin, request }),
+    }),
+    request,
+    methods: Object.freeze([
+      "loadProject",
+      "loadBrief",
+      "loadOutline",
+      "loadOutlineSourceRevision",
+      "loadRevision",
+      "loadFoundation",
+    ]),
+    assertActive: authority.assertActive,
+    assertCurrent: async () => {
+      authority.assertActive();
+      await authority.assertCurrent();
+      await authority.assertTransactionCurrent();
+      authority.assertActive();
+    },
+  });
+  source.assertActive();
+  const ref: PluginProjectReadScope = Object.freeze({
+    version: "crewon.plugin-project-read-scope.v1",
+  });
   references.set(ref, source);
   return ref;
 }

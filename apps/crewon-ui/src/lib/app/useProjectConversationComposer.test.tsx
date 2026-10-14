@@ -100,6 +100,7 @@ function deferred<T>() {
 async function fixture(
   fetch: typeof globalThis.fetch,
   outlineProtocol: "legacy" | "v2" = "legacy",
+  contextProtocol: "legacy" | "current" = "legacy",
 ) {
   const container = document.createElement("div");
   document.body.append(container);
@@ -109,8 +110,12 @@ async function fixture(
     accessToken: "user-token",
     csrfToken: "csrf",
     fetch: (url, options) =>
-      outlineProtocol === "legacy" &&
-      new URL(String(url)).pathname.startsWith("/api/v2/")
+      (contextProtocol === "legacy" &&
+        new URL(String(url)).pathname.endsWith(
+          "project-conversation/context",
+        )) ||
+      (outlineProtocol === "legacy" &&
+        new URL(String(url)).pathname.startsWith("/api/v2/"))
         ? Promise.resolve(
             Response.json(
               {
@@ -246,6 +251,76 @@ it("mixed outline history reads every adopted episode page without promoting the
     kind: "script",
     outline: { artifactId: "outline", contentRevision: 1 },
   });
+});
+it("protected project composer uses only its actual bound Thread context and sends nothing on a stage click", async () => {
+  const calls: string[] = [];
+  const f = await fixture(
+    async (url) => {
+      const path = new URL(String(url)).pathname;
+      calls.push(path);
+      if (path.endsWith("project-conversation/context"))
+        return Response.json({
+          context: {
+            binding,
+            projectRevision: 2,
+            briefRevision: 1,
+            outline: {
+              artifactId: "outline",
+              contentRevision: 1,
+              episodes: [{ episodeId: "episode/中文", title: "第一集" }],
+            },
+          },
+        });
+      throw new Error("protected_project_must_not_use_ordinary_reads");
+    },
+    "v2",
+    "current",
+  );
+  expect(f.current().blocked).toBe(false);
+  expect(f.current().selection).toMatchObject({
+    binding,
+    stage: { kind: "discussion" },
+  });
+  const stage = f.container.querySelector("select")!;
+  await act(async () => {
+    stage.value = "script";
+    stage.dispatchEvent(new Event("change", { bubbles: true }));
+  });
+  expect(f.current().selection?.stage).toMatchObject({
+    kind: "script",
+    episodeId: "episode/中文",
+    outline: { artifactId: "outline", contentRevision: 1 },
+  });
+  expect(
+    calls.filter((path) => path.endsWith("project-conversation/context")),
+  ).toHaveLength(1);
+  expect(
+    calls.some(
+      (path) => path.includes("/creative-projects/") || path.endsWith("stages"),
+    ),
+  ).toBe(false);
+});
+it("protected context authorization failure blocks without falling back to ordinary project reads", async () => {
+  const calls: string[] = [];
+  const f = await fixture(
+    async (url) => {
+      calls.push(new URL(String(url)).pathname);
+      return Response.json(
+        {
+          error: {
+            code: "project_conversation_authority_changed",
+            message: "denied",
+          },
+        },
+        { status: 403 },
+      );
+    },
+    "v2",
+    "current",
+  );
+  expect(f.current().blocked).toBe(true);
+  expect(f.current().selection).toBe(null);
+  expect(calls).toHaveLength(1);
 });
 it("a v2 authorization failure blocks the original project composer without silently falling back", async () => {
   let legacyReads = 0;

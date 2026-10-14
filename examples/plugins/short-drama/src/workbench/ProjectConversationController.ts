@@ -15,14 +15,22 @@ export type CreationWorkspace = Readonly<{
   workspaceId: string | null;
   name: string | null;
 }>;
+type WorkspaceResolver = (
+  input: Readonly<{ projectId: string }>,
+  options: Readonly<{ signal: AbortSignal }>,
+) => Promise<Readonly<{ projectId: string; workspaceId: string }>>;
 export type ConversationSnapshot = Readonly<{
   projectId: string | null;
   phase: "waiting" | "loading" | "ready" | "unavailable";
   bindings: readonly PublicProjectConversationBinding[];
   nextThreadId: string | null;
   workspace: CreationWorkspace | null;
+  resolvingWorkspace: boolean;
   creating: boolean;
   openingThreadId: string | null;
+  openedThreadId: string | null;
+  automaticOpen: boolean;
+  automaticConnecting: boolean;
   pendingCreation: CreateInput | null;
   sourceRefreshThreadId: string | null;
   refreshingSource: boolean;
@@ -41,6 +49,7 @@ export class ProjectConversationController {
     | "refreshSource"
   >;
   readonly #physicalWritesPending: () => boolean;
+  readonly #resolveWorkspace: WorkspaceResolver | undefined;
   readonly #listeners = new Set<() => void>();
   #snapshot: ConversationSnapshot = {
     projectId: null,
@@ -48,8 +57,12 @@ export class ProjectConversationController {
     bindings: [],
     nextThreadId: null,
     workspace: null,
+    resolvingWorkspace: false,
     creating: false,
     openingThreadId: null,
+    openedThreadId: null,
+    automaticOpen: false,
+    automaticConnecting: false,
     pendingCreation: null,
     sourceRefreshThreadId: null,
     refreshingSource: false,
@@ -63,6 +76,16 @@ export class ProjectConversationController {
   #epoch = 0;
   #read: AbortController | null = null;
   #operation: AbortController | null = null;
+  #automaticRequested = false;
+  #automaticScheduled = false;
+  #rememberedThreads = new Map<string, string>();
+  #pendingProjects = new Map<
+    string,
+    Pick<
+      ConversationSnapshot,
+      "pendingCreation" | "pendingSourceRefresh" | "sourceRefreshThreadId"
+    >
+  >();
 
   constructor(ports: {
     client: Pick<
@@ -73,9 +96,11 @@ export class ProjectConversationController {
       | "refreshSource"
     >;
     physicalWritesPending(): boolean;
+    resolveWorkspace?: WorkspaceResolver;
   }) {
     this.#client = ports.client;
     this.#physicalWritesPending = ports.physicalWritesPending;
+    this.#resolveWorkspace = ports.resolveWorkspace;
   }
   readonly subscribe = (listener: () => void) => {
     this.#listeners.add(listener);
@@ -84,6 +109,7 @@ export class ProjectConversationController {
   readonly getSnapshot = () => this.#snapshot;
   get locked() {
     return (
+      this.#snapshot.resolvingWorkspace ||
       this.#snapshot.creating ||
       this.#snapshot.openingThreadId !== null ||
       this.#snapshot.pendingCreation !== null ||
@@ -97,7 +123,8 @@ export class ProjectConversationController {
       !this.#disposed &&
       this.#project?.project.state === "active" &&
       this.#snapshot.phase === "ready" &&
-      this.#snapshot.workspace !== null &&
+      (this.#resolveWorkspace !== undefined ||
+        this.#snapshot.workspace !== null) &&
       !this.locked &&
       !this.#physicalWritesPending()
     );
@@ -106,6 +133,7 @@ export class ProjectConversationController {
     if (this.#disposed) return;
     this.#snapshot = { ...this.#snapshot, ...patch };
     for (const listener of this.#listeners) listener();
+    this.#scheduleAutomaticOpen();
   }
   #invalidate() {
     ++this.#epoch;
@@ -117,11 +145,16 @@ export class ProjectConversationController {
   setReady(ready: boolean) {
     if (this.#disposed || ready === this.#ready) return;
     this.#ready = ready;
+    if (!ready && this.#snapshot.openedThreadId)
+      this.#automaticRequested = true;
     this.#invalidate();
     this.#publish({
+      resolvingWorkspace: false,
       creating: false,
       refreshingSource: false,
       openingThreadId: null,
+      openedThreadId: null,
+      automaticConnecting: false,
       phase: ready ? "loading" : "waiting",
     });
     if (ready && this.#project) void this.refresh();
@@ -140,25 +173,152 @@ export class ProjectConversationController {
     if (this.#disposed) return;
     const changed =
       details?.project.projectId !== this.#project?.project.projectId;
+    const previousId = this.#project?.project.projectId;
+    if (changed && previousId) {
+      if (this.#snapshot.pendingCreation || this.#snapshot.pendingSourceRefresh)
+        this.#rememberPending(previousId);
+      else this.#pendingProjects.delete(previousId);
+    }
     this.#project = details;
     if (!changed) return;
     this.#invalidate();
+    this.#automaticRequested = true;
+    const pending = details
+      ? this.#pendingProjects.get(details.project.projectId)
+      : undefined;
     this.#publish({
       projectId: details?.project.projectId ?? null,
       bindings: [],
       nextThreadId: null,
       phase: this.#ready && details ? "loading" : "waiting",
+      resolvingWorkspace: false,
       creating: false,
       openingThreadId: null,
+      openedThreadId: null,
+      automaticConnecting: false,
+      pendingCreation: pending?.pendingCreation ?? null,
       error: null,
       notice: null,
-      sourceRefreshThreadId: null,
+      sourceRefreshThreadId: pending?.sourceRefreshThreadId ?? null,
       refreshingSource: false,
+      pendingSourceRefresh: pending?.pendingSourceRefresh ?? null,
     });
     if (this.#ready && details) void this.refresh();
   }
   refreshWriteActivity() {
     this.#publish({});
+  }
+  /** Only the navigation owner opens the central chat; right result pages stay read-only. */
+  setAutomaticOpen(enabled: boolean) {
+    if (this.#disposed || enabled === this.#snapshot.automaticOpen) return;
+    if (enabled) this.#automaticRequested = true;
+    if (!enabled && this.#snapshot.automaticConnecting) {
+      this.#invalidate();
+      this.#publish({
+        resolvingWorkspace: false,
+        creating: false,
+        openingThreadId: null,
+        refreshingSource: false,
+        automaticConnecting: false,
+      });
+    }
+    this.#publish({ automaticOpen: enabled });
+  }
+  #rememberPending(projectId: string) {
+    this.#pendingProjects.delete(projectId);
+    this.#pendingProjects.set(projectId, {
+      pendingCreation: this.#snapshot.pendingCreation,
+      pendingSourceRefresh: this.#snapshot.pendingSourceRefresh,
+      sourceRefreshThreadId: this.#snapshot.sourceRefreshThreadId,
+    });
+    while (this.#pendingProjects.size > 32)
+      this.#pendingProjects.delete(this.#pendingProjects.keys().next().value!);
+  }
+  #scheduleAutomaticOpen() {
+    if (this.#automaticScheduled || !this.#canAutomaticallyOpen()) return;
+    this.#automaticScheduled = true;
+    queueMicrotask(() => {
+      this.#automaticScheduled = false;
+      if (this.#canAutomaticallyOpen()) void this.#openAutomatically();
+    });
+  }
+  #canAutomaticallyOpen() {
+    return (
+      this.#snapshot.automaticOpen &&
+      this.#automaticRequested &&
+      !this.#snapshot.automaticConnecting &&
+      !this.#snapshot.error &&
+      this.#ready &&
+      !this.#disposed &&
+      this.#project !== null &&
+      this.#snapshot.phase === "ready" &&
+      !this.locked &&
+      !this.#physicalWritesPending()
+    );
+  }
+  async #openAutomatically() {
+    if (!this.#canAutomaticallyOpen() || !this.#project) return;
+    const projectId = this.#project.project.projectId,
+      epoch = this.#epoch;
+    this.#automaticRequested = false;
+    this.#publish({ automaticConnecting: true });
+    try {
+      // Bounded reads avoid creating a second chat when older revoked bindings fill a page.
+      for (let page = 0; page <= 4; page++) {
+        if (
+          this.#disposed ||
+          !this.#ready ||
+          epoch !== this.#epoch ||
+          this.#project?.project.projectId !== projectId
+        )
+          return;
+        const active = this.#snapshot.bindings.filter(
+          (binding) => binding.state === "active",
+        );
+        const remembered = this.#rememberedThreads.get(projectId);
+        const selected =
+          active.find((binding) => binding.threadId === remembered) ??
+          active[0];
+        if (selected) {
+          await this.open(selected.threadId);
+          if (
+            this.#snapshot.sourceRefreshThreadId === selected.threadId &&
+            epoch === this.#epoch &&
+            this.#project?.project.projectId === projectId
+          )
+            if (this.#project?.project.state === "active")
+              await this.refreshSourceAndOpen(selected.threadId);
+            else
+              this.#publish({
+                error: "归档项目的会话关联已过期。恢复项目后可重新连接。",
+              });
+          return;
+        }
+        if (!this.#snapshot.nextThreadId) {
+          if (this.#project?.project.state !== "active") {
+            this.#publish({ notice: "归档项目暂无可恢复的对话。" });
+            return;
+          }
+          const created = await this.#prepareCreation("initial");
+          if (created && epoch === this.#epoch)
+            await this.open(created.threadId);
+          return;
+        }
+        if (page === 4) break;
+        await this.refresh({ more: true });
+        if (this.#snapshot.phase !== "ready") return;
+      }
+      this.#publish({ error: "请继续读取项目对话，再选择要继续的对话。" });
+    } finally {
+      if (!this.#disposed && epoch === this.#epoch)
+        this.#publish({ automaticConnecting: false });
+    }
+  }
+  /** Explicit recovery after a failed open; repeated renders never retry a request. */
+  async reconnect() {
+    if (this.#disposed || this.locked || this.#physicalWritesPending()) return;
+    this.#automaticRequested = true;
+    await this.refresh();
   }
   async refresh({ more = false }: { more?: boolean } = {}) {
     if (
@@ -224,47 +384,98 @@ export class ProjectConversationController {
     );
   }
   async create() {
-    if (!this.canCreate || !this.#project || !this.#snapshot.workspace) return;
-    const input: CreateInput = {
-      projectId: this.#project.project.projectId,
-      workspaceId: this.#snapshot.workspace.workspaceId,
-      title: null,
-      idempotencyKey: crypto.randomUUID(),
-    };
-    this.#publish({ pendingCreation: input });
-    await this.#create(input);
+    const created = await this.#prepareCreation("additional");
+    if (created && this.#snapshot.automaticOpen)
+      await this.open(created.threadId);
+  }
+  async #prepareCreation(kind: "initial" | "additional") {
+    if (!this.canCreate || !this.#project) return null;
+    const projectId = this.#project.project.projectId,
+      epoch = this.#epoch,
+      operation = new AbortController();
+    this.#operation = operation;
+    this.#publish({ resolvingWorkspace: true, error: null, notice: null });
+    let input: CreateInput;
+    try {
+      let workspaceId = this.#snapshot.workspace?.workspaceId ?? null;
+      if (this.#resolveWorkspace) {
+        const target = await this.#resolveWorkspace(
+          { projectId },
+          { signal: operation.signal },
+        );
+        if (!this.#current(epoch, projectId, operation)) return null;
+        if (
+          target.projectId !== projectId ||
+          !/^workspace-project-[a-f0-9]{64}$/u.test(target.workspaceId)
+        )
+          throw new Error("project_conversation_workspace_target_invalid");
+        workspaceId = target.workspaceId;
+      }
+      const idempotencyKey =
+        kind === "initial"
+          ? await initialConversationKey(projectId, workspaceId)
+          : crypto.randomUUID();
+      if (!this.#current(epoch, projectId, operation)) return null;
+      if (this.#project?.project.state !== "active") return null;
+      input = Object.freeze({
+        projectId,
+        workspaceId,
+        title: null,
+        idempotencyKey,
+      });
+      this.#publish({
+        resolvingWorkspace: false,
+        workspace: {
+          workspaceId,
+          name: this.#snapshot.workspace?.name ?? null,
+        },
+        pendingCreation: input,
+      });
+    } catch {
+      if (this.#current(epoch, projectId, operation))
+        this.#publish({
+          error: "项目工作空间暂时无法连接，请重新连接。",
+        });
+      return null;
+    } finally {
+      if (this.#operation === operation) this.#operation = null;
+      if (this.#current(epoch, projectId, operation))
+        this.#publish({ resolvingWorkspace: false });
+    }
+    return this.#create(input, { refreshBindings: kind === "additional" });
   }
   /** The explicit main action creates once, then opens the actual bound host conversation. */
   async begin() {
     if (!this.canCreate) return;
-    const before = new Set(
-      this.#snapshot.bindings.map((binding) => binding.threadId),
-    );
-    const projectId = this.#snapshot.projectId;
-    await this.create();
-    if (
-      this.#snapshot.projectId !== projectId ||
-      this.#snapshot.pendingCreation
-    )
-      return;
-    const created = this.#snapshot.bindings.find(
-      (binding) => binding.state === "active" && !before.has(binding.threadId),
-    );
+    const created = await this.#prepareCreation("additional");
     if (created) await this.open(created.threadId);
   }
   async retryCreation() {
     const original = this.#snapshot.pendingCreation;
-    if (
-      !original ||
-      !this.#ready ||
-      this.#snapshot.creating ||
-      this.#physicalWritesPending() ||
-      original.projectId !== this.#project?.project.projectId
-    )
-      return;
-    await this.#create(original);
+    if (!original || !this.canRetryCreation) return;
+    const created = await this.#create(original);
+    if (created && this.#snapshot.automaticOpen)
+      await this.open(created.threadId);
   }
-  async #create(input: CreateInput) {
+  get canRetryCreation() {
+    const original = this.#snapshot.pendingCreation;
+    return Boolean(
+      original &&
+        this.#ready &&
+        !this.#disposed &&
+        this.#project?.project.state === "active" &&
+        !this.#snapshot.resolvingWorkspace &&
+        !this.#snapshot.creating &&
+        !this.#snapshot.openingThreadId &&
+        !this.#snapshot.refreshingSource &&
+        !this.#physicalWritesPending() &&
+        original.projectId === this.#project?.project.projectId,
+    );
+  }
+  async #create(
+    input: CreateInput,
+    { refreshBindings = true }: { refreshBindings?: boolean } = {},
+  ): Promise<PublicProjectConversationBinding | null> {
     this.#read?.abort();
     this.#read = null;
     const operation = new AbortController(),
@@ -275,24 +486,33 @@ export class ProjectConversationController {
       const response = await this.#client.createConversation(input, {
         signal: operation.signal,
       });
-      if (!this.#current(epoch, input.projectId, operation)) return;
+      if (!this.#current(epoch, input.projectId, operation)) return null;
       if (
         response.binding.projectId !== input.projectId ||
         response.binding.workspaceId !== input.workspaceId
       )
         throw new Error("project_conversation_response_scope_invalid");
       this.#publish({
+        bindings: [
+          ...this.#snapshot.bindings.filter(
+            (binding) => binding.threadId !== response.binding.threadId,
+          ),
+          response.binding,
+        ],
         pendingCreation: null,
         creating: false,
         notice: "项目对话已创建，进入后可与 Agent 继续创作。",
       });
-      await this.refresh();
+      this.#pendingProjects.delete(input.projectId);
+      if (refreshBindings) await this.refresh();
+      return response.binding;
     } catch {
       if (this.#current(epoch, input.projectId, operation))
         this.#publish({
           creating: false,
           error: "尚未确认创建结果。重试会使用原项目、工作空间与原请求。",
         });
+      return null;
     } finally {
       if (this.#operation === operation) this.#operation = null;
     }
@@ -333,7 +553,14 @@ export class ProjectConversationController {
       this.#publish({
         notice: "已请求打开项目对话。",
         sourceRefreshThreadId: null,
+        openedThreadId: threadId,
       });
+      this.#rememberedThreads.delete(projectId);
+      this.#rememberedThreads.set(projectId, threadId);
+      while (this.#rememberedThreads.size > 32)
+        this.#rememberedThreads.delete(
+          this.#rememberedThreads.keys().next().value!,
+        );
     } catch (error) {
       if (this.#current(epoch, projectId, operation))
         this.#publish(
@@ -356,6 +583,7 @@ export class ProjectConversationController {
       this.#ready &&
       !this.#disposed &&
       this.#project?.project.state === "active" &&
+      !this.#snapshot.resolvingWorkspace &&
       !this.#snapshot.creating &&
       !this.#snapshot.openingThreadId &&
       !this.#snapshot.refreshingSource &&
@@ -461,6 +689,21 @@ export class ProjectConversationController {
     this.#disposed = true;
     this.#listeners.clear();
   }
+}
+async function initialConversationKey(
+  projectId: string,
+  workspaceId: string | null,
+) {
+  const digest = await crypto.subtle.digest(
+    "SHA-256",
+    new TextEncoder().encode(JSON.stringify([projectId, workspaceId])),
+  );
+  return (
+    "project-chat-v1-" +
+    [...new Uint8Array(digest)]
+      .map((byte) => byte.toString(16).padStart(2, "0"))
+      .join("")
+  );
 }
 function errorCode(error: unknown): string | null {
   if (!error || typeof error !== "object") return null;

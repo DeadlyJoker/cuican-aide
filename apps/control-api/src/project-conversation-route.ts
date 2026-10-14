@@ -13,6 +13,7 @@ import {
   PROJECT_CONVERSATIONS_METHOD_ACTIONS as actions,
   parseProjectConversationsActionRequest,
   parseProjectConversationsActionResponse,
+  parseProjectConversationContextResponse,
 } from "@crewon/contracts/project-conversations";
 import type { FastifyInstance } from "fastify";
 import type {
@@ -58,6 +59,25 @@ export function registerProjectConversationRoutes(
           ? await noOwnerBinding(input.routing, actor, threadId)
           : await input.owner.getBinding(context, actor, threadId);
       return parseProjectConversationsActionResponse(parsed, value);
+    },
+  );
+  app.get<{ Params: { threadId: string }; Querystring: unknown }>(
+    `${ROOT}/context`,
+    { exposeHeadRoute: false },
+    async (request) => {
+      const context = requestContext(request),
+        actor = await input.identity.resolveActor(context);
+      const threadId = parseThreadId(request.params.threadId);
+      parseProjectTextEmptyQuery(request.query);
+      await input.threads.getThread(actor, threadId);
+      if (input.owner == null) {
+        await noOwnerBinding(input.routing, actor, threadId);
+        return { context: null };
+      }
+      return parseProjectConversationContextResponse(
+        threadId,
+        await input.owner.getContext(context, actor, threadId),
+      );
     },
   );
   app.post<{

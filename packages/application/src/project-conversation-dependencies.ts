@@ -11,6 +11,7 @@ export function captureProjectConversationDependencies(
     "threadStore",
     "projects",
     "texts",
+    ...(Object.hasOwn(input, "foundations") ? ["foundations"] : []),
     "tasks",
     "authorization",
     "clock",
@@ -56,6 +57,21 @@ export function captureProjectConversationDependencies(
       loadOutline: method(d.texts, "loadOutline"),
       loadRevision: method(d.texts, "loadRevision"),
     }),
+    ...(d.foundations === undefined
+      ? {}
+      : {
+          foundations: Object.freeze({
+            loadFoundation: method(d.foundations, "loadFoundation"),
+            ...(optionalMethod(d.foundations, "bindProjectReads") === undefined
+              ? {}
+              : {
+                  bindProjectReads: optionalMethod(
+                    d.foundations,
+                    "bindProjectReads",
+                  ),
+                }),
+          }),
+        }),
     tasks: Object.freeze({
       createProjectConversationTurnFromHost: method(
         d.tasks,

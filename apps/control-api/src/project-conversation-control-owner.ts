@@ -4,6 +4,10 @@ import {
   projectConversationStageReadOptions,
 } from "./project-conversation-execution-read-scope.ts";
 import {
+  readBoundProjectConversation,
+  registerProjectConversationMetadataReadAuthority,
+} from "./project-conversation-context-read-scope.ts";
+import {
   PROJECT_WORKSPACE_TARGET_ACTION,
   parseProjectWorkspaceTargetRequest,
   parseProjectWorkspaceTargetResponse,
@@ -227,25 +231,63 @@ export class ProjectConversationControlOwner {
         actor,
         actions.getBinding,
         signal,
-        async () => {
-          const binding = await this.#binding(actor, threadId);
-          if (binding === null) {
-            if (
-              await this.hasThreadBinding(
-                actor.tenantId,
-                actor.spaceId,
-                threadId,
-              )
-            )
-              denied();
-            return { binding: null };
-          }
-          const authority = await this.#issue(
+        () =>
+          readBoundProjectConversation({
             actor,
-            binding.currentInstallation,
-          );
-          return this.#input.service.getBinding(actor, { threadId }, authority);
-        },
+            threadId,
+            requests: this.#input.requests,
+            projectOwnership: this.#input.projectOwnership,
+            binding: () => this.#binding(actor, threadId),
+            hasThreadBinding: (locator) =>
+              this.#input.conversations.hasThreadBinding(locator),
+            issue: (binding) => this.#issue(actor, binding.currentInstallation),
+            absent: {
+              binding: null,
+            } as import("@crewon/contracts/project-conversations").ProjectConversationsResponses["getBinding"],
+            read: (authority, options) =>
+              this.#input.service.getBinding(
+                actor,
+                { threadId },
+                authority,
+                options,
+              ),
+          }),
+      ),
+    );
+  }
+  getContext(
+    request: ControlApiRequestContext,
+    actor: ActorContext,
+    threadId: string,
+    signal?: AbortSignal,
+  ) {
+    return this.#track(() =>
+      this.runAuthenticatedRequest(
+        request,
+        actor,
+        actions.getBinding,
+        signal,
+        () =>
+          readBoundProjectConversation({
+            actor,
+            threadId,
+            requests: this.#input.requests,
+            projectOwnership: this.#input.projectOwnership,
+            binding: () => this.#binding(actor, threadId),
+            hasThreadBinding: (locator) =>
+              this.#input.conversations.hasThreadBinding(locator),
+            issue: (binding) => this.#issue(actor, binding.currentInstallation),
+            absent: {
+              context: null,
+            } as import("@crewon/contracts/project-conversations").ProjectConversationContextResponse,
+            read: (authority, options) =>
+              this.#input.service.getContext(
+                actor,
+                { threadId },
+                authority,
+                options,
+              ),
+          }),
       ),
     );
   }
@@ -786,6 +828,7 @@ export class ProjectConversationControlOwner {
     });
     if (purpose === "execute")
       registerProjectConversationExecutionAuthority(issued);
+    registerProjectConversationMetadataReadAuthority(issued);
     return issued;
   }
   #track<T>(work: () => Promise<T>): Promise<T> {

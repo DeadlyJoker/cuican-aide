@@ -1,3 +1,4 @@
+import { createProductionProjectWorkspaceProvisioning } from "./production-project-workspace-provisioning.ts";
 import { createProjectMediaInputStagePluginOwner } from "./project-media-input-stage-plugin-runtime.ts";
 import type { ProjectMediaInputStageControlOwner } from "./project-media-input-stage-control-owner.ts";
 import { createProjectAssetStagePluginOwner } from "./project-asset-stage-plugin-runtime.ts";
@@ -84,7 +85,41 @@ export function createProductionProjectConversationRuntime(
   let plans: ProjectTextPlanPluginUiRuntime | undefined;
   let assets: ProjectAssetStageControlOwner | undefined;
   let closing: Promise<void> | undefined;
+  const nativeWorkspace =
+    foundation.configuration.projectOwnership === "plugin-project-v1"
+      ? createProductionProjectWorkspaceProvisioning({
+          installRoot: input.ui.installRoot,
+          registration:
+            input.store.pluginProjectWorkspaceNativeRegistrationStore(),
+          assertActive: () => {
+            if (closed)
+              throw new ApplicationError(
+                "authorization",
+                "project_conversation_authority_changed",
+              );
+          },
+        })
+      : undefined;
   const conversationServices = appendProjectConversationUiServiceAvailability({
+    workspaceTargets: {
+      isAvailable: (request) =>
+        !closed &&
+        owner !== undefined &&
+        owner.supportsAction(
+          "crewon.project-workspace-target.v1.resolveTarget",
+        ) &&
+        foundation.configuration.publications.some(
+          (entry) =>
+            entry.pluginId === request.candidate.descriptor.pluginId &&
+            entry.packageDigest === request.candidate.packageDigest &&
+            request.candidate.descriptor.contributions.some(
+              (c) =>
+                c.id === entry.contributionId &&
+                c.kind === "module" &&
+                c.slot === "main.content",
+            ),
+        ),
+    },
     conversations: {
       isAvailable: (request) =>
         !closed &&
@@ -180,6 +215,9 @@ export function createProductionProjectConversationRuntime(
         requests = taskAuthority?.requests ?? metadataRequests;
       const service = new ProjectConversationApplicationService({
         conversations: foundation.store,
+        ...(input.projects?.foundation === undefined
+          ? {}
+          : { foundations: input.store.projectFoundationStore() }),
         threads,
         threadStore: input.store,
         projects: foundation.projects,
@@ -204,6 +242,7 @@ export function createProductionProjectConversationRuntime(
       });
       owner = new ProjectConversationControlOwner({
         service,
+        ...(nativeWorkspace === undefined ? {} : { nativeWorkspace }),
         ...(foundation.configuration.projectOwnership === undefined
           ? {}
           : { projectOwnership: foundation.configuration.projectOwnership }),

@@ -25,7 +25,7 @@ function policy(target: string, method = "GET") {
     method,
   });
 }
-test("conversation proxy bounds only the two exact routes before path normalization", () => {
+test("conversation proxy bounds only the exact binding, context and stage routes before path normalization", () => {
   assert.deepEqual(policy(path), {
     outcome: "allow",
     threadId: "thread-1",
@@ -36,6 +36,12 @@ test("conversation proxy bounds only the two exact routes before path normalizat
     threadId: "thread-1",
     responseMaxBytes: 24 * 1024,
   });
+  assert.deepEqual(policy(`${path}/context`), {
+    outcome: "allow",
+    threadId: "thread-1",
+    responseMaxBytes: 256 * 1024,
+  });
+  assert.equal(policy(`${path}/context`, "POST")?.outcome, "deny");
   assert.equal(policy("/api/v1/threads/thread-1/turns", "POST"), null);
   for (const target of [
     `${path}/unknown`,

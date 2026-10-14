@@ -125,3 +125,39 @@ test("successful HTTP with wrong thread/revision or private fields cannot be ado
         e.code === "control_client_project_conversation_response_invalid",
     );
 });
+test("composer context uses one authenticated read of the actual Thread and rejects a foreign binding", async () => {
+  const context = {
+    binding,
+    projectRevision: 2,
+    briefRevision: 1,
+    outline: {
+      artifactId: "adopted",
+      contentRevision: 2,
+      episodes: [{ episodeId: "one", title: "第一集" }],
+    },
+  };
+  const calls: Request[] = [];
+  const c = client(async (url, init) => {
+    calls.push(new Request(url, init));
+    return Response.json({ context });
+  });
+  assert.deepEqual(await c.projectConversations.getContext(threadId), {
+    context,
+  });
+  assert.equal(calls.length, 1);
+  assert.equal(
+    calls[0]!.url,
+    `https://control.test/api/v1/threads/${encodeURIComponent(threadId)}/project-conversation/context`,
+  );
+  assert.equal(calls[0]!.method, "GET");
+  assert.equal(calls[0]!.headers.get("authorization"), "Bearer real-token");
+  assert.equal(calls[0]!.headers.get("idempotency-key"), null);
+  await assert.rejects(
+    client(async () =>
+      Response.json({
+        context: { ...context, binding: { ...binding, threadId: "foreign" } },
+      }),
+    ).projectConversations.getContext(threadId),
+    ControlApiProtocolError,
+  );
+});

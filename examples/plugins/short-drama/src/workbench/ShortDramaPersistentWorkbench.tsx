@@ -278,6 +278,7 @@ export function ShortDramaPersistentWorkbench({
     mediaOutputs?.locked === true;
   const locked = otherLocked || association?.locked === true;
   const archived = details?.project.state === "archived";
+  const ownsCentralChat = hostSurface === "sidebar";
   useEffect(() => {
     association?.setContext({
       ready: associationReady,
@@ -285,6 +286,10 @@ export function ShortDramaPersistentWorkbench({
       details,
     });
   }, [association, associationReady, associationThreadId, details]);
+  useEffect(() => {
+    conversations.setAutomaticOpen(ownsCentralChat);
+    return () => conversations.setAutomaticOpen(false);
+  }, [conversations, ownsCentralChat]);
   useEffect(() => {
     foundations?.setProject(details);
     texts.setProject(details);
@@ -436,10 +441,10 @@ export function ShortDramaPersistentWorkbench({
                 <span>{project.title}</span>
               </button>
               {hostPageContext?.projectId === project.projectId && (
-                <>
-                  <ProjectConversationActions controller={conversations} />
-
-                </>
+                <ProjectConversationActions
+                  controller={conversations}
+                  presentation="automatic"
+                />
               )}
             </div>
           ))}

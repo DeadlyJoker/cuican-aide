@@ -20,7 +20,7 @@ import type {
 } from "@crewon/contracts/project-conversations";
 import type { ProjectConversationComposerSelection } from "../control-runtime/controlProjectConversationTurn";
 import { subscribeProjectConversationBindingChanges } from "../plugins/projectConversationBindingChanges";
-import { readProjectConversationOutline } from "../control-runtime/controlProjectConversationOutline";
+import { readProjectConversationComposerContext } from "../control-runtime/controlProjectConversationContext";
 
 type Snapshot = Readonly<{
   binding: PublicProjectConversationBinding;
@@ -99,32 +99,20 @@ export function useProjectConversationComposer(
       };
     const options = { signal: controller.signal };
     void (async () => {
-      const { binding } = await owner.client!.projectConversations.getBinding(
+      const { context } = await readProjectConversationComposerContext(
+        owner.client!,
         owner.threadId!,
         options,
       );
-      if (binding === null) {
+      if (context === null) {
         if (alive && current.current === owner) setSnapshot(null);
         return;
       }
-      if (binding.threadId !== owner.threadId || binding.state !== "active")
-        throw new Error("binding_inactive");
-      const { project } = await owner.client!.creativeProjects.getProject(
-        binding.projectId,
-        options,
-      );
-      const selectedOutline = await readProjectConversationOutline(
-        owner.client!,
-        {
-          projectId: binding.projectId,
-          briefRevision: project.latestBriefRevision,
-        },
-        options,
-      );
+      const { binding, outline: selectedOutline } = context;
       if (alive && current.current === owner) {
         setSnapshot({
           binding,
-          briefRevision: project.latestBriefRevision,
+          briefRevision: context.briefRevision,
           outline: selectedOutline,
         });
         setEpisode((previous) =>

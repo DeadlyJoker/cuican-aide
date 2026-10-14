@@ -352,8 +352,10 @@ test("project_context_read returns bounded actual Run metadata and validates its
     assert.equal(output.guidance.skill, "novel-outline");
     assert.match(
       output.guidance.source,
-      /ef4ac0c313c7eeb1f918db5f0f0eb319745900bc/,
+      /dd1adef5c8189b489f6b901e8ab8d7c394c81a3e/,
     );
+    assert.equal(output.guidance.resource.mode, "reviewed-excerpt");
+    assert.equal(output.guidance.resource.qualityChecks, "not-run");
     assert.match(output.guidance.output, /outline_save/);
     assert.equal(calls[0], command);
     assert.ok(Buffer.byteLength(result.result.output) <= 8192);

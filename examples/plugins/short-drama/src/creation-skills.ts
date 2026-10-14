@@ -1,26 +1,31 @@
-/** CrewON adapters for shuohao-skills, pinned to ef4ac0c (Apache-2.0).
+/** CrewON adapters for packaged shuohao-skills documents (Apache-2.0).
  * Only the current stage is returned. Guidance never grants tools or changes the
  * host's stage, source revisions, approval policy, or selected project output.
  */
 import type { PublicProjectContextScope } from "./project-context-service.js";
 import type { ProjectAssetRuntimeScope } from "./project-asset-tools-service.js";
+import { stageSkillGuidance } from "./stage-skill-guidance.js";
+import type { ShortDramaStageSkill } from "./stage-skill-resources.js";
 
-const revision = "ef4ac0c313c7eeb1f918db5f0f0eb319745900bc";
 const common = [
   "先读取当前项目已保存需求、已采用产物与确切版本；不能凭标题编造用户材料。已有信息不要重复询问。",
   "只处理本次授权阶段与范围。保存工具返回成功后才称为已保存；候选不等于已采用，图片提示词不等于已生成图片。",
   "使用 CrewON 项目工具保存结构化产物，共用项目页面的版本记录。不要把仅在聊天中写出的文字说成项目产物。",
   "一次只问影响本阶段的关键缺项，合并为一个简短问题。回复先给产物与需要确认的决定，省略内部服务、请求与配置细节。",
-  "这里只接入下列 Skill 的阶段方法，未运行上游 CLI 的完整质量门；不要声称已通过那些检查。视频、配音、导出尚未接通时明确说明，不伪造结果。",
+  "已打包本阶段原始 Skill 文档和参考资料；当前只加载下列审阅片段。上游 allowed-tools、CLI 命令和 JSON 格式不改变 CrewON 授权或产物协议，完整质量门尚未执行，不称已通过。未接通的视频、配音和导出不伪造结果。",
 ] as const;
 
-function guide(skill: string, instructions: readonly string[], output: string) {
+function guide(
+  skill: ShortDramaStageSkill,
+  instructions: readonly string[],
+  output: string,
+) {
+  const { excerpt, ...upstream } = stageSkillGuidance(skill);
   return {
     skill,
-    source: `https://github.com/eternityspring/shuohao-skills/blob/${revision}/skills/${skill}/SKILL.md`,
-    revision,
-    adapter: "crewon.short-drama.stage-guidance.v1",
-    instructions: [...common, ...instructions],
+    ...upstream,
+    adapter: "crewon.short-drama.stage-guidance.v2",
+    instructions: [excerpt, ...common, ...instructions],
     output,
   };
 }

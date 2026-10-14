@@ -28,6 +28,7 @@ import {
   type ProjectGenerationHostContext,
   defineUiPlugin,
   createPluginUiNavigationClient,
+  resolvePluginProjectWorkspaceTarget,
   type PluginUiProps,
 } from "@crewon/plugin-sdk/ui";
 import { flushSync } from "react-dom";
@@ -343,6 +344,18 @@ export default defineUiPlugin({
             projectConversationsCodec,
           ),
           physicalWritesPending: () => writes.pending,
+          ...(props.data &&
+          typeof props.data === "object" &&
+          !Array.isArray(props.data) &&
+          Object.getOwnPropertyDescriptor(props.data, "hostPresentation")
+            ? {
+                resolveWorkspace: (
+                  input: { projectId: string },
+                  options: { signal: AbortSignal },
+                ) =>
+                  resolvePluginProjectWorkspaceTarget(clients, input, options),
+              }
+            : {}),
         });
     plans = preview
       ? null
@@ -493,15 +506,20 @@ export default defineUiPlugin({
                   } | null
                 )?.hostPresentation?.context ?? null
               }
-              onOpenHostPage={(next.data as {hostPresentation?: unknown} | null)?.hostPresentation ? (page) => {
-                void createPluginUiNavigationClient(services)
-                  .openPage({
-                    contributionId: "workbench",
-                    mode: "reuse",
-                    ...page,
-                  })
-                  .catch(() => undefined);
-              } : undefined}
+              onOpenHostPage={
+                (next.data as { hostPresentation?: unknown } | null)
+                  ?.hostPresentation
+                  ? (page) => {
+                      void createPluginUiNavigationClient(services)
+                        .openPage({
+                          contributionId: "workbench",
+                          mode: "reuse",
+                          ...page,
+                        })
+                        .catch(() => undefined);
+                    }
+                  : undefined
+              }
               controller={controller}
               texts={texts}
               outlines={outlines ?? undefined}

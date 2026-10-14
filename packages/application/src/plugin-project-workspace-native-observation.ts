@@ -46,6 +46,45 @@ export function issuePluginProjectWorkspaceNativeObservation(
   );
   return reference;
 }
+/** Trusted in-process Host producer. The callback observes the actual shared allocator; no Desktop IPC response is synthesized. */
+export function issuePluginProjectWorkspaceHostObservation(
+  preparation: PluginProjectWorkspacePreparation,
+  inspectAllocation: () => Readonly<{
+    workspaceId: string;
+    phase: string;
+    observation: string;
+    failureCode: string | null;
+  }>,
+  assertProducerActive: () => void,
+): PluginProjectWorkspaceNativeObservation {
+  const source = qualifyPluginProjectWorkspacePreparation(preparation);
+  const active = () => {
+    assertProducerActive();
+    source.assertActive();
+    const allocation = inspectAllocation();
+    if (
+      allocation.workspaceId !== source.expectedWorkspaceId ||
+      allocation.phase !== "registered" ||
+      allocation.observation !== "registered" ||
+      allocation.failureCode !== null
+    )
+      unavailable();
+  };
+  active();
+  const reference = Object.freeze({
+    version: "crewon.plugin-project-workspace-native-observation.v1" as const,
+  });
+  references.set(
+    reference,
+    Object.freeze({
+      preparation,
+      assertProducerActive: active,
+      expiresAt: Date.now() + 5000,
+    }),
+  );
+  return reference;
+}
+
 /** Original Store consumer. Detached response JSON cannot mint this reference. */
 export function qualifyPluginProjectWorkspaceNativeObservation(
   reference: PluginProjectWorkspaceNativeObservation,

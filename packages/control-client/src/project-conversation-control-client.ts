@@ -5,6 +5,9 @@ import {
   parseProjectConversationsActionResponse,
   type ProjectConversationsRequests,
   type ProjectConversationsResponses,
+  MAX_PROJECT_CONVERSATION_CONTEXT_BYTES,
+  parseProjectConversationContextResponse,
+  type ProjectConversationContextResponse,
 } from "@crewon/contracts/project-conversations";
 import type { CreativeProjectControlTransport } from "./creative-project-control-client.ts";
 
@@ -37,6 +40,26 @@ export class ProjectConversationControlClient {
     return this.#output(() =>
       parseProjectConversationsActionResponse(request, value),
     ) as ProjectConversationsResponses["getBinding"];
+  }
+  async getContext(
+    threadId: string,
+    options: ProjectConversationControlRequestOptions = {},
+  ): Promise<ProjectConversationContextResponse> {
+    this.#input(() =>
+      parseProjectConversationsActionRequest({
+        action: PROJECT_CONVERSATIONS_METHOD_ACTIONS.getBinding,
+        input: { threadId },
+      }),
+    );
+    const value = await this.#transport.json(
+      "GET",
+      `${path(threadId)}/context`,
+      null,
+      this.#options(options, [200], MAX_PROJECT_CONVERSATION_CONTEXT_BYTES),
+    );
+    return this.#output(() =>
+      parseProjectConversationContextResponse(threadId, value),
+    );
   }
   async startStage(
     threadId: string,
@@ -73,6 +96,7 @@ export class ProjectConversationControlClient {
   #options(
     input: ProjectConversationControlRequestOptions,
     expectedStatuses: readonly number[],
+    maximumResponseBytes = MAX_PROJECT_CONVERSATIONS_BYTES,
   ) {
     const signal = this.#input(() => {
       if (
@@ -101,7 +125,7 @@ export class ProjectConversationControlClient {
         signal === undefined
           ? AbortSignal.timeout(30_000)
           : AbortSignal.any([signal, AbortSignal.timeout(30_000)]),
-      maximumResponseBytes: MAX_PROJECT_CONVERSATIONS_BYTES,
+      maximumResponseBytes,
       redirect: "manual" as const,
       expectedStatuses,
     };

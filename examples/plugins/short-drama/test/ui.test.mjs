@@ -30,6 +30,7 @@ test("ships a unified self-contained UI and execution package with the original 
   assert.equal(descriptor.entrypoints.node, "node.mjs");
   assert.equal(descriptor.businessManifestPath, "business.json");
   assert.deepEqual(descriptor.requires, [
+    { service: "crewon.plugin-navigation", apiVersion: "1", optional: true },
     ...(Number(version.split(".")[0]) >= 47
       ? [
           {
@@ -175,6 +176,11 @@ test("ships a unified self-contained UI and execution package with the original 
             optional: true,
           },
           {
+            service: "crewon.project-workspace-target",
+            apiVersion: "1",
+            optional: true,
+          },
+          {
             service: "crewon.project-context",
             apiVersion: "1",
             optional: true,
@@ -244,7 +250,14 @@ test("ships a unified self-contained UI and execution package with the original 
     { service: "crewon.short-drama", apiVersion: "1" },
   ]);
   assert.deepEqual(descriptor.contributions, [
-    { id: "workbench", kind: "module", slot: "main.content", title: "AI 短剧" },
+    {
+      id: "workbench",
+      kind: "module",
+      slot: "main.content",
+      title: "AI 短剧",
+      icon: "book-open",
+      surfaces: ["workbench", "sidebar"],
+    },
   ]);
   assert.equal(
     descriptor.files.filter((file) => file.path.endsWith(".png")).length,

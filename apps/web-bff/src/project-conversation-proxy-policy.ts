@@ -1,6 +1,7 @@
 import { parseThreadId } from "@crewon/contracts";
 import {
   MAX_PROJECT_CONVERSATIONS_BYTES,
+  MAX_PROJECT_CONVERSATION_CONTEXT_BYTES,
   PROJECT_CONVERSATIONS_METHOD_ACTIONS,
   parseProjectConversationsActionRequest,
 } from "@crewon/contracts/project-conversations";
@@ -44,7 +45,7 @@ export function projectConversationProxyPolicy(
   )
     return fail(404, "route_not_found");
   const match =
-    /^\/api\/v1\/threads\/([^/]+)\/project-conversation(\/stages)?$/u.exec(
+    /^\/api\/v1\/threads\/([^/]+)\/project-conversation(\/stages|\/context)?$/u.exec(
       input.pathname,
     );
   if (match === null) return fail(404, "route_not_found");
@@ -55,14 +56,17 @@ export function projectConversationProxyPolicy(
   } catch {
     return fail(404, "route_not_found");
   }
-  if (input.method !== (match[2] === undefined ? "GET" : "POST"))
+  if (input.method !== (match[2] === "/stages" ? "POST" : "GET"))
     return fail(405, "method_not_allowed");
   if (input.search !== "")
     return fail(400, "project_conversation_request_invalid");
   return Object.freeze({
     outcome: "allow",
     threadId,
-    responseMaxBytes: MAX_PROJECT_CONVERSATIONS_BYTES,
+    responseMaxBytes:
+      match[2] === "/context"
+        ? MAX_PROJECT_CONVERSATION_CONTEXT_BYTES
+        : MAX_PROJECT_CONVERSATIONS_BYTES,
   });
 }
 export async function boundedProjectConversationProxyRequest(
@@ -89,10 +93,14 @@ export async function boundedProjectConversationProxyRequest(
   return bytes;
 }
 export function boundedProjectConversationProxyResponse(
-  input: Readonly<{ upstream: Response; signal: AbortSignal }>,
+  input: Readonly<{
+    upstream: Response;
+    signal: AbortSignal;
+    maximumBytes?: number;
+  }>,
 ): Promise<Response> {
   return boundedCreativeProjectProxyResponse({
     ...input,
-    maximumBytes: MAX_PROJECT_CONVERSATIONS_BYTES,
+    maximumBytes: input.maximumBytes ?? MAX_PROJECT_CONVERSATIONS_BYTES,
   });
 }

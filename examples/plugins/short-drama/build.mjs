@@ -485,6 +485,7 @@ const descriptor = parsePluginPackageDescriptor({
       apiVersion: "1",
       optional: true,
     },
+    { service: "crewon.project-workspace-target", apiVersion: "1", optional: true },
     { service: "crewon.project-context", apiVersion: "1", optional: true },
     {
       service: "crewon.project-text-recovery",

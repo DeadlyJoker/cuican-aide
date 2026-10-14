@@ -189,6 +189,9 @@ export function createDesktopProjectConversationRuntime(
       originalThreads = threads;
       const service = new ProjectConversationApplicationService({
         conversations: foundation.store,
+        ...(input.projects?.foundation === undefined
+          ? {}
+          : { foundations: input.store.projectFoundationStore() }),
         threads,
         threadStore: input.store,
         projects: foundation.projects,
