@@ -100,7 +100,14 @@ export function ShortDramaProjectList({
                   {item.selectedVersion
                     ? `概念图 v${item.selectedVersion} 已选用`
                     : item.concepts.length
-                      ? `概念图 v${item.concepts.at(-1)!.version} · ${stateName(item.concepts.at(-1)!.state)}`
+                      ? (
+                        <>
+                          {item.concepts.at(-1)!.state === "queued" && (
+                            <span className="status-dot busy" />
+                          )}
+                          {`概念图 v${item.concepts.at(-1)!.version} · ${stateName(item.concepts.at(-1)!.state)}`}
+                        </>
+                      )
                       : "待完善画面"}
                 </span>
               </div>

@@ -1,4 +1,20 @@
+/* AI 短剧工作台宿主预览 —— "场记仪表台" 设计语言。
+ * 只使用宿主 token 与本文件局部 token，随宿主浅色/深色主题自动适配。 */
+
 .drama-workbench {
+  /* 局部 token：卡片圆角 / 排队警示色 / 统一缓动 */
+  --drama-radius-card: 12px;
+  --drama-warn: oklch(55% 0.13 63);
+  --drama-ease: cubic-bezier(0.2, 0.6, 0.2, 1);
+  --drama-transition:
+    background-color 0.18s var(--drama-ease),
+    color 0.18s var(--drama-ease),
+    border-color 0.18s var(--drama-ease),
+    box-shadow 0.18s var(--drama-ease),
+    transform 0.18s var(--drama-ease),
+    opacity 0.18s var(--drama-ease);
+
+  container: drama-workbench / inline-size;
   position: relative;
   display: flex;
   flex-direction: column;
@@ -11,6 +27,21 @@
   font-family: inherit;
   font-size: var(--user-ui-font-size);
   line-height: 1.6;
+}
+[data-theme="dark"] .drama-workbench {
+  --drama-warn: oklch(83% 0.16 82);
+}
+
+@keyframes drama-pulse {
+  50% {
+    opacity: 0.35;
+  }
+}
+@keyframes drama-toast-in {
+  from {
+    opacity: 0;
+    transform: translateY(6px);
+  }
 }
 
 .drama-workbench *,
@@ -32,9 +63,9 @@
   outline: 2px solid var(--control-ring-strong);
   outline-offset: 2px;
 }
+/* 禁用态由各按钮自行配色，这里只去掉手型 */
 .drama-workbench button:disabled {
   cursor: default;
-  opacity: 0.5;
 }
 .drama-workbench svg {
   flex-shrink: 0;
@@ -45,7 +76,23 @@
   min-width: 0;
   min-height: 0;
   overflow: auto;
+  scrollbar-width: thin;
+  scrollbar-color: color-mix(in srgb, var(--text) 18%, transparent) transparent;
 }
+.drama-workbench .drama-main::-webkit-scrollbar {
+  width: 10px;
+}
+.drama-workbench .drama-main::-webkit-scrollbar-thumb {
+  border: 3px solid transparent;
+  border-radius: var(--radius-pill);
+  background: color-mix(in srgb, var(--text) 18%, transparent);
+  background-clip: content-box;
+}
+.drama-workbench .drama-main::-webkit-scrollbar-track {
+  background: transparent;
+}
+
+/* ── 顶栏与路径 ─────────────────────────────── */
 
 .drama-workbench .drama-topbar,
 .drama-workbench .breadcrumbs,
@@ -71,6 +118,7 @@
   padding: var(--space-1);
   background: transparent;
   color: inherit;
+  transition: var(--drama-transition);
 }
 .drama-workbench .breadcrumbs button:hover {
   background: var(--control-surface-hover);
@@ -79,27 +127,65 @@
 .drama-workbench .breadcrumbs > span {
   color: var(--text);
 }
+
+/* ── chips / 标签 ───────────────────────────── */
+
 .drama-workbench :is(.preview-tag, .genre-label, .version-chip, .cover-label),
 .drama-workbench .brief-tags span {
   display: inline-flex;
   align-items: center;
   gap: var(--space-1);
-  padding: 2px var(--space-2);
-  border-radius: var(--radius-sm);
+  padding: 1px 9px;
+  border: 0;
+  border-radius: var(--radius-pill);
   background: var(--control-surface);
   color: var(--text-muted);
-  font-size: 0.92em;
+  font-size: 0.78em;
+  letter-spacing: 0.02em;
 }
+/* 演示态提示：前置琥珀圆点 */
+.drama-workbench .preview-tag > span:empty {
+  width: 7px;
+  height: 7px;
+  border-radius: 50%;
+  background: var(--drama-warn);
+}
+/* 图片上的贴片：深色玻璃 + 白字 */
+.drama-workbench .cover-label {
+  background: color-mix(in srgb, var(--text) 62%, transparent);
+  color: white;
+  backdrop-filter: blur(10px);
+}
+
+/* ── 演示条 ─────────────────────────────────── */
+
 .drama-workbench .preview-strip {
   display: flex;
   flex-wrap: wrap;
   justify-content: space-between;
+  align-items: center;
   gap: var(--space-2);
   padding: var(--space-2) var(--space-6);
+  border-bottom: 1px solid var(--border);
   color: var(--text-muted);
-  background: var(--panel-subtle);
-  font-size: 0.92em;
+  font-size: 0.8em;
 }
+.drama-workbench .preview-strip > span:first-child {
+  display: inline-flex;
+  align-items: center;
+  gap: var(--space-1);
+  padding: 1px 9px;
+  border-radius: var(--radius-pill);
+  background: var(--control-surface);
+}
+.drama-workbench .preview-strip > span:first-child::before {
+  content: "";
+  width: 7px;
+  height: 7px;
+  border-radius: 50%;
+  background: var(--drama-warn);
+}
+
 .drama-workbench .drama-content {
   display: flex;
   flex-direction: column;
@@ -108,6 +194,8 @@
   margin: 0 auto;
   padding: var(--space-6);
 }
+
+/* ── 标题层级：靠 size / weight / tracking ──── */
 
 .drama-workbench
   :is(
@@ -129,43 +217,72 @@
 }
 .drama-workbench .page-heading h1 {
   color: var(--text);
-  font-size: 1.9em;
-  font-weight: 600;
+  font-size: 1.55em;
+  font-weight: 650;
+  letter-spacing: -0.01em;
   line-height: 1.35;
 }
 .drama-workbench .page-heading p {
   margin-top: var(--space-2);
   color: var(--text-muted);
+  font-size: 0.9em;
 }
 .drama-workbench :is(.heading-actions, .detail-actions) {
   justify-content: flex-start;
 }
+
+/* ── 按钮 ───────────────────────────────────── */
+
 .drama-workbench .button {
   display: inline-flex;
   align-items: center;
   justify-content: center;
-  gap: var(--space-2);
-  min-height: var(--control-h-md);
-  padding: var(--space-1) var(--space-3);
+  gap: 6px;
+  min-height: 30px;
+  padding: 3px 14px;
   border: 1px solid transparent;
-  border-radius: var(--radius-md);
+  border-radius: var(--radius-pill);
   background: var(--control-surface);
   color: var(--control-fg);
+  font-weight: 500;
+  transition: var(--drama-transition);
 }
 .drama-workbench .button:not(:disabled):hover {
-  border-color: var(--control-ring);
   background: var(--control-surface-hover);
 }
+.drama-workbench .button:not(:disabled):active {
+  transform: scale(0.97);
+}
+.drama-workbench .button:disabled {
+  background: var(--control-surface);
+  color: var(--text-faint);
+}
+/* 主按钮：近黑实心胶囊 */
 .drama-workbench .button.primary {
-  background: var(--accent-strong);
-  color: var(--accent-ink);
+  background: var(--text);
+  color: var(--bg);
 }
 .drama-workbench .button.primary:not(:disabled):hover {
-  background: var(--accent-strong);
-  border-color: var(--control-ring-strong);
+  background: var(--text);
+  box-shadow: 0 4px 14px -6px color-mix(in srgb, black 35%, transparent);
+  transform: translateY(-1px);
+}
+.drama-workbench .button.primary:not(:disabled):active {
+  transform: scale(0.97);
+}
+.drama-workbench .button.primary:disabled {
+  background: var(--control-surface);
+  color: var(--text-faint);
+}
+.drama-workbench .button.secondary {
+  border-color: var(--border-strong);
+  background: transparent;
+}
+.drama-workbench .button.secondary:not(:disabled):hover {
+  background: var(--control-surface-hover);
 }
 .drama-workbench .button.icon {
-  width: var(--control-h-md);
+  width: 30px;
   padding: var(--space-1);
 }
 .drama-workbench .text-button {
@@ -177,6 +294,7 @@
   padding: var(--space-1);
   background: transparent;
   color: var(--text-muted);
+  transition: var(--drama-transition);
 }
 .drama-workbench .text-button:not(:disabled):hover {
   background: var(--control-surface-hover);
@@ -197,32 +315,89 @@
   font-size: 0.92em;
 }
 
+/* ── 阶段导航：垂直 stepper ─────────────────── */
+
 .drama-workbench .stage-rail {
   display: flex;
-  flex-wrap: wrap;
-  gap: var(--space-2);
-  border-bottom: 1px solid var(--border);
-  padding-bottom: var(--space-4);
+  flex-direction: column;
+  gap: 2px;
 }
 .drama-workbench .stage-item {
-  display: flex;
+  position: relative;
+  display: grid;
+  grid-template-columns: 26px minmax(0, 1fr) auto;
   align-items: center;
-  gap: var(--space-2);
-  padding: var(--space-2);
-  border-radius: var(--radius-md);
+  column-gap: var(--space-2);
+  padding: 8px 10px;
+  border-radius: 10px;
   color: var(--text-faint);
+  transition: var(--drama-transition);
+}
+/* 节点之间的连接线段 */
+.drama-workbench .stage-item:not(:last-child)::before {
+  content: "";
+  position: absolute;
+  top: calc(50% + 14px);
+  left: 20px;
+  width: 1px;
+  height: calc(50% + 4px);
+  background: var(--border);
+}
+.drama-workbench .stage-node {
+  display: grid;
+  width: 20px;
+  height: 20px;
+  place-items: center;
+  justify-self: center;
+  border: 1px solid var(--border-strong);
+  border-radius: 50%;
+  color: var(--text-faint);
+  font-family: var(--user-code-font);
+  font-size: 0.72em;
+  transition: var(--drama-transition);
+}
+.drama-workbench .stage-text {
+  display: grid;
+  min-width: 0;
+}
+.drama-workbench .stage-text small {
+  color: var(--text-muted);
+  font-size: 0.78em;
 }
 .drama-workbench .stage-item.active {
-  color: var(--text);
   background: var(--control-surface-active);
+  color: var(--text);
 }
-.drama-workbench .stage-item small {
-  display: block;
-  font-size: 0.86em;
+.drama-workbench .stage-item.active .stage-node {
+  border-color: var(--text);
+  background: var(--text);
+  color: var(--bg);
 }
-.drama-workbench .stage-number {
-  font-family: var(--user-code-font);
+.drama-workbench .stage-item.active .stage-text {
+  color: var(--text);
+  font-size: 0.95em;
+  font-weight: 600;
 }
+.drama-workbench .stage-item.active .stage-text small {
+  font-weight: 400;
+}
+.drama-workbench .stage-item.later:hover .stage-text {
+  color: var(--text);
+}
+.drama-workbench .stage-item.later:hover .stage-node {
+  border-color: var(--text-faint);
+}
+.drama-workbench .stage-current-pill {
+  padding: 1px 8px;
+  border: 1px solid var(--border);
+  border-radius: var(--radius-pill);
+  background: var(--surface);
+  color: var(--text-muted);
+  font-size: 0.72em;
+}
+
+/* ── 布局网格与面板 ─────────────────────────── */
+
 .drama-workbench :is(.concept-grid, .detail-layout) {
   display: grid;
   grid-template-columns: minmax(0, 1fr) minmax(0, 1.25fr);
@@ -239,37 +414,50 @@
   gap: var(--space-3);
   padding: var(--space-4);
   border: 1px solid var(--border);
-  border-radius: var(--radius-xl);
+  border-radius: var(--drama-radius-card);
   background: var(--surface);
 }
+/* 栏目眉：小字号 + 宽字距 + 中灰 */
 .drama-workbench .panel-heading h2 {
   display: flex;
   align-items: center;
   gap: var(--space-2);
-  font-size: 1.08em;
-  font-weight: 600;
+  color: var(--text-muted);
+  font-size: 0.8em;
+  font-weight: 650;
+  letter-spacing: 0.05em;
+}
+.drama-workbench .panel-heading h2 svg {
+  width: 14px;
+  height: 14px;
 }
 .drama-workbench .brief-tags {
   display: flex;
   flex-wrap: wrap;
   gap: var(--space-2);
 }
+
+/* ── 表单控件 ───────────────────────────────── */
+
 .drama-workbench .description-input,
-.drama-workbench .form-field :is(input, textarea),
-.drama-workbench .concept-version-bar select {
+.drama-workbench .form-field :is(input, textarea, select) {
   width: 100%;
   min-width: 0;
   border: 1px solid transparent;
-  border-radius: var(--radius-lg);
-  padding: var(--space-3);
+  border-radius: 10px;
+  padding: 10px 12px;
   background: var(--control-surface);
   color: var(--control-fg);
+  transition: var(--drama-transition);
 }
 .drama-workbench .description-input:hover:not(:disabled),
-.drama-workbench .form-field :is(input, textarea):hover,
-.drama-workbench .concept-version-bar select:hover {
-  border-color: var(--control-ring);
-  background: var(--control-surface-hover);
+.drama-workbench .form-field :is(input, textarea, select):hover {
+  border-color: var(--border);
+}
+.drama-workbench .description-input:focus,
+.drama-workbench .form-field :is(input, textarea, select):focus {
+  border-color: var(--control-ring-strong);
+  background: var(--surface);
 }
 .drama-workbench :is(input, textarea)::placeholder {
   color: var(--control-fg-muted);
@@ -277,7 +465,7 @@
 .drama-workbench .description-input {
   min-height: 230px;
   resize: vertical;
-  line-height: 1.8;
+  line-height: 1.75;
 }
 .drama-workbench .brief-footer > span {
   display: flex;
@@ -286,6 +474,8 @@
   color: var(--text-faint);
   font-size: 0.92em;
 }
+
+/* ── 图片与遮罩 ─────────────────────────────── */
 
 .drama-workbench :is(.concept-art, .detail-art, .project-card-photo) {
   position: relative;
@@ -310,21 +500,58 @@
   height: 100%;
   object-fit: cover;
 }
+/* 底部渐变 scrim，白字 */
 .drama-workbench .art-overlay,
 .drama-workbench .detail-art > .image-caption {
   position: absolute;
-  right: var(--space-2);
-  bottom: var(--space-2);
-  left: var(--space-2);
+  right: 0;
+  bottom: 0;
+  left: 0;
   display: flex;
   align-items: center;
   justify-content: space-between;
   gap: var(--space-2);
-  padding: var(--space-2);
-  border-radius: var(--radius-md);
-  color: var(--text);
-  background: color-mix(in srgb, var(--surface) 92%, transparent);
+  padding: 24px 10px 8px;
+  border-radius: 0;
+  background: linear-gradient(
+    to top,
+    color-mix(in srgb, black 55%, transparent),
+    transparent
+  );
+  color: white;
   font-size: 0.92em;
+}
+/* 遮罩内的版本 chip 用深色玻璃 */
+.drama-workbench .art-overlay .version-chip {
+  background: color-mix(in srgb, var(--text) 62%, transparent);
+  color: white;
+  backdrop-filter: blur(10px);
+}
+.drama-workbench .art-overlay > span {
+  display: inline-flex;
+  align-items: center;
+  gap: var(--space-1);
+}
+/* "查看概念图 →" 默认隐藏，hover 浮出 */
+.drama-workbench .art-overlay > span:last-child {
+  opacity: 0;
+  transform: translateY(3px);
+  transition:
+    opacity 0.2s var(--drama-ease),
+    transform 0.2s var(--drama-ease);
+}
+.drama-workbench .concept-art:hover .art-overlay > span:last-child,
+.drama-workbench .concept-art:focus-visible .art-overlay > span:last-child {
+  opacity: 1;
+  transform: translateY(0);
+}
+/* 占位图（无图片）时遮罩退化为普通说明文字 */
+.drama-workbench .concept-art:not(:has(> img)) .art-overlay,
+.drama-workbench .detail-art:not(:has(> img)) > .image-caption {
+  position: static;
+  padding: var(--space-2) 0 0;
+  background: none;
+  color: var(--text-muted);
 }
 .drama-workbench .concept-panel > .image-caption {
   display: flex;
@@ -333,13 +560,9 @@
   gap: var(--space-2);
   margin-top: var(--space-2);
   color: var(--text-muted);
-  font-size: 0.92em;
+  font-size: 0.8em;
 }
-.drama-workbench .art-overlay > span {
-  display: inline-flex;
-  align-items: center;
-  gap: var(--space-1);
-}
+/* 占位图：虚线内框 + 图标 + 说明 */
 .drama-workbench :is(.art-placeholder, .project-art-placeholder, .empty-state) {
   display: flex;
   align-items: center;
@@ -352,15 +575,40 @@
   text-align: center;
   color: var(--text-muted);
 }
-.drama-workbench .empty-state {
+.drama-workbench .art-placeholder {
   border: 1px dashed var(--border-strong);
-  border-radius: var(--radius-xl);
-  background: var(--surface);
+  border-radius: var(--radius-lg);
+}
+.drama-workbench .art-placeholder > svg {
+  width: 28px;
+  height: 28px;
+  color: var(--text-muted);
+}
+.drama-workbench .art-placeholder > span,
+.drama-workbench .art-placeholder > p {
+  font-size: 0.86em;
+}
+/* 空状态：灰底面板 + 圆形图标徽章 */
+.drama-workbench .empty-state {
+  border: 0;
+  border-radius: var(--drama-radius-card);
+  background: var(--panel-subtle);
+}
+.drama-workbench .empty-state > svg {
+  width: 40px;
+  height: 40px;
+  padding: 11px;
+  border-radius: 50%;
+  background: var(--control-surface);
+  color: var(--text-muted);
 }
 .drama-workbench .empty-state h2 {
   color: var(--text);
   font-size: 1.15em;
 }
+
+/* ── 版本列表 ───────────────────────────────── */
+
 .drama-workbench .revision-list {
   display: grid;
   gap: var(--space-2);
@@ -373,24 +621,27 @@
   min-width: 0;
   padding: var(--space-3);
   border: 1px solid var(--border);
-  border-radius: var(--radius-lg);
+  border-radius: var(--drama-radius-card);
   background: var(--surface);
   color: var(--text);
   text-align: left;
+  transition: var(--drama-transition);
 }
-.drama-workbench .revision-item.active,
 .drama-workbench .revision-item:hover {
+  background: var(--control-surface);
+}
+.drama-workbench .revision-item.active {
   background: var(--control-surface);
   border-color: var(--border-strong);
 }
 .drama-workbench .revision-thumb {
   display: grid;
   flex-shrink: 0;
-  width: 64px;
-  height: 44px;
+  width: 56px;
+  height: 40px;
   place-items: center;
   overflow: hidden;
-  border-radius: var(--radius-sm);
+  border-radius: var(--radius-md);
   background: var(--panel-subtle);
 }
 .drama-workbench .revision-thumb img {
@@ -401,6 +652,13 @@
 .drama-workbench .revision-item small {
   display: block;
 }
+.drama-workbench .revision-item > svg:last-child {
+  color: var(--text-faint);
+  transition: transform 0.18s var(--drama-ease);
+}
+.drama-workbench .revision-item:hover > svg:last-child {
+  transform: translateX(2px);
+}
 .drama-workbench .revision-status {
   display: inline-flex;
   align-items: center;
@@ -409,6 +667,55 @@
   color: var(--text-muted);
   font-size: 0.92em;
 }
+.drama-workbench .revision-status svg {
+  color: var(--success);
+}
+
+/* ── 状态圆点系统 ───────────────────────────── */
+
+.drama-workbench .status-dot {
+  display: inline-block;
+  flex-shrink: 0;
+  width: 8px;
+  height: 8px;
+  border-radius: 50%;
+  background: var(--success);
+}
+.drama-workbench .status-dot.busy {
+  background: var(--drama-warn);
+  animation: drama-pulse 1.6s infinite;
+}
+.drama-workbench .status-dot.idle {
+  background: var(--text-faint);
+}
+.drama-workbench .status-stack {
+  display: grid;
+  gap: var(--space-2);
+  padding: var(--space-3) 0;
+  border-top: 1px solid var(--border);
+  border-bottom: 1px solid var(--border);
+}
+.drama-workbench .status-row {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  flex-wrap: wrap;
+  gap: var(--space-2);
+  color: var(--text-muted);
+  font-size: 0.86em;
+}
+.drama-workbench .status-row strong {
+  display: inline-flex;
+  align-items: center;
+  gap: var(--space-1);
+  color: var(--text);
+  font-weight: 500;
+}
+.drama-workbench .status-row strong svg {
+  color: var(--success);
+}
+
+/* ── 项目卡片 ───────────────────────────────── */
 
 .drama-workbench .project-grid {
   display: grid;
@@ -419,17 +726,20 @@
   overflow: hidden;
   min-width: 0;
   border: 1px solid var(--border);
-  border-radius: var(--radius-xl);
+  border-radius: var(--drama-radius-card);
   padding: 0;
   background: var(--surface);
   color: var(--text);
   text-align: left;
+  transition: var(--drama-transition);
 }
 .drama-workbench .project-card:hover {
   border-color: var(--border-strong);
+  box-shadow: 0 10px 24px -12px color-mix(in srgb, black 18%, transparent);
+  transform: translateY(-2px);
 }
 .drama-workbench .project-card-photo {
-  height: 160px;
+  aspect-ratio: 16 / 10;
   border-radius: 0;
 }
 .drama-workbench .project-card-photo .cover-label {
@@ -450,13 +760,40 @@
   font-size: 1.17em;
   font-weight: 600;
 }
+.drama-workbench .project-card-text h2 svg {
+  color: var(--text-faint);
+  transition:
+    transform 0.18s var(--drama-ease),
+    color 0.18s var(--drama-ease);
+}
+.drama-workbench .project-card:hover .project-card-text h2 svg {
+  color: var(--text);
+  transform: translate(2px, -2px);
+}
 .drama-workbench .project-card-text p {
   color: var(--text-muted);
 }
+/* 单行点分隔元信息 */
 .drama-workbench .project-card-meta {
-  display: grid;
-  gap: var(--space-1);
+  display: flex;
+  align-items: center;
+  flex-wrap: wrap;
+  font-size: 0.86em;
+  color: var(--text-muted);
 }
+.drama-workbench .project-card-meta > span {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+}
+.drama-workbench .project-card-meta > span + span::before {
+  content: "·";
+  margin: 0 6px;
+  color: var(--text-faint);
+}
+
+/* ── 搜索与分段筛选 ─────────────────────────── */
+
 .drama-workbench .search-field {
   display: flex;
   align-items: center;
@@ -464,13 +801,15 @@
   min-width: 0;
   min-height: var(--control-h-md);
   border: 1px solid transparent;
-  border-radius: var(--radius-lg);
+  border-radius: var(--radius-pill);
   padding: var(--space-1) var(--space-2);
   background: var(--control-surface);
   color: var(--control-fg-muted);
+  transition: var(--drama-transition);
 }
 .drama-workbench .search-field:focus-within {
   border-color: var(--control-ring-strong);
+  box-shadow: 0 0 0 3px color-mix(in srgb, var(--accent) 18%, transparent);
 }
 .drama-workbench .search-field input {
   width: 180px;
@@ -480,24 +819,39 @@
   background: transparent;
   color: var(--control-fg);
 }
+/* segmented capsule */
 .drama-workbench .filter-tabs {
-  display: flex;
+  display: inline-flex;
   flex-wrap: wrap;
-  gap: var(--space-1);
+  gap: 2px;
+  padding: 2px;
+  border: 1px solid var(--border);
+  border-radius: var(--radius-pill);
+  background: var(--control-surface);
 }
 .drama-workbench .filter-tabs button {
-  min-height: var(--control-h-md);
+  min-height: 0;
   border: 0;
-  border-radius: var(--radius-md);
-  padding: var(--space-1) var(--space-3);
+  border-radius: var(--radius-pill);
+  padding: 2px 12px;
   background: transparent;
   color: var(--text-muted);
+  font-size: 0.88em;
+  transition: var(--drama-transition);
 }
 .drama-workbench .filter-tabs button.active {
-  background: var(--control-surface-active);
-  color: var(--text);
+  background: var(--text);
+  color: var(--bg);
 }
+.drama-workbench .filter-tabs button small {
+  font-size: 0.8em;
+  color: inherit;
+}
+
+/* ── 概念图版本选择 ─────────────────────────── */
+
 .drama-workbench .concept-version-bar label {
+  position: relative;
   display: flex;
   align-items: center;
   flex-wrap: wrap;
@@ -505,40 +859,33 @@
 }
 .drama-workbench .concept-version-bar select {
   width: auto;
-  padding: var(--space-1) var(--space-2);
+  appearance: none;
+  border: 1px solid var(--border-strong);
+  border-radius: var(--radius-pill);
+  padding: 4px 26px 4px 12px;
+  background: var(--surface);
+  color: var(--text);
+}
+.drama-workbench .concept-version-bar select:hover {
+  border-color: var(--control-ring-strong);
+  background: var(--surface);
+}
+.drama-workbench .select-chevron {
+  position: absolute;
+  right: 9px;
+  color: var(--text-muted);
+  pointer-events: none;
 }
 .drama-workbench .prompt-length {
   text-align: right;
 }
-.drama-workbench .status-stack {
-  display: grid;
-  gap: var(--space-2);
-  padding: var(--space-3) 0;
-  border-top: 1px solid var(--border);
-  border-bottom: 1px solid var(--border);
-}
-.drama-workbench .status-row {
-  display: flex;
-  align-items: center;
-  justify-content: space-between;
-  flex-wrap: wrap;
-  gap: var(--space-2);
-  color: var(--text-muted);
-}
-.drama-workbench .status-row strong {
-  display: inline-flex;
-  align-items: center;
-  gap: var(--space-1);
-  color: var(--text);
-  font-weight: 500;
-}
-.drama-workbench .status-row strong.positive {
-  color: var(--success);
-}
+
+/* ── 版本卡 / 服务信息 ──────────────────────── */
+
 .drama-workbench .version-card {
   padding: var(--space-3);
   border: 1px solid var(--border);
-  border-radius: var(--radius-lg);
+  border-radius: var(--drama-radius-card);
   background: var(--control-surface);
 }
 .drama-workbench .version-card p {
@@ -552,23 +899,38 @@
   font-weight: 400;
 }
 
+/* ── toast：浮空胶囊 ────────────────────────── */
+
 .drama-workbench .toast {
+  position: sticky;
+  bottom: 12px;
   display: flex;
   align-items: center;
   gap: var(--space-2);
   flex-shrink: 0;
-  padding: var(--space-3) var(--space-6);
-  border-top: 1px solid var(--border);
-  background: var(--control-surface);
-  color: var(--text);
+  width: fit-content;
+  margin: auto auto 0;
+  padding: 8px 16px;
+  border-radius: var(--radius-pill);
+  background: var(--text);
+  color: var(--bg);
+  box-shadow: 0 8px 24px -8px color-mix(in srgb, black 40%, transparent);
+  animation: drama-toast-in 0.25s var(--drama-ease);
 }
+.drama-workbench .toast svg {
+  color: var(--success);
+}
+
+/* ── 弹窗 ───────────────────────────────────── */
+
 .drama-workbench .modal {
   width: min(560px, 92%);
   max-height: 85%;
+  margin: auto;
   padding: var(--space-5);
   overflow: auto;
-  border: 1px solid var(--border-strong);
-  border-radius: var(--radius-xl);
+  border: 1px solid var(--border);
+  border-radius: 14px;
   background: var(--surface);
   color: var(--text);
   font: inherit;
@@ -576,10 +938,11 @@
 }
 .drama-workbench .modal::backdrop {
   background: color-mix(in srgb, var(--text) 35%, transparent);
+  backdrop-filter: blur(6px);
 }
 .drama-workbench .modal h2 {
-  font-size: 1.25em;
-  font-weight: 600;
+  font-size: 1.05em;
+  font-weight: 650;
 }
 .drama-workbench .modal-form {
   display: grid;
@@ -589,10 +952,17 @@
 .drama-workbench .form-field {
   display: grid;
   gap: var(--space-2);
+  color: var(--text-muted);
+  font-size: 0.8em;
+}
+.drama-workbench .form-field :is(input, textarea) {
+  color: var(--text);
+  font-size: 1.25em;
 }
 .drama-workbench .form-field textarea {
   min-height: 150px;
   resize: vertical;
+  line-height: 1.75;
 }
 .drama-workbench .modal-actions {
   justify-content: flex-end;
@@ -626,7 +996,9 @@
   border: 0;
 }
 
-@media (max-width: 1100px) {
+/* ── 容器查询：按宿主栏宽而非视口 ───────────── */
+
+@container drama-workbench (max-width: 1100px) {
   .drama-workbench .project-grid {
     grid-template-columns: repeat(2, minmax(0, 1fr));
   }
@@ -635,8 +1007,8 @@
   }
 }
 
-@media (max-width: 640px) {
-  .drama-workbench :is(.drama-topbar, .preview-strip, .toast) {
+@container drama-workbench (max-width: 640px) {
+  .drama-workbench :is(.drama-topbar, .preview-strip) {
     padding-right: var(--space-3);
     padding-left: var(--space-3);
   }

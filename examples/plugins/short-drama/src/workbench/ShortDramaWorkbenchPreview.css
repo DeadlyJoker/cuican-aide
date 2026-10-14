@@ -1,4 +1,7 @@
 .drama-workbench {
+  --drama-radius-card: 12px;
+  --drama-warn: #b45309;
+  --drama-ease: cubic-bezier(0.2, 0.6, 0.2, 1);
   container: drama-workbench / inline-size;
   position: relative;
   isolation: isolate;
@@ -14,6 +17,20 @@
   font-family: inherit;
   font-size: var(--user-ui-font-size);
   line-height: 1.6;
+}
+[data-theme="dark"] .drama-workbench {
+  --drama-warn: #fbbf24;
+}
+@keyframes drama-pulse {
+  50% {
+    opacity: 0.35;
+  }
+}
+@keyframes drama-toast-in {
+  from {
+    opacity: 0;
+    transform: translateY(6px);
+  }
 }
 .drama-workbench .drama-output-editor {
   display: grid;
@@ -50,7 +67,6 @@
 }
 .drama-workbench button:disabled {
   cursor: default;
-  opacity: 0.5;
 }
 .drama-workbench svg {
   flex-shrink: 0;
@@ -61,6 +77,15 @@
   min-width: 0;
   min-height: 0;
   overflow: auto;
+}
+.drama-workbench .drama-main::-webkit-scrollbar {
+  width: 10px;
+}
+.drama-workbench .drama-main::-webkit-scrollbar-thumb {
+  border: 3px solid transparent;
+  border-radius: var(--radius-pill);
+  background: color-mix(in srgb, var(--text) 18%, transparent);
+  background-clip: content-box;
 }
 
 .drama-workbench .drama-topbar,
@@ -109,11 +134,24 @@
   display: inline-flex;
   align-items: center;
   gap: var(--space-1);
-  padding: 2px var(--space-2);
-  border-radius: var(--radius-sm);
+  padding: 1px 9px;
+  border: 0;
+  border-radius: var(--radius-pill);
   background: var(--control-surface);
   color: var(--text-muted);
-  font-size: 0.92em;
+  font-size: 0.78em;
+  letter-spacing: 0.02em;
+}
+.drama-workbench .preview-tag > span:empty {
+  width: 7px;
+  height: 7px;
+  border-radius: 50%;
+  background: var(--drama-warn);
+}
+.drama-workbench .cover-label {
+  background: color-mix(in srgb, var(--text) 62%, transparent);
+  color: #fff;
+  backdrop-filter: blur(10px);
 }
 .drama-workbench .preview-strip {
   display: flex;
@@ -121,9 +159,22 @@
   justify-content: space-between;
   gap: var(--space-2);
   padding: var(--space-2) var(--space-6);
+  border-bottom: 1px solid var(--border);
+  background: transparent;
   color: var(--text-muted);
-  background: var(--panel-subtle);
-  font-size: 0.92em;
+  font-size: 0.8em;
+}
+.drama-workbench .preview-strip > span:first-child {
+  display: inline-flex;
+  align-items: center;
+  gap: var(--space-1);
+}
+.drama-workbench .preview-strip > span:first-child::before {
+  content: "";
+  width: 7px;
+  height: 7px;
+  border-radius: 50%;
+  background: var(--drama-warn);
 }
 .drama-workbench .drama-content {
   display: flex;
@@ -155,12 +206,14 @@
 .drama-workbench .page-heading h1 {
   color: var(--text);
   font-size: 1.55em;
-  font-weight: 600;
+  font-weight: 650;
   line-height: 1.35;
+  letter-spacing: -0.01em;
 }
 .drama-workbench .page-heading p {
   margin-top: var(--space-2);
   color: var(--text-muted);
+  font-size: 0.9em;
 }
 .drama-workbench :is(.heading-actions, .detail-actions) {
   justify-content: flex-start;
@@ -169,28 +222,54 @@
   display: inline-flex;
   align-items: center;
   justify-content: center;
-  gap: var(--space-2);
-  min-height: var(--control-h-md);
-  padding: var(--space-1) var(--space-3);
+  gap: 6px;
+  min-height: 30px;
+  padding: 3px 14px;
   border: 1px solid transparent;
-  border-radius: var(--radius-md);
+  border-radius: var(--radius-pill);
   background: var(--control-surface);
   color: var(--control-fg);
+  font-weight: 500;
+  transition:
+    background 0.18s var(--drama-ease),
+    border-color 0.18s var(--drama-ease),
+    color 0.18s var(--drama-ease),
+    box-shadow 0.18s var(--drama-ease),
+    transform 0.18s var(--drama-ease);
 }
 .drama-workbench .button:not(:disabled):hover {
   border-color: var(--control-ring);
   background: var(--control-surface-hover);
 }
+.drama-workbench .button:not(:disabled):active {
+  transform: scale(0.97);
+}
 .drama-workbench .button.primary {
-  background: var(--accent-strong);
-  color: var(--accent-ink);
+  border-color: transparent;
+  background: var(--text);
+  color: var(--bg);
 }
 .drama-workbench .button.primary:not(:disabled):hover {
-  background: var(--accent-strong);
-  border-color: var(--control-ring-strong);
+  border-color: transparent;
+  background: var(--text);
+  box-shadow: 0 4px 14px -6px rgb(0 0 0 / 0.35);
+  transform: translateY(-1px);
+}
+.drama-workbench .button.primary:disabled {
+  background: var(--control-surface);
+  color: var(--text-faint);
+}
+.drama-workbench .button.secondary {
+  border-color: var(--border-strong);
+  background: transparent;
+}
+.drama-workbench .button.secondary:not(:disabled):hover {
+  border-color: var(--border-strong);
+  background: var(--control-surface-hover);
 }
 .drama-workbench .button.icon {
   width: var(--control-h-md);
+  min-height: var(--control-h-md);
   padding: var(--space-1);
 }
 .drama-workbench .text-button {
@@ -202,6 +281,9 @@
   padding: var(--space-1);
   background: transparent;
   color: var(--text-muted);
+  transition:
+    background 0.18s var(--drama-ease),
+    color 0.18s var(--drama-ease);
 }
 .drama-workbench .text-button:not(:disabled):hover {
   background: var(--control-surface-hover);
@@ -239,6 +321,10 @@
   border: 0;
   background: transparent;
   text-align: left;
+  transition:
+    background 0.18s var(--drama-ease),
+    color 0.18s var(--drama-ease),
+    transform 0.18s var(--drama-ease);
 }
 .drama-workbench .stage-item:not(:disabled):hover {
   background: var(--control-surface-hover);
@@ -274,15 +360,21 @@
   gap: var(--space-3);
   padding: var(--space-4);
   border: 1px solid var(--border);
-  border-radius: var(--radius-xl);
+  border-radius: var(--drama-radius-card);
   background: var(--surface);
 }
 .drama-workbench .panel-heading h2 {
   display: flex;
   align-items: center;
   gap: var(--space-2);
-  font-size: 1.08em;
-  font-weight: 600;
+  color: var(--text-muted);
+  font-size: 0.8em;
+  font-weight: 650;
+  letter-spacing: 0.05em;
+}
+.drama-workbench .panel-heading h2 svg {
+  width: 14px;
+  height: 14px;
 }
 .drama-workbench .brief-tags {
   display: flex;
@@ -291,22 +383,27 @@
 }
 .drama-workbench .description-input,
 .drama-workbench .form-field :is(input, textarea),
-.drama-workbench .form-field select,
-.drama-workbench .concept-version-bar select {
+.drama-workbench .form-field select {
   width: 100%;
   min-width: 0;
   border: 1px solid transparent;
-  border-radius: var(--radius-lg);
-  padding: var(--space-3);
+  border-radius: 10px;
+  padding: 10px 12px;
   background: var(--control-surface);
   color: var(--control-fg);
+  transition:
+    border-color 0.18s var(--drama-ease),
+    background 0.18s var(--drama-ease);
 }
 .drama-workbench .description-input:hover:not(:disabled),
-.drama-workbench .form-field :is(input, textarea):hover,
-.drama-workbench .form-field select:hover,
-.drama-workbench .concept-version-bar select:hover {
-  border-color: var(--control-ring);
-  background: var(--control-surface-hover);
+.drama-workbench .form-field :is(input, textarea):hover:not(:disabled),
+.drama-workbench .form-field select:hover:not(:disabled) {
+  border-color: var(--border);
+}
+.drama-workbench .description-input:focus,
+.drama-workbench .form-field :is(input, textarea, select):focus {
+  border-color: var(--control-ring-strong);
+  background: var(--surface);
 }
 .drama-workbench :is(input, textarea)::placeholder {
   color: var(--control-fg-muted);
@@ -314,7 +411,10 @@
 .drama-workbench .description-input {
   min-height: 230px;
   resize: vertical;
-  line-height: 1.8;
+  line-height: 1.75;
+}
+.drama-workbench .form-field textarea {
+  line-height: 1.75;
 }
 .drama-workbench .brief-footer > span {
   display: flex;
@@ -350,18 +450,42 @@
 .drama-workbench .art-overlay,
 .drama-workbench .detail-art > .image-caption {
   position: absolute;
-  right: var(--space-2);
-  bottom: var(--space-2);
-  left: var(--space-2);
+  right: 0;
+  bottom: 0;
+  left: 0;
   display: flex;
   align-items: center;
   justify-content: space-between;
   gap: var(--space-2);
-  padding: var(--space-2);
-  border-radius: var(--radius-md);
-  color: var(--text);
-  background: color-mix(in srgb, var(--surface) 92%, transparent);
+  padding: 24px 10px 8px;
+  color: #fff;
+  background: linear-gradient(to top, rgb(0 0 0 / 0.55), transparent);
   font-size: 0.92em;
+}
+.drama-workbench .art-overlay .version-chip {
+  background: color-mix(in srgb, var(--text) 62%, transparent);
+  color: #fff;
+  backdrop-filter: blur(10px);
+}
+.drama-workbench .art-overlay > span:last-child {
+  opacity: 0;
+  transform: translateY(3px);
+  transition:
+    opacity 0.2s var(--drama-ease),
+    transform 0.2s var(--drama-ease);
+}
+.drama-workbench .concept-art:hover .art-overlay > span:last-child,
+.drama-workbench .concept-art:focus-visible .art-overlay > span:last-child {
+  opacity: 1;
+  transform: none;
+}
+/* 占位图（无图片）时遮罩退化为普通说明文字 */
+.drama-workbench .concept-art:not(:has(> img)) .art-overlay,
+.drama-workbench .detail-art:not(:has(> img)) > .image-caption {
+  position: static;
+  padding: var(--space-2) 0 0;
+  background: none;
+  color: var(--text-muted);
 }
 .drama-workbench .concept-panel > .image-caption {
   display: flex;
@@ -370,7 +494,7 @@
   gap: var(--space-2);
   margin-top: var(--space-2);
   color: var(--text-muted);
-  font-size: 0.92em;
+  font-size: 0.8em;
 }
 .drama-workbench .art-overlay > span {
   display: inline-flex;
@@ -389,10 +513,31 @@
   text-align: center;
   color: var(--text-muted);
 }
-.drama-workbench .empty-state {
+.drama-workbench .art-placeholder {
   border: 1px dashed var(--border-strong);
-  border-radius: var(--radius-xl);
-  background: var(--surface);
+  border-radius: var(--radius-md);
+}
+.drama-workbench .art-placeholder > svg {
+  width: 28px;
+  height: 28px;
+  color: var(--text-muted);
+}
+.drama-workbench .art-placeholder :is(p, span) {
+  font-size: 0.86em;
+}
+.drama-workbench .empty-state {
+  border: 0;
+  border-radius: var(--drama-radius-card);
+  background: var(--panel-subtle);
+}
+.drama-workbench .empty-state > svg:first-child {
+  width: 40px;
+  height: 40px;
+  padding: 11px;
+  border-radius: 50%;
+  background: var(--control-surface);
+  color: var(--text-muted);
+  box-sizing: border-box;
 }
 .drama-workbench .empty-state h2 {
   color: var(--text);
@@ -410,24 +555,35 @@
   min-width: 0;
   padding: var(--space-3);
   border: 1px solid var(--border);
-  border-radius: var(--radius-lg);
+  border-radius: var(--drama-radius-card);
   background: var(--surface);
   color: var(--text);
   text-align: left;
+  transition:
+    background 0.18s var(--drama-ease),
+    border-color 0.18s var(--drama-ease);
 }
-.drama-workbench .revision-item.active,
 .drama-workbench .revision-item:hover {
   background: var(--control-surface);
+}
+.drama-workbench .revision-item.active {
+  background: var(--control-surface);
   border-color: var(--border-strong);
+}
+.drama-workbench .revision-item > svg:last-child {
+  transition: transform 0.18s var(--drama-ease);
+}
+.drama-workbench .revision-item:hover > svg:last-child {
+  transform: translateX(2px);
 }
 .drama-workbench .revision-thumb {
   display: grid;
   flex-shrink: 0;
-  width: 64px;
-  height: 44px;
+  width: 56px;
+  height: 40px;
   place-items: center;
   overflow: hidden;
-  border-radius: var(--radius-sm);
+  border-radius: 6px;
   background: var(--panel-subtle);
 }
 .drama-workbench .revision-thumb img {
@@ -456,17 +612,24 @@
   overflow: hidden;
   min-width: 0;
   border: 1px solid var(--border);
-  border-radius: var(--radius-xl);
+  border-radius: var(--drama-radius-card);
   padding: 0;
   background: var(--surface);
   color: var(--text);
   text-align: left;
+  transition:
+    border-color 0.18s var(--drama-ease),
+    box-shadow 0.18s var(--drama-ease),
+    transform 0.18s var(--drama-ease);
 }
 .drama-workbench .project-card:hover {
   border-color: var(--border-strong);
+  box-shadow: 0 10px 24px -12px rgb(0 0 0 / 0.18);
+  transform: translateY(-2px);
 }
 .drama-workbench .project-card-photo {
-  height: 160px;
+  aspect-ratio: 16 / 10;
+  height: auto;
   border-radius: 0;
 }
 .drama-workbench .project-card-photo .cover-label {
@@ -487,12 +650,31 @@
   font-size: 1.17em;
   font-weight: 600;
 }
+.drama-workbench .project-card-text h2 svg {
+  transition:
+    translate 0.18s var(--drama-ease),
+    color 0.18s var(--drama-ease);
+}
+.drama-workbench .project-card:hover .project-card-text h2 svg {
+  color: var(--text);
+  translate: 2px -2px;
+}
 .drama-workbench .project-card-text p {
   color: var(--text-muted);
 }
 .drama-workbench .project-card-meta {
-  display: grid;
-  gap: var(--space-1);
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  font-size: 0.86em;
+}
+.drama-workbench .project-card-meta span + span::before {
+  content: "·";
+  margin: 0 6px;
+  color: var(--text-faint);
+}
+.drama-workbench .project-card-meta .status-dot {
+  margin-right: 6px;
 }
 .drama-workbench .search-field {
   display: flex;
@@ -501,13 +683,17 @@
   min-width: 0;
   min-height: var(--control-h-md);
   border: 1px solid transparent;
-  border-radius: var(--radius-lg);
+  border-radius: var(--radius-pill);
   padding: var(--space-1) var(--space-2);
   background: var(--control-surface);
   color: var(--control-fg-muted);
+  transition:
+    border-color 0.18s var(--drama-ease),
+    box-shadow 0.18s var(--drama-ease);
 }
 .drama-workbench .search-field:focus-within {
   border-color: var(--control-ring-strong);
+  box-shadow: 0 0 0 3px color-mix(in srgb, var(--accent) 18%, transparent);
 }
 .drama-workbench .search-field input {
   width: 180px;
@@ -518,23 +704,40 @@
   color: var(--control-fg);
 }
 .drama-workbench .filter-tabs {
-  display: flex;
+  display: inline-flex;
   flex-wrap: wrap;
-  gap: var(--space-1);
+  gap: 2px;
+  padding: 2px;
+  border: 1px solid var(--border);
+  border-radius: var(--radius-pill);
+  background: var(--control-surface);
 }
 .drama-workbench .filter-tabs button {
-  min-height: var(--control-h-md);
+  min-height: 0;
+  padding: 2px 12px;
   border: 0;
-  border-radius: var(--radius-md);
-  padding: var(--space-1) var(--space-3);
+  border-radius: var(--radius-pill);
   background: transparent;
   color: var(--text-muted);
+  font-size: 0.88em;
+  transition:
+    background 0.18s var(--drama-ease),
+    color 0.18s var(--drama-ease);
 }
-.drama-workbench .filter-tabs button.active {
-  background: var(--control-surface-active);
+.drama-workbench .filter-tabs button:hover {
   color: var(--text);
 }
+.drama-workbench .filter-tabs button.active,
+.drama-workbench .filter-tabs button[aria-pressed="true"] {
+  background: var(--text);
+  color: var(--bg);
+}
+.drama-workbench .filter-tabs button small {
+  color: inherit;
+  font-size: 0.8em;
+}
 .drama-workbench .concept-version-bar label {
+  position: relative;
   display: flex;
   align-items: center;
   flex-wrap: wrap;
@@ -542,7 +745,19 @@
 }
 .drama-workbench .concept-version-bar select {
   width: auto;
-  padding: var(--space-1) var(--space-2);
+  min-width: 0;
+  appearance: none;
+  border: 1px solid var(--border-strong);
+  border-radius: var(--radius-pill);
+  padding: 4px 26px 4px 12px;
+  background: var(--surface);
+  color: var(--control-fg);
+}
+.drama-workbench .concept-version-bar .select-chevron {
+  position: absolute;
+  right: 9px;
+  color: var(--text-muted);
+  pointer-events: none;
 }
 .drama-workbench .prompt-length {
   text-align: right;
@@ -562,6 +777,9 @@
   gap: var(--space-2);
   color: var(--text-muted);
 }
+.drama-workbench .status-row > span:first-child {
+  font-size: 0.86em;
+}
 .drama-workbench .status-row strong {
   display: inline-flex;
   align-items: center;
@@ -569,8 +787,23 @@
   color: var(--text);
   font-weight: 500;
 }
-.drama-workbench .status-row strong.positive {
-  color: var(--success);
+.drama-workbench .status-dot {
+  display: inline-block;
+  width: 8px;
+  height: 8px;
+  flex-shrink: 0;
+  border-radius: 50%;
+  background: var(--text-faint);
+}
+.drama-workbench .status-dot.positive {
+  background: var(--success);
+}
+.drama-workbench .status-dot.busy {
+  background: var(--drama-warn);
+  animation: drama-pulse 1.6s infinite;
+}
+.drama-workbench .status-dot.idle {
+  background: var(--text-faint);
 }
 .drama-workbench .version-card {
   padding: var(--space-3);
@@ -604,14 +837,24 @@
 }
 
 .drama-workbench .toast {
+  position: sticky;
+  bottom: 12px;
   display: flex;
   align-items: center;
   gap: var(--space-2);
   flex-shrink: 0;
-  padding: var(--space-3) var(--space-6);
-  border-top: 1px solid var(--border);
-  background: var(--control-surface);
-  color: var(--text);
+  width: fit-content;
+  margin: auto auto 0;
+  padding: 8px 16px;
+  border: 0;
+  border-radius: var(--radius-pill);
+  background: var(--text);
+  color: var(--bg);
+  box-shadow: 0 8px 24px -8px rgb(0 0 0 / 0.4);
+  animation: drama-toast-in 0.25s var(--drama-ease);
+}
+.drama-workbench .toast > svg {
+  color: var(--success);
 }
 .drama-workbench .drama-dialog-layer {
   position: absolute;
@@ -633,16 +876,19 @@
   max-height: 85%;
   padding: var(--space-5);
   overflow: auto;
-  border: 1px solid var(--border-strong);
-  border-radius: var(--radius-xl);
+  border: 1px solid var(--border);
+  border-radius: 14px;
   background: var(--surface);
   color: var(--text);
   font: inherit;
   box-shadow: var(--shadow-modal);
 }
+.drama-workbench .modal::backdrop {
+  backdrop-filter: blur(6px);
+}
 .drama-workbench .modal h2 {
-  font-size: 1.25em;
-  font-weight: 600;
+  font-size: 1.05em;
+  font-weight: 650;
 }
 .drama-workbench .modal-form {
   display: grid;
@@ -699,7 +945,7 @@
 }
 
 @container drama-workbench (max-width: 640px) {
-  .drama-workbench :is(.drama-topbar, .preview-strip, .toast) {
+  .drama-workbench :is(.drama-topbar, .preview-strip) {
     padding-right: var(--space-3);
     padding-left: var(--space-3);
   }
@@ -817,39 +1063,107 @@
 }
 .drama-workbench .drama-project-navigation {
   display: flex;
-  align-items: center;
-  gap: var(--space-3);
+  flex-direction: column;
+  align-items: stretch;
+  gap: var(--space-2);
   min-width: 0;
   border-bottom: 1px solid var(--border);
-  padding-bottom: var(--space-2);
+  padding-bottom: var(--space-3);
 }
 .drama-workbench .drama-navigation-heading {
   display: flex;
   align-items: center;
+  justify-content: space-between;
   gap: var(--space-2);
   flex: 0 0 auto;
+  padding: 0 4px;
   color: var(--text-muted);
 }
 .drama-workbench .drama-navigation-heading > span {
-  display: none;
+  font-size: 0.78em;
+  font-weight: 650;
+  letter-spacing: 0.08em;
+  color: var(--text-muted);
+}
+.drama-workbench .drama-navigation-heading .button.icon {
+  width: 28px;
+  min-height: 28px;
+  height: 28px;
+  padding: 0;
+  border: 0;
+  background: transparent;
+  color: var(--text-muted);
+}
+.drama-workbench .drama-navigation-heading .button.icon:not(:disabled):hover {
+  background: var(--control-surface-hover);
+  color: var(--text);
 }
 .drama-workbench .drama-navigation-items {
   display: flex;
-  gap: var(--space-1);
+  flex-direction: column;
+  gap: 2px;
   min-width: 0;
-  overflow-x: auto;
+  padding: 4px;
 }
 .drama-workbench .drama-project-navigation .stage-item {
+  position: relative;
   flex: 0 0 auto;
-  width: auto;
-  min-height: var(--control-h-md);
-  padding: var(--space-2) var(--space-3);
-  white-space: nowrap;
+  width: 100%;
+  min-height: 0;
+  padding: 6px 10px;
+  border-radius: 10px;
+  white-space: normal;
   color: var(--text-muted);
+}
+.drama-workbench .drama-project-navigation .stage-item:not(:disabled):hover {
+  background: var(--control-surface-hover);
+  color: var(--text);
+  transform: translateX(2px);
 }
 .drama-workbench .drama-project-navigation .stage-item.active {
   color: var(--text);
   background: var(--control-surface-active);
+}
+.drama-workbench .drama-project-navigation .stage-item.active::before {
+  content: "";
+  position: absolute;
+  top: 8px;
+  bottom: 8px;
+  left: 0;
+  width: 2px;
+  border-radius: 2px;
+  background: var(--accent);
+}
+.drama-workbench .drama-project-navigation .stage-item.later {
+  opacity: 0.55;
+}
+.drama-workbench .drama-navigation-icon {
+  display: grid;
+  place-items: center;
+  width: 28px;
+  height: 28px;
+  flex-shrink: 0;
+  border-radius: 8px;
+  background: var(--control-surface);
+  color: var(--text-muted);
+  transition:
+    background 0.18s var(--drama-ease),
+    color 0.18s var(--drama-ease);
+}
+.drama-workbench .stage-item.active .drama-navigation-icon,
+.drama-workbench .stage-item:not(:disabled):hover .drama-navigation-icon {
+  background: var(--surface);
+  color: var(--text);
+}
+.drama-workbench .drama-project-navigation .drama-navigation-label {
+  font-size: 0.92em;
+  font-weight: 550;
+  color: inherit;
+}
+.drama-workbench .drama-project-navigation .drama-navigation-label small {
+  font-size: 0.78em;
+  font-weight: 400;
+  color: var(--text-muted);
 }
 .drama-workbench
   [data-navigation-expanded="false"]
@@ -890,7 +1204,10 @@
 
 /* Compact project tools keep the saved creative work in the first screen. */
 .drama-workbench .drama-navigation-label small {
-  display: none;
+  display: block;
+  font-size: 0.78em;
+  font-weight: 400;
+  color: var(--text-muted);
 }
 .drama-workbench .drama-conversation-tools {
   display: grid;
@@ -944,8 +1261,6 @@
 }
 .drama-workbench .form-field select {
   min-height: var(--control-h-md);
-  padding: var(--space-1) var(--space-2);
-  border-color: var(--border-strong);
 }
 @container drama-workbench (max-width: 760px) {
   .drama-workbench .drama-conversation-tools {
@@ -1165,3 +1480,182 @@
 .drama-workbench .drama-stage-tabs button {flex-shrink:0;background:transparent;color:var(--text);border:0;border-radius:6px;padding:8px 10px;cursor:pointer;font:inherit;}
 .drama-workbench .drama-stage-tabs button[aria-current="page"] {background:var(--control-surface-active);font-weight:600;box-shadow:inset 0 -2px 0 currentColor;}
 .drama-workbench .drama-stage-tabs button:focus-visible {outline:2px solid currentColor;outline-offset:2px;}
+/* Host sidebar surface: compact tree navigation for projects and stages. */
+.drama-workbench.drama-host-sidebar {
+  display: block;
+  width: 100%;
+  min-height: 0;
+  padding: 16px 10px;
+  box-sizing: border-box;
+}
+.drama-workbench.drama-host-sidebar h2 {
+  margin: 4px 8px 10px;
+  font-size: 17px;
+}
+.drama-workbench .drama-sidebar-heading {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: 4px 8px 12px;
+  font-size: 13px;
+}
+.drama-workbench .drama-sidebar-heading strong {
+  font-size: 0.78em;
+  font-weight: 650;
+  letter-spacing: 0.08em;
+  color: var(--text-muted);
+}
+.drama-workbench .drama-sidebar-heading button {
+  display: grid;
+  place-items: center;
+  width: 28px;
+  height: 28px;
+  border: 1px solid var(--border);
+  border-radius: 8px;
+  background: transparent;
+  color: var(--text);
+  cursor: pointer;
+  transition: background 0.18s var(--drama-ease);
+}
+.drama-workbench .drama-sidebar-heading button:hover {
+  background: color-mix(in srgb, var(--text) 6%, transparent);
+}
+.drama-workbench .drama-sidebar-item {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  width: 100%;
+  padding: 7px 10px;
+  border: 0;
+  border-radius: 8px;
+  background: transparent;
+  color: inherit;
+  text-align: left;
+  cursor: pointer;
+  font: inherit;
+  font-size: 13px;
+  box-sizing: border-box;
+  transition:
+    background 0.18s var(--drama-ease),
+    color 0.18s var(--drama-ease);
+}
+.drama-workbench .drama-sidebar-item span {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+.drama-workbench .drama-sidebar-item > svg {
+  width: 15px;
+  height: 15px;
+  color: var(--text-muted);
+}
+.drama-workbench .drama-sidebar-item:hover,
+.drama-workbench .drama-sidebar-item:focus-visible {
+  background: color-mix(in srgb, var(--text) 6%, transparent);
+}
+.drama-workbench .drama-sidebar-projects {
+  display: grid;
+  gap: 6px;
+  margin-top: 18px;
+}
+
+/* Stage list grows as a tree under the active project: hairline rail plus dots. */
+.drama-workbench .drama-sidebar-projects nav[aria-label="项目制作阶段"] {
+  display: grid;
+  gap: 2px;
+  margin-top: 2px;
+  margin-left: 17px;
+  padding-left: 10px;
+  border-left: 1px solid var(--border);
+}
+.drama-workbench .drama-sidebar-stage {
+  padding: 5px 8px;
+  border-radius: 6px;
+  color: var(--text-muted);
+}
+.drama-workbench .drama-sidebar-stage:hover {
+  color: var(--text);
+}
+.drama-workbench .drama-sidebar-stage-dot {
+  width: 7px;
+  height: 7px;
+  flex-shrink: 0;
+  border: 1px solid var(--text-muted);
+  border-radius: 50%;
+}
+.drama-workbench .drama-sidebar-stage.current {
+  color: var(--text);
+}
+.drama-workbench .drama-sidebar-stage.current .drama-sidebar-stage-dot {
+  border-color: var(--accent);
+  background: var(--accent);
+}
+
+/* Integrated host layout: the host owns the navigation chrome. */
+.drama-workbench[data-host-layout="integrated"] .drama-project-navigation {
+  display: none;
+}
+.drama-workbench[data-host-layout="integrated"] .drama-project-layout {
+  display: block;
+}
+.drama-workbench[data-host-layout="integrated"] .drama-content {
+  padding: 24px;
+}
+.drama-workbench[data-host-layout="integrated"] .drama-home-hero {
+  padding: 0;
+  gap: 12px;
+  text-align: left;
+}
+.drama-workbench[data-host-layout="integrated"] .drama-home-hero h1 {
+  margin: 0;
+  font-size: 22px;
+  line-height: 1.35;
+}
+.drama-workbench[data-host-layout="integrated"] .drama-home-hero > p {
+  margin: 0;
+  font-size: 13px;
+  line-height: 1.65;
+}
+.drama-workbench[data-host-layout="integrated"] .drama-idea-composer {
+  width: 100%;
+  margin: 8px 0 0;
+  padding: 14px;
+  border-radius: 8px;
+}
+.drama-workbench[data-host-layout="integrated"] .drama-idea-composer textarea {
+  min-height: 110px;
+  font-size: 14px;
+  line-height: 1.7;
+}
+.drama-workbench[data-host-layout="integrated"] .drama-idea-actions {
+  flex-wrap: wrap;
+  gap: 8px;
+}
+.drama-workbench[data-host-layout="integrated"] .drama-idea-actions > span {
+  display: none;
+}
+.drama-workbench[data-host-layout="integrated"]
+  .drama-project-editor
+  > .panel-heading {
+  margin-bottom: 12px;
+}
+.drama-workbench[data-host-layout="integrated"]
+  .drama-project-editor
+  > .panel-heading
+  h2 {
+  font-size: 18px;
+}
+
+/* Home settings disclosure inherits the host's muted text tone. */
+.drama-workbench .drama-home-settings {
+  margin-top: 16px;
+  color: var(--text-muted);
+  font-size: 13px;
+}
+.drama-workbench .drama-home-settings summary {
+  padding: 8px 0;
+  cursor: pointer;
+}
+.drama-workbench .drama-home-settings[open] .drama-home-creation-fields {
+  margin-top: 12px;
+}

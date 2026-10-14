@@ -22,6 +22,14 @@ const server = await createServer({
     port: 5719,
     strictPort: true,
     fs: { allow: [repository] },
+    // Warm the preview module graph at startup so first clicks don't pay
+    // per-file transform cost in the dev server.
+    warmup: {
+      clientFiles: [
+        `${repository}artifacts/short-drama-workbench-preview/preview.tsx`,
+        `${uiRoot}/src/components/short-drama/ShortDramaWorkbenchPreview.tsx`,
+      ],
+    },
   },
   plugins: [
     {

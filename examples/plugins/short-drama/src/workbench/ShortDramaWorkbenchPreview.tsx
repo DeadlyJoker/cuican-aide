@@ -4,6 +4,7 @@ import {
   ArrowLeft,
   ArrowRight,
   Check,
+  ChevronDown,
   ChevronRight,
   Image,
   Plus,
@@ -416,11 +417,27 @@ export function ShortDramaWorkbenchPreview({
                         <span className="revision-status">
                           {item.version === project.selectedVersion ? (
                             <>
+                              <span
+                                className="status-dot positive"
+                                aria-hidden="true"
+                              />
                               <Check size={12} />
                               已选用
                             </>
                           ) : (
-                            stateName(item.state)
+                            <>
+                              <span
+                                className={`status-dot ${
+                                  item.state === "succeeded"
+                                    ? "positive"
+                                    : item.state === "queued"
+                                      ? "busy"
+                                      : "idle"
+                                }`}
+                                aria-hidden="true"
+                              />
+                              {stateName(item.state)}
+                            </>
                           )}
                         </span>
                         <ChevronRight size={15} />
@@ -453,6 +470,7 @@ export function ShortDramaWorkbenchPreview({
                           </option>
                         ))}
                       </select>
+                      <ChevronDown size={13} className="select-chevron" />
                     </label>
                     <span className="subtle">
                       基于需求 v{concept.briefVersion}
@@ -540,6 +558,13 @@ export function ShortDramaWorkbenchPreview({
                                 : "已完成"
                           }
                           positive={concept.state === "succeeded"}
+                          tone={
+                            concept.state === "queued"
+                              ? "busy"
+                              : concept.state === "succeeded"
+                                ? "positive"
+                                : "idle"
+                          }
                         />
                       </div>
                       <ShortDramaAccessNotice />

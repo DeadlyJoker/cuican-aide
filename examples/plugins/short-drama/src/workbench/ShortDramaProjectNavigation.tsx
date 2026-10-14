@@ -146,7 +146,9 @@ export function ShortDramaProjectNavigation({
                   if (available) onSelect(id as ShortDramaProjectPage);
                 }}
               >
-                <Icon size={18} />
+                <span className="drama-navigation-icon" aria-hidden="true">
+                  <Icon size={18} />
+                </span>
                 <span className="drama-navigation-label">
                   {title}
                   <small>{description}</small>

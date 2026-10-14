@@ -13,15 +13,20 @@ export function Status({
   label,
   value,
   positive = false,
+  tone,
 }: {
   label: string;
   value: string;
   positive?: boolean;
+  /** Status-dot tone; falls back to the positive flag for compatibility. */
+  tone?: "positive" | "busy" | "idle";
 }) {
+  const resolvedTone = tone ?? (positive ? "positive" : "idle");
   return (
     <div className="status-row">
       <span>{label}</span>
       <strong className={positive ? "positive" : ""}>
+        <span className={`status-dot ${resolvedTone}`} />
         {positive && <Check size={12} />} {value}
       </strong>
     </div>

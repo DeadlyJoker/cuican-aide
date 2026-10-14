@@ -97,6 +97,10 @@ export function ShortDramaProjectList({
               <div className="project-card-meta">
                 <span>需求 v{item.briefs.length}</span>
                 <span>
+                  {!item.selectedVersion &&
+                    item.concepts.at(-1)?.state === "queued" && (
+                      <span className="status-dot busy" aria-hidden="true" />
+                    )}
                   {item.selectedVersion
                     ? `概念图 v${item.selectedVersion} 已选用`
                     : item.concepts.length

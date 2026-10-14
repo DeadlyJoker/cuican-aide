@@ -3,6 +3,7 @@ import {
   ArrowLeft,
   ArrowRight,
   Check,
+  ChevronDown,
   ChevronRight,
   Image,
   Plus,
@@ -282,16 +283,13 @@ export function ShortDramaWorkbenchPreview({
                         key={title}
                         className={`stage-item ${index === 0 ? "active" : "later"}`}
                       >
-                        <span className="stage-number">
+                        <span className="stage-node">
                           {String(index + 1).padStart(2, "0")}
                         </span>
-                        <span>
+                        <span className="stage-text">
                           {title}
                           <small>{index === 0 ? "当前阶段" : "后续开放"}</small>
                         </span>
-                        {index < stages.length - 1 && (
-                          <ChevronRight size={13} />
-                        )}
                       </div>
                     ))}
                   </div>
@@ -456,6 +454,7 @@ export function ShortDramaWorkbenchPreview({
                           </option>
                         ))}
                       </select>
+                      <ChevronDown size={13} className="select-chevron" />
                     </label>
                     <span className="subtle">
                       基于需求 v{concept.briefVersion}
@@ -543,6 +542,9 @@ export function ShortDramaWorkbenchPreview({
                                 : "已完成"
                           }
                           positive={concept.state === "succeeded"}
+                          tone={
+                            concept.state === "queued" ? "busy" : undefined
+                          }
                         />
                       </div>
                       <ShortDramaAccessNotice />

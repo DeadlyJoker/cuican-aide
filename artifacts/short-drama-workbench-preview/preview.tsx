@@ -17,6 +17,8 @@ import "../../apps/crewon-ui/src/styles/app.css";
 import "../../apps/crewon-ui/src/styles/original-shell-overrides.css";
 import "../../apps/crewon-ui/src/styles/team-workspace.css";
 import "../../apps/crewon-ui/src/styles/appearance.css";
+import "../../apps/crewon-ui/src/styles/command-lightweight.css";
+import "../../apps/crewon-ui/src/styles/command-navigation.css";
 import referenceImage from "./assets/crewon-krea2-reference.png";
 
 initializeShortDramaPreviewSurface();

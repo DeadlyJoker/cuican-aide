@@ -137,6 +137,13 @@ export function ShortDramaPreviewDialogs({
               label="外部生成"
               value={stateName(concept.state)}
               positive={concept.state === "succeeded"}
+              tone={
+                concept.state === "queued"
+                  ? "busy"
+                  : concept.state === "succeeded"
+                    ? "positive"
+                    : "idle"
+              }
             />
           </div>
           <div className="version-card">
