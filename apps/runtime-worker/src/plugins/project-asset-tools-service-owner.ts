@@ -1,5 +1,10 @@
 import { assertProjectAssetStageDispatch } from "./project-stage-dispatch-scope.ts";
 import {
+  issuePluginProjectAssetRunMutationReadScope,
+  issuePluginProjectAssetRunReadScope,
+  captureProjectAssetRunReadAuthority,
+} from "@crewon/application/host-project-workspaces";
+import {
   captureMediaInputReadScope,
   mediaInputStageReadCommand,
 } from "./project-media-input-read-scope.ts";
@@ -497,6 +502,41 @@ export class ProjectAssetToolsServiceOwner {
       )
     )
       denied();
+    let readAssets = this.#assets;
+    if (method !== "saveCandidate" && this.#stage !== null) {
+      const current = async () => {
+        this.#check(i);
+        await this.#d.authorizeAssetService(signal);
+        await this.#d.authorizeCurrent(operation);
+        await this.#actor(signal);
+        await this.#policy(actor, request.projectId, false);
+        this.#check(i);
+      };
+      const evidence = this.#check(i);
+      const authority = captureProjectAssetRunReadAuthority({
+        version: "crewon.project-asset-run-read.v1",
+        actor,
+        run,
+        receipt: evidence.receipt,
+        claim: evidence.claim,
+        commandInput: i.command.input,
+        operationId: PROJECT_ASSET_TOOL_OPERATIONS[method],
+        installation,
+        admission: this.#d.admission,
+        assetStageAdmission: this.#stage,
+        selection,
+        package: pkg,
+        assertCurrent: current,
+      });
+      readAssets = await this.#assets.bindRunProjectReads(
+        await issuePluginProjectAssetRunReadScope({
+          authority,
+          assertActive: () => {
+            this.#check(i);
+          },
+        }),
+      );
+    }
     let value: unknown;
     if (method === "saveCandidate") {
       proveMetadataAckBudget(
@@ -537,9 +577,14 @@ export class ProjectAssetToolsServiceOwner {
         assertTransactionCurrent: txCurrent,
         runTransaction: tx,
       });
+      const readScope = await issuePluginProjectAssetRunMutationReadScope({
+        authority: tx,
+        assertActive: authority.assertActive,
+      });
+      const scopedAssets = await this.#assets.bindRunMutationReads(readScope);
       const result =
         await ProjectAssetApplicationService.prototype.saveCandidate.call(
-          this.#assets,
+          scopedAssets,
           actor,
           projectAssetRunMutationCommand(tx, sha),
           { authority },
@@ -554,7 +599,7 @@ export class ProjectAssetToolsServiceOwner {
     } else if (method === "listAssets") {
       const page =
         await ProjectAssetApplicationService.prototype.listAssets.call(
-          this.#assets,
+          readAssets,
           actor,
           request as ProjectAssetToolsRequests["listAssets"],
         );
@@ -577,7 +622,7 @@ export class ProjectAssetToolsServiceOwner {
       }
     } else if (method === "getAsset") {
       const view = await ProjectAssetApplicationService.prototype.getAsset.call(
-        this.#assets,
+        readAssets,
         actor,
         request as ProjectAssetToolsRequests["getAsset"],
       );
@@ -604,10 +649,10 @@ export class ProjectAssetToolsServiceOwner {
       };
     } else if (method === "listRevisions") {
       const q = request as ProjectAssetToolsRequests["listRevisions"];
-      await this.#sameKind(actor, q.projectId, q.assetId);
+      await this.#sameKind(actor, q.projectId, q.assetId, readAssets);
       const page =
           await ProjectAssetApplicationService.prototype.listRevisions.call(
-            this.#assets,
+            readAssets,
             actor,
             q,
           ),
@@ -631,7 +676,7 @@ export class ProjectAssetToolsServiceOwner {
       const q = request as ProjectAssetToolsRequests["readContent"];
       const record =
         await ProjectAssetApplicationService.prototype.getRevision.call(
-          this.#assets,
+          readAssets,
           actor,
           {
             projectId: q.projectId,
@@ -670,9 +715,10 @@ export class ProjectAssetToolsServiceOwner {
     actor: import("@crewon/application").ActorContext,
     projectId: string,
     assetId: string,
+    assets = this.#assets,
   ) {
     const view = await ProjectAssetApplicationService.prototype.getAsset.call(
-      this.#assets,
+      assets,
       actor,
       { projectId, assetId },
     );

@@ -113,19 +113,20 @@ export function useProjectAssetStageComposer(
       return () => controller.abort();
     }
     setScriptLoading(true);
-    void input.client.projectTexts
-      .getScript(input.binding.projectId, episodeId, {
-        signal: controller.signal,
-      })
+    void input.client.projectAssetStages
+      .getScriptSource(
+        {
+          projectId: input.binding.projectId,
+          threadId: input.binding.threadId,
+          expectedBindingRevision: input.binding.revision,
+          briefRevision: input.briefRevision,
+          episodeId,
+        },
+        { signal: controller.signal },
+      )
       .then((result) => {
-        const r = result.view?.selectedRevision;
-        if (
-          r?.kind !== "script" ||
-          r.episodeId !== episodeId ||
-          r.brief.briefRevision !== input.briefRevision ||
-          result.view?.dependencyState !== "current"
-        )
-          throw new Error("project_asset_script_unavailable");
+        const r = result.script;
+        if (r === null) throw new Error("project_asset_script_unavailable");
         if (alive && currentScript.current === scriptSource)
           setScript({
             artifactId: r.artifactId,

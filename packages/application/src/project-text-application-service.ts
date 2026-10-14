@@ -1,4 +1,6 @@
 import { readProjectOutlineSourceRevision } from "./project-outline-source-reader.ts";
+import { captureTextRunStoreView } from "./project-text-run-store-view.ts";
+import type { PluginProjectReadScope } from "./plugin-project-read-scope.ts";
 import { prepareProjectTextMutationAuthority } from "./project-text-mutation-authority.ts";
 import {
   checkedProjectTextArtifactPage,
@@ -92,8 +94,21 @@ type ArtifactQuery = ProjectQuery & Readonly<{ artifactId: string }>;
 /** UI and Agent share these owned metadata commands; no model, tool, Run or supplier is invoked. */
 export class ProjectTextApplicationService {
   readonly #dependencies: ProjectTextApplicationDependencies;
+  readonly #runStoreView: ReturnType<typeof captureTextRunStoreView>;
   constructor(dependencies: ProjectTextApplicationDependencies) {
     this.#dependencies = captureProjectTextDependencies(dependencies);
+    this.#runStoreView = captureTextRunStoreView(
+      dependencies,
+      this.#dependencies,
+    );
+  }
+  async withPluginProjectRunReads(
+    scope: PluginProjectReadScope,
+  ): Promise<ProjectTextApplicationService> {
+    const dependencies = await this.#runStoreView(scope);
+    return dependencies === null
+      ? this
+      : new ProjectTextApplicationService(dependencies);
   }
   saveOutlineCandidate(
     actor: ActorContext,

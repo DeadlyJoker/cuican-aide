@@ -1,2 +1,3 @@
 export * from "./project-asset-stages-service.ts";
 export * from "./project-asset-stages-contract.ts";
+export * from "./project-asset-stage-script-source.ts";

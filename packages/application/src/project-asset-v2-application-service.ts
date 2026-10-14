@@ -25,6 +25,7 @@ import {
 import { projectAssetOwnFields } from "./project-asset-application-support.ts";
 import { ApplicationError } from "./application-error.ts";
 import type { ActorContext } from "./authorization-port.ts";
+import type { PluginProjectReadScope } from "./plugin-project-read-scope.ts";
 import {
   captureProjectAssetCommitAuthority,
   type ProjectAssetCommitAuthority,
@@ -32,6 +33,8 @@ import {
 
 /** Shared public model for UI/Agent adapters. No route, tool or installation is registered implicitly. */
 export class ProjectAssetV2ApplicationService {
+  readonly #assets: ProjectAssetApplicationService;
+  readonly #adoptions: ProjectAssetMediaAdoptionApplicationService;
   readonly #asset: ProjectAssetApplicationService["getAsset"];
   readonly #revision: ProjectAssetApplicationService["getRevision"];
   readonly #list: ProjectAssetApplicationService["listAssets"];
@@ -63,6 +66,8 @@ export class ProjectAssetV2ApplicationService {
         "validation",
         "project_asset_v2_dependencies_invalid",
       );
+    this.#assets = d.assets;
+    this.#adoptions = d.adoptions;
     this.#asset = ProjectAssetApplicationService.prototype.getAsset.bind(
       d.assets,
     );
@@ -88,6 +93,19 @@ export class ProjectAssetV2ApplicationService {
         d.adoptions,
       );
     Object.freeze(this);
+  }
+  async bindPluginProjectReads(scope: PluginProjectReadScope) {
+    const assets =
+      await ProjectAssetApplicationService.prototype.bindPluginProjectReads.call(
+        this.#assets,
+        scope,
+      );
+    return assets === this.#assets
+      ? this
+      : new ProjectAssetV2ApplicationService({
+          assets,
+          adoptions: this.#adoptions,
+        });
   }
   async query(actor: ActorContext, input: ProjectAssetV2ReadRequest) {
     const request = parseProjectAssetV2Request(input);

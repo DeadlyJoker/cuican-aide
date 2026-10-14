@@ -321,3 +321,73 @@ test("asset availability rejects owner/selectors and aborted late replies; it ne
     ControlApiClientError,
   );
 });
+
+test("script source is an exact authenticated finite read without legacy project text API or automatic execution", async () => {
+  const request = {
+    projectId: "project",
+    threadId,
+    expectedBindingRevision: 2,
+    briefRevision: 3,
+    episodeId: "episode 1",
+  };
+  const output = {
+    projectId: request.projectId,
+    threadId,
+    bindingRevision: 2,
+    briefRevision: 3,
+    episodeId: request.episodeId,
+    script: {
+      artifactId: "script",
+      episodeId: request.episodeId,
+      contentRevision: 1,
+    },
+  };
+  const calls: { url: string; init: RequestInit }[] = [];
+  const c = client(async (url, init) => {
+    calls.push({ url: String(url), init: init! });
+    return Response.json(output);
+  }, null);
+  assert.deepEqual(await c.projectAssetStages.getScriptSource(request), output);
+  assert.equal(calls.length, 1);
+  assert.equal(calls[0]!.init.method, "GET");
+  assert.equal(calls[0]!.init.redirect, "manual");
+  const url = new URL(calls[0]!.url);
+  assert.equal(
+    url.pathname,
+    `/api/v1/threads/${encodeURIComponent(threadId)}/project-asset-stage/script-source`,
+  );
+  assert.equal(url.searchParams.get("projectId"), request.projectId);
+  assert.equal(
+    new Headers(calls[0]!.init.headers).get("authorization"),
+    "Bearer fixture-token",
+  );
+  assert.equal(
+    new Headers(calls[0]!.init.headers).get("idempotency-key"),
+    null,
+  );
+  for (const bad of [
+    { ...output, threadId: "foreign" },
+    { ...output, script: { ...output.script, episodeId: "foreign" } },
+    { ...output, content: "unbounded" },
+  ])
+    await assert.rejects(
+      client(async () => Response.json(bad)).projectAssetStages.getScriptSource(
+        request,
+      ),
+      ControlApiProtocolError,
+    );
+  await assert.rejects(
+    c.projectAssetStages.getScriptSource({
+      ...request,
+      actorId: "forged",
+    } as never),
+    ControlApiProtocolError,
+  );
+  assert.equal(calls.length, 1);
+  const gate = new AbortController();
+  gate.abort();
+  await assert.rejects(
+    c.projectAssetStages.getScriptSource(request, { signal: gate.signal }),
+  );
+  assert.equal(calls.length, 1);
+});

@@ -7,6 +7,7 @@ import {
   type ProjectAssetStageRunAdmission,
 } from "@crewon/domain";
 import type { ProjectAssetStageStore } from "@crewon/application";
+import type { ProjectAssetRuntimeReadObservation } from "@crewon/application/host-project-workspaces";
 
 /** A real required marker and its exact immutable record, never a prompt hint or old text scope. */
 export async function readProjectAssetStageRuntimeScope(
@@ -18,6 +19,7 @@ export async function readProjectAssetStageRuntimeScope(
     admission: PluginTaskAdmission;
     binding: ExtensionRunBinding;
     signal: AbortSignal;
+    observation?: ProjectAssetRuntimeReadObservation;
   }>,
 ): Promise<ProjectAssetStageRunAdmission | null> {
   const locator = {
@@ -26,8 +28,15 @@ export async function readProjectAssetStageRuntimeScope(
     runId: input.binding.runId,
   };
   input.signal.throwIfAborted();
-  const required = await input.stages.readRequiredAssetStageDigest(locator),
-    actual = await input.stages.loadAssetStageAdmission(locator);
+  const options =
+    input.observation === undefined
+      ? undefined
+      : { projectAssetRuntimeReadObservation: input.observation };
+  const required = await input.stages.readRequiredAssetStageDigest(
+      locator,
+      options,
+    ),
+    actual = await input.stages.loadAssetStageAdmission(locator, options);
   input.signal.throwIfAborted();
   if (actual === null) {
     if (required !== null) denied();

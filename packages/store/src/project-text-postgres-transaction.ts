@@ -1,4 +1,5 @@
 import type { Pool, PoolClient } from "pg";
+import { capturePostgresTextRunProjectAccess } from "./project-text-run-owned-access.ts";
 import {
   assertCreativeProjectCommitActive,
   assertCreativeProjectCommitCurrent,
@@ -30,7 +31,10 @@ export async function commitPostgresLegacyText<
     authority?: CreativeProjectCommitAuthority;
     runQualification?: ProjectRunQualification;
     scope?: CreativeProjectScope;
-    checkDownstream?(client: PoolClient): Promise<void>;
+    checkDownstream?(
+      client: PoolClient,
+      access: PostgresCreativeProjectLegacyAccess,
+    ): Promise<void>;
   }>,
 ): Promise<T> {
   const active = () => {
@@ -46,21 +50,27 @@ export async function commitPostgresLegacyText<
     active();
     await client.query("BEGIN ISOLATION LEVEL READ COMMITTED");
     await lockPostgresCreativeProjectLegacySchema(client, input.schema);
-    const access = await capturePostgresCreativeProjectLegacyAccess(
-      client,
-      input.schema,
-    );
+    const access =
+      (await capturePostgresTextRunProjectAccess(
+        client,
+        input.schema,
+        input.authority,
+      )) ??
+      (await capturePostgresCreativeProjectLegacyAccess(client, input.schema));
     if (input.scope !== undefined) await access.assertProject(input.scope);
     const result = await input.body(client, access);
     // New negative SQL and downstream reads finish before original final authorization and lease.
-    const current = await capturePostgresCreativeProjectLegacyAccess(
-      client,
-      input.schema,
-    );
+    const current =
+      (await capturePostgresTextRunProjectAccess(
+        client,
+        input.schema,
+        input.authority,
+      )) ??
+      (await capturePostgresCreativeProjectLegacyAccess(client, input.schema));
     if (input.scope !== undefined) await current.assertProject(input.scope);
     const resultScope = textLegacyResultScope(result);
     if (resultScope !== undefined) await current.assertProject(resultScope);
-    await input.checkDownstream?.(client);
+    await input.checkDownstream?.(client, current);
     const authority = input.authority;
     if (authority?.planTransaction !== undefined) {
       await authority.planTransaction.assertCurrent();

@@ -1,4 +1,5 @@
 import { prepareProjectToolOwnedReads } from "./project-tool-owned-reads.ts";
+import { issuePluginProjectTextRunMutationReadScope } from "@crewon/application/host-project-workspaces";
 import {
   projectToolReadPolicyFence,
   assertProjectToolOwnershipDeployment,
@@ -110,7 +111,13 @@ export type ProjectToolsServiceOwnerDependencies = Readonly<{
   outlines?: Pick<
     ProjectStructuredOutlineApplicationService,
     "getOutline" | "getRevision" | "listRevisions"
-  >;
+  > &
+    Partial<
+      Pick<
+        ProjectStructuredOutlineApplicationService,
+        "withPluginProjectRunReads"
+      >
+    >;
   runs: Pick<RunStore, "loadRunInSpace">;
   installations: Pick<PluginInstallationStore, "loadSelection" | "loadPackage">;
   authorization: CreativeProjectAuthorizationPort;
@@ -731,8 +738,36 @@ export class ProjectToolsServiceOwner {
         this.#check(invocation);
       }
     }
+    let executionDependencies = ownedReads.dependencies;
+    if (
+      this.#dependencies.projectOwnership === "plugin-project-v1" &&
+      authority?.runTransaction &&
+      [
+        "saveOutlineCandidate",
+        "saveScriptCandidate",
+        "selectRevision",
+        "setLocked",
+      ].includes(method)
+    ) {
+      const readScope = await issuePluginProjectTextRunMutationReadScope({
+        authority: authority.runTransaction,
+        assertActive: authority.assertActive,
+      });
+      const texts =
+        await this.#dependencies.texts.withPluginProjectRunReads(readScope);
+      const outlines = this.#dependencies.outlines;
+      if (outlines && !outlines.withPluginProjectRunReads)
+        throw new Error("plugin_project_text_mutation_binding_unavailable");
+      executionDependencies = {
+        ...executionDependencies,
+        texts,
+        ...(outlines
+          ? { outlines: await outlines.withPluginProjectRunReads!(readScope) }
+          : {}),
+      };
+    }
     const value = await invokeProjectTool({
-      dependencies: ownedReads.dependencies,
+      dependencies: executionDependencies,
       method,
       request,
       actor,

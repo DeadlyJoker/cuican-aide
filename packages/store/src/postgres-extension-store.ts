@@ -1,3 +1,5 @@
+import { readPostgresAssetRuntimeMetadata } from "./project-asset-runtime-read.ts";
+import { readPostgresAssetStageExtensionReceipt } from "./project-asset-stage-receipt-read.ts";
 import { readPostgresTextPlan } from "./project-text-plan-legacy-access.ts";
 import {
   admitPostgresRunComposition,
@@ -631,55 +633,88 @@ export class PostgresExtensionStore implements ExtensionStore {
 
   async loadExtensionTurnReceipt(
     input: ExtensionScope & { receipt: ExtensionMutationReceipt },
+    options?: Parameters<ExtensionStore["loadExtensionTurnReceipt"]>[1],
   ) {
     this.#host.assertOpen();
-    return readPostgresTextPlan({
-      pool: this.#pool,
-      schema: this.#schemaName,
-      assertOpen: () => this.#host.assertOpen(),
-      read: async (client) => {
-        const value = await this.#receipt(client, input, "task", input.receipt);
-        if (value === null) return null;
-        const result = parseExtensionTurnReceipt(value, input, input.receipt);
-        await readPostgresRunComposition(
-          client,
-          this.#schemaName,
-          result.binding,
+    const read = async (
+      client: PoolClient,
+      projectAccess?: import("./creative-project-legacy-access.ts").PostgresCreativeProjectLegacyAccess,
+    ) => {
+      const value = await this.#receipt(client, input, "task", input.receipt);
+      if (value === null) return null;
+      const result = parseExtensionTurnReceipt(value, input, input.receipt);
+      await readPostgresRunComposition(
+        client,
+        this.#schemaName,
+        result.binding,
+      );
+      await this.#assertCreditLink(client, result.creditAdmission);
+      await verifyPostgresUnmeteredReceipt(client, this.#schemaName, result);
+      this.#host.assertOpen();
+      const projectTextPlanAdmission = await loadPostgresPlanAdmission(
+        client,
+        this.#schemaName,
+        { tenantId: result.binding.tenantId, runId: result.binding.runId },
+      );
+      this.#host.assertOpen();
+      const projectMediaInputStageAdmission = await loadPostgresMediaInputStage(
+        client,
+        this.#schemaName,
+        result.binding,
+      );
+      const projectAssetStageAdmission = await loadPostgresAssetStage(
+        client,
+        this.#schemaName,
+        result.binding,
+        ...(projectAccess === undefined ? [] : [{ projectAccess }]),
+      );
+      return {
+        ...result,
+        ...(projectTextPlanAdmission === null
+          ? {}
+          : { projectTextPlanAdmission }),
+        ...(projectMediaInputStageAdmission === null
+          ? {}
+          : { projectMediaInputStageAdmission }),
+        ...(projectAssetStageAdmission === null
+          ? {}
+          : { projectAssetStageAdmission }),
+      };
+    };
+    if (
+      options !== undefined &&
+      Object.hasOwn(options, "projectAssetRuntimeReadObservation")
+    )
+      return readPostgresAssetRuntimeMetadata(
+        {
+          pool: this.#pool,
+          schema: this.#schemaName,
+          assertOpen: () => this.#host.assertOpen(),
+          request: input,
+          options:
+            options as import("./project-asset-runtime-read.ts").ProjectAssetRuntimeReadOptions,
+        },
+        read,
+      );
+    return options === undefined
+      ? readPostgresTextPlan({
+          pool: this.#pool,
+          schema: this.#schemaName,
+          assertOpen: () => this.#host.assertOpen(),
+          read,
+        })
+      : readPostgresAssetStageExtensionReceipt(
+          {
+            pool: this.#pool,
+            schema: this.#schemaName,
+            assertOpen: () => this.#host.assertOpen(),
+            request: input,
+            options: options as {
+              projectAssetStageReadScope: import("@crewon/application").PluginProjectReadScope;
+            },
+          },
+          read,
         );
-        await this.#assertCreditLink(client, result.creditAdmission);
-        await verifyPostgresUnmeteredReceipt(client, this.#schemaName, result);
-        this.#host.assertOpen();
-        const projectTextPlanAdmission = await loadPostgresPlanAdmission(
-          client,
-          this.#schemaName,
-          { tenantId: result.binding.tenantId, runId: result.binding.runId },
-        );
-        this.#host.assertOpen();
-        const projectMediaInputStageAdmission =
-          await loadPostgresMediaInputStage(
-            client,
-            this.#schemaName,
-            result.binding,
-          );
-        const projectAssetStageAdmission = await loadPostgresAssetStage(
-          client,
-          this.#schemaName,
-          result.binding,
-        );
-        return {
-          ...result,
-          ...(projectTextPlanAdmission === null
-            ? {}
-            : { projectTextPlanAdmission }),
-          ...(projectMediaInputStageAdmission === null
-            ? {}
-            : { projectMediaInputStageAdmission }),
-          ...(projectAssetStageAdmission === null
-            ? {}
-            : { projectAssetStageAdmission }),
-        };
-      },
-    });
   }
   async loadExtensionCreditAdmission(input: ExtensionRunLocator) {
     this.#host.assertOpen();

@@ -1,4 +1,5 @@
 import { readSqliteProjectText } from "./plugin-project-text-read-view.ts";
+import { captureSqliteTextRunProjectAccess } from "./project-text-run-owned-access.ts";
 import type { PluginProjectReadScope } from "@crewon/application";
 import {
   beginSqlitePlanResult,
@@ -170,17 +171,23 @@ export class SqliteStructuredOutlineStorage {
       identity.receipt,
       "structured-outline",
     );
-    return readSqliteLegacyCreativeProject(this.#database, (access) => {
+    return readSqliteLegacyCreativeProject(this.#database, (legacyAccess) => {
+      const access =
+        captureSqliteTextRunProjectAccess(this.#database, authority) ??
+        legacyAccess;
       assertSqliteProjectTextUiCommit(this.#database, q);
       assertSqliteProjectOutlineRunCommit(
         this.#database,
         rq,
         "receipt-publication",
+        { projectAccess: access },
       );
       beginSqlitePlanResult(this.#database, rq);
       beginSqlitePlanSelection(this.#database, pq);
       const result = this.#receipt(identity, access, "read");
-      const current = captureSqliteCreativeProjectLegacyAccess(this.#database);
+      const current =
+        captureSqliteTextRunProjectAccess(this.#database, authority) ??
+        captureSqliteCreativeProjectLegacyAccess(this.#database);
       if (result !== null)
         current.assertProject(
           textLegacyScope(result.artifact, result.artifact.projectId),
@@ -190,6 +197,7 @@ export class SqliteStructuredOutlineStorage {
         this.#database,
         rq,
         "receipt-publication",
+        { projectAccess: access },
       );
       this.#active(authority);
       return result;
@@ -241,7 +249,9 @@ export class SqliteStructuredOutlineStorage {
     this.#active(authority);
     this.#database.exec("BEGIN IMMEDIATE");
     try {
-      const access = captureSqliteCreativeProjectLegacyAccess(this.#database);
+      const access =
+        captureSqliteTextRunProjectAccess(this.#database, authority) ??
+        captureSqliteCreativeProjectLegacyAccess(this.#database);
       const scope = textLegacyScope(
         prepared.project,
         prepared.project.projectId,
@@ -252,6 +262,7 @@ export class SqliteStructuredOutlineStorage {
         this.#database,
         rq,
         "receipt-publication",
+        { projectAccess: access },
       );
       const identity = textIdentity({
         actor: prepared.actor,
@@ -267,9 +278,9 @@ export class SqliteStructuredOutlineStorage {
       if (replay !== null) {
         finishSqlitePlanResult(this.#database, planResult, replay);
         finishSqlitePlanSelection(this.#database, selectionCheckpoint, replay);
-        const current = captureSqliteCreativeProjectLegacyAccess(
-          this.#database,
-        );
+        const current =
+          captureSqliteTextRunProjectAccess(this.#database, authority) ??
+          captureSqliteCreativeProjectLegacyAccess(this.#database);
         current.assertProject(scope);
         current.assertProject(
           textLegacyScope(replay.artifact, replay.artifact.projectId),
@@ -279,6 +290,7 @@ export class SqliteStructuredOutlineStorage {
           this.#database,
           rq,
           "receipt-publication",
+          { projectAccess: access },
         );
         this.#active(authority);
         this.#database.exec("COMMIT");
@@ -298,6 +310,7 @@ export class SqliteStructuredOutlineStorage {
       const foundation = captureSqliteProjectFoundationDownstream(
         this.#database,
         { actor: prepared.actor, projectId: id },
+        { projectAccess: access },
       );
       const base =
         qualifiedCommand &&
@@ -312,7 +325,12 @@ export class SqliteStructuredOutlineStorage {
           : null;
       assertProjectOutlineUiPrepared(q, prepared, base);
       assertProjectOutlineRunPrepared(rq, prepared, base);
-      assertSqliteProjectOutlineRunCommit(this.#database, rq);
+      assertSqliteProjectOutlineRunCommit(
+        this.#database,
+        rq,
+        "fresh-candidate",
+        { projectAccess: access },
+      );
       const candidate = prepared.kind === "save-outline";
       const revision = candidate
         ? null
@@ -390,7 +408,7 @@ export class SqliteStructuredOutlineStorage {
       );
       finishSqlitePlanResult(this.#database, planResult, result);
       finishSqlitePlanSelection(this.#database, selectionCheckpoint, result);
-      if (planSelection === undefined)
+      if (planSelection === undefined && identity.kind === "select-revision")
         observeSqlitePlanManualSelection(
           this.#database,
           prepared.actor,
@@ -402,14 +420,22 @@ export class SqliteStructuredOutlineStorage {
         this.#database,
         { actor: prepared.actor, projectId: id },
         foundation,
+        { projectAccess: access },
       );
-      const current = captureSqliteCreativeProjectLegacyAccess(this.#database);
+      const current =
+        captureSqliteTextRunProjectAccess(this.#database, authority) ??
+        captureSqliteCreativeProjectLegacyAccess(this.#database);
       current.assertProject(scope);
       current.assertProject(
         textLegacyScope(result.artifact, result.artifact.projectId),
       );
       assertSqliteProjectTextUiCommit(this.#database, q);
-      assertSqliteProjectOutlineRunCommit(this.#database, rq);
+      assertSqliteProjectOutlineRunCommit(
+        this.#database,
+        rq,
+        "fresh-candidate",
+        { projectAccess: access },
+      );
       this.#active(authority);
       this.#database.exec("COMMIT");
       return result;

@@ -131,10 +131,17 @@ function checked(
     projectAssetFailure("project_asset_stage_marker_invalid");
   return actual;
 }
-export function loadSqliteAssetStage(db: DatabaseSync, l: Locator) {
+export function loadSqliteAssetStage(
+  db: DatabaseSync,
+  l: Locator,
+  options?: Readonly<{
+    projectAccess: import("./creative-project-legacy-access.ts").CreativeProjectLegacyAccess;
+  }>,
+) {
   if (!db.isTransaction)
     throw new Error("creative_project_legacy_transaction_required");
-  const access = captureSqliteCreativeProjectLegacyAccess(db);
+  const access =
+    options?.projectAccess ?? captureSqliteCreativeProjectLegacyAccess(db);
   const row = assertSqliteAssetStageSchema(db, true)
     ? db
         .prepare(
@@ -152,9 +159,14 @@ export async function loadPostgresAssetStage(
   c: PoolClient,
   s: string,
   l: Locator,
+  options?: Readonly<{
+    projectAccess: import("./creative-project-legacy-access.ts").PostgresCreativeProjectLegacyAccess;
+  }>,
 ) {
   await lockPostgresCreativeProjectLegacySchema(c, s);
-  const access = await capturePostgresCreativeProjectLegacyAccess(c, s);
+  const access =
+    options?.projectAccess ??
+    (await capturePostgresCreativeProjectLegacyAccess(c, s));
   const row = (await assertPostgresAssetStageSchema(c, s, true))
     ? (
         await c.query(

@@ -2,6 +2,7 @@ import {
   bindProjectTextReadView,
   readSqliteOwnedProjectText,
 } from "./plugin-project-text-read-view.ts";
+import { captureSqliteTextRunProjectAccess } from "./project-text-run-owned-access.ts";
 import type { PluginProjectReadCall } from "./plugin-project-owned-read-sqlite.ts";
 import type { PluginProjectReadScope } from "@crewon/application";
 import {
@@ -358,7 +359,10 @@ export class SqliteProjectTextStore implements ProjectStructuredOutlineStore {
             selectionCheckpoint,
             result,
           );
-          if (planSelection === undefined)
+          if (
+            planSelection === undefined &&
+            identity.kind === "select-revision"
+          )
             observeSqlitePlanManualSelection(
               this.#database,
               identity.actor,
@@ -467,7 +471,10 @@ export class SqliteProjectTextStore implements ProjectStructuredOutlineStore {
             selectionCheckpoint,
             replay,
           );
-          if (planSelection === undefined)
+          if (
+            planSelection === undefined &&
+            identity.kind === "select-revision"
+          )
             observeSqlitePlanManualSelection(
               this.#database,
               identity.actor,
@@ -567,6 +574,7 @@ export class SqliteProjectTextStore implements ProjectStructuredOutlineStore {
           downstream = captureSqliteProjectFoundationDownstream(
             this.#database,
             downstreamLocator,
+            { projectAccess: access },
           );
           assertOutlineSourceInputsCurrent(structuredSource, downstream);
         }
@@ -620,7 +628,7 @@ export class SqliteProjectTextStore implements ProjectStructuredOutlineStore {
         finishSqliteTextIntentCommit(this.#database, intent);
         finishSqlitePlanResult(this.#database, planResult, result);
         finishSqlitePlanSelection(this.#database, selectionCheckpoint, result);
-        if (planSelection === undefined)
+        if (planSelection === undefined && identity.kind === "select-revision")
           observeSqlitePlanManualSelection(
             this.#database,
             identity.actor,
@@ -633,12 +641,13 @@ export class SqliteProjectTextStore implements ProjectStructuredOutlineStore {
       authority,
       runQualification,
       textUi,
-      () => {
+      (access) => {
         if (downstream !== undefined)
           assertSqliteProjectFoundationDownstreamUnchanged(
             this.#database,
             downstreamLocator,
             downstream,
+            { projectAccess: access },
           );
       },
       textLegacyScope(prepared.project, prepared.project.projectId),
@@ -776,20 +785,24 @@ export class SqliteProjectTextStore implements ProjectStructuredOutlineStore {
     authority?: CreativeProjectCommitAuthority,
     runQualification?: ProjectRunQualification,
     textUi?: ProjectTextUiQualification,
-    checkDownstream?: () => void,
+    checkDownstream?: (access: CreativeProjectLegacyAccess) => void,
     scope?: CreativeProjectScope,
   ): T {
     this.#active(authority);
     this.#database.exec("BEGIN IMMEDIATE");
     try {
-      const access = captureSqliteCreativeProjectLegacyAccess(this.#database);
+      const access =
+        captureSqliteTextRunProjectAccess(this.#database, authority) ??
+        captureSqliteCreativeProjectLegacyAccess(this.#database);
       if (scope !== undefined) access.assertProject(scope);
       const result = body(access);
-      const current = captureSqliteCreativeProjectLegacyAccess(this.#database);
+      const current =
+        captureSqliteTextRunProjectAccess(this.#database, authority) ??
+        captureSqliteCreativeProjectLegacyAccess(this.#database);
       if (scope !== undefined) current.assertProject(scope);
       const resultScope = textLegacyResultScope(result);
       if (resultScope !== undefined) current.assertProject(resultScope);
-      checkDownstream?.();
+      checkDownstream?.(current);
       // The original physical lease and UI qualification follow every new SQL fence.
       assertSqliteProjectRunCommit(this.#database, runQualification);
       assertSqliteProjectTextUiCommit(this.#database, textUi);

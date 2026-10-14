@@ -1,13 +1,22 @@
+import type { ProjectAssetRunReadAuthority } from "./project-asset-run-read-authority.ts";
+import type { ProjectOutlineRunReadAuthority } from "./project-outline-run-read-authority.ts";
+import type { ProjectAssetStageReadRequest } from "./project-asset-stage-read-scope.ts";
+import type { ProjectAssetStageCommitAuthority } from "./project-asset-stage-authority.ts";
+import type { ProjectConversationBinding } from "@crewon/domain";
 import {
   foundationProjectReadSource,
   type PluginProjectFoundationScope,
 } from "./plugin-project-foundation-scope.ts";
 import type { ProjectFoundationUiRequest } from "@crewon/contracts/project-foundation";
+import type { ProjectAssetV2ReadRequest } from "@crewon/contracts/project-assets-v2";
 import {
   captureProjectFoundationRunReadAuthority,
   type ProjectFoundationRunReadAuthority,
 } from "./project-foundation-run-commit-authority.ts";
 import type { ProjectFoundationRunCommitTransactionAuthority } from "./project-foundation-run-commit-authority.ts";
+import type { CreativeProjectRunCommitTransactionAuthority } from "./creative-project-run-commit-authority.ts";
+import type { ProjectOutlineRunCommitTransactionAuthority } from "./project-outline-run-commit-authority.ts";
+import type { ProjectAssetRunCommitTransactionAuthority } from "./project-asset-run-commit-authority.ts";
 import {
   PROJECT_WORKSPACE_TARGET_ACTION,
   parseProjectWorkspaceTargetRequest,
@@ -98,9 +107,18 @@ export function isPluginProjectMutationAction(action: string): boolean {
   );
 }
 type Qualified = Readonly<{
+  assetRunReadAuthority?: ProjectAssetRunReadAuthority;
+  outlineRunReadAuthority?: ProjectOutlineRunReadAuthority;
+  assetStageRead?: Readonly<{
+    authority: ProjectAssetStageCommitAuthority;
+    binding: ProjectConversationBinding;
+  }>;
   runAuthority?: CreativeProjectRunReadAuthority;
   foundationRunAuthority?: ProjectFoundationRunReadAuthority;
   foundationRunMutationAuthority?: ProjectFoundationRunCommitTransactionAuthority;
+  creativeRunMutationAuthority?: CreativeProjectRunCommitTransactionAuthority;
+  outlineRunMutationAuthority?: ProjectOutlineRunCommitTransactionAuthority;
+  assetRunMutationAuthority?: ProjectAssetRunCommitTransactionAuthority;
   purpose: "read" | "mutation";
   scope: PluginProjectWorkspaceOwnerScope;
   snapshot: Readonly<{
@@ -110,7 +128,24 @@ type Qualified = Readonly<{
   }>;
   request:
     | Readonly<{
-        action: "crewon.project-foundation-run-mutation-read.v1";
+        action: "crewon.project-asset-run-read.v1";
+        input: Readonly<{
+          projectId: string;
+          assetId?: string;
+          contentRevision?: number;
+        }>;
+      }>
+    | Readonly<{
+        action: "crewon.project-outline-context-read.v1";
+        input: Readonly<{ projectId: string }>;
+      }>
+    | ProjectAssetStageReadRequest
+    | Readonly<{
+        action:
+          | "crewon.project-foundation-run-mutation-read.v1"
+          | "crewon.project-text-run-mutation-read.v1"
+          | "crewon.project-outline-run-mutation-read.v1"
+          | "crewon.project-asset-run-mutation-read.v1";
         input: Readonly<{ projectId: string }>;
       }>
     | Readonly<{
@@ -125,6 +160,7 @@ type Qualified = Readonly<{
         }>;
       }>
     | ProjectFoundationUiRequest
+    | ProjectAssetV2ReadRequest
     | ReturnType<typeof parseCreativeProjectUiActionRequest>
     | ReturnType<typeof parseProjectConversationsActionRequest>
     | Readonly<{
@@ -141,9 +177,13 @@ type Qualified = Readonly<{
 }>;
 const references = new WeakMap<object, Qualified>();
 /** Internal registry for deliberate Host issuers. Not exported from any package entrypoint. */
-export function registerTrustedRunProjectReadSource(source: Qualified): PluginProjectReadScope {
+export function registerTrustedRunProjectReadSource(
+  source: Qualified,
+): PluginProjectReadScope {
   source.assertActive();
-  const ref: PluginProjectReadScope = Object.freeze({ version: "crewon.plugin-project-read-scope.v1" });
+  const ref: PluginProjectReadScope = Object.freeze({
+    version: "crewon.plugin-project-read-scope.v1",
+  });
   references.set(ref, Object.freeze(source));
   return ref;
 }

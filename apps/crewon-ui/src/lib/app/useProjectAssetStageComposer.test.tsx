@@ -7,7 +7,6 @@ import {
   api,
   binding,
   selection,
-  scriptView,
   deferred,
 } from "../control-runtime/controlProjectAssetStage.test-support";
 type Input = Parameters<typeof useProjectAssetStageComposer>[0];
@@ -123,38 +122,48 @@ it("absent owner and old-server route keep ordinary composer inactive; selecting
   expect(f.current().blocked).toBe(false);
   expect(f.current().selection).toBeNull();
 });
-it("script source uses the actual adopted script and rejects stale, unselected and foreign projections", async () => {
-  const calls: string[] = [];
+function scriptSource(episodeId = "episode-1", briefRevision = 1) {
+  return {
+    projectId: binding.projectId,
+    threadId: binding.threadId,
+    bindingRevision: binding.revision,
+    briefRevision,
+    episodeId,
+    script: {
+      artifactId: `script-${episodeId}`,
+      episodeId,
+      contentRevision: 1,
+    },
+  };
+}
+it("script source uses an exact bound read and blocks absent or stale refs without legacy project API calls", async () => {
+  const calls: URL[] = [];
   let valid = true;
   const f = await fixture(
     api(async (url) => {
-      const path = new URL(String(url)).pathname;
-      calls.push(path);
-      if (path.endsWith("project-asset-stage"))
+      const target = new URL(String(url));
+      calls.push(target);
+      if (target.pathname.endsWith("project-asset-stage"))
         return Response.json({ available: true });
-      const response = scriptView();
       return Response.json(
-        valid
-          ? response
-          : {
-              view: {
-                ...response.view,
-                dependencyState: "stale",
-                staleReasons: ["brief-changed"],
-              },
-            },
+        valid ? scriptSource() : { ...scriptSource(), script: null },
       );
     }),
   );
   await f.change((value) => value.setEpisodeId("episode-1"));
   expect(f.current().blocked).toBe(false);
-  expect(f.current().selection?.stage.script).toEqual({
-    artifactId: "script-episode-1",
+  expect(f.current().selection?.stage.script).toEqual(scriptSource().script);
+  expect(calls[1].pathname).toBe(
+    "/api/v1/threads/thread/project-asset-stage/script-source",
+  );
+  expect(Object.fromEntries(calls[1].searchParams)).toEqual({
+    projectId: binding.projectId,
+    expectedBindingRevision: String(binding.revision),
+    briefRevision: "1",
     episodeId: "episode-1",
-    contentRevision: 1,
   });
-  expect(calls).toContain(
-    "/api/v1/creative-projects/project%2F%E4%B8%AD%E6%96%87/text-artifacts/scripts/episode-1",
+  expect(calls.some((u) => u.pathname.includes("creative-projects"))).toBe(
+    false,
   );
   valid = false;
   await f.render({ refresh: 1 });
@@ -162,33 +171,19 @@ it("script source uses the actual adopted script and rejects stale, unselected a
   expect(f.current().selection?.stage.script).toBeNull();
   await f.change((value) => value.setEpisodeId("absent-episode"));
   expect(f.current().blocked).toBe(true);
-  expect(calls.some((p) => p.includes("absent-episode"))).toBe(false);
+  expect(
+    calls.some((u) => u.searchParams.get("episodeId") === "absent-episode"),
+  ).toBe(false);
 });
-it("missing selection, foreign project and changed brief cannot be presented as usable script sources", async () => {
-  const original = scriptView();
-  const responses = [
-    {
-      view: {
-        ...original.view,
-        artifact: { ...original.view!.artifact, selectedContentRevision: null },
-        selectedRevision: null,
-        dependencyState: "unselected",
-        staleReasons: [],
-      },
-    },
-    {
-      view: {
-        ...original.view,
-        artifact: { ...original.view!.artifact, projectId: "foreign" },
-        selectedRevision: {
-          ...original.view!.selectedRevision,
-          projectId: "foreign",
-        },
-      },
-    },
-    scriptView("episode-1", 2),
-  ];
-  for (const response of responses) {
+it("unselected, foreign binding, project and changed brief cannot become a usable source", async () => {
+  const original = scriptSource();
+  for (const response of [
+    { ...original, script: null },
+    { ...original, projectId: "foreign" },
+    { ...original, threadId: "foreign" },
+    { ...original, bindingRevision: binding.revision + 1 },
+    scriptSource("episode-1", 2),
+  ]) {
     const f = await fixture(
       api(async (url) =>
         Response.json(
@@ -210,11 +205,11 @@ it("late old script or project reads cannot replace the new selected episode or 
     const path = new URL(String(url)).pathname;
     if (path.endsWith("project-asset-stage"))
       return Response.json({ available: true });
-    if (path.endsWith("episode-1")) {
+    if (new URL(String(url)).searchParams.get("episodeId") === "episode-1") {
       oldSignal = init?.signal;
       return old.promise;
     }
-    return Response.json(scriptView("episode-2"));
+    return Response.json(scriptSource("episode-2"));
   });
   const f = await fixture(client);
   await f.change((value) => value.setEpisodeId("episode-1"));
@@ -223,7 +218,7 @@ it("late old script or project reads cannot replace the new selected episode or 
   expect(oldSignal?.aborted).toBe(true);
   expect(f.current().selection?.stage.script?.episodeId).toBe("episode-2");
   await act(async () => {
-    old.resolve(Response.json(scriptView()));
+    old.resolve(Response.json(scriptSource()));
     await flush();
   });
   expect(f.current().selection?.stage.script?.episodeId).toBe("episode-2");
@@ -308,7 +303,7 @@ it("refreshing saved episode choices removes unavailable sources without trigger
     Response.json(
       new URL(String(url)).pathname.endsWith("project-asset-stage")
         ? { available: true }
-        : scriptView(),
+        : scriptSource(),
     ),
   );
   const f = await fixture(api(fetch));

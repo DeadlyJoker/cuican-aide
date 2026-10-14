@@ -251,6 +251,13 @@ export interface ExtensionStore {
   ): Promise<CommitExtensionTurnResult>;
   loadExtensionTurnReceipt(
     input: ExtensionScope & { receipt: ExtensionMutationReceipt },
+    options?:
+      | Readonly<{
+          projectAssetStageReadScope: import("./plugin-project-read-scope.ts").PluginProjectReadScope;
+        }>
+      | Readonly<{
+          projectAssetRuntimeReadObservation: import("./project-asset-runtime-read-observation.ts").ProjectAssetRuntimeReadObservation;
+        }>,
   ): Promise<CommitExtensionTurnResult | null>;
   loadExtensionRunReceipt(
     input: ExtensionScope & { receipt: ExtensionMutationReceipt },

@@ -1,4 +1,8 @@
 import {
+  projectAssetScriptSourceProxyPolicy,
+  boundedProjectAssetScriptSourceProxyResponse,
+} from "./project-asset-script-source-proxy-policy.ts";
+import {
   projectConversationProxyPolicy,
   boundedProjectConversationProxyRequest,
   boundedProjectConversationProxyResponse,
@@ -125,6 +129,10 @@ export function createWebBff(config: {
           conversationPolicy.code,
         );
       const projectPolicy = creativeProjectProxyPolicy(policyInput);
+      const assetScriptPolicy =
+        projectAssetScriptSourceProxyPolicy(policyInput);
+      if (assetScriptPolicy?.outcome === "deny")
+        return errorResponse(assetScriptPolicy.status, assetScriptPolicy.code);
       if (projectPolicy?.outcome === "deny") {
         return errorResponse(projectPolicy.status, projectPolicy.code);
       }
@@ -237,6 +245,7 @@ export function createWebBff(config: {
         return errorResponse(extensionPolicy.status, extensionPolicy.code);
       }
       const upstreamSignal =
+        assetScriptPolicy !== null ||
         conversationPolicy !== null ||
         pluginPolicy !== null ||
         extensionPolicy !== null ||
@@ -244,13 +253,15 @@ export function createWebBff(config: {
           ? AbortSignal.any([
               request.signal,
               AbortSignal.timeout(
-                conversationPolicy !== null
-                  ? PROJECT_CONVERSATION_PROXY_DEADLINE_MS
-                  : pluginPolicy !== null
-                    ? PLUGIN_PROXY_DEADLINE_MS
-                    : projectPolicy !== null
-                      ? CREATIVE_PROJECT_PROXY_DEADLINE_MS
-                      : EXTENSION_PROXY_DEADLINE_MS,
+                assetScriptPolicy !== null
+                  ? 30_000
+                  : conversationPolicy !== null
+                    ? PROJECT_CONVERSATION_PROXY_DEADLINE_MS
+                    : pluginPolicy !== null
+                      ? PLUGIN_PROXY_DEADLINE_MS
+                      : projectPolicy !== null
+                        ? CREATIVE_PROJECT_PROXY_DEADLINE_MS
+                        : EXTENSION_PROXY_DEADLINE_MS,
               ),
             ])
           : request.signal;
@@ -319,7 +330,17 @@ export function createWebBff(config: {
       } catch {
         return errorResponse(502, "control_api_unavailable");
       }
-      if (conversationPolicy !== null) {
+      if (assetScriptPolicy?.outcome === "allow") {
+        try {
+          upstream = await boundedProjectAssetScriptSourceProxyResponse({
+            upstream,
+            signal: upstreamSignal,
+            policy: assetScriptPolicy,
+          });
+        } catch {
+          return errorResponse(502, "control_api_response_invalid");
+        }
+      } else if (conversationPolicy !== null) {
         try {
           upstream = await boundedProjectConversationProxyResponse({
             upstream,

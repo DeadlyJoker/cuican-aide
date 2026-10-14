@@ -1,4 +1,5 @@
 import { readPostgresProjectText } from "./plugin-project-text-read-view.ts";
+import { capturePostgresTextRunProjectAccess } from "./project-text-run-owned-access.ts";
 import type { PluginProjectReadScope } from "@crewon/application";
 import {
   beginPostgresPlanResult,
@@ -180,16 +181,23 @@ export class PostgresStructuredOutlineStorage {
     try {
       await client.query("BEGIN ISOLATION LEVEL READ COMMITTED");
       await lockPostgresCreativeProjectLegacySchema(client, this.#schema);
-      const access = await capturePostgresCreativeProjectLegacyAccess(
-        client,
-        this.#schema,
-      );
+      const access =
+        (await capturePostgresTextRunProjectAccess(
+          client,
+          this.#schema,
+          authority,
+        )) ??
+        (await capturePostgresCreativeProjectLegacyAccess(
+          client,
+          this.#schema,
+        ));
       await assertPostgresProjectTextUiCommit(client, this.#schema, q);
       await assertPostgresProjectOutlineRunCommit(
         client,
         this.#schema,
         rq,
         "receipt-publication",
+        { projectAccess: access },
       );
       await beginPostgresPlanResult(client, this.#schema, rq);
       const pq = planSelectionQualification(
@@ -201,10 +209,16 @@ export class PostgresStructuredOutlineStorage {
       );
       await beginPostgresPlanSelection(client, this.#schema, pq);
       result = await this.#receipt(client, identity, access, "read");
-      const current = await capturePostgresCreativeProjectLegacyAccess(
-        client,
-        this.#schema,
-      );
+      const current =
+        (await capturePostgresTextRunProjectAccess(
+          client,
+          this.#schema,
+          authority,
+        )) ??
+        (await capturePostgresCreativeProjectLegacyAccess(
+          client,
+          this.#schema,
+        ));
       if (result !== null)
         await current.assertProject(
           textLegacyScope(result.artifact, result.artifact.projectId),
@@ -219,6 +233,7 @@ export class PostgresStructuredOutlineStorage {
         this.#schema,
         rq,
         "receipt-publication",
+        { projectAccess: access },
       );
       this.#active(authority);
       await client.query("COMMIT");
@@ -292,10 +307,16 @@ export class PostgresStructuredOutlineStorage {
     try {
       await client.query("BEGIN ISOLATION LEVEL READ COMMITTED");
       await lockPostgresCreativeProjectLegacySchema(client, this.#schema);
-      const access = await capturePostgresCreativeProjectLegacyAccess(
-        client,
-        this.#schema,
-      );
+      const access =
+        (await capturePostgresTextRunProjectAccess(
+          client,
+          this.#schema,
+          authority,
+        )) ??
+        (await capturePostgresCreativeProjectLegacyAccess(
+          client,
+          this.#schema,
+        ));
       const scope = textLegacyScope(
         prepared.project,
         prepared.project.projectId,
@@ -307,6 +328,7 @@ export class PostgresStructuredOutlineStorage {
         this.#schema,
         rq,
         "receipt-publication",
+        { projectAccess: access },
       );
       const identity = textIdentity({
         actor: prepared.actor,
@@ -360,6 +382,7 @@ export class PostgresStructuredOutlineStorage {
           client,
           this.#schema,
           locator,
+          { projectAccess: access },
         );
         const base =
           qualifiedCommand &&
@@ -375,7 +398,13 @@ export class PostgresStructuredOutlineStorage {
             : null;
         assertProjectOutlineUiPrepared(q, prepared, base);
         assertProjectOutlineRunPrepared(rq, prepared, base);
-        await assertPostgresProjectOutlineRunCommit(client, this.#schema, rq);
+        await assertPostgresProjectOutlineRunCommit(
+          client,
+          this.#schema,
+          rq,
+          "fresh-candidate",
+          { projectAccess: access },
+        );
         const candidate = prepared.kind === "save-outline";
         const revision = candidate
           ? null
@@ -477,7 +506,7 @@ export class PostgresStructuredOutlineStorage {
         selectionCheckpoint,
         result,
       );
-      if (planSelection === undefined)
+      if (planSelection === undefined && identity.kind === "select-revision")
         await observePostgresPlanManualSelection(
           client,
           this.#schema,
@@ -491,11 +520,18 @@ export class PostgresStructuredOutlineStorage {
           this.#schema,
           locator,
           foundation,
+          { projectAccess: access },
         );
-      const current = await capturePostgresCreativeProjectLegacyAccess(
-        client,
-        this.#schema,
-      );
+      const current =
+        (await capturePostgresTextRunProjectAccess(
+          client,
+          this.#schema,
+          authority,
+        )) ??
+        (await capturePostgresCreativeProjectLegacyAccess(
+          client,
+          this.#schema,
+        ));
       await current.assertProject(scope);
       await current.assertProject(
         textLegacyScope(result.artifact, result.artifact.projectId),
@@ -512,6 +548,7 @@ export class PostgresStructuredOutlineStorage {
         result.disposition === "replayed"
           ? "receipt-publication"
           : "fresh-candidate",
+        { projectAccess: access },
       );
       this.#active(authority);
       await client.query("COMMIT");

@@ -31,6 +31,7 @@ import {
 } from "./plugin-project-asset-v2-invocation.ts";
 import { parseProjectAssetMediaAdoptionRequest } from "./project-asset-media-adoption.ts";
 import { projectMediaResultAssertVoid } from "./project-media-result-record.ts";
+import { issuePluginProjectAssetUiReadScope } from "./plugin-project-asset-ui-read-scope.ts";
 import type { ProjectAssetCommitAuthority } from "./project-asset-commit-authority.ts";
 import type {
   PluginUiActionContext,
@@ -51,7 +52,7 @@ export class PluginProjectAssetV2ActionOwner {
   readonly actions: PluginUiActionPort;
   readonly committedMetadata: PluginUiCommittedMetadataPort;
   readonly #recovery: PluginProjectAssetV2RecoveryService | undefined;
-  readonly #query: ProjectAssetV2ApplicationService["query"];
+  readonly #bindReads: ProjectAssetV2ApplicationService["bindPluginProjectReads"];
   readonly #mutate: ProjectAssetV2ApplicationService["mutate"];
   readonly #adopt: ProjectAssetV2ApplicationService["adoptReference"];
   readonly #publications: readonly PluginProjectTextActionPublication[];
@@ -103,7 +104,7 @@ export class PluginProjectAssetV2ActionOwner {
       | PluginProjectAssetV2RecoveryService
       | undefined;
     const p = ProjectAssetV2ApplicationService.prototype;
-    this.#query = p.query.bind(d.assets);
+    this.#bindReads = p.bindPluginProjectReads.bind(d.assets);
     this.#mutate = p.mutate.bind(d.assets);
     this.#adopt = p.adoptReference.bind(d.assets);
     this.#publications = captureProjectTextPublications(d.publications);
@@ -260,7 +261,13 @@ export class PluginProjectAssetV2ActionOwner {
           { authority },
         );
       } else {
-        raw = await this.#query(
+        const scope = await issuePluginProjectAssetUiReadScope({
+          context,
+          authority,
+        });
+        const assets = await this.#bindReads(scope);
+        raw = await ProjectAssetV2ApplicationService.prototype.query.call(
+          assets,
           snapshot.context.actor,
           request as Exclude<
             ProjectAssetV2Request,

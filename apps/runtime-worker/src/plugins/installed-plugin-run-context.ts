@@ -1,3 +1,4 @@
+import { authorizeInstalledRuntimeExecution } from "./installed-plugin-runtime-execution-authorization.ts";
 import {
   validateReceipt,
   assertRun,
@@ -8,7 +9,7 @@ import {
 import { readProjectMediaInputStageRuntimeScope } from "./project-media-input-stage-runtime-scope.ts";
 import type { ProjectMediaInputStageStore } from "@crewon/application";
 import type { ProjectMediaInputStageRunAdmission } from "@crewon/domain";
-import { readProjectAssetStageRuntimeScope } from "./project-asset-stage-runtime-scope.ts";
+import { readInstalledRuntimeAssetMetadata } from "./installed-plugin-runtime-assets.ts";
 import type { ProjectAssetStageStore } from "@crewon/application";
 import type { ProjectAssetStageRunAdmission } from "@crewon/domain";
 import { createHash } from "node:crypto";
@@ -186,7 +187,7 @@ export class InstalledPluginRunContext {
     const target = parseExtensionExecutionTarget(value.expectedTarget);
     const purpose = checkedPurpose(value.purpose);
     const signal = checkedSignal(value.signal);
-    const base = await this.#read(locator, target, signal);
+    const base = await this.#read(locator, target, signal, purpose);
     if (base === null) return null;
     const actor = await this.#authorize(base, purpose, signal);
     const saved = await this.#withFoundation(base, actor, purpose, signal);
@@ -216,6 +217,7 @@ export class InstalledPluginRunContext {
       previous.binding,
       previous.binding.target,
       signal,
+      purpose,
     );
     if (base === null) fail("installed_plugin_context_changed");
     const actor = await this.#authorize(base, purpose, signal);
@@ -347,6 +349,7 @@ export class InstalledPluginRunContext {
     locator: ExtensionRunLocator,
     expectedTarget: ExtensionExecutionTarget,
     signal: AbortSignal,
+    purpose: InstalledPluginRunPurpose,
   ): Promise<SavedContext | null> {
     const extensions = this.#dependencies.extensions;
     signal.throwIfAborted();
@@ -425,12 +428,61 @@ export class InstalledPluginRunContext {
       extensionCanonicalJson(expectedTarget)
     )
       fail("installed_plugin_target_mismatch");
-    const rawReceipt = await extensions.loadExtensionTurnReceipt({
-      ...binding,
-      receipt,
+    const composition = await readInstalledPluginRunComposition({
+      binding,
+      admission,
+      query,
+      compositions: this.#dependencies.compositions,
+      signal,
+      fail,
     });
+    const run = await this.#dependencies.runs.loadRunInSpace(locator);
+    signal.throwIfAborted();
+    if (run === null) fail("installed_plugin_run_missing");
+    const scopedAssets =
+      this.#dependencies.projectOwnership !== undefined &&
+      query === null &&
+      admission.action === "project.execute" &&
+      this.#dependencies.assetStages !== undefined;
+    const earlyActor = scopedAssets
+      ? await this.#authorize(
+          { admission, binding, query, composition },
+          purpose,
+          signal,
+        )
+      : undefined;
+    const { rawReceipt, projectAssetStage } =
+      await readInstalledRuntimeAssetMetadata({
+        ownership: this.#dependencies.projectOwnership,
+        extensions,
+        stages: this.#dependencies.assetStages,
+        actor: earlyActor,
+        admission,
+        binding,
+        run,
+        receipt,
+        purpose,
+        requestKind: query === null ? "direct" : "query",
+        signal,
+        authorize: () =>
+          this.#authorize(
+            { admission, binding, query, composition },
+            purpose,
+            signal,
+          ),
+      });
     signal.throwIfAborted();
     if (rawReceipt === null) fail("installed_plugin_task_receipt_missing");
+    if (
+      rawReceipt.projectAssetStageAdmission !== undefined &&
+      this.#dependencies.assetStages === undefined
+    )
+      fail("installed_plugin_asset_stage_runtime_unavailable");
+    if (
+      extensionCanonicalJson(rawReceipt.projectAssetStageAdmission ?? null) !==
+      extensionCanonicalJson(projectAssetStage)
+    )
+      fail("installed_plugin_asset_stage_mismatch");
     if (
       rawReceipt.projectMediaInputStageAdmission !== undefined &&
       this.#dependencies.mediaInputStages === undefined
@@ -444,9 +496,6 @@ export class InstalledPluginRunContext {
       query,
       fail,
     );
-    const run = await this.#dependencies.runs.loadRunInSpace(locator);
-    signal.throwIfAborted();
-    if (run === null) fail("installed_plugin_run_missing");
     assertRun(run, binding, original, fail);
     const projectMediaInputStage =
       this.#dependencies.mediaInputStages === undefined
@@ -467,15 +516,6 @@ export class InstalledPluginRunContext {
             projectMediaInputStage.workspaceId))
     )
       fail("installed_plugin_media_input_stage_mismatch");
-    const projectAssetStage =
-      this.#dependencies.assetStages === undefined
-        ? null
-        : await readProjectAssetStageRuntimeScope({
-            stages: this.#dependencies.assetStages,
-            admission,
-            binding,
-            signal,
-          });
     if (
       projectAssetStage !== null &&
       (query !== null ||
@@ -583,14 +623,6 @@ export class InstalledPluginRunContext {
       }),
       target: binding.target,
     });
-    const composition = await readInstalledPluginRunComposition({
-      binding,
-      admission,
-      query,
-      compositions: this.#dependencies.compositions,
-      signal,
-      fail,
-    });
     return Object.freeze({
       admission,
       binding,
@@ -629,85 +661,29 @@ export class InstalledPluginRunContext {
     return Object.freeze({ ...saved, projectFoundation });
   }
 
-  async #authorize(
-    saved: SavedContext,
+  #authorize(
+    saved: Pick<
+      SavedContext,
+      "admission" | "binding" | "query" | "composition"
+    >,
     purpose: InstalledPluginRunPurpose,
     signal: AbortSignal,
   ) {
-    const { admission, binding } = saved;
-    if (saved.query !== null) purpose = "observe";
-    assertInstalledPluginCompositionAuthority(
-      this.#dependencies.compositionAuthority,
-      saved.composition,
-      purpose,
-    );
-    const initial = await this.#activation(binding, purpose, signal);
-    const selection = await this.#selection(
-      saved.query ?? admission,
+    return authorizeInstalledRuntimeExecution(
+      {
+        binding: saved.binding,
+        query: saved.query,
+        composition: saved.composition,
+        compositionAuthority: this.#dependencies.compositionAuthority,
+        authorization: this.#dependencies.authorization,
+        activation: (p, s) => this.#activation(saved.binding, p, s),
+        selection: (p, s) =>
+          this.#selection(saved.query ?? saved.admission, p, s),
+        actor: (s) => this.#actor(saved.admission, s),
+      },
       purpose,
       signal,
     );
-    const actor = await this.#actor(admission, signal);
-    for (const request of [
-      {
-        actor,
-        action: "run:execute" as const,
-        resource: {
-          kind: "run" as const,
-          tenantId: binding.tenantId,
-          spaceId: binding.spaceId,
-          threadId: binding.threadId,
-          runId: binding.runId,
-        },
-      },
-      {
-        actor,
-        action:
-          purpose === "submit"
-            ? ("extension:run" as const)
-            : ("extension:query" as const),
-        resource: {
-          kind: "extension" as const,
-          tenantId: binding.tenantId,
-          spaceId: binding.spaceId,
-          pluginId: binding.pluginId,
-        },
-      },
-    ]) {
-      signal.throwIfAborted();
-      const decision =
-        await this.#dependencies.authorization.authorize(request);
-      signal.throwIfAborted();
-      const outcome = Object.getOwnPropertyDescriptor(decision, "outcome");
-      if (
-        !outcome?.enumerable ||
-        !Object.hasOwn(outcome, "value") ||
-        outcome.value !== "allow"
-      )
-        fail("installed_plugin_execution_access_denied");
-    }
-    const latest = await this.#activation(binding, purpose, signal);
-    if (extensionCanonicalJson(initial) !== extensionCanonicalJson(latest))
-      fail("installed_plugin_activation_changed");
-    const latestSelection = await this.#selection(
-      saved.query ?? admission,
-      purpose,
-      signal,
-    );
-    if (
-      extensionCanonicalJson(selection) !==
-      extensionCanonicalJson(latestSelection)
-    )
-      fail("installed_plugin_selection_changed");
-    const currentActor = await this.#actor(admission, signal);
-    if (extensionCanonicalJson(currentActor) !== extensionCanonicalJson(actor))
-      fail("installed_plugin_execution_identity_unavailable");
-    assertInstalledPluginCompositionAuthority(
-      this.#dependencies.compositionAuthority,
-      saved.composition,
-      purpose,
-    );
-    return actor;
   }
 
   #selection(

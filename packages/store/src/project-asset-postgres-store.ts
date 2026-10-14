@@ -1,3 +1,11 @@
+import {
+  bindProjectAssetReadView,
+  readPostgresOwnedProjectAsset,
+  type ProjectAssetReadMethod,
+} from "./plugin-project-asset-read-view.ts";
+import { capturePostgresAssetRunOwnedAccess } from "./project-asset-run-owned-access.ts";
+import type { PluginProjectReadScope } from "@crewon/application";
+import type { PostgresCreativeProjectLegacyAccess } from "./creative-project-legacy-access.ts";
 import { executePostgresAssetLegacyInstruction } from "./project-asset-legacy-instruction.ts";
 import type { CreativeProjectScope } from "@crewon/domain";
 import {
@@ -94,6 +102,9 @@ export class PostgresProjectAssetStore
         ? undefined
         : captureProjectGenerationImageResultVerifier(input.verifier);
   }
+  bindProjectReads(scope: PluginProjectReadScope) {
+    return bindProjectAssetReadView(this, scope);
+  }
   async migrate(): Promise<void> {
     await this.#withClient(async (client) => {
       await client.query("BEGIN");
@@ -126,11 +137,17 @@ export class PostgresProjectAssetStore
       ...(this.#verifier === undefined ? {} : { verifier: this.#verifier }),
     });
   }
-  async loadAsset(input: AssetInput<"loadAsset">) {
+  async loadAsset(
+    input: AssetInput<"loadAsset">,
+    readScope?: PluginProjectReadScope,
+  ) {
     const q = captureAssetRead(input, ["assetId"]);
     return this.#read(
       assetHead(this.#d, q.owner, q.projectId, q.assetId!),
       assetLegacyProjectScope(q.owner, q.projectId),
+      readScope === undefined
+        ? undefined
+        : { scope: readScope, method: "loadAsset", query: q },
     );
   }
   async loadReferenceImageSource(
@@ -149,7 +166,10 @@ export class PostgresProjectAssetStore
       { projectScope: assetLegacyProjectScope(q.actor, q.query.projectId) },
     );
   }
-  async loadRevision(input: AssetInput<"loadRevision">) {
+  async loadRevision(
+    input: AssetInput<"loadRevision">,
+    readScope?: PluginProjectReadScope,
+  ) {
     const q = captureAssetRead(input, ["assetId", "contentRevision"]);
     return this.#read(
       assetContent(
@@ -160,9 +180,15 @@ export class PostgresProjectAssetStore
         q.contentRevision!,
       ),
       assetLegacyProjectScope(q.owner, q.projectId),
+      readScope === undefined
+        ? undefined
+        : { scope: readScope, method: "loadRevision", query: q },
     );
   }
-  async loadReferenceRevision(input: AssetInput<"loadReferenceRevision">) {
+  async loadReferenceRevision(
+    input: AssetInput<"loadReferenceRevision">,
+    readScope?: PluginProjectReadScope,
+  ) {
     const q = captureAssetRead(input, ["assetId", "referenceRevision"]);
     return this.#read(
       assetReference(
@@ -173,16 +199,28 @@ export class PostgresProjectAssetStore
         q.referenceRevision!,
       ),
       assetLegacyProjectScope(q.owner, q.projectId),
+      readScope === undefined
+        ? undefined
+        : { scope: readScope, method: "loadReferenceRevision", query: q },
     );
   }
-  async listAssets(input: AssetInput<"listAssets">) {
+  async listAssets(
+    input: AssetInput<"listAssets">,
+    readScope?: PluginProjectReadScope,
+  ) {
     const q = captureAssetRead(input, ["kind", "afterAssetId", "limit"]);
     return this.#read(
       assetPage(this.#d, q),
       assetLegacyProjectScope(q.owner, q.projectId),
+      readScope === undefined
+        ? undefined
+        : { scope: readScope, method: "listAssets", query: q },
     );
   }
-  async listRevisions(input: AssetInput<"listRevisions">) {
+  async listRevisions(
+    input: AssetInput<"listRevisions">,
+    readScope?: PluginProjectReadScope,
+  ) {
     const q = captureAssetRead(input, [
       "assetId",
       "afterContentRevision",
@@ -191,9 +229,15 @@ export class PostgresProjectAssetStore
     return this.#read(
       assetContentPage(this.#d, q),
       assetLegacyProjectScope(q.owner, q.projectId),
+      readScope === undefined
+        ? undefined
+        : { scope: readScope, method: "listRevisions", query: q },
     );
   }
-  async listReferences(input: AssetInput<"listReferences">) {
+  async listReferences(
+    input: AssetInput<"listReferences">,
+    readScope?: PluginProjectReadScope,
+  ) {
     const q = captureAssetRead(input, [
       "assetId",
       "afterReferenceRevision",
@@ -202,6 +246,9 @@ export class PostgresProjectAssetStore
     return this.#read(
       assetReferencePage(this.#d, q),
       assetLegacyProjectScope(q.owner, q.projectId),
+      readScope === undefined
+        ? undefined
+        : { scope: readScope, method: "listReferences", query: q },
     );
   }
   async loadMutationReceipt(
@@ -212,7 +259,7 @@ export class PostgresProjectAssetStore
       authority = captureProjectAssetCommitAuthority(options);
     assertAssetReceiptQualification(authority, identity);
     return this.#transaction(
-      async (client) =>
+      async (client, projectAccess) =>
         this.#execute(
           client,
           loadAssetMutationReceiptPlan(
@@ -223,6 +270,8 @@ export class PostgresProjectAssetStore
             await assertPostgresAssetIntentSchema(client, this.#d.schema, true),
           ),
           authority,
+          undefined,
+          projectAccess,
         ),
       authority,
       { receiptIdentity: identity },
@@ -237,7 +286,7 @@ export class PostgresProjectAssetStore
       authority = captureProjectAssetCommitAuthority(options);
     let downstream: ProjectFoundationDownstreamCheck | undefined;
     return this.#transaction(
-      async (client) =>
+      async (client, projectAccess) =>
         this.#execute(
           client,
           commitAssetPlan(
@@ -251,6 +300,7 @@ export class PostgresProjectAssetStore
           (check) => {
             downstream = check;
           },
+          projectAccess,
         ),
       authority,
       {
@@ -260,18 +310,45 @@ export class PostgresProjectAssetStore
         ),
         receiptIdentity: prepared,
       },
-      async (client) => {
+      async (client, projectAccess) => {
         if (downstream !== undefined)
           await assertPostgresProjectFoundationDownstreamUnchanged(
             client,
             this.#d.schema,
             downstream.locator,
             downstream.snapshot,
+            projectAccess === undefined ? undefined : { projectAccess },
           );
       },
     );
   }
-  async #read<T>(plan: AssetPlan<T>, scope: CreativeProjectScope): Promise<T> {
+  async #read<T>(
+    plan: AssetPlan<T>,
+    scope: CreativeProjectScope,
+    call?: Readonly<{
+      scope: PluginProjectReadScope;
+      method: ProjectAssetReadMethod;
+      query: Parameters<typeof readPostgresOwnedProjectAsset>[1]["query"];
+    }>,
+  ): Promise<T> {
+    if (call !== undefined)
+      return readPostgresOwnedProjectAsset(
+        { pool: this.#pool, schema: this.#d.schema, assertOpen: this.#open },
+        call,
+        async (client, access) => {
+          await assertPostgresProjectAssetSchema(client, this.#d.schema);
+          await access.assertProject(scope);
+          const result = await this.#execute(
+            client,
+            plan,
+            undefined,
+            undefined,
+            access,
+          );
+          await access.assertProject(scope);
+          return result;
+        },
+      );
     return readPostgresLegacyCreativeProject(
       { pool: this.#pool, schema: this.#d.schema, assertOpen: this.#open },
       async (client, access) => {
@@ -288,6 +365,7 @@ export class PostgresProjectAssetStore
     plan: AssetCommitPlan<T>,
     authority?: ProjectAssetCommitAuthority,
     onFoundationSnapshot?: (check: ProjectFoundationDownstreamCheck) => void,
+    projectAccess?: PostgresCreativeProjectLegacyAccess,
   ): Promise<T> {
     let next = plan.next();
     while (!next.done) {
@@ -296,16 +374,21 @@ export class PostgresProjectAssetStore
       const step = next.value;
       let rows: readonly Record<string, unknown>[];
       if ("assetLegacyAccess" in step) {
-        rows = await executePostgresAssetLegacyInstruction(
-          client,
-          this.#d.schema,
-          step,
-        );
+        if (projectAccess && step.assetLegacyAccess.kind === "project") {
+          await projectAccess.assertProject(step.assetLegacyAccess.scope);
+          rows = [];
+        } else
+          rows = await executePostgresAssetLegacyInstruction(
+            client,
+            this.#d.schema,
+            step,
+          );
       } else if ("foundationDownstream" in step) {
         const snapshot = await capturePostgresProjectFoundationDownstream(
           client,
           this.#d.schema,
           step.foundationDownstream,
+          projectAccess === undefined ? undefined : { projectAccess },
         );
         onFoundationSnapshot?.({
           locator: step.foundationDownstream,
@@ -351,13 +434,19 @@ export class PostgresProjectAssetStore
     }
   }
   async #transaction<T>(
-    body: (client: PoolClient) => Promise<T>,
+    body: (
+      client: PoolClient,
+      projectAccess?: PostgresCreativeProjectLegacyAccess,
+    ) => Promise<T>,
     authority: ProjectAssetCommitAuthority | undefined,
     isolation: Readonly<{
       projectScope?: CreativeProjectScope;
       receiptIdentity?: ProjectAssetMutationIdentity;
     }>,
-    checkDownstream?: (client: PoolClient) => Promise<void>,
+    checkDownstream?: (
+      client: PoolClient,
+      projectAccess?: PostgresCreativeProjectLegacyAccess,
+    ) => Promise<void>,
   ): Promise<T> {
     this.#open();
     await assertProjectAssetCommitCurrent(authority);
@@ -366,10 +455,17 @@ export class PostgresProjectAssetStore
       try {
         await lockPostgresCreativeProjectLegacySchema(client, this.#d.schema);
         await assertPostgresProjectAssetSchema(client, this.#d.schema);
-        const access = await capturePostgresCreativeProjectLegacyAccess(
+        const owned = await capturePostgresAssetRunOwnedAccess(
           client,
           this.#d.schema,
+          authority?.runTransaction,
         );
+        const access =
+          owned ??
+          (await capturePostgresCreativeProjectLegacyAccess(
+            client,
+            this.#d.schema,
+          ));
         const assertLegacy = async () => {
           if (isolation.projectScope)
             await access.assertProject(isolation.projectScope);
@@ -386,18 +482,25 @@ export class PostgresProjectAssetStore
           client,
           this.#d.schema,
           authority,
+          { projectAccess: access },
         );
-        const result = await body(client);
+        const result = await body(client, owned);
         await assertProjectAssetCommitTransactionCurrent(authority);
-        await checkDownstream?.(client);
+        await checkDownstream?.(client, owned);
         await assertLegacy();
         // Keep the original current, installation and Run lease checks after
         // every added SQL await, immediately before publication.
         await assertProjectAssetCommitTransactionCurrent(authority);
+        await capturePostgresAssetRunOwnedAccess(
+          client,
+          this.#d.schema,
+          authority?.runTransaction,
+        );
         await assertPostgresProjectAssetQualification(
           client,
           this.#d.schema,
           authority,
+          { projectAccess: access },
         );
         assertProjectAssetCommitActive(authority);
         this.#open();

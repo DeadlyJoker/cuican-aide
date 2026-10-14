@@ -7,6 +7,8 @@ export {
 export { issuePluginProjectConversationStageReadScope } from "./plugin-project-read-scope.ts";
 export { issuePluginProjectConversationContextReadScope } from "./plugin-project-read-scope.ts";
 export { issuePluginProjectFoundationRunMutationReadScope } from "./project-foundation-run-mutation-read-scope.ts";
+export { issuePluginProjectAssetRunMutationReadScope } from "./project-asset-run-mutation-read-scope.ts";
+export { issuePluginProjectTextRunMutationReadScope } from "./project-text-run-mutation-read-scope.ts";
 export { issuePluginProjectRunReadScope } from "./plugin-project-read-scope.ts";
 export {
   captureCreativeProjectRunReadAuthority,
@@ -26,3 +28,25 @@ export {
   type PluginProjectRuntimeObservation,
   type PluginProjectRuntimeObservationAuthority,
 } from "./plugin-project-runtime-observation.ts";
+
+export { issuePluginProjectAssetStageReadScope } from "./project-asset-stage-read-scope.ts";
+
+export { issuePluginProjectOutlineRunReadScope } from "./project-outline-run-read-scope.ts";
+export {
+  captureProjectOutlineRunReadAuthority,
+  type ProjectOutlineRunReadAuthority,
+} from "./project-outline-run-read-authority.ts";
+
+export { issuePluginProjectAssetRunReadScope } from "./project-asset-run-read-scope.ts";
+export {
+  captureProjectAssetRunReadAuthority,
+  PROJECT_ASSET_RUN_READ_METHODS,
+  type ProjectAssetRunReadAuthority,
+} from "./project-asset-run-read-authority.ts";
+
+export {
+  issueProjectAssetRuntimeReadObservation,
+  qualifyProjectAssetRuntimeReadObservation,
+  type ProjectAssetRuntimeReadObservation,
+  type ProjectAssetRuntimeReadObservationAuthority,
+} from "./project-asset-runtime-read-observation.ts";

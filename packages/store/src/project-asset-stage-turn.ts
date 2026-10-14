@@ -1,4 +1,8 @@
 import {
+  captureSqliteAssetStageOwnedAccess,
+  capturePostgresAssetStageOwnedAccess,
+} from "./project-asset-stage-owned-access.ts";
+import {
   captureSqliteAssetLegacyExecution,
   capturePostgresAssetLegacyExecution,
 } from "./project-asset-legacy-instruction.ts";
@@ -17,6 +21,7 @@ import {
   validateThreadState,
   projectAssetFailure,
   type ProjectAssetStageRunAdmission,
+  type ProjectConversationBinding,
   type ThreadState,
 } from "@crewon/domain";
 import { creativeStoreDigester } from "./creative-project-store-records.ts";
@@ -257,15 +262,49 @@ export function assertSqliteAssetStageTurn(
     p,
     current,
   );
+  const currentBinding = decodeConversation(
+    db
+      .prepare(
+        "SELECT * FROM project_conversation_bindings WHERE tenant_id=? AND space_id=? AND binding_id=?",
+      )
+      .get(
+        p.admission.actor.tenantId,
+        p.admission.actor.spaceId,
+        p.admission.bindingId,
+      ),
+  );
+  if (currentBinding === null) fail();
+  const owned = captureSqliteAssetStageOwnedAccess(
+    db,
+    p.authority,
+    currentBinding,
+  );
   const legacy = captureSqliteAssetLegacyExecution(db);
   let n = plan.next();
   while (!n.done)
     n = plan.next(
       "assetLegacyAccess" in n.value
-        ? legacy.execute(n.value)
+        ? owned === undefined
+          ? legacy.execute(n.value)
+          : n.value.assetLegacyAccess.kind === "project"
+            ? (owned.assertProject(n.value.assetLegacyAccess.scope), [])
+            : []
         : db.prepare(n.value.sql).all(...n.value.values),
     );
-  legacy.assertCurrent();
+  if (owned === undefined) legacy.assertCurrent();
+  else {
+    const current = captureSqliteAssetStageOwnedAccess(
+      db,
+      p.authority,
+      currentBinding,
+    );
+    if (current === undefined) fail();
+    current.assertProject({
+      tenantId: p.admission.actor.tenantId,
+      spaceId: p.admission.actor.spaceId,
+      projectId: p.admission.projectId,
+    });
+  }
   assertSqliteProjectTextUiCommit(db, p.authority);
 }
 export async function assertPostgresAssetStageTurn(
@@ -282,15 +321,66 @@ export async function assertPostgresAssetStageTurn(
     p,
     current,
   );
+  let currentBinding: ProjectConversationBinding | null = null;
+  let owned: Awaited<ReturnType<typeof capturePostgresAssetStageOwnedAccess>> =
+    undefined;
+  let captured = false;
   const legacy = capturePostgresAssetLegacyExecution(c, schema);
   let n = plan.next();
-  while (!n.done)
+  while (!n.done) {
+    // Preserve the generator's original idempotency -> Run -> Thread -> Project
+    // lock prefix. Namespace capture begins only when its first project fence is reached.
+    if (
+      "assetLegacyAccess" in n.value &&
+      n.value.assetLegacyAccess.kind === "project" &&
+      !captured
+    ) {
+      currentBinding = decodeConversation(
+        (
+          await c.query(
+            `SELECT * FROM ${creativeProjectSchemaName(schema)}.project_conversation_bindings WHERE tenant_id=$1 AND space_id=$2 AND binding_id=$3 FOR SHARE`,
+            [
+              p.admission.actor.tenantId,
+              p.admission.actor.spaceId,
+              p.admission.bindingId,
+            ],
+          )
+        ).rows[0],
+      );
+      if (currentBinding === null) fail();
+      owned = await capturePostgresAssetStageOwnedAccess(
+        c,
+        schema,
+        p.authority,
+        currentBinding,
+      );
+      captured = true;
+    }
     n = plan.next(
       "assetLegacyAccess" in n.value
-        ? await legacy.execute(n.value)
+        ? owned === undefined
+          ? await legacy.execute(n.value)
+          : n.value.assetLegacyAccess.kind === "project"
+            ? (await owned.assertProject(n.value.assetLegacyAccess.scope), [])
+            : []
         : (await c.query(n.value.sql, [...n.value.values])).rows,
     );
-  await legacy.assertCurrent();
+  }
+  if (owned === undefined) await legacy.assertCurrent();
+  else {
+    const current = await capturePostgresAssetStageOwnedAccess(
+      c,
+      schema,
+      p.authority,
+      currentBinding!,
+    );
+    if (current === undefined) fail();
+    await current.assertProject({
+      tenantId: p.admission.actor.tenantId,
+      spaceId: p.admission.actor.spaceId,
+      projectId: p.admission.projectId,
+    });
+  }
   await assertPostgresProjectTextUiCommit(c, schema, p.authority);
 }
 export function assertAssetStageReplay(

@@ -67,7 +67,12 @@ function exactTool(q: ProjectAssetRunCommitTransactionAuthority) {
 }
 export function assertSqliteProjectAssetQualification(
   db: DatabaseSync,
-  authority: ProjectAssetCommitAuthority | undefined,
+  authority:
+    | Pick<ProjectAssetCommitAuthority, "uiTransaction" | "runTransaction">
+    | undefined,
+  options?: Readonly<{
+    projectAccess: import("./creative-project-legacy-access.ts").CreativeProjectLegacyAccess;
+  }>,
 ): void {
   const q = authority?.uiTransaction ?? authority?.runTransaction;
   if (!q) return;
@@ -126,7 +131,7 @@ export function assertSqliteProjectAssetQualification(
     binding: projectRunJson(binding.binding_json),
     configuration: projectRunJson(binding.configuration_json),
   });
-  assertSqliteProjectAssetStageTool(db, r);
+  assertSqliteProjectAssetStageTool(db, r, options);
   assertProjectRunQueue(
     r,
     db
@@ -138,7 +143,12 @@ export function assertSqliteProjectAssetQualification(
 export async function assertPostgresProjectAssetQualification(
   c: PoolClient,
   schema: string,
-  authority: ProjectAssetCommitAuthority | undefined,
+  authority:
+    | Pick<ProjectAssetCommitAuthority, "uiTransaction" | "runTransaction">
+    | undefined,
+  options?: Readonly<{
+    projectAccess: import("./creative-project-legacy-access.ts").PostgresCreativeProjectLegacyAccess;
+  }>,
 ): Promise<void> {
   const q = authority?.uiTransaction ?? authority?.runTransaction;
   if (!q) return;
@@ -198,7 +208,7 @@ export async function assertPostgresProjectAssetQualification(
     binding: projectRunJson(binding.binding_json),
     configuration: projectRunJson(binding.configuration_json),
   });
-  await assertPostgresProjectAssetStageTool(c, schema, r);
+  await assertPostgresProjectAssetStageTool(c, schema, r, options);
   assertProjectRunQueue(
     r,
     (

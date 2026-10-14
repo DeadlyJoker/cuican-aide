@@ -322,10 +322,15 @@ export async function createExtensionTaskTurn(
         ? taskReceipt
         : generation.receipt(taskReceipt);
     const previous =
-      await context.dependencies.extensions.loadExtensionTurnReceipt({
-        ...scope,
-        receipt,
-      });
+      await context.dependencies.extensions.loadExtensionTurnReceipt(
+        {
+          ...scope,
+          receipt,
+        },
+        assetStage?.task.projectReadScope === undefined
+          ? undefined
+          : { projectAssetStageReadScope: assetStage.task.projectReadScope },
+      );
     if (previous !== null) {
       assertExtensionTaskCreditPrincipal(
         context.dependencies.digester,

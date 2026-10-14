@@ -1,3 +1,7 @@
+import {
+  assertSqliteTextRunNamespace,
+  assertPostgresTextRunNamespace,
+} from "./project-text-run-namespace.ts";
 import type { DatabaseSync } from "node:sqlite";
 import type { PoolClient } from "pg";
 import {
@@ -36,6 +40,7 @@ export function captureSqliteFoundationRunOwnedAccess(
   assertSqliteInstalledProjectRunExecution(db, q);
   if (assertSqlitePluginProjectWorkspaceMetadata(db, owner) !== "protected")
     return undefined;
+  assertSqliteTextRunNamespace(db, q.projectStageAdmission);
   const access = captureSqliteOwnedProjectAccess(db, { scope: owner });
   return Object.freeze({
     predicate: access.predicate,
@@ -63,6 +68,8 @@ export async function capturePostgresFoundationRunOwnedAccess(
     "protected"
   )
     return undefined;
+  // Follow the original Run -> project advisory -> namespace -> project lock order.
+  await assertPostgresTextRunNamespace(c, schema, q.projectStageAdmission);
   const access = await capturePostgresOwnedProjectAccess(c, schema, {
     scope: owner,
   });

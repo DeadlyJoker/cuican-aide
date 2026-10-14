@@ -341,7 +341,10 @@ export class PostgresProjectTextStore implements ProjectStructuredOutlineStore {
             selectionCheckpoint,
             result,
           );
-          if (planSelection === undefined)
+          if (
+            planSelection === undefined &&
+            identity.kind === "select-revision"
+          )
             await observePostgresPlanManualSelection(
               client,
               this.#schema,
@@ -468,7 +471,10 @@ export class PostgresProjectTextStore implements ProjectStructuredOutlineStore {
             selectionCheckpoint,
             replay,
           );
-          if (planSelection === undefined)
+          if (
+            planSelection === undefined &&
+            identity.kind === "select-revision"
+          )
             await observePostgresPlanManualSelection(
               client,
               this.#schema,
@@ -584,6 +590,7 @@ export class PostgresProjectTextStore implements ProjectStructuredOutlineStore {
             client,
             this.#schema,
             downstreamLocator,
+            { projectAccess: access },
           );
           assertOutlineSourceInputsCurrent(structuredSource, downstream);
         }
@@ -651,7 +658,7 @@ export class PostgresProjectTextStore implements ProjectStructuredOutlineStore {
           selectionCheckpoint,
           result,
         );
-        if (planSelection === undefined)
+        if (planSelection === undefined && identity.kind === "select-revision")
           await observePostgresPlanManualSelection(
             client,
             this.#schema,
@@ -665,13 +672,14 @@ export class PostgresProjectTextStore implements ProjectStructuredOutlineStore {
       authority,
       runQualification,
       textUi,
-      async (client) => {
+      async (client, access) => {
         if (downstream !== undefined)
           await assertPostgresProjectFoundationDownstreamUnchanged(
             client,
             this.#schema,
             downstreamLocator,
             downstream,
+            { projectAccess: access },
           );
       },
       textLegacyScope(prepared.project, prepared.project.projectId),
@@ -852,7 +860,10 @@ export class PostgresProjectTextStore implements ProjectStructuredOutlineStore {
     authority?: CreativeProjectCommitAuthority,
     runQualification?: ProjectRunQualification,
     _textUi?: ProjectTextUiQualification,
-    checkDownstream?: (client: PoolClient) => Promise<void>,
+    checkDownstream?: (
+      client: PoolClient,
+      access: PostgresCreativeProjectLegacyAccess,
+    ) => Promise<void>,
     scope?: CreativeProjectScope,
   ): Promise<T> {
     return commitPostgresLegacyText({

@@ -67,6 +67,12 @@ import type {
   ProjectAssetMutationResult,
   ProjectAssetReadScope,
 } from "./project-asset-store-port.ts";
+import {
+  captureAssetRunStoreView,
+  captureAssetUiReadStoreView,
+  captureAssetRunReadStoreView,
+} from "./project-asset-run-store-view.ts";
+import type { PluginProjectReadScope } from "./plugin-project-read-scope.ts";
 
 export type ProjectAssetApplicationDependencies = Readonly<{
   store: ProjectAssetStore;
@@ -87,6 +93,9 @@ export function isProjectAssetApplicationService(
 /** Shared metadata commands. This service never starts a Run or calls an image supplier. */
 export class ProjectAssetApplicationService {
   readonly #d: ProjectAssetApplicationDependencies;
+  readonly #runStoreView: ReturnType<typeof captureAssetRunStoreView>;
+  readonly #uiReadStoreView: ReturnType<typeof captureAssetUiReadStoreView>;
+  readonly #runReadStoreView: ReturnType<typeof captureAssetRunReadStoreView>;
   constructor(input: ProjectAssetApplicationDependencies) {
     const d = projectAssetOwnFields(input, [
       "store",
@@ -153,8 +162,33 @@ export class ProjectAssetApplicationService {
         ),
       }),
     });
+    this.#runStoreView = captureAssetRunStoreView(input, this.#d);
+    this.#uiReadStoreView = captureAssetUiReadStoreView(input, this.#d);
+    this.#runReadStoreView = captureAssetRunReadStoreView(input, this.#d);
     owners.add(this);
     Object.freeze(this);
+  }
+  /** Genuine leased asset mutation preparation only; preserves ordinary behavior
+   * and original Store writers while binding protected dependency reads.
+   */
+  async bindRunMutationReads(scope: PluginProjectReadScope) {
+    const dependencies = await this.#runStoreView(scope);
+    return dependencies === null
+      ? this
+      : new ProjectAssetApplicationService(dependencies);
+  }
+  /** Actual module read scope only. Read preparation never lends receipt/writer ports. */
+  async bindPluginProjectReads(scope: PluginProjectReadScope) {
+    const dependencies = await this.#uiReadStoreView(scope);
+    return dependencies === null
+      ? this
+      : new ProjectAssetApplicationService(dependencies);
+  }
+  async bindRunProjectReads(scope: PluginProjectReadScope) {
+    const dependencies = await this.#runReadStoreView(scope);
+    return dependencies === null
+      ? this
+      : new ProjectAssetApplicationService(dependencies);
   }
   saveCandidate(
     actor: ActorContext,

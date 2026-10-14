@@ -1,3 +1,5 @@
+import { readSqliteAssetRuntimeMetadata } from "./project-asset-runtime-read.ts";
+import { readSqliteAssetStageExtensionReceipt } from "./project-asset-stage-receipt-read.ts";
 import { readSqliteLegacyCreativeProject } from "./creative-project-sqlite-legacy-read.ts";
 import {
   admitSqliteRunComposition,
@@ -569,9 +571,12 @@ export class SqliteExtensionStore implements ExtensionStore {
 
   async loadExtensionTurnReceipt(
     input: ExtensionScope & { receipt: ExtensionMutationReceipt },
+    options?: Parameters<ExtensionStore["loadExtensionTurnReceipt"]>[1],
   ) {
     this.#host.assertOpen();
-    return readSqliteLegacyCreativeProject(this.#db, () => {
+    const read = (
+      projectAccess?: import("./creative-project-legacy-access.ts").CreativeProjectLegacyAccess,
+    ) => {
       const value = this.#receipt(input, "task", input.receipt);
       if (value === null) return null;
       const result = this.#verifyCreditReceipt(
@@ -588,6 +593,7 @@ export class SqliteExtensionStore implements ExtensionStore {
       const projectAssetStageAdmission = loadSqliteAssetStage(
         this.#db,
         result.binding,
+        ...(projectAccess === undefined ? [] : [{ projectAccess }]),
       );
       return {
         ...result,
@@ -601,7 +607,34 @@ export class SqliteExtensionStore implements ExtensionStore {
           ? {}
           : { projectAssetStageAdmission }),
       };
-    });
+    };
+    if (
+      options !== undefined &&
+      Object.hasOwn(options, "projectAssetRuntimeReadObservation")
+    )
+      return readSqliteAssetRuntimeMetadata(
+        {
+          database: this.#db,
+          assertOpen: () => this.#host.assertOpen(),
+          request: input,
+          options:
+            options as import("./project-asset-runtime-read.ts").ProjectAssetRuntimeReadOptions,
+        },
+        read,
+      );
+    return options === undefined
+      ? readSqliteLegacyCreativeProject(this.#db, () => read())
+      : readSqliteAssetStageExtensionReceipt(
+          {
+            database: this.#db,
+            assertOpen: () => this.#host.assertOpen(),
+            request: input,
+            options: options as {
+              projectAssetStageReadScope: import("@crewon/application").PluginProjectReadScope;
+            },
+          },
+          read,
+        );
   }
   async commitExtensionTurn(
     input: CommitExtensionTurnInput,

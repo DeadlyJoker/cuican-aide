@@ -4,6 +4,10 @@ import {
   parseProjectAssetStagesActionResponse,
   type ProjectAssetStageRequest,
   type ProjectAssetStageResponse,
+  parseProjectAssetScriptSourceRequest,
+  parseProjectAssetScriptSourceResponse,
+  type ProjectAssetScriptSourceRequest,
+  type ProjectAssetScriptSourceResponse,
 } from "@crewon/contracts/project-asset-stages";
 import {
   extensionCanonicalJson,
@@ -19,7 +23,10 @@ import {
 import { ApplicationError } from "./application-error.ts";
 import type { ActorContext } from "./authorization-port.ts";
 import type { ContentDigester } from "./application-runtime-ports.ts";
-import type { CreativeProjectStore } from "./creative-project-store-port.ts";
+import type {
+  CreativeProjectStore,
+  PluginProjectReadStoreBinding,
+} from "./creative-project-store-port.ts";
 import type { ProjectTextStore } from "./project-text-store-port.ts";
 import type { ProjectConversationStore } from "./project-conversation-store-port.ts";
 import type { ThreadStore } from "./thread-store-port.ts";
@@ -31,20 +38,34 @@ import {
   assertProjectAssetStageActor,
   type ProjectAssetStageCommitAuthority,
 } from "./project-asset-stage-authority.ts";
+import {
+  issuePluginProjectAssetStageReadScope,
+  type ProjectAssetStageReadRequest,
+} from "./project-asset-stage-read-scope.ts";
 import { creativeOwner } from "./creative-project-application-support.ts";
 
 export type ProjectAssetStageApplicationDependencies = Readonly<{
   conversations: Pick<ProjectConversationStore, "loadBinding">;
   stages: ProjectAssetStageStore;
   threadStore: Pick<ThreadStore, "loadThreadInSpace">;
-  projects: Pick<CreativeProjectStore, "loadProject" | "loadBrief">;
-  texts: Pick<ProjectTextStore, "loadScript" | "loadOutline" | "loadRevision">;
+  projects: Pick<CreativeProjectStore, "loadProject" | "loadBrief"> &
+    Partial<PluginProjectReadStoreBinding>;
+  texts: Pick<
+    ProjectTextStore,
+    "loadScript" | "loadOutline" | "loadRevision" | "bindProjectReads"
+  >;
   tasks: Pick<
     ExtensionTaskApplicationService,
     "createProjectAssetStageTurnFromHost"
   >;
   authorization: CreativeProjectAuthorizationPort;
   digester: ContentDigester;
+}>;
+type StageReaders = Readonly<{
+  scope?: import("./plugin-project-read-scope.ts").PluginProjectReadScope;
+  stages: ProjectAssetStageStore;
+  projects: Pick<CreativeProjectStore, "loadProject" | "loadBrief">;
+  texts: Pick<ProjectTextStore, "loadScript" | "loadOutline" | "loadRevision">;
 }>;
 /** Independent asset execution admission, using the original Turn/Run/funding transaction. */
 export class ProjectAssetStageApplicationService {
@@ -58,6 +79,9 @@ export class ProjectAssetStageApplicationService {
       }),
       stages: Object.freeze({
         version: d.stages.version,
+        ...(d.stages.bindProjectReads === undefined
+          ? {}
+          : { bindProjectReads: d.stages.bindProjectReads.bind(d.stages) }),
         migrate: d.stages.migrate.bind(d.stages),
         loadAssetStageAdmission: d.stages.loadAssetStageAdmission.bind(
           d.stages,
@@ -69,10 +93,16 @@ export class ProjectAssetStageApplicationService {
         loadThreadInSpace: d.threadStore.loadThreadInSpace.bind(d.threadStore),
       }),
       projects: Object.freeze({
+        ...(d.projects.bindProjectReads === undefined
+          ? {}
+          : { bindProjectReads: d.projects.bindProjectReads.bind(d.projects) }),
         loadProject: d.projects.loadProject.bind(d.projects),
         loadBrief: d.projects.loadBrief.bind(d.projects),
       }),
       texts: Object.freeze({
+        ...(d.texts.bindProjectReads === undefined
+          ? {}
+          : { bindProjectReads: d.texts.bindProjectReads.bind(d.texts) }),
         loadScript: d.texts.loadScript.bind(d.texts),
         loadOutline: d.texts.loadOutline.bind(d.texts),
         loadRevision: d.texts.loadRevision.bind(d.texts),
@@ -110,7 +140,16 @@ export class ProjectAssetStageApplicationService {
         extensionCanonicalJson(q.installation)
     )
       return false;
-    const project = await this.#project(q, b.projectId, "creativeProject:read");
+    const readers = await this.#readers(q, b, {
+      action: "crewon.project-asset-stage-read.v1",
+      input: { purpose: "availability", projectId: b.projectId, threadId },
+    });
+    const project = await this.#project(
+      q,
+      b.projectId,
+      "creativeProject:read",
+      readers.projects,
+    );
     if (!(await this.#allows(q, b.projectId, "creativeProject:write")))
       return false;
     const thread = await this.#d.threadStore.loadThreadInSpace({
@@ -120,6 +159,7 @@ export class ProjectAssetStageApplicationService {
     await q.assertCurrent();
     q.assertActive();
     await this.#authorize(q, b.projectId, "creativeProject:read");
+    await this.#assertBindingCurrent(q, b);
     const writable = await this.#allows(
       q,
       b.projectId,
@@ -176,7 +216,16 @@ export class ProjectAssetStageApplicationService {
         "conflict",
         "project_conversation_revision_conflict",
       );
-    await this.#project(q, r.projectId, "creativeProject:write");
+    const readers = await this.#readers(q, binding, {
+      action: "crewon.project-asset-stage-read.v1",
+      input: { ...r, purpose: "start-stage" },
+    });
+    await this.#project(
+      q,
+      r.projectId,
+      "creativeProject:write",
+      readers.projects,
+    );
     const thread = await this.#d.threadStore.loadThreadInSpace({
       ...q.actor,
       threadId: r.threadId,
@@ -222,9 +271,12 @@ export class ProjectAssetStageApplicationService {
           content: r.content,
           ...(r.modelId === undefined ? {} : { modelId: r.modelId }),
           authority: liveProjectAuthority,
+          ...(readers.scope === undefined
+            ? {}
+            : { projectReadScope: readers.scope }),
           conversations: this.#d.conversations,
-          stages: this.#d.stages,
-          prepareSources: () => this.#sources(liveProjectAuthority, r),
+          stages: readers.stages,
+          prepareSources: () => this.#sources(liveProjectAuthority, r, readers),
         },
       );
     return parseProjectAssetStagesActionResponse(request, {
@@ -237,14 +289,166 @@ export class ProjectAssetStageApplicationService {
       stageAdmissionDigest: assetStageAdmission.contentDigest,
     });
   }
+  async #readers(
+    q: ProjectAssetStageCommitAuthority,
+    binding: import("@crewon/domain").ProjectConversationBinding,
+    request: ProjectAssetStageReadRequest,
+  ): Promise<StageReaders> {
+    await this.#authorize(q, binding.projectId, "creativeProject:read");
+    q.assertActive();
+    // The original negative filter identifies ordinary projects without lending
+    // protected access. Absent/hidden projects must pass the exact bound reader.
+    const ordinary = await this.#d.projects.loadProject({
+      owner: creativeOwner(q.actor),
+      projectId: binding.projectId,
+    });
+    await q.assertCurrent();
+    q.assertActive();
+    if (ordinary !== null) return this.#d;
+    if (
+      this.#d.projects.bindProjectReads === undefined ||
+      this.#d.texts.bindProjectReads === undefined
+    )
+      throw new ApplicationError(
+        "authorization",
+        "project_asset_stage_read_scope_unavailable",
+      );
+    const scope = issuePluginProjectAssetStageReadScope({
+      authority: q,
+      binding,
+      request,
+      digester: this.#d.digester,
+    });
+    if (
+      request.input.purpose === "start-stage" &&
+      this.#d.stages.bindProjectReads === undefined
+    )
+      throw new ApplicationError(
+        "authorization",
+        "project_asset_stage_read_scope_unavailable",
+      );
+    return Object.freeze({
+      scope,
+      projects: this.#d.projects.bindProjectReads(scope),
+      texts: this.#d.texts.bindProjectReads(scope),
+      stages:
+        request.input.purpose === "start-stage"
+          ? this.#d.stages.bindProjectReads!(scope)
+          : this.#d.stages,
+    });
+  }
+  async getScriptSource(
+    actor: ActorContext,
+    input: ProjectAssetScriptSourceRequest,
+    authority: ProjectAssetStageCommitAuthority,
+  ): Promise<ProjectAssetScriptSourceResponse> {
+    const r = parseProjectAssetScriptSourceRequest(input),
+      q = captureProjectAssetStageAuthority(authority);
+    assertProjectAssetStageActor(actor, q);
+    await q.assertCurrent();
+    q.assertActive();
+    const raw = await this.#d.conversations.loadBinding({
+      actor: q.actor,
+      profileId: q.installation.profileId,
+      threadId: r.threadId,
+    });
+    if (raw === null)
+      throw new ApplicationError("notFound", "project_conversation_not_found");
+    const b = parseProjectConversationBinding(raw, this.#d.digester);
+    const readers = await this.#readers(q, b, {
+      action: "crewon.project-asset-stage-read.v1",
+      input: { ...r, purpose: "script-source" },
+    });
+    if (
+      b.state !== "active" ||
+      b.projectId !== r.projectId ||
+      b.threadId !== r.threadId ||
+      b.revision !== r.expectedBindingRevision ||
+      extensionCanonicalJson(b.owner) !== extensionCanonicalJson(q.actor) ||
+      extensionCanonicalJson(b.currentInstallation) !==
+        extensionCanonicalJson(q.installation)
+    )
+      throw new ApplicationError(
+        "authorization",
+        "project_asset_stage_binding_conflict",
+      );
+    const thread = await this.#d.threadStore.loadThreadInSpace({
+      ...q.actor,
+      threadId: r.threadId,
+    });
+    if (
+      thread === null ||
+      thread.status !== "active" ||
+      thread.createdByActorId !== q.actor.actorId ||
+      (thread.workspaceId ?? null) !== b.workspaceId
+    )
+      throw new ApplicationError(
+        "notFound",
+        "project_conversation_thread_not_found",
+      );
+    const project = await this.#project(
+      q,
+      r.projectId,
+      "creativeProject:read",
+      readers.projects,
+    );
+    if (project.latestBriefRevision !== r.briefRevision) stale();
+    const headRaw = await readers.texts.loadScript({
+      owner: creativeOwner(q.actor),
+      projectId: r.projectId,
+      episodeId: r.episodeId,
+    });
+    const head = headRaw === null ? null : parseProjectTextArtifact(headRaw);
+    let script: ProjectAssetScriptSourceResponse["script"] = null;
+    if (head !== null && head.selectedContentRevision !== null) {
+      const stageRequest: ProjectAssetStageRequest = {
+        projectId: r.projectId,
+        threadId: r.threadId,
+        expectedThreadRevision: thread.revision,
+        expectedBindingRevision: r.expectedBindingRevision,
+        stage: {
+          kind: "assets",
+          assetKind: "character",
+          briefRevision: r.briefRevision,
+          script: {
+            artifactId: head.artifactId,
+            episodeId: r.episodeId,
+            contentRevision: head.selectedContentRevision,
+          },
+        },
+        content: "read selected source",
+        idempotencyKey: "read-only-script-source",
+      };
+      await this.#sources(q, stageRequest, readers);
+      script = stageRequest.stage.script;
+    }
+    await q.assertCurrent();
+    await this.#authorize(q, r.projectId, "creativeProject:read");
+    q.assertActive();
+    await this.#assertBindingCurrent(q, b);
+    return parseProjectAssetScriptSourceResponse(r, {
+      projectId: r.projectId,
+      threadId: r.threadId,
+      bindingRevision: b.revision,
+      briefRevision: r.briefRevision,
+      episodeId: r.episodeId,
+      script,
+    });
+  }
   async #sources(
     q: ProjectAssetStageCommitAuthority,
     r: ProjectAssetStageRequest,
+    readers: StageReaders,
   ): Promise<ProjectAssetStageSources> {
     const owner = creativeOwner(q.actor),
-      project = await this.#project(q, r.projectId, "creativeProject:read");
+      project = await this.#project(
+        q,
+        r.projectId,
+        "creativeProject:read",
+        readers.projects,
+      );
     if (project.latestBriefRevision !== r.stage.briefRevision) stale();
-    const raw = await this.#d.projects.loadBrief({
+    const raw = await readers.projects.loadBrief({
       owner,
       projectId: r.projectId,
       briefRevision: r.stage.briefRevision,
@@ -258,7 +462,7 @@ export class ProjectAssetStageApplicationService {
     let script: ProjectAssetStageSources["script"] = null;
     if (r.stage.script !== null) {
       const s = r.stage.script;
-      const rawHead = await this.#d.texts.loadScript({
+      const rawHead = await readers.texts.loadScript({
         owner,
         projectId: r.projectId,
         episodeId: s.episodeId,
@@ -272,7 +476,7 @@ export class ProjectAssetStageApplicationService {
         head.episodeId !== s.episodeId
       )
         stale();
-      const rawRevision = await this.#d.texts.loadRevision({
+      const rawRevision = await readers.texts.loadRevision({
         owner,
         projectId: r.projectId,
         artifactId: s.artifactId,
@@ -290,7 +494,7 @@ export class ProjectAssetStageApplicationService {
         revision.artifactId !== s.artifactId
       )
         stale();
-      const rawOutline = await this.#d.texts.loadOutline({
+      const rawOutline = await readers.texts.loadOutline({
         owner,
         projectId: r.projectId,
       });
@@ -298,7 +502,7 @@ export class ProjectAssetStageApplicationService {
         rawOutline === null ? null : parseProjectTextArtifact(rawOutline);
       let selectedOutline: ProjectOutlineRevision | null = null;
       if (outline?.selectedContentRevision !== null && outline !== null) {
-        const actual = await this.#d.texts.loadRevision({
+        const actual = await readers.texts.loadRevision({
           owner,
           projectId: r.projectId,
           artifactId: outline.artifactId,
@@ -328,6 +532,28 @@ export class ProjectAssetStageApplicationService {
       }),
       script,
     });
+  }
+  async #assertBindingCurrent(
+    q: ProjectAssetStageCommitAuthority,
+    expected: import("@crewon/domain").ProjectConversationBinding,
+  ) {
+    const raw = await this.#d.conversations.loadBinding({
+      actor: q.actor,
+      profileId: q.installation.profileId,
+      threadId: expected.threadId,
+    });
+    if (
+      raw === null ||
+      extensionCanonicalJson(
+        parseProjectConversationBinding(raw, this.#d.digester),
+      ) !== extensionCanonicalJson(expected)
+    )
+      throw new ApplicationError(
+        "conflict",
+        "project_asset_stage_binding_conflict",
+      );
+    await q.assertCurrent();
+    q.assertActive();
   }
   async #authorize(
     q: ProjectAssetStageCommitAuthority,
@@ -364,9 +590,10 @@ export class ProjectAssetStageApplicationService {
     q: ProjectAssetStageCommitAuthority,
     projectId: string,
     action: "creativeProject:read" | "creativeProject:write",
+    projects: StageReaders["projects"] = this.#d.projects,
   ) {
     await this.#authorize(q, projectId, action);
-    const raw = await this.#d.projects.loadProject({
+    const raw = await projects.loadProject({
       owner: creativeOwner(q.actor),
       projectId,
     });

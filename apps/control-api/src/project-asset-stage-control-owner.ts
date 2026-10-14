@@ -32,6 +32,8 @@ import {
   parseProjectAssetStagesActionRequest,
   parseProjectAssetStagesActionResponse,
   type ProjectAssetStageRequest,
+  parseProjectAssetScriptSourceRequest,
+  type ProjectAssetScriptSourceRequest,
 } from "@crewon/contracts/project-asset-stages";
 import { parsePluginUiJsonValue } from "@crewon/contracts/plugins";
 import { join } from "node:path";
@@ -214,6 +216,30 @@ export class ProjectAssetStageControlOwner {
           if (b === null || b.projectId !== parsed.input.projectId) denied();
           const q = await this.#issue(actor, b.currentInstallation);
           return this.#input.service.startStage(actor, parsed.input, q);
+        },
+      ),
+    );
+  }
+  getScriptSource(
+    request: ControlApiRequestContext,
+    actor: ActorContext,
+    input: ProjectAssetScriptSourceRequest,
+    signal?: AbortSignal,
+  ) {
+    return this.#track(() =>
+      this.#input.requests.run(
+        { request, actor, signal, preparation: "configuration" },
+        async () => {
+          const parsed = parseProjectAssetScriptSourceRequest(input);
+          await this.#input.requests.assertCurrent();
+          const b = await this.#input.conversations.loadBinding({
+            actor,
+            profileId: this.#input.requests.currentScope().profileId,
+            threadId: parsed.threadId,
+          });
+          if (b === null || b.projectId !== parsed.projectId) denied();
+          const q = await this.#issue(actor, b.currentInstallation);
+          return this.#input.service.getScriptSource(actor, parsed, q);
         },
       ),
     );

@@ -1,3 +1,8 @@
+import { assertProjectAssetStageReadScope } from "./project-asset-stage-read-scope.ts";
+import {
+  qualifyPluginProjectReadScope,
+  type PluginProjectReadScope,
+} from "./plugin-project-read-scope.ts";
 import { pluginTaskModelId } from "./plugin-task-model-selection.ts";
 import {
   createProjectAssetStageRunAdmission,
@@ -36,6 +41,7 @@ export type ProjectAssetConversationTask = Readonly<{
   sources: ProjectAssetStageSources;
   content: string;
   modelId?: string;
+  projectReadScope?: PluginProjectReadScope;
   authority: ProjectAssetStageCommitAuthority;
   conversations: Pick<ProjectConversationStore, "loadBinding">;
   stages: Pick<
@@ -61,6 +67,7 @@ export function captureProjectAssetConversationTask(
     "conversations",
     "stages",
     ...(Object.hasOwn(input, "modelId") ? ["modelId"] : []),
+    ...(Object.hasOwn(input, "projectReadScope") ? ["projectReadScope"] : []),
   ]);
   const binding = parseProjectConversationBinding(v.binding, digester),
     authority = captureProjectAssetStageAuthority(v.authority);
@@ -83,12 +90,33 @@ export function captureProjectAssetConversationTask(
       extensionCanonicalJson(authority.installation)
   )
     fail();
+  if (Object.hasOwn(v, "projectReadScope")) {
+    const scope = v.projectReadScope as PluginProjectReadScope;
+    const source = qualifyPluginProjectReadScope(scope);
+    if (
+      source.request.action !== "crewon.project-asset-stage-read.v1" ||
+      source.request.input.purpose !== "start-stage" ||
+      extensionCanonicalJson(source.request.input.stage) !==
+        extensionCanonicalJson(stage) ||
+      source.request.input.content !== content
+    )
+      fail();
+    assertProjectAssetStageReadScope({
+      scope,
+      authority,
+      binding,
+      request: source.request,
+    });
+  }
   return Object.freeze({
     binding,
     authority,
     stage,
     sources,
     content,
+    ...(Object.hasOwn(v, "projectReadScope")
+      ? { projectReadScope: v.projectReadScope as PluginProjectReadScope }
+      : {}),
     ...(Object.hasOwn(v, "modelId")
       ? { modelId: pluginTaskModelId(v.modelId) }
       : {}),
@@ -221,6 +249,7 @@ export async function prepareProjectAssetConversationTask(
     "conversations",
     "stages",
     ...(Object.hasOwn(input, "modelId") ? ["modelId"] : []),
+    ...(Object.hasOwn(input, "projectReadScope") ? ["projectReadScope"] : []),
   ]);
   const binding = parseProjectConversationBinding(v.binding, digester),
     authority = captureProjectAssetStageAuthority(v.authority),
@@ -304,6 +333,9 @@ export async function prepareProjectAssetConversationTask(
       stage,
       sources: parseProjectAssetStageSources(sources, stage),
       content: v.content as string,
+      ...(Object.hasOwn(v, "projectReadScope")
+        ? { projectReadScope: v.projectReadScope as PluginProjectReadScope }
+        : {}),
       ...(Object.hasOwn(v, "modelId")
         ? { modelId: pluginTaskModelId(v.modelId) }
         : {}),

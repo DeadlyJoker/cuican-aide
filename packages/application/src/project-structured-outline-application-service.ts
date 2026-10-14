@@ -1,4 +1,6 @@
 import { assertProjectOutlinePlanSelectionCommand } from "./project-outline-plan-selection-authority.ts";
+import { captureOutlineRunStoreView } from "./project-text-run-store-view.ts";
+import type { PluginProjectReadScope } from "./plugin-project-read-scope.ts";
 import { structuredOutlineCommitOptions } from "./project-structured-outline-commit-options.ts";
 import { qualifyProjectOutlineRunCommand } from "./project-outline-run-commit-authority.ts";
 import {
@@ -108,6 +110,7 @@ export type ProjectStructuredOutlineView = Readonly<{
 /** One original outline slot, immutable mixed history and exact small commands for manual work and Agent batches. */
 export class ProjectStructuredOutlineApplicationService {
   readonly #d: ProjectStructuredOutlineApplicationDependencies;
+  readonly #runStoreView: ReturnType<typeof captureOutlineRunStoreView>;
   constructor(input: ProjectStructuredOutlineApplicationDependencies) {
     const fields = dataFields(input, [
       "store",
@@ -165,6 +168,15 @@ export class ProjectStructuredOutlineApplicationService {
         sha256: method(fields.digester as ContentDigester, "sha256"),
       }),
     });
+    this.#runStoreView = captureOutlineRunStoreView(input, this.#d);
+  }
+  async withPluginProjectRunReads(
+    scope: PluginProjectReadScope,
+  ): Promise<ProjectStructuredOutlineApplicationService> {
+    const dependencies = await this.#runStoreView(scope);
+    return dependencies === null
+      ? this
+      : new ProjectStructuredOutlineApplicationService(dependencies);
   }
   saveCandidate(
     actor: ActorContext,

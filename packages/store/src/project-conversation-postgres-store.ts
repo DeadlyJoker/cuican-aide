@@ -241,6 +241,10 @@ export class PostgresProjectConversationStore
           threadLockKey(o.actor.tenantId, p.binding.threadId),
         );
         // Keep the original Thread/idempotency lock order used by ordinary creation.
+        // Model writers acquire this project lock before namespace ownership.
+        // Acquire it here too, so rebinding cannot hold namespace while waiting
+        // for a model writer that is waiting for that same namespace.
+        await this.#lockProject(c, p.binding);
         await assertPostgresPluginProjectWorkspaceBinding(
           c,
           this.#schema,
@@ -386,16 +390,7 @@ export class PostgresProjectConversationStore
     c: PoolClient,
     b: Parameters<typeof bindingOwner>[0],
   ): Promise<void> {
-    await advisoryLock(
-      c,
-      JSON.stringify([
-        "creative-project-project",
-        this.#schema,
-        b.owner.tenantId,
-        b.owner.spaceId,
-        b.projectId,
-      ]),
-    );
+    await this.#lockProject(c, b);
     const project = decodeCreativeProject(
       await this.#get(
         c,
@@ -408,6 +403,21 @@ export class PostgresProjectConversationStore
     if (project === null) conversationFail("creative_project_not_found");
     if (project.state !== "active")
       conversationFail("creative_project_archived");
+  }
+  async #lockProject(
+    c: PoolClient,
+    b: Parameters<typeof bindingOwner>[0],
+  ): Promise<void> {
+    await advisoryLock(
+      c,
+      JSON.stringify([
+        "creative-project-project",
+        this.#schema,
+        b.owner.tenantId,
+        b.owner.spaceId,
+        b.projectId,
+      ]),
+    );
   }
   async #assertThread(
     c: PoolClient,

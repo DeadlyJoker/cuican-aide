@@ -1,11 +1,13 @@
 import {
-  assertSqliteSavedSourceUploadLegacyAccess,
-  assertPostgresSavedSourceUploadLegacyAccess,
+  assertSqliteSavedSourceUploadProjectAccess,
+  assertPostgresSavedSourceUploadProjectAccess,
 } from "./project-source-upload-legacy-access.ts";
 import {
   captureSqliteCreativeProjectLegacyAccess,
   capturePostgresCreativeProjectLegacyAccess,
   lockPostgresCreativeProjectLegacySchema,
+  type CreativeProjectLegacyAccess,
+  type PostgresCreativeProjectLegacyAccess,
 } from "./creative-project-legacy-access.ts";
 import { foundationLegacyScope } from "./project-foundation-legacy-scope.ts";
 import type { DatabaseSync } from "node:sqlite";
@@ -166,9 +168,11 @@ function checkedSnapshot(
 export function captureSqliteProjectFoundationDownstream(
   database: DatabaseSync,
   input: ProjectFoundationDownstreamLocator,
+  options: Readonly<{ projectAccess?: CreativeProjectLegacyAccess }> = {},
 ): ProjectFoundationDownstreamSnapshot {
   const scope = locator(input);
-  const access = captureSqliteCreativeProjectLegacyAccess(database);
+  const access =
+    options.projectAccess ?? captureSqliteCreativeProjectLegacyAccess(database);
   access.assertProject(foundationLegacyScope(scope.owner, scope.projectId));
   const read = (sql: string, revision?: number) =>
     database
@@ -185,11 +189,15 @@ export function captureSqliteProjectFoundationDownstream(
   );
   if (foundation === null) return null;
   if (foundation.source !== null)
-    assertSqliteSavedSourceUploadLegacyAccess(database, {
-      owner: scope.owner,
-      projectId: scope.projectId,
-      sourceRevision: foundation.source.revision,
-    });
+    assertSqliteSavedSourceUploadProjectAccess(
+      database,
+      {
+        owner: scope.owner,
+        projectId: scope.projectId,
+        sourceRevision: foundation.source.revision,
+      },
+      access,
+    );
   return checkedSnapshot(
     project,
     scope,
@@ -224,13 +232,15 @@ export async function capturePostgresProjectFoundationDownstream(
   client: PoolClient,
   schema: string,
   input: ProjectFoundationDownstreamLocator,
+  options: Readonly<{
+    projectAccess?: PostgresCreativeProjectLegacyAccess;
+  }> = {},
 ): Promise<ProjectFoundationDownstreamSnapshot> {
   const scope = locator(input);
   await lockPostgresCreativeProjectLegacySchema(client, schema);
-  const access = await capturePostgresCreativeProjectLegacyAccess(
-    client,
-    schema,
-  );
+  const access =
+    options.projectAccess ??
+    (await capturePostgresCreativeProjectLegacyAccess(client, schema));
   await access.assertProject(
     foundationLegacyScope(scope.owner, scope.projectId),
   );
@@ -260,11 +270,16 @@ export async function capturePostgresProjectFoundationDownstream(
     return null;
   }
   if (foundation.source !== null)
-    await assertPostgresSavedSourceUploadLegacyAccess(client, schema, {
-      owner: scope.owner,
-      projectId: scope.projectId,
-      sourceRevision: foundation.source.revision,
-    });
+    await assertPostgresSavedSourceUploadProjectAccess(
+      client,
+      schema,
+      {
+        owner: scope.owner,
+        projectId: scope.projectId,
+        sourceRevision: foundation.source.revision,
+      },
+      access,
+    );
   const snapshot = checkedSnapshot(
     project,
     scope,
@@ -310,9 +325,10 @@ export function assertSqliteProjectFoundationDownstreamUnchanged(
   database: DatabaseSync,
   input: ProjectFoundationDownstreamLocator,
   expected: ProjectFoundationDownstreamSnapshot,
+  options: Readonly<{ projectAccess?: CreativeProjectLegacyAccess }> = {},
 ): void {
   assertSnapshotUnchanged(
-    captureSqliteProjectFoundationDownstream(database, input),
+    captureSqliteProjectFoundationDownstream(database, input, options),
     expected,
   );
 }
@@ -322,9 +338,17 @@ export async function assertPostgresProjectFoundationDownstreamUnchanged(
   schema: string,
   input: ProjectFoundationDownstreamLocator,
   expected: ProjectFoundationDownstreamSnapshot,
+  options: Readonly<{
+    projectAccess?: PostgresCreativeProjectLegacyAccess;
+  }> = {},
 ): Promise<void> {
   assertSnapshotUnchanged(
-    await capturePostgresProjectFoundationDownstream(client, schema, input),
+    await capturePostgresProjectFoundationDownstream(
+      client,
+      schema,
+      input,
+      options,
+    ),
     expected,
   );
 }

@@ -1,4 +1,9 @@
+import { assertSqlitePluginProjectAssetRunRead } from "./plugin-project-asset-run-read.ts";
+import { assertSqlitePluginProjectOutlineContextRead } from "./plugin-project-outline-context-read.ts";
+import { assertSqliteAssetStageBoundRead } from "./project-asset-stage-owned-access.ts";
 import { assertSqliteFoundationRunRead } from "./project-foundation-run-read.ts";
+import { assertSqliteProjectRunMutationRead } from "./plugin-project-run-mutation-read.ts";
+import type { ProjectAssetReadMethod } from "./plugin-project-asset-read-view.ts";
 import { assertSqliteFoundationRunCommit } from "./project-foundation-run-qualification.ts";
 import type { ProjectFoundationSourceReadMethod } from "./plugin-project-foundation-read-view.ts";
 import type { DatabaseSync } from "node:sqlite";
@@ -30,11 +35,19 @@ export type PluginProjectReadCall = Readonly<{
   method:
     | PluginProjectReadMethod
     | ProjectTextReadMethod
-    | ProjectFoundationSourceReadMethod;
+    | ProjectAssetReadMethod
+    | ProjectFoundationSourceReadMethod
+    | "loadAssetStageAdmission"
+    | "readRequiredAssetStageDigest"
+    | "loadExtensionTurnReceipt";
   query: Readonly<{
     owner: CreativeProjectOwnerScope;
     projectId?: string;
     assetId?: string;
+    artifactId?: string;
+    episodeId?: string;
+    contentRevision?: number;
+    referenceRevision?: number;
     briefRevision?: number;
     assetRevision?: number;
     revision?: number;
@@ -87,6 +100,10 @@ export async function readSqliteOwnedCreativeProject<T>(
   for (const key of [
     "projectId",
     "assetId",
+    "artifactId",
+    "episodeId",
+    "contentRevision",
+    "referenceRevision",
     "briefRevision",
     "assetRevision",
     "revision",
@@ -118,12 +135,21 @@ export async function readSqliteOwnedCreativeProject<T>(
     );
     assertSqlitePluginProjectRunRead(db, source.runAuthority);
     const access = captureSqliteOwnedProjectAccess(db, source);
+    assertSqliteProjectRunMutationRead(db, source, access);
+    assertSqlitePluginProjectAssetRunRead(db, source, access);
+    assertSqlitePluginProjectOutlineContextRead(db, source, access);
+    assertSqliteAssetStageBoundRead(db, source, call);
     if (source.foundationRunAuthority !== undefined)
       assertSqliteFoundationRunRead(db, source.foundationRunAuthority, {
         projectAccess: access,
       });
     if (source.foundationRunMutationAuthority !== undefined)
-      assertSqliteFoundationRunCommit(db, source.foundationRunMutationAuthority, "fresh-proposal", { projectAccess: access });
+      assertSqliteFoundationRunCommit(
+        db,
+        source.foundationRunMutationAuthority,
+        "fresh-proposal",
+        { projectAccess: access },
+      );
     source.assertActive();
     result = read(access);
     const items = Array.isArray(result)
@@ -156,7 +182,16 @@ export async function readSqliteOwnedCreativeProject<T>(
         projectAccess: access,
       });
     if (source.foundationRunMutationAuthority !== undefined)
-      assertSqliteFoundationRunCommit(db, source.foundationRunMutationAuthority, "fresh-proposal", { projectAccess: access });
+      assertSqliteFoundationRunCommit(
+        db,
+        source.foundationRunMutationAuthority,
+        "fresh-proposal",
+        { projectAccess: access },
+      );
+    assertSqliteProjectRunMutationRead(db, source, access);
+    assertSqlitePluginProjectAssetRunRead(db, source, access);
+    assertSqlitePluginProjectOutlineContextRead(db, source, access);
+    assertSqliteAssetStageBoundRead(db, source, call);
     db.exec("COMMIT");
   } catch (error) {
     try {

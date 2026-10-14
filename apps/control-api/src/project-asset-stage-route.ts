@@ -13,6 +13,8 @@ import {
   parseProjectAssetStagesActionRequest,
   parseProjectAssetStagesActionResponse,
   parseProjectAssetStageAvailabilityResponse,
+  parseProjectAssetScriptSourceQuery,
+  parseProjectAssetScriptSourceResponse,
 } from "@crewon/contracts/project-asset-stages";
 import type { FastifyInstance } from "fastify";
 import type { ControlApiIdentityPort } from "./control-api-ports.ts";
@@ -87,6 +89,28 @@ export function registerProjectAssetStageRoutes(
       return reply
         .code(output.disposition === "committed" ? 201 : 200)
         .send(output);
+    },
+  );
+  app.get<{ Params: { threadId: string }; Querystring: unknown }>(
+    "/api/v1/threads/:threadId/project-asset-stage/script-source",
+    { exposeHeadRoute: false },
+    async (request) => {
+      const context = requestContext(request),
+        actor = await input.identity.resolveActor(context);
+      const parsed = parseProjectAssetScriptSourceQuery(
+        parseThreadId(request.params.threadId),
+        request.query,
+      );
+      await input.threads.getThread(actor, parsed.threadId);
+      if (input.owner == null)
+        throw new ApplicationError(
+          "conflict",
+          "project_asset_stage_unavailable",
+        );
+      return parseProjectAssetScriptSourceResponse(
+        parsed,
+        await input.owner.getScriptSource(context, actor, parsed),
+      );
     },
   );
 }

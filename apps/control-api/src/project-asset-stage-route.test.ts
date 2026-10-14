@@ -11,6 +11,7 @@ import {
   type CreativeProjectAuthorizationPort,
   type ProjectConversationCommitAuthority,
 } from "@crewon/application";
+import { projectAssetScriptSourcePath } from "@crewon/contracts/project-asset-stages";
 import { parsePluginTaskAdmissionPin } from "@crewon/domain";
 import {
   businessExecutionFixture,
@@ -446,6 +447,57 @@ for (const backend of ["sqlite", "postgres"] as const)
       const available = await get();
       assert.equal(available.statusCode, 200, available.body);
       assert.deepEqual(available.json(), { available: true });
+      const sourceUrl = projectAssetScriptSourcePath({
+        projectId: f.request.projectId,
+        threadId: f.request.threadId,
+        expectedBindingRevision: 1,
+        briefRevision: 1,
+        episodeId: "ep-1",
+      });
+      const source = await f.app.inject({
+        method: "GET",
+        url: sourceUrl,
+        headers: headers(),
+      });
+      assert.equal(source.statusCode, 200, source.body);
+      assert.deepEqual(source.json(), {
+        projectId: f.request.projectId,
+        threadId: f.request.threadId,
+        bindingRevision: 1,
+        briefRevision: 1,
+        episodeId: "ep-1",
+        script: null,
+      });
+      for (const bad of [
+        sourceUrl + "&actorId=forged",
+        sourceUrl + "&episodeId=foreign",
+        sourceUrl.replace("briefRevision=1", "briefRevision=01"),
+      ])
+        assert.equal(
+          (await f.app.inject({ method: "GET", url: bad, headers: headers() }))
+            .statusCode,
+          400,
+        );
+      assert.equal(
+        (
+          await f.app.inject({
+            method: "GET",
+            url: sourceUrl,
+            headers: { ...headers(), authorization: "Bearer foreign" },
+          })
+        ).statusCode,
+        401,
+      );
+      assert.equal(
+        (
+          await f.app.inject({
+            method: "HEAD",
+            url: sourceUrl,
+            headers: headers(),
+          })
+        ).statusCode,
+        404,
+      );
       assert.equal(f.state.peerPrepares, 0);
       assert.equal(await f.count("run_snapshots"), 0);
       f.state.projectDenied = true;

@@ -7,6 +7,12 @@ import {
   projectAssetStagePath,
   type ProjectAssetStageRequest,
   type ProjectAssetStageResponse,
+  MAX_PROJECT_ASSET_SCRIPT_SOURCE_BYTES,
+  parseProjectAssetScriptSourceRequest,
+  parseProjectAssetScriptSourceResponse,
+  projectAssetScriptSourcePath,
+  type ProjectAssetScriptSourceRequest,
+  type ProjectAssetScriptSourceResponse,
 } from "@crewon/contracts/project-asset-stages";
 import type { CreativeProjectControlTransport } from "./creative-project-control-client.ts";
 export type ProjectAssetStageControlRequestOptions = Readonly<{
@@ -64,6 +70,31 @@ export class ProjectAssetStageControlClient {
     );
     signal.throwIfAborted();
     return this.#output(() => parseProjectAssetStageResponse(request, value));
+  }
+  async getScriptSource(
+    input: ProjectAssetScriptSourceRequest,
+    options: ProjectAssetStageControlRequestOptions = {},
+  ): Promise<ProjectAssetScriptSourceResponse> {
+    const request = this.#input(() =>
+      parseProjectAssetScriptSourceRequest(input),
+    );
+    const signal = this.#signal(options);
+    signal.throwIfAborted();
+    const value = await this.#transport.json(
+      "GET",
+      projectAssetScriptSourcePath(request),
+      null,
+      {
+        signal,
+        maximumResponseBytes: MAX_PROJECT_ASSET_SCRIPT_SOURCE_BYTES,
+        redirect: "manual",
+        expectedStatuses: [200],
+      },
+    );
+    signal.throwIfAborted();
+    return this.#output(() =>
+      parseProjectAssetScriptSourceResponse(request, value),
+    );
   }
   #signal(input: ProjectAssetStageControlRequestOptions): AbortSignal {
     const signal = this.#input(() => {

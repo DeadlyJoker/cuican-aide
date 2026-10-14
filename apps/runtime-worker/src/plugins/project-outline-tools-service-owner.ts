@@ -12,6 +12,11 @@ import {
   type RunStore,
 } from "@crewon/application";
 import {
+  issuePluginProjectTextRunMutationReadScope,
+  issuePluginProjectOutlineRunReadScope,
+  captureProjectOutlineRunReadAuthority,
+} from "@crewon/application/host-project-workspaces";
+import {
   assertProjectStageToolRequest,
   extensionCanonicalJson,
   extensionToolName,
@@ -62,7 +67,10 @@ export type ProjectOutlineToolsServiceOwnerDependencies = Readonly<{
   stageAdmission: ProjectStageRunAdmission;
   tools: ExtensionManifest["tools"];
   outlines: ProjectStructuredOutlineApplicationService;
-  foundations: Pick<ProjectFoundationStore, "loadFoundation">;
+  foundations: Pick<
+    ProjectFoundationStore,
+    "loadFoundation" | "bindProjectReads"
+  >;
   conversations: Pick<
     ProjectConversationStore,
     "loadBinding" | "loadStageAdmission" | "readRequiredStageDigest"
@@ -96,6 +104,7 @@ export class ProjectOutlineToolsServiceOwner {
   readonly #d: ProjectOutlineToolsServiceOwnerDependencies;
   readonly #stage: ProjectStageRunAdmission;
   readonly #service: PluginProjectOutlineToolsService;
+  readonly #foundationReads: ProjectFoundationStore["bindProjectReads"];
   readonly #invocations = new WeakMap<object, Invocation>();
   readonly #active = new Set<Invocation>();
   readonly #pending = new Set<Promise<unknown>>();
@@ -107,6 +116,7 @@ export class ProjectOutlineToolsServiceOwner {
     foundationOwnerNativeRecord(input);
     if (!(input.outlines instanceof ProjectStructuredOutlineApplicationService))
       denied();
+    this.#foundationReads = foundationReadBinder(input.foundations);
     const admission = parsePluginTaskAdmission(input.admission);
     this.#stage = parseProjectStageRunAdmission(input.stageAdmission, sha);
     const stage = this.#stage,
@@ -386,10 +396,66 @@ export class ProjectOutlineToolsServiceOwner {
       };
     await this.#authorizeCurrent(operation);
     const actor = await this.#actor(signal);
-    await this.#run(i);
+    const run = await this.#run(i);
     await this.#identity(actor, i);
     await this.#policy(actor, false);
-    const raw = await this.#d.foundations.loadFoundation({
+    const installation = this.#stage.installation;
+    const scope = {
+      tenantId: actor.tenantId,
+      spaceId: actor.spaceId,
+      profileId: installation.profileId,
+    };
+    const [selection, pkg] = await Promise.all([
+      this.#d.installations.loadSelection({
+        scope,
+        pluginId: installation.pluginId,
+      }),
+      this.#d.installations.loadPackage({
+        scope,
+        packageDigest: installation.packageDigest,
+      }),
+    ]);
+    if (selection === null || pkg === null) denied();
+    const current = async () => {
+      this.#check(i);
+      signal.throwIfAborted();
+      if (
+        (await this.#d.authorizeOutlineService(signal)) !== undefined ||
+        (await this.#d.authorizeTransaction(operation)) !== undefined
+      )
+        denied();
+      await this.#actor(signal);
+      await this.#policy(actor, false);
+      this.#check(i);
+    };
+    const evidence = this.#check(i);
+    const authority = captureProjectOutlineRunReadAuthority({
+      version: "crewon.project-outline-run-read.v1",
+      actor,
+      run,
+      receipt: evidence.receipt,
+      claim: evidence.claim,
+      commandInput: i.command.input,
+      operationId: "outline_context",
+      installation,
+      admission: this.#d.admission,
+      projectStageAdmission: this.#stage,
+      selection,
+      package: pkg,
+      assertCurrent: current,
+    });
+    const readScope = await issuePluginProjectOutlineRunReadScope({
+      authority,
+      assertActive: () => this.#check(i),
+    });
+    const outlines =
+      await this.#d.outlines.withPluginProjectRunReads(readScope);
+    const foundations =
+      outlines === this.#d.outlines
+        ? this.#d.foundations
+        : this.#foundationReads?.(readScope);
+    if (!foundations) denied();
+    const raw = await foundations.loadFoundation({
       owner: {
         tenantId: actor.tenantId,
         spaceId: actor.spaceId,
@@ -411,7 +477,7 @@ export class ProjectOutlineToolsServiceOwner {
       denied();
     // Existing Application authorizes and validates the original project/outline identity. No write is performed.
     await ProjectStructuredOutlineApplicationService.prototype.getOutline.call(
-      this.#d.outlines,
+      outlines,
       actor,
       { projectId: request.projectId },
     );
@@ -444,7 +510,7 @@ export class ProjectOutlineToolsServiceOwner {
     await this.#run(i);
     await this.#identity(actor, i);
     await this.#policy(actor, false);
-    const latest = await this.#d.foundations.loadFoundation({
+    const latest = await foundations.loadFoundation({
       owner: {
         tenantId: actor.tenantId,
         spaceId: actor.spaceId,
@@ -537,9 +603,15 @@ export class ProjectOutlineToolsServiceOwner {
         await current();
       },
     });
+    const readScope = await issuePluginProjectTextRunMutationReadScope({
+      authority: transaction,
+      assertActive: authority.assertActive,
+    });
+    const scopedOutlines =
+      await this.#d.outlines.withPluginProjectRunReads(readScope);
     const result =
       await ProjectStructuredOutlineApplicationService.prototype.saveCandidate.call(
-        this.#d.outlines,
+        scopedOutlines,
         actor,
         projectOutlineRunMutationCommand(transaction, sha),
         { authority },
@@ -661,4 +733,28 @@ export class ProjectOutlineToolsServiceOwner {
 }
 function denied(): never {
   throw new Error("plugin_project_outline_tools_authority_denied");
+}
+/** Capture only a native original manager method; do not execute caller accessors. */
+function foundationReadBinder(
+  port: object,
+): ProjectFoundationStore["bindProjectReads"] {
+  let cursor: object | null = port;
+  for (
+    let depth = 0;
+    cursor && depth < 32;
+    depth++, cursor = Object.getPrototypeOf(cursor)
+  ) {
+    const descriptor = Object.getOwnPropertyDescriptor(
+      cursor,
+      "bindProjectReads",
+    );
+    if (!descriptor) continue;
+    if (!Object.hasOwn(descriptor, "value")) denied();
+    if (descriptor.value === undefined) return undefined;
+    if (typeof descriptor.value !== "function") denied();
+    return descriptor.value.bind(port) as NonNullable<
+      ProjectFoundationStore["bindProjectReads"]
+    >;
+  }
+  return undefined;
 }

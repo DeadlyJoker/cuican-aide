@@ -33,6 +33,10 @@ import {
 import { creativeProjectSchemaName } from "./creative-project-schema.ts";
 import { assertProjectOutlinePreparedCommand } from "./project-outline-prepared-command.ts";
 import type { StructuredTextPrepared } from "./project-structured-outline-store-support.ts";
+import type {
+  CreativeProjectLegacyAccess,
+  PostgresCreativeProjectLegacyAccess,
+} from "./creative-project-legacy-access.ts";
 
 export function projectOutlineRunCommitQualification(
   authority: CreativeProjectCommitAuthority | undefined,
@@ -87,6 +91,7 @@ export function assertSqliteProjectOutlineRunCommit(
   db: DatabaseSync,
   q: Qualification,
   mode: "fresh-candidate" | "receipt-publication" = "fresh-candidate",
+  options?: Readonly<{ projectAccess: CreativeProjectLegacyAccess }>,
 ): void {
   if (!q) return;
   assertSqliteInstalledProjectRunExecution(db, q);
@@ -100,7 +105,12 @@ export function assertSqliteProjectOutlineRunCommit(
   )
     denied();
   // Includes current actor-owned active project, exact conversation revision and installation.
-  const facts = captureSqliteFoundationRunFacts(db, q.projectStageAdmission);
+  const facts = captureSqliteFoundationRunFacts(
+    db,
+    q.projectStageAdmission,
+    false,
+    options,
+  );
   if (
     facts === null ||
     (mode === "fresh-candidate" &&
@@ -115,6 +125,7 @@ export async function assertPostgresProjectOutlineRunCommit(
   schema: string,
   q: Qualification,
   mode: "fresh-candidate" | "receipt-publication" = "fresh-candidate",
+  options?: Readonly<{ projectAccess: PostgresCreativeProjectLegacyAccess }>,
 ): Promise<void> {
   if (!q) return;
   await assertPostgresInstalledProjectRunExecution(c, schema, q);
@@ -145,6 +156,8 @@ export async function assertPostgresProjectOutlineRunCommit(
     c,
     schema,
     q.projectStageAdmission,
+    false,
+    options,
   );
   if (
     facts === null ||

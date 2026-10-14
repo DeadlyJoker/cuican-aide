@@ -1,8 +1,12 @@
+import { assertPostgresPluginProjectAssetRunRead } from "./plugin-project-asset-run-read.ts";
+import { assertPostgresPluginProjectOutlineContextRead } from "./plugin-project-outline-context-read.ts";
+import { assertPostgresAssetStageBoundRead } from "./project-asset-stage-owned-access.ts";
 import {
   assertPostgresInstalledProjectRunExecution,
   assertPostgresProjectRunLease,
 } from "./creative-project-run-commit-postgres.ts";
 import { assertPostgresFoundationRunRead } from "./project-foundation-run-read.ts";
+import { assertPostgresProjectRunMutationRead } from "./plugin-project-run-mutation-read.ts";
 import { assertPostgresFoundationRunCommit } from "./project-foundation-run-qualification.ts";
 import type { Pool } from "pg";
 import {
@@ -73,6 +77,10 @@ export async function readPostgresOwnedCreativeProject<T>(
   for (const key of [
     "projectId",
     "assetId",
+    "artifactId",
+    "episodeId",
+    "contentRevision",
+    "referenceRevision",
     "briefRevision",
     "assetRevision",
     "revision",
@@ -122,17 +130,47 @@ export async function readPostgresOwnedCreativeProject<T>(
       );
     }
     if (source.foundationRunMutationAuthority !== undefined) {
-      await assertPostgresInstalledProjectRunExecution(c, input.schema, source.foundationRunMutationAuthority);
-      await assertPostgresProjectRunLease(c, input.schema, source.foundationRunMutationAuthority);
+      await assertPostgresInstalledProjectRunExecution(
+        c,
+        input.schema,
+        source.foundationRunMutationAuthority,
+      );
+      await assertPostgresProjectRunLease(
+        c,
+        input.schema,
+        source.foundationRunMutationAuthority,
+      );
     }
+    // Original writers lock Run/physical lease before project rows. Read-side
+    // qualification follows the same order before acquiring owner/project locks.
+    for (const q of [
+      source.creativeRunMutationAuthority,
+      source.outlineRunMutationAuthority,
+      source.assetRunMutationAuthority,
+      source.outlineRunReadAuthority,
+      source.assetRunReadAuthority,
+    ]) {
+      if (q !== undefined)
+        await assertPostgresInstalledProjectRunExecution(c, input.schema, q);
+    }
+    const projectId = (source.request.input as { projectId?: string })
+      .projectId;
+    if (projectId !== undefined)
+      await c.query("SELECT pg_advisory_xact_lock(hashtextextended($1,0))", [
+        JSON.stringify([
+          "creative-project-project",
+          input.schema,
+          source.scope.tenantId,
+          source.scope.spaceId,
+          projectId,
+        ]),
+      ]);
     const access = await capturePostgresOwnedProjectAccess(
       c,
       input.schema,
       source,
     );
     const assertProject = access.assertProject;
-    if (call.query.projectId !== undefined)
-      await assertProject({ projectId: call.query.projectId });
     source.assertActive();
     input.assertOpen();
     if (source.foundationRunAuthority !== undefined)
@@ -143,7 +181,30 @@ export async function readPostgresOwnedCreativeProject<T>(
         { projectAccess: access },
       );
     if (source.foundationRunMutationAuthority !== undefined)
-      await assertPostgresFoundationRunCommit(c, input.schema, source.foundationRunMutationAuthority, "fresh-proposal", { projectAccess: access });
+      await assertPostgresFoundationRunCommit(
+        c,
+        input.schema,
+        source.foundationRunMutationAuthority,
+        "fresh-proposal",
+        { projectAccess: access },
+      );
+    await assertPostgresProjectRunMutationRead(c, input.schema, source, access);
+    await assertPostgresPluginProjectAssetRunRead(
+      c,
+      input.schema,
+      source,
+      access,
+    );
+    await assertPostgresPluginProjectOutlineContextRead(
+      c,
+      input.schema,
+      source,
+      access,
+    );
+    await assertPostgresAssetStageBoundRead(c, input.schema, source, call);
+    if (call.query.projectId !== undefined)
+      await assertProject({ projectId: call.query.projectId });
+
     result = await read(c, access);
     const items =
       result && typeof result === "object" && "projects" in result
@@ -179,7 +240,27 @@ export async function readPostgresOwnedCreativeProject<T>(
         { projectAccess: access },
       );
     if (source.foundationRunMutationAuthority !== undefined)
-      await assertPostgresFoundationRunCommit(c, input.schema, source.foundationRunMutationAuthority, "fresh-proposal", { projectAccess: access });
+      await assertPostgresFoundationRunCommit(
+        c,
+        input.schema,
+        source.foundationRunMutationAuthority,
+        "fresh-proposal",
+        { projectAccess: access },
+      );
+    await assertPostgresProjectRunMutationRead(c, input.schema, source, access);
+    await assertPostgresPluginProjectAssetRunRead(
+      c,
+      input.schema,
+      source,
+      access,
+    );
+    await assertPostgresPluginProjectOutlineContextRead(
+      c,
+      input.schema,
+      source,
+      access,
+    );
+    await assertPostgresAssetStageBoundRead(c, input.schema, source, call);
     await c.query("COMMIT");
   } catch (error) {
     await rollbackPostgres(c);

@@ -22,8 +22,11 @@ import {
 import { withWorkerToolDispatch } from "./worker-tool-dispatch-authority.ts";
 
 /** Real original SQLite Run/lease/receipt. Named PDP only; no supplier or user database. */
-export async function outlineToolsOwnerFixture(t: TestContext) {
-  const f = await outlineToolFixture(t, "sqlite");
+export async function outlineToolsOwnerFixture(
+  t: TestContext,
+  backend: "sqlite" | "postgres" = "sqlite",
+) {
+  const f = await outlineToolFixture(t, backend);
   const prepared = await f.prepare(),
     q = prepared.transaction;
   const binding = await f.first.store.loadExtensionRunBinding(f.locator);
@@ -266,6 +269,7 @@ export async function outlineToolsOwnerFixture(t: TestContext) {
     return {
       request,
       command: readCommand,
+      receipt,
       invoke: <T>(
         value: ProjectOutlineToolsServiceOwner,
         delegate: () => Promise<T>,
