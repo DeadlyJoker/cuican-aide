@@ -1,6 +1,7 @@
 import { ControlApiClientError } from "@crewon/control-client";
 import { CircleAlert } from "lucide-react";
 import type { Locale } from "../../lib/i18n";
+import { PluginUiLoaderError } from "../../lib/plugins/pluginUiValidation";
 import styles from "./InstalledPluginUnavailable.module.css";
 
 export function InstalledPluginUnavailable({
@@ -8,7 +9,14 @@ export function InstalledPluginUnavailable({
   locale,
   onRetry,
 }: Readonly<{ error: unknown; locale: Locale; onRetry(): void }>) {
-  const code = error instanceof ControlApiClientError ? error.code : null;
+  const rawCode =
+    error instanceof ControlApiClientError ||
+    error instanceof PluginUiLoaderError
+      ? error.code
+      : null;
+  // Expose only bounded protocol codes, never an arbitrary exception or URL.
+  const code =
+    rawCode && /^[a-z][a-z0-9_]{2,95}$/.test(rawCode) ? rawCode : null;
   const zh = locale === "zh";
   const title =
     code === "storage_capacity_low"
@@ -31,10 +39,20 @@ export function InstalledPluginUnavailable({
           ? "请重新加载插件；若仍无法打开，可到设置中检查插件状态。"
           : "Reload the plugin. If it remains unavailable, check its status in Settings.";
   return (
-    <section className={styles.panel} role="alert">
+    <section
+      className={styles.panel}
+      role="alert"
+      data-plugin-error-code={code ?? undefined}
+    >
       <CircleAlert size={24} aria-hidden="true" />
       <h2>{title}</h2>
       <p>{description}</p>
+      {code ? (
+        <details>
+          <summary>{zh ? "诊断信息" : "Diagnostics"}</summary>
+          <code>{code}</code>
+        </details>
+      ) : null}
       <button type="button" className="button" onClick={onRetry}>
         {zh ? "重新加载插件" : "Reload plugin"}
       </button>
