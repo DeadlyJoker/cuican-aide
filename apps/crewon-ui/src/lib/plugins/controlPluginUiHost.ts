@@ -62,6 +62,7 @@ export type ControlPluginUiHost = Readonly<{
     item: PluginUiCatalogItem,
     contributionId: string,
     signal: AbortSignal,
+    onProgress?: (phase: string) => void,
   ): Promise<PluginUiLease>;
   validateLease(
     lease: PluginUiLease,
@@ -358,7 +359,15 @@ export function createControlPluginUiHost(
       input: PluginUiCatalogItem,
       contributionId: string,
       signal: AbortSignal,
+      onProgress?: (phase: string) => void,
     ) {
+      const progress = (phase: string) => {
+        try {
+          onProgress?.(phase);
+        } catch {
+          // Diagnostics never determine authorization or request completion.
+        }
+      };
       const item = parsePluginUiCatalogResponse(
         { plugins: [input], next: null },
         { afterPluginId: null, limit: 1 },
@@ -373,6 +382,7 @@ export function createControlPluginUiHost(
         uiFailure("plugin_ui_contribution_invalid");
       assertPluginUiCurrent(assertCurrent, signal);
       // Do not hide a newly allocated reference by cancelling this small response read with the caller's signal.
+      progress("open-lease");
       const lease = await pluginUiControlRequest((requestSignal) =>
         client.plugins.openMount(
           {
@@ -389,7 +399,9 @@ export function createControlPluginUiHost(
         if (pluginUiCatalogIdentity(lease) !== pluginUiCatalogIdentity(item))
           uiFailure("plugin_ui_lease_identity_mismatch");
         leases.register(lease);
+        progress("recover");
         await recovery.hydrate(lease, signal);
+        progress("lease-ready");
       } catch (error) {
         try {
           await loader.closeUnusedMount(lease);

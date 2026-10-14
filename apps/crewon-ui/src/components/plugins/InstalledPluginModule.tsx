@@ -246,11 +246,15 @@ export function InstalledPluginModule({
     [context, stopMonitor],
   );
   const acquireMount = useCallback(
-    async (signal: AbortSignal): Promise<PluginUiLease> => {
+    async (
+      signal: AbortSignal,
+      onProgress?: (phase: string) => void,
+    ): Promise<PluginUiLease> => {
       let lease = await context.host.acquireMount(
         context.module.plugin,
         context.module.contributionId,
         signal,
+        onProgress,
       );
       if (signal.aborted || current.current !== context) return lease;
       stopMonitor();

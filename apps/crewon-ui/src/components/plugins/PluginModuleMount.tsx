@@ -11,7 +11,10 @@ import { PluginUiUpdateDeferredError } from "../../lib/plugins/pluginUiPresentat
 export type PluginModuleMountProps = Readonly<{
   loader: TrustedPluginUiLoader;
   /** Trusted host closure captures the session/profile/selection; plugins never receive this function. */
-  acquireMount(signal: AbortSignal): Promise<PluginUiLease>;
+  acquireMount(
+    signal: AbortSignal,
+    onProgress?: (phase: string) => void,
+  ): Promise<PluginUiLease>;
   mountKey: string;
   active: boolean;
   props: PluginUiProps;
@@ -100,12 +103,19 @@ export function PluginModuleMount({
     const progress = (phase: string) => {
       if (!traceLoading || !isCurrent() || !root.current) return;
       timing.push([Math.round(performance.now() - started), phase]);
-      root.current.dataset.pluginLoadPhase = phase;
-      root.current.dataset.pluginLoadTiming = JSON.stringify(timing.slice(-8));
+      const targets = new Set([
+        root.current,
+        root.current.closest<HTMLElement>("[data-host-module-id]"),
+      ]);
+      for (const target of targets) {
+        if (!target) continue;
+        target.dataset.pluginLoadPhase = phase;
+        target.dataset.pluginLoadTiming = JSON.stringify(timing.slice(-8));
+      }
     };
     const mount = async () => {
       progress("acquire");
-      const lease = await acquireMount(controller.signal);
+      const lease = await acquireMount(controller.signal, progress);
       if (!isCurrent() || !root.current) {
         await loader.closeUnusedMount(lease);
         return;
