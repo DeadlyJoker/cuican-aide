@@ -44,6 +44,7 @@ import { createInstalledPluginProjectSelectionJournal } from "../plugins/install
 import { useInstalledPluginPlanningNavigation } from "./useInstalledPluginPlanningNavigation";
 import { useInstalledPluginPlanningLaunch } from "./useInstalledPluginPlanningLaunch";
 import type { DesktopLocalManagementAccess } from "../desktop/desktopLocalManagementAccess";
+import { useInstalledPluginNavigationRestore } from "./useInstalledPluginNavigationRestore";
 
 const CATALOG_REFRESH_INTERVAL_MS = 5_000;
 const CATALOG_SNAPSHOT_DEADLINE_MS = 10_000;
@@ -520,14 +521,29 @@ export function useInstalledPluginModules({
     setSnapshot(null);
     setCatalogRevision((revision) => revision + 1);
   }, [scope]);
+  const selectedTaskThreadId = taskContext?.selectedThreadId ?? null;
+  const navigationRestore = useInstalledPluginNavigationRestore({
+    scope,
+    catalog,
+    navigation: pageNavigation,
+    threadId: selectedTaskThreadId,
+    rememberConversation,
+    onDiagnostic,
+  });
   const hostModuleAvailability = useMemo(
     () => ({
       state:
         catalog === null ? ("unavailable" as const) : ("available" as const),
       ownerKey: directoryOwnerKey,
       retry: retryDirectory,
+      onSelectionChange: navigationRestore.onSelectionChange,
     }),
-    [catalog, directoryOwnerKey, retryDirectory],
+    [
+      catalog,
+      directoryOwnerKey,
+      retryDirectory,
+      navigationRestore.onSelectionChange,
+    ],
   );
   const taskRuntime = taskContext?.runtime ?? null;
   const taskPorts = useMemo(
@@ -550,7 +566,6 @@ export function useInstalledPluginModules({
         : null,
     [scope, taskRuntime, receipts],
   );
-  const selectedTaskThreadId = taskContext?.selectedThreadId ?? null;
   const planningLaunch = useInstalledPluginPlanningLaunch({
     scope,
     catalog,

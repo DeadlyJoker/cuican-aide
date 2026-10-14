@@ -60,6 +60,8 @@ export type CommandWorkspaceHostModuleAvailability = Readonly<{
   state: "available" | "unavailable";
   ownerKey: object | null;
   retry(): void;
+  /** Presentation only. Callers still need the fresh directory and actual project binding. */
+  onSelectionChange?(module: CommandWorkspaceHostModule | null): void;
 }>;
 
 /** The legacy single contribution keeps its position; duplicate identities are a host configuration error. */
@@ -208,6 +210,16 @@ export function useCommandWorkspaceHostModules(
     },
     [ids, labels, navigationScope, ownerKey, unavailable],
   );
+  const onSelectionChange = availability?.onSelectionChange;
+  useEffect(() => {
+    // A transient catalog outage withdraws content, not the user's navigation hint.
+    if (!unavailable)
+      onSelectionChange?.(
+        selectedId === null
+          ? null
+          : (modules.find((module) => module.id === selectedId) ?? null),
+      );
+  }, [onSelectionChange, selectedId, modules, unavailable]);
   return {
     selectedId,
     pluginId: selectedId !== null ? (selection?.pluginId ?? null) : null,

@@ -142,6 +142,46 @@ export class PluginUiPageNavigation {
       this.#request(home.routeId, true),
     );
   }
+  /** Presentation locator supplied only after the Host has read the current owned project/binding. */
+  openProjectFromHost(
+    moduleKey: string,
+    locator: Readonly<{ projectId: string; stage?: string }>,
+  ): string {
+    const module = this.#modules().find((item) => item.key === moduleKey);
+    if (!module) fail("plugin_ui_page_unavailable");
+    const sourceKey = pluginUiPageSourceKey(module);
+    const key = `project:${locator.projectId}`;
+    const existing = this.#snapshot.pages.find(
+      (page) =>
+        page.moduleKey === moduleKey &&
+        page.sourceKey === sourceKey &&
+        page.key === key,
+    );
+    const context = Object.freeze({ ...locator });
+    if (existing) {
+      this.#publish(
+        this.#snapshot.pages.map((page) =>
+          page.pageId === existing.pageId
+            ? Object.freeze({ ...page, context })
+            : page,
+        ),
+        this.#request(existing.routeId, true),
+      );
+      return existing.routeId;
+    }
+    this.#capacity(sourceKey, 1);
+    const page = this.#page(module, {
+      key,
+      title: module.title,
+      context,
+      home: false,
+    });
+    this.#publish(
+      [...this.#snapshot.pages, page],
+      this.#request(page.routeId, true),
+    );
+    return page.routeId;
+  }
   activateFromHost(pageId: string): void {
     this.#modules();
     const page = this.#snapshot.pages.find((item) => item.pageId === pageId);
