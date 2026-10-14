@@ -3,7 +3,6 @@ import type { PluginUiLease } from "@crewon/contracts/plugins";
 /** This stores approved code, never a lease, service object, props or authorization result. */
 export class PluginUiModuleCodeCache {
   readonly #entries = new Map<string, unknown>();
-  readonly #pending = new Map<string, Promise<unknown>>();
   readonly #capacity = 8;
 
   async import(
@@ -12,23 +11,9 @@ export class PluginUiModuleCodeCache {
   ): Promise<unknown> {
     const cached = this.get(lease);
     if (cached !== undefined) return cached;
-    const key = this.#key(lease);
-    const pending = this.#pending.get(key);
-    if (pending) {
-      const module = await pending;
-      // A second mount can share the download only after the bundle itself
-      // declares that it has no resources tied to the first mount's URL.
-      if (this.#selfContained(module)) return module;
-      return operation();
-    }
-    if (this.#pending.size >= this.#capacity) return operation();
-    const actual = Promise.resolve().then(operation);
-    this.#pending.set(key, actual);
-    try {
-      return await actual;
-    } finally {
-      if (this.#pending.get(key) === actual) this.#pending.delete(key);
-    }
+    // Before a first import, the bundle's resource contract is unknown. Keep
+    // independent cold downloads parallel instead of serializing old plugins.
+    return operation();
   }
 
   get(lease: PluginUiLease): unknown | undefined {

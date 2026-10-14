@@ -11,7 +11,7 @@ import { PluginUiModuleCodeCache } from "./pluginUiModuleCodeCache";
 
 describe("approved self-contained UI code reuse", () => {
   it.each([true, false])(
-    "coalesces cold imports only for self-contained modules (%s)",
+    "keeps cold imports independent until the resource mode is verified (%s)",
     async (declared) => {
       const gate = deferred<unknown>();
       const h = uiHarness();
@@ -30,13 +30,13 @@ describe("approved self-contained UI code reuse", () => {
         props: uiProps(),
       });
       await flush();
-      expect(h.importModule).toHaveBeenCalledOnce();
+      expect(h.importModule).toHaveBeenCalledTimes(2);
       gate.resolve({
         default: h.definition,
         ...(declared ? { crewonUiResourceMode: "self-contained.v1" } : {}),
       });
       const handles = await Promise.all([a, b]);
-      expect(h.importModule).toHaveBeenCalledTimes(declared ? 1 : 2);
+      expect(h.importModule).toHaveBeenCalledTimes(2);
       expect(h.instances).toHaveLength(2);
       expect(h.ports.validateMount).toHaveBeenCalledTimes(6);
       await Promise.all(handles.map((handle) => handle.stop()));
@@ -45,6 +45,7 @@ describe("approved self-contained UI code reuse", () => {
   it("cancels one cold waiter without canceling the other mount or retaining failed code", async () => {
     const gate = deferred<unknown>();
     const h = uiHarness();
+    h.importModule.mockImplementationOnce(() => gate.promise);
     h.importModule.mockImplementationOnce(() => gate.promise);
     const controller = new AbortController();
     const first = uiLease();
@@ -69,7 +70,7 @@ describe("approved self-contained UI code reuse", () => {
     });
     expect(await a).toBeInstanceOf(Error);
     const handle = await b;
-    expect(h.importModule).toHaveBeenCalledOnce();
+    expect(h.importModule).toHaveBeenCalledTimes(2);
     expect(h.instances).toHaveLength(1);
     await handle.stop();
     const cache = new PluginUiModuleCodeCache();
