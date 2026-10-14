@@ -17,7 +17,7 @@ describe("model failure presentation", () => {
     expect(markup).toContain(title);
     expect(markup).not.toContain("模型连接失败");
     expect(markup).toContain(
-      `<details><summary>错误详情</summary><code>${message}</code></details>`,
+      `<details class="failure-details"><summary>错误详情</summary><code>${message}</code></details>`,
     );
   });
   it("retains the existing connection failure behavior for other failures", () => {
@@ -30,5 +30,23 @@ describe("model failure presentation", () => {
     );
     expect(markup).toContain("Model connection failed");
     expect(markup).not.toContain("<details>");
+  });
+  it.each([
+    "installed_plugin_request_authority_unavailable",
+    "project_conversation_execution_unavailable",
+    "project_asset_stage_execution_unavailable",
+    "project_media_input_stage_execution_unavailable",
+  ])("shows plugin service failure separately for %s", (message) => {
+    const markup = renderToStaticMarkup(
+      <TranscriptFailureMessage
+        crewonLabel="CrewON"
+        locale="zh"
+        error={{ message, codexErrorInfo: null, additionalDetails: null }}
+      />,
+    );
+    expect(markup).toContain("插件执行暂不可用");
+    expect(markup).toContain("执行服务尚未准备好");
+    expect(markup).not.toContain("模型连接失败");
+    expect(markup).toContain(`<code>${message}</code>`);
   });
 });

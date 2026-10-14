@@ -6,6 +6,19 @@ export function threadFailurePresentation(
   locale: Locale,
 ) {
   switch (error?.message) {
+    case "installed_plugin_request_authority_unavailable":
+    case "project_conversation_execution_unavailable":
+    case "project_asset_stage_execution_unavailable":
+    case "project_media_input_stage_execution_unavailable":
+      return {
+        title:
+          locale === "zh" ? "插件执行暂不可用" : "Plugin execution unavailable",
+        message:
+          locale === "zh"
+            ? "当前插件的执行服务尚未准备好，请等待服务恢复后再试。"
+            : "The plugin execution service is not ready. Try again when it is available.",
+        diagnostic: error.message,
+      };
     case "responses_provider_server_is_overloaded":
       return {
         title: locale === "zh" ? "模型服务繁忙" : "Model service busy",
