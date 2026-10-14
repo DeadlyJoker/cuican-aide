@@ -52,7 +52,7 @@ pnpm --ignore-workspace build
 pnpm --ignore-workspace test
 ```
 
-默认构建按 package.json 版本生成完整预构建安装目录，当前为 `dist/50.1.2/`，并拒绝构建 19 及更早主版本。`crewon.plugin.json` 清单包含 UI/Node ESM、业务清单、工作流溯源、演示使用的已有 Krea2 示意 PNG 与依赖许可文件的实际字节数和 SHA256。构建拒绝仓外源码依赖与未打包的浏览器依赖；安装器无需执行脚本。下一次改动可以设置 `CREWON_EXAMPLE_PLUGIN_VERSION=50.1.3 pnpm --ignore-workspace build` 构建新的候选版本，测试入口默认取当前 package.json 版本，显式变量仍优先。既有完整交付目录保持冻结，不能在原交付路径重建。新清单须按实际字节重新核验 packageDigest，并同步宿主批准配置；不能沿用旧版本的 digest。独立目录即便放在 monorepo 下，也应保留 `--ignore-workspace`，避免误操作宿主依赖。
+默认构建按 package.json 版本生成完整预构建安装目录，当前为 `dist/50.1.3/`，并拒绝构建 19 及更早主版本。`crewon.plugin.json` 清单包含 UI/Node ESM、业务清单、工作流溯源、演示使用的已有 Krea2 示意 PNG 与依赖许可文件的实际字节数和 SHA256。构建拒绝仓外源码依赖与未打包的浏览器依赖；安装器无需执行脚本。下一次改动可以设置 `CREWON_EXAMPLE_PLUGIN_VERSION=50.1.4 pnpm --ignore-workspace build` 构建新的候选版本，测试入口默认取当前 package.json 版本，显式变量仍优先。既有完整交付目录保持冻结，不能在原交付路径重建。新清单须按实际字节重新核验 packageDigest，并同步宿主批准配置；不能沿用旧版本的 digest。独立目录即便放在 monorepo 下，也应保留 `--ignore-workspace`，避免误操作宿主依赖。
 
 ## 22.0.0 的参考素材确认输入页面
 
