@@ -43,6 +43,18 @@ export function installedPluginSurfaceModules(
     const group = groups.get(module.plugin.descriptor.pluginId)!;
     const sidebar = group.find((item) => item.surfaces?.includes("sidebar"));
     const routeId = page?.routeId ?? module.key;
+    const context = page?.context;
+    const conversationProjectId =
+      module.plugin.descriptor.requires.some(
+        (requirement) => requirement.service === "crewon.project-conversations",
+      ) &&
+      context &&
+      typeof context === "object" &&
+      !Array.isArray(context) &&
+      "projectId" in context &&
+      typeof context.projectId === "string"
+        ? context.projectId
+        : undefined;
     return Object.freeze({
       id: routeId,
       label: page?.title ?? module.title,
@@ -51,6 +63,7 @@ export function installedPluginSurfaceModules(
       conversationThreadIds:
         input.conversationThreads?.get(module.plugin.descriptor.pluginId) ?? [],
       navigationLabel: group[0]!.title,
+      ...(conversationProjectId === undefined ? {} : { conversationProjectId }),
       ...(page
         ? {
             pageId: page.pageId,

@@ -442,6 +442,7 @@ type CommandWorkspaceProps = {
   onOpenTaskChanges?: () => void;
   taskDetailTrigger?: ReactNode;
   projectConversationComposer?: ReactNode;
+  projectConversationProjectId?: string | null;
   onPluginConversationPageChange?(
     page: Readonly<{ pluginId: string; context: unknown }> | null,
   ): void;
@@ -912,6 +913,7 @@ export function CommandWorkspace({
   onOpenTaskChanges,
   taskDetailTrigger = null,
   projectConversationComposer = null,
+  projectConversationProjectId = null,
   onPluginConversationPageChange,
   onTaskDetailAvailabilityChange,
   threadGoal = null,
@@ -1039,9 +1041,9 @@ export function CommandWorkspace({
   ]);
   const pluginConversationMissing = Boolean(
     pluginSceneActive &&
-      !activePluginModule?.conversationThreadIds?.includes(
+      (!activePluginModule?.conversationThreadIds?.includes(
         selectedThreadId ?? selectedThread?.id ?? "",
-      ),
+      ) || (activePluginModule?.conversationProjectId !== undefined && activePluginModule.conversationProjectId !== projectConversationProjectId)),
   );
   useEffect(() => {
     if (!hostModuleView.active || activeView === "command") return;
@@ -3646,8 +3648,8 @@ export function CommandWorkspace({
                       </h1>
                       <p className="scene-subtitle">
                         {locale === "zh"
-                          ? "选择左侧项目，在项目中开启 Agent 对话。成果在右侧查看与编辑。"
-                          : "Choose a project to open its Agent conversation. View and edit results on the right."}
+                          ? activePluginModule?.conversationProjectId ? "项目对话尚未就绪，连接状态见左侧。" : "选择左侧项目即可开始对话，成果在右侧查看与编辑。"
+                          : activePluginModule?.conversationProjectId ? "The project conversation is not ready. Check its status in the sidebar." : "Choose a project to start chatting. View and edit results on the right."}
                       </p>
                     </header>
                   ) : (

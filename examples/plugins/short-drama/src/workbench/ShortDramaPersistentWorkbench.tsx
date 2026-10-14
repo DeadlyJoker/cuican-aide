@@ -279,6 +279,19 @@ export function ShortDramaPersistentWorkbench({
   const locked = otherLocked || association?.locked === true;
   const archived = details?.project.state === "archived";
   const ownsCentralChat = hostSurface === "sidebar";
+  const selectProjectPage = (next: ShortDramaProjectPage) => {
+    if (onOpenHostPage && details) {
+      onOpenHostPage({
+        key: `project:${details.project.projectId}`,
+        title: details.project.title,
+        context: { projectId: details.project.projectId, stage: next },
+      });
+      return;
+    }
+    if (next === "characters" || next === "art") assets?.activate();
+    if (next === "references") mediaInputs?.activate();
+    setPage(next);
+  };
   useEffect(() => {
     association?.setContext({
       ready: associationReady,
@@ -361,9 +374,21 @@ export function ShortDramaPersistentWorkbench({
     if (
       hostPageContext?.stage &&
       details?.project.projectId === hostPageContext.projectId
-    )
+    ) {
       setPage(hostPageContext.stage);
+      if (hostSurface === "workbench") {
+        if (
+          hostPageContext.stage === "characters" ||
+          hostPageContext.stage === "art"
+        )
+          assets?.activate();
+        if (hostPageContext.stage === "references") mediaInputs?.activate();
+      }
+    }
   }, [
+    assets,
+    mediaInputs,
+    hostSurface,
     details?.project.projectId,
     hostPageContext?.stage,
     hostPageContext?.projectId,
@@ -573,11 +598,7 @@ export function ShortDramaPersistentWorkbench({
                       key={item.id}
                       type="button"
                       aria-current={page === item.id ? "page" : undefined}
-                      onClick={() => onOpenHostPage({
-                        key: `project:${details.project.projectId}`,
-                        title: details.project.title,
-                        context: {projectId: details.project.projectId, stage: item.id},
-                      })}
+                      onClick={() => selectProjectPage(item.id)}
                     >
                       {item.title}
                     </button>
@@ -604,12 +625,7 @@ export function ShortDramaPersistentWorkbench({
                   locked={locked}
                   expanded={navigationExpanded}
                   onExpandedChange={setNavigationExpanded}
-                  onSelect={(next) => {
-                    if (next === "characters" || next === "art")
-                      assets?.activate();
-                    if (next === "references") mediaInputs?.activate();
-                    setPage(next);
-                  }}
+                  onSelect={selectProjectPage}
                 />
                 <div className="drama-project-editor">
                   <div className="panel-heading">
@@ -655,7 +671,9 @@ export function ShortDramaPersistentWorkbench({
                       details={details}
                       sourcePage={page === "source"}
                       onContinue={() =>
-                        setPage(origin === "novel" ? "outline" : "script")
+                        selectProjectPage(
+                          origin === "novel" ? "outline" : "script",
+                        )
                       }
                     />
                   ) : page === "references" && mediaInputs ? (
@@ -715,11 +733,11 @@ export function ShortDramaPersistentWorkbench({
                     <ProjectAssetWorkbench
                       controller={assets}
                       page={page === "art" ? "art" : "characters"}
-                      onPageChange={setPage}
+                      onPageChange={selectProjectPage}
                       images={controller.concepts.images}
                       concepts={controller.concepts}
                       details={details}
-                      onOpenConcept={() => setPage("overview")}
+                      onOpenConcept={() => selectProjectPage("overview")}
                       blocked={
                         downstreamBlocked ||
                         projectLocked ||
@@ -743,7 +761,7 @@ export function ShortDramaPersistentWorkbench({
                           <StoryScriptWorkbench
                             controller={texts}
                             page="outline"
-                            onPageChange={setPage}
+                            onPageChange={selectProjectPage}
                             details={details}
                             blocked={
                               downstreamBlocked ||
@@ -757,7 +775,7 @@ export function ShortDramaPersistentWorkbench({
                       <StoryScriptWorkbench
                         controller={texts}
                         page={page === "script" ? "script" : "outline"}
-                        onPageChange={setPage}
+                        onPageChange={selectProjectPage}
                         details={details}
                         blocked={
                           downstreamBlocked ||
@@ -871,7 +889,7 @@ export function ShortDramaPersistentWorkbench({
                         texts={texts}
                         details={details}
                         openText={(step) => {
-                          setPage(
+                          selectProjectPage(
                             step.kind === "script" ? "script" : "outline",
                           );
                           void texts.open(
@@ -903,7 +921,7 @@ export function ShortDramaPersistentWorkbench({
                     assets={assets}
                     projects={controller}
                     onRestore={() =>
-                      setPage(
+                      selectProjectPage(
                         assets?.getSnapshot().draft?.kind === "scene" ||
                           assets?.getSnapshot().draft?.kind === "prop"
                           ? "art"

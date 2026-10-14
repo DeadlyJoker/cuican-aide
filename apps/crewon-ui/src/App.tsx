@@ -1408,6 +1408,7 @@ export function App({
             showSignedOutAccount={localManagementAccess !== null}
             hostModules={installedPlugins.hostModules}
             onPluginConversationPageChange={setPluginConversationPage}
+            projectConversationProjectId={projectConversationComposer.projectId}
             hostModuleAvailability={installedPlugins.hostModuleAvailability}
             hostModuleRequest={installedPlugins.planningRequest}
             teamProgress={

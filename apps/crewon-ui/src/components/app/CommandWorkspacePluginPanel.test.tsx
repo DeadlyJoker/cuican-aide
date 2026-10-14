@@ -130,6 +130,36 @@ async function openPlugin(id: string) {
 }
 
 describe("plugin panels in the formal Agent shell", () => {
+  it("never sends to the previous project while the next project's conversation is opening or unavailable", async () => {
+    const module = {
+      ...contribution("scoped", "短剧"),
+      pluginId: "example.drama",
+      conversationThreadIds: [thread.id],
+      conversationProjectId: "next-project",
+    };
+    await render({
+      hostModules: [module],
+      projectConversationProjectId: "previous-project",
+    });
+    await openPlugin("scoped");
+    expect(container.querySelector(".command-thread-room")).toBeNull();
+    expect(
+      container.querySelector<HTMLTextAreaElement>(
+        '[data-shell-view="command"] textarea',
+      )?.disabled,
+    ).toBe(true);
+    await render({
+      hostModules: [module],
+      projectConversationProjectId: "next-project",
+    });
+    expect(container.querySelector(".command-thread-room")).not.toBeNull();
+    expect(
+      container.querySelector<HTMLTextAreaElement>(
+        '[data-shell-view="command"] textarea',
+      )?.disabled,
+    ).toBe(false);
+  });
+
   it("isolates plugin conversations and keeps the shared composer while opening an owned thread", async () => {
     const module = {
       ...contribution("scoped", "短剧"),

@@ -233,8 +233,8 @@ export function useProjectConversationComposer(
         <span role="alert" className="composer-state">
           {failure === "source-changed"
             ? zh
-              ? "插件已更新，请在项目页选择「继续与 Agent 对话」，再更新会话关联。历史和工作空间会保留。"
-              : "The plugin changed. Continue the Agent conversation from the project page to update its association. History and workspace are preserved."
+              ? "插件已更新，请在左侧项目中重新连接对话。历史和工作空间会保留。"
+              : "The plugin changed. Reconnect from the project sidebar. History and workspace are preserved."
             : zh
               ? "暂时无法读取项目会话，请稍后重试。"
               : "Unable to read the project conversation. Try again shortly."}
@@ -438,6 +438,7 @@ export function useProjectConversationComposer(
       </div>
     );
   return {
+    projectId: actual?.binding.projectId ?? null,
     selection,
     assetSelection: assets.selection,
     mediaInputSelection: media.selection,

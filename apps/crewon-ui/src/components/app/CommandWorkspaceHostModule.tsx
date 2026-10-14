@@ -30,6 +30,8 @@ export type CommandWorkspaceHostModule = Readonly<{
   pageId?: string;
   /** Presentation only; never a project or tool authority. */
   pageContext?: PluginUiJsonValue;
+  /** Selected project is a presentation constraint, never an authority grant. */
+  conversationProjectId?: string;
   createPage?(): void;
   closePage?(): void;
   activatePage?(): void;
