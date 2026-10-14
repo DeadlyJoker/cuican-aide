@@ -18,6 +18,7 @@ export class PluginUiModuleCodeCache {
 
   get(lease: PluginUiLease): unknown | undefined {
     const key = this.#key(lease);
+    if (key === null) return undefined;
     const value = this.#entries.get(key);
     if (value !== undefined) {
       this.#entries.delete(key);
@@ -30,6 +31,7 @@ export class PluginUiModuleCodeCache {
   remember(lease: PluginUiLease, module: object): void {
     if (!this.#selfContained(module)) return;
     const key = this.#key(lease);
+    if (key === null) return;
     this.#entries.delete(key);
     this.#entries.set(key, module);
     if (this.#entries.size > this.#capacity)
@@ -49,15 +51,19 @@ export class PluginUiModuleCodeCache {
     return !!mode && "value" in mode && mode.value === "self-contained.v1";
   }
 
-  #key(lease: PluginUiLease): string {
+  #key(lease: PluginUiLease): string | null {
     const entry = lease.descriptor.entrypoints.ui;
+    const file = lease.descriptor.files.find(
+      (file) => file.path === entry?.path,
+    );
+    if (!entry || !file) return null;
     return JSON.stringify([
       lease.descriptor.pluginId,
       lease.descriptor.publisherId,
       lease.descriptor.version,
       lease.packageDigest,
-      entry?.path,
-      lease.descriptor.files.find((file) => file.path === entry?.path)?.sha256,
+      entry.path,
+      file.sha256,
     ]);
   }
 }

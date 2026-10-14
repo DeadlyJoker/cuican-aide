@@ -174,5 +174,11 @@ describe("approved self-contained UI code reuse", () => {
     });
     expect(called).toBe(false);
     expect(cache.get(uiLease(10))).toBeUndefined();
+    const missingFile = {
+      ...uiLease(),
+      descriptor: { ...uiLease().descriptor, files: [] },
+    };
+    cache.remember(missingFile, { crewonUiResourceMode: "self-contained.v1" });
+    expect(cache.get(missingFile)).toBeUndefined();
   });
 });
