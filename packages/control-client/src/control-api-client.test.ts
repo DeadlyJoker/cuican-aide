@@ -1312,6 +1312,51 @@ test("maps safe error envelopes and rejects malformed remote bodies", async () =
   );
 });
 
+test("rejects malformed HTTP error bodies while retaining only their real status and cancelling unread transport", async () => {
+  for (const status of [401, 403, 404, 502, 503]) {
+    let cancelled = false;
+    const client = new ControlApiClient({
+      baseUrl: "https://control.example/",
+      fetch: async () =>
+        new Response(
+          new ReadableStream({
+            cancel() {
+              cancelled = true;
+            },
+          }),
+          {
+            status,
+            headers: { "content-type": "text/html" },
+          },
+        ),
+    });
+    await assert.rejects(client.getRun("run-1"), (error) => {
+      assert(error instanceof ControlApiProtocolError);
+      assert.equal(error.code, "control_api_error_envelope_invalid");
+      assert.equal(error.httpStatus, status);
+      assert.equal(error.message, "control_api_error_envelope_invalid");
+      return true;
+    });
+    assert.equal(cancelled, true);
+  }
+  const invalidSuccess = new ControlApiClient({
+    baseUrl: "https://control.example/",
+    fetch: async () =>
+      new Response("private upstream error", {
+        status: 200,
+        headers: { "content-type": "text/html" },
+      }),
+  });
+  await assert.rejects(
+    invalidSuccess.getRun("run-1"),
+    (error) =>
+      error instanceof ControlApiProtocolError &&
+      error.code === "control_api_content_type_invalid" &&
+      error.httpStatus === undefined &&
+      !error.message.includes("private"),
+  );
+});
+
 test("downloads one bounded digest-verified Artifact through the narrow client surface", async () => {
   const requests: string[] = [];
   const content = new TextEncoder().encode("complete Artifact content");

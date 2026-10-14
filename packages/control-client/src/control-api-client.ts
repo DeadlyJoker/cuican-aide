@@ -1,3 +1,11 @@
+import {
+  ControlApiClientError,
+  ControlApiProtocolError,
+} from "./control-api-errors.ts";
+export {
+  ControlApiClientError,
+  ControlApiProtocolError,
+} from "./control-api-errors.ts";
 import { ProjectMediaResultControlClient } from "./project-media-result-control-client.ts";
 import { ProjectMediaGenerationControlClient } from "./project-media-generation-control-client.ts";
 import { ProjectMediaInputStageControlClient } from "./project-media-input-stage-control-client.ts";
@@ -235,7 +243,9 @@ export class ControlApiClient {
   #pluginCreditClient: PluginCreditControlClient | null = null;
   #creativeProjectClient: CreativeProjectControlClient | null = null;
   #projectTextClient: ProjectTextControlClient | null = null;
-  #projectOutlineClient: ReturnType<typeof createProjectOutlineControlClient> | null = null;
+  #projectOutlineClient: ReturnType<
+    typeof createProjectOutlineControlClient
+  > | null = null;
   #projectConversationClient: ProjectConversationControlClient | null = null;
   #projectMediaInputStageClient: ProjectMediaInputStageControlClient | null =
     null;
@@ -1676,7 +1686,8 @@ export class ControlApiClient {
 
   get projectOutlines(): ReturnType<typeof createProjectOutlineControlClient> {
     return (this.#projectOutlineClient ??= createProjectOutlineControlClient({
-      json: (method, path, body, options) => this.#json(method, path, body, options),
+      json: (method, path, body, options) =>
+        this.#json(method, path, body, options),
       protocolError: (code) => new ControlApiProtocolError(code),
     }));
   }
@@ -1810,37 +1821,6 @@ export class ControlApiClient {
   }
 }
 
-export class ControlApiClientError extends Error {
-  readonly status: number;
-  readonly category: ErrorCategory;
-  readonly code: string;
-  readonly requestId: string;
-
-  constructor(input: {
-    status: number;
-    category: ErrorCategory;
-    code: string;
-    requestId: string;
-  }) {
-    super(input.code);
-    this.name = "ControlApiClientError";
-    this.status = input.status;
-    this.category = input.category;
-    this.code = input.code;
-    this.requestId = input.requestId;
-  }
-}
-
-export class ControlApiProtocolError extends Error {
-  readonly code: string;
-
-  constructor(code: string) {
-    super(code);
-    this.name = "ControlApiProtocolError";
-    this.code = code;
-  }
-}
-
 function normalizeExecutionIntentCapabilityError(error: unknown): unknown {
   return error instanceof ControlApiClientError &&
     error.status === 404 &&
@@ -1891,7 +1871,12 @@ async function controlApiError(
   } catch {
     // Replace malformed remote error bodies with a content-free protocol code.
   }
-  return new ControlApiProtocolError("control_api_error_envelope_invalid");
+  // An HTML proxy error can have a streaming body. Reject without retaining its
+  // connection or consuming untrusted diagnostics; successful API JSON is unchanged.
+  await response.body?.cancel().catch(() => {});
+  return new ControlApiProtocolError("control_api_error_envelope_invalid", {
+    httpStatus: response.status,
+  });
 }
 
 async function responseJson(

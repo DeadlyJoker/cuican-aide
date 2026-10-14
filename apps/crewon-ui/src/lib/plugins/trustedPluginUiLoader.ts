@@ -1,5 +1,10 @@
 import { pluginUiActionInputMaximumBytes } from "@crewon/contracts/project-texts-ui";
 import {
+  isTransientPluginUiValidationError,
+  pluginUiPropsKey,
+  PluginUiUpdateDeferredError,
+} from "./pluginUiPresentationUpdate";
+import {
   parseProjectSourceUploadPartLocator,
   parseProjectSourceUploadPartResponse,
   type ProjectSourceUploadPartLocator,
@@ -82,6 +87,7 @@ export type PluginUiMountHandle = Readonly<{
 
 type UpdateRequest = {
   props: PluginUiProps;
+  key: string;
   resolve(): void;
   reject(error: unknown): void;
 };
@@ -105,6 +111,8 @@ type Candidate = {
   instanceWork: Set<Promise<void>>;
   updating: boolean;
   pendingUpdate: UpdateRequest | null;
+  deferredUpdate: { props: PluginUiProps; key: string } | null;
+  presentedPropsKey: string;
 };
 
 /** Trusted same-origin JavaScript has normal renderer privileges; these ports are not a sandbox. */
@@ -176,6 +184,26 @@ export class TrustedPluginUiLoader {
     const next = parseRenewPluginUiMountResponse(nextInput, previous);
     this.#current(candidate);
     candidate.lease = next;
+  }
+
+  /** A host observation can resume delivery, but delivery still performs its own live fences. */
+  resumeDeferredUpdate(input: PluginUiLease): void {
+    const lease = parsePluginUiLease(input);
+    const candidate = this.#mounts.get(lease.mountRef);
+    if (!candidate || candidate.updating || !candidate.deferredUpdate) return;
+    if (JSON.stringify(candidate.lease) !== JSON.stringify(lease)) return;
+    const props = candidate.deferredUpdate.props;
+    void this.#queueUpdate(candidate, props).catch((error) => {
+      if (
+        !(error instanceof PluginUiUpdateDeferredError) &&
+        !(
+          error instanceof PluginUiLoaderError &&
+          (error.code === "plugin_ui_update_superseded" ||
+            error.code === "plugin_ui_operation_aborted")
+        )
+      )
+        this.#diagnostic(error);
+    });
   }
 
   /** An acquire result arriving after its caller cancelled has no DOM instance to stop. */
@@ -266,6 +294,8 @@ export class TrustedPluginUiLoader {
       instanceWork: new Set(),
       updating: false,
       pendingUpdate: null,
+      deferredUpdate: null,
+      presentedPropsKey: pluginUiPropsKey(props),
     };
     slot.candidate = candidate;
     this.#mounts.set(lease.mountRef, candidate);
@@ -490,12 +520,18 @@ export class TrustedPluginUiLoader {
         rawProps,
         candidate.lease.contributionId,
       );
+      const key = pluginUiPropsKey(props);
+      if (!candidate.updating && key === candidate.presentedPropsKey) {
+        candidate.deferredUpdate = null;
+        return Promise.resolve();
+      }
+      candidate.deferredUpdate = null;
       return new Promise<void>((resolve, reject) => {
         // At most one executing and one latest queued update. Superseded callers are explicitly cancelled.
         candidate.pendingUpdate?.reject(
           new PluginUiLoaderError("plugin_ui_update_superseded"),
         );
-        candidate.pendingUpdate = { props, resolve, reject };
+        candidate.pendingUpdate = { props, key, resolve, reject };
         if (!candidate.updating) void this.#flushUpdates(candidate);
       });
     } catch (error) {
@@ -509,9 +545,16 @@ export class TrustedPluginUiLoader {
       while (candidate.pendingUpdate) {
         const request = candidate.pendingUpdate;
         candidate.pendingUpdate = null;
+        let phase: "before" | "instance" | "after" = "before";
         try {
+          this.#current(candidate, true);
+          if (request.key === candidate.presentedPropsKey) {
+            request.resolve();
+            continue;
+          }
           await this.#fence(candidate);
           this.#current(candidate, true);
+          phase = "instance";
           const work = Promise.resolve().then(() => {
             this.#current(candidate, true);
             return candidate.instance!.update(request.props);
@@ -522,10 +565,28 @@ export class TrustedPluginUiLoader {
             () => candidate.instanceWork.delete(work),
           );
           await this.#await(candidate, work);
+          this.#current(candidate, true);
+          candidate.presentedPropsKey = request.key;
+          phase = "after";
           await this.#fence(candidate);
           this.#current(candidate, true);
           request.resolve();
         } catch (error) {
+          if (
+            phase !== "instance" &&
+            isTransientPluginUiValidationError(error)
+          ) {
+            try {
+              // An outage cannot renew the finite lease or keep a stopped/superseded presentation alive.
+              this.#current(candidate, true);
+            } catch (withdrawal) {
+              request.reject(withdrawal);
+              this.#discard(candidate);
+              break;
+            }
+            this.#deferUpdate(candidate, request, error);
+            break;
+          }
           request.reject(error);
           this.#discard(candidate);
         }
@@ -533,6 +594,25 @@ export class TrustedPluginUiLoader {
     } finally {
       candidate.updating = false;
     }
+  }
+
+  #deferUpdate(
+    candidate: Candidate,
+    request: UpdateRequest,
+    error: unknown,
+  ): void {
+    // Another props update may have arrived while either fence awaited the network.
+    const pending = candidate.pendingUpdate;
+    const latest = pending ?? request;
+    candidate.deferredUpdate =
+      latest.key === candidate.presentedPropsKey
+        ? null
+        : { props: latest.props, key: latest.key };
+    const deferred = new PluginUiUpdateDeferredError(error);
+    request.reject(deferred);
+    pending?.reject(deferred);
+    candidate.pendingUpdate = null;
+    this.#diagnostic(error);
   }
 
   #discard(candidate: Candidate): void {
@@ -552,6 +632,7 @@ export class TrustedPluginUiLoader {
     candidate.unlinkSignal();
     candidate.pendingUpdate?.reject(abortedPluginUiOperation());
     candidate.pendingUpdate = null;
+    candidate.deferredUpdate = null;
     if (candidate.slot.candidate === candidate) candidate.slot.candidate = null;
     if (candidate.slot.current === candidate) candidate.slot.current = null;
     candidate.child.remove();

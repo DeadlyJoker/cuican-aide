@@ -1,5 +1,6 @@
 import { afterEach, describe, expect, it, vi } from "vitest";
 import { installedPluginTaskRequest } from "./installedPluginTaskRequests";
+import { PLUGIN_UI_CONTROL_DEADLINE_MS } from "./controlPluginUiSupport";
 import {
   taskContextDeferred,
   taskContextFixture,
@@ -20,7 +21,7 @@ describe("installed task HTTP physical ownership (real Control client)", () => {
       f.client.getThread("thread-1", { signal }),
     );
     const failed = expect(first).rejects.toThrow("plugin_ui_control_timeout");
-    await vi.advanceTimersByTimeAsync(5_001);
+    await vi.advanceTimersByTimeAsync(PLUGIN_UI_CONTROL_DEADLINE_MS + 1);
     await failed;
     expect(f.requests).toHaveLength(1);
     expect(f.requests[0]?.signal?.aborted).toBe(true);

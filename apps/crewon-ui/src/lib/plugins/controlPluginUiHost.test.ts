@@ -339,9 +339,11 @@ describe("authenticated Control plugin UI host (real client; explicit importer f
     const task = f.h.instances[0].services.invoke("query", null, {});
     const check = expect(task).rejects.toThrow("captured_session_revoked");
     await flush();
-    expect(
-      f.fetch.mock.calls.some(([url]) => String(url).endsWith("/actions")),
-    ).toBe(true);
+    await vi.waitFor(() =>
+      expect(
+        f.fetch.mock.calls.some(([url]) => String(url).endsWith("/actions")),
+      ).toBe(true),
+    );
     f.revoke();
     gate.resolve(
       controlUiResponse({ output: { private: "must not reach plugin" } }),
@@ -380,6 +382,11 @@ describe("authenticated Control plugin UI host (real client; explicit importer f
       "plugin_ui_operation_aborted",
     );
     await flush();
+    await vi.waitFor(() =>
+      expect(
+        f.fetch.mock.calls.some(([url]) => String(url).endsWith("/actions")),
+      ).toBe(true),
+    );
     const request = f.fetch.mock.calls.find(([url]) =>
       String(url).endsWith("/actions"),
     )!;
@@ -388,10 +395,12 @@ describe("authenticated Control plugin UI host (real client; explicit importer f
     expect(request[1]?.signal?.aborted).toBe(false);
     gate.resolve(controlUiResponse({ output: receipt }));
     await flush();
-    expect(observer).toHaveBeenCalledExactlyOnceWith({
-      lease: f.lease,
-      receipt,
-    });
+    await vi.waitFor(() =>
+      expect(observer).toHaveBeenCalledExactlyOnceWith({
+        lease: f.lease,
+        receipt,
+      }),
+    );
     expect(f.h.instances[0].dispose).toHaveBeenCalledTimes(1);
     expect(f.h.root.textContent).toBe("");
   });

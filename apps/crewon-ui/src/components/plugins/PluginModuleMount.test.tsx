@@ -13,6 +13,7 @@ import {
   uiProps,
 } from "../../lib/plugins/pluginUiLoader.test-support";
 import { PluginModuleMount } from "./PluginModuleMount";
+import { PluginUiLoaderError } from "../../lib/plugins/pluginUiValidation";
 
 (
   globalThis as { IS_REACT_ACT_ENVIRONMENT?: boolean }
@@ -32,6 +33,96 @@ function reactRoot() {
 }
 
 describe("PluginModuleMount host composition", () => {
+  it("marks an authorized first mount ready even when late props wait for transient recovery", async () => {
+    const importing = deferred<unknown>();
+    const h = uiHarness(() => importing.promise);
+    const acquireMount = vi.fn(async () => uiLease());
+    const onMounted = vi.fn();
+    const onError = vi.fn();
+    const mounted = reactRoot();
+    const render = (props = uiProps()) => (
+      <PluginModuleMount
+        active
+        loader={h.loader}
+        acquireMount={acquireMount}
+        mountKey="one"
+        props={props}
+        onMounted={onMounted}
+        onError={onError}
+      />
+    );
+    await act(async () => {
+      mounted.root.render(render());
+      await flush();
+    });
+    expect(h.importModule).toHaveBeenCalledTimes(1);
+    await act(async () => {
+      mounted.root.render(render(uiProps({ stage: "美术" })));
+      await flush();
+    });
+    h.ports.validateMount
+      .mockResolvedValueOnce(undefined)
+      .mockResolvedValueOnce(undefined)
+      .mockRejectedValueOnce(
+        new PluginUiLoaderError("plugin_ui_control_timeout"),
+      );
+    await act(async () => {
+      importing.resolve({ default: h.definition });
+      await flush();
+    });
+    expect(onMounted).toHaveBeenCalledTimes(1);
+    expect(onError).not.toHaveBeenCalled();
+    expect(mounted.container.textContent).toBe('{"title":"初始内容"}');
+    expect(h.instances[0].update).not.toHaveBeenCalled();
+    await act(async () => {
+      h.loader.resumeDeferredUpdate(uiLease());
+      await flush();
+    });
+    expect(mounted.container.textContent).toBe('{"stage":"美术"}');
+  });
+  it("retains its mounted page after a transient props fence and receives the recovered stage without a reload", async () => {
+    const h = uiHarness();
+    const acquireMount = vi.fn(async () => uiLease());
+    const onError = vi.fn();
+    const mounted = reactRoot();
+    const render = (props = uiProps()) => (
+      <PluginModuleMount
+        active
+        loader={h.loader}
+        acquireMount={acquireMount}
+        mountKey="one"
+        props={props}
+        onError={onError}
+      />
+    );
+    await act(async () => {
+      mounted.root.render(render());
+      await flush();
+    });
+    h.ports.validateMount.mockRejectedValueOnce(
+      new PluginUiLoaderError("plugin_ui_control_timeout"),
+    );
+    await act(async () => {
+      mounted.root.render(render(uiProps({ stage: "角色" })));
+      await flush();
+    });
+    expect(onError).not.toHaveBeenCalled();
+    expect(h.ports.onDiagnostic).toHaveBeenCalledWith(
+      expect.objectContaining({ code: "plugin_ui_control_timeout" }),
+    );
+    expect(
+      mounted.container.querySelector("[data-plugin-ui-root]"),
+    ).not.toBeNull();
+    expect(h.instances[0].update).not.toHaveBeenCalled();
+    await act(async () => {
+      h.loader.resumeDeferredUpdate(uiLease());
+      await flush();
+    });
+    expect(mounted.container.textContent).toBe('{"stage":"角色"}');
+    expect(acquireMount).toHaveBeenCalledTimes(1);
+    expect(h.importModule).toHaveBeenCalledTimes(1);
+    expect(h.instances[0].dispose).not.toHaveBeenCalled();
+  });
   it("does not acquire or import a hidden slot, stops on leaving, and reacquires on reopening", async () => {
     const h = uiHarness();
     let serial = 0;

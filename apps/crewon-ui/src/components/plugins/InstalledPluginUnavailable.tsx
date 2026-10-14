@@ -1,4 +1,7 @@
-import { ControlApiClientError } from "@crewon/control-client";
+import {
+  ControlApiClientError,
+  ControlApiProtocolError,
+} from "@crewon/control-client";
 import { CircleAlert } from "lucide-react";
 import type { Locale } from "../../lib/i18n";
 import { PluginUiLoaderError } from "../../lib/plugins/pluginUiValidation";
@@ -11,6 +14,7 @@ export function InstalledPluginUnavailable({
 }: Readonly<{ error: unknown; locale: Locale; onRetry(): void }>) {
   const rawCode =
     error instanceof ControlApiClientError ||
+    error instanceof ControlApiProtocolError ||
     error instanceof PluginUiLoaderError
       ? error.code
       : null;

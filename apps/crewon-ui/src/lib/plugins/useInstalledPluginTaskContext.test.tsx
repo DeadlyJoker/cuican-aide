@@ -4,6 +4,7 @@ import { createRoot, type Root } from "react-dom/client";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { useInstalledPluginTaskContext } from "./useInstalledPluginTaskContext";
 import { installedPluginTaskRequest } from "./installedPluginTaskRequests";
+import { PLUGIN_UI_CONTROL_DEADLINE_MS } from "./controlPluginUiSupport";
 import type {
   InstalledPluginTaskContextInput,
   InstalledPluginTaskContextState,
@@ -195,7 +196,7 @@ describe("installed plugin task context (actual Control client, named HTTP fixtu
     await render({ selectedThreadId: null });
     await change(() => state.prepareThread());
     await act(async () => {
-      await vi.advanceTimersByTimeAsync(5_001);
+      await vi.advanceTimersByTimeAsync(PLUGIN_UI_CONTROL_DEADLINE_MS + 1);
     });
     expect(state.phase).toBe("uncertain");
     expect(f.requests.filter(({ method }) => method === "POST")).toHaveLength(

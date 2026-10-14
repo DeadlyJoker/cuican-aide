@@ -35,6 +35,7 @@ import {
 } from "./trustedPluginUiLoader";
 import { uiFailure } from "./pluginUiValidation";
 import { PluginUiLeaseLifecycle } from "./pluginUiLeaseLifecycle";
+import { PluginUiValidationFlights } from "./pluginUiValidationFlights";
 import {
   createInstalledPluginTaskReceiptTransport,
   type InstalledPluginTaskReceiptEvent,
@@ -101,6 +102,8 @@ export function createControlPluginUiHost(
   } = options;
   const recovery = createInstalledPluginUiRecovery(options);
   const leases = new PluginUiLeaseLifecycle();
+  const validations = new PluginUiValidationFlights();
+  let onValidated: (lease: PluginUiLease) => void = () => undefined;
   const taskReceiptTransport = options.onTaskReceipt
     ? createInstalledPluginTaskReceiptTransport({
         assertCurrent,
@@ -120,20 +123,41 @@ export function createControlPluginUiHost(
     input: PluginUiLease,
     signal: AbortSignal,
   ): Promise<PluginUiLease> =>
-    leases.validate(input, signal, async (lease) => {
-      assertPluginUiCurrent(assertCurrent, signal);
-      const checked = await pluginUiControlRequest(
-        (requestSignal) =>
-          client.plugins.validateMount(lease.mountRef, {
-            signal: requestSignal,
-          }),
-        signal,
-      );
-      assertPluginUiCurrent(assertCurrent, signal);
-      if (checkedLeaseIdentity(checked) !== checkedLeaseIdentity(lease))
-        uiFailure("plugin_ui_lease_identity_mismatch");
-      return checked;
-    });
+    leases
+      .validate(input, signal, async (lease) => {
+        assertPluginUiCurrent(assertCurrent, signal);
+        const checked = await validations.run(
+          lease,
+          signal,
+          async (sharedSignal) => {
+            assertPluginUiCurrent(assertCurrent, sharedSignal);
+            const result = await pluginUiControlRequest(
+              (requestSignal) =>
+                client.plugins.validateMount(lease.mountRef, {
+                  signal: requestSignal,
+                }),
+              sharedSignal,
+            );
+            assertPluginUiCurrent(assertCurrent, sharedSignal);
+            if (checkedLeaseIdentity(result) !== checkedLeaseIdentity(lease))
+              uiFailure("plugin_ui_lease_identity_mismatch");
+            return result;
+          },
+        );
+        // Each waiter must still belong to its own live host scope after the shared GET completes.
+        assertPluginUiCurrent(assertCurrent, signal);
+        return checked;
+      })
+      .then((checked) => {
+        assertPluginUiCurrent(assertCurrent, signal);
+        onValidated(checked);
+        return checked;
+      })
+      .catch((error: unknown) => {
+        // A transport outage must not hide withdrawal of the captured session while it was in flight.
+        assertPluginUiCurrent(assertCurrent, signal);
+        throw error;
+      });
   const sourceUploadParts = createInstalledPluginSourceUploadPartTransport({
     client,
     assertCurrent,
@@ -289,6 +313,7 @@ export function createControlPluginUiHost(
       async closeMount(lease) {
         mediaResults.release(lease);
         leases.release(lease);
+        validations.withdraw(lease);
         recovery.release(lease);
         // Revoke the reference through the original authenticated client even after the host changed session.
         await pluginUiControlRequest((signal) =>
@@ -298,6 +323,8 @@ export function createControlPluginUiHost(
       onDiagnostic: options.onDiagnostic,
     },
   });
+  // Private host notification; plugins receive neither this hook nor the checked lease.
+  onValidated = (lease) => loader.resumeDeferredUpdate(lease);
   return Object.freeze({
     loader,
     validateLease,
@@ -321,6 +348,7 @@ export function createControlPluginUiHost(
           });
         },
         (previous, next) => {
+          validations.withdraw(previous);
           recovery.renewLease(previous, next);
           loader.renewLease(previous, next);
         },

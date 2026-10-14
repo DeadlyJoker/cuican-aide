@@ -22,7 +22,9 @@ export function deferred<T>() {
 }
 
 export async function flush() {
-  for (let count = 0; count < 24; count++) await Promise.resolve();
+  // Real Control parsing, independently cancellable validation waiters and both live fences settle asynchronously.
+  // This drains microtasks only; timers and physical HTTP acknowledgement gates remain controlled by each test.
+  for (let count = 0; count < 48; count++) await Promise.resolve();
 }
 
 export function uiLease(serial = 1): PluginUiLease {

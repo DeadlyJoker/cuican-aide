@@ -164,6 +164,7 @@ describe("independent short-drama persistent presentation", () => {
     );
     expect(markup).toMatchSnapshot();
     expect(markup).toContain("正在等待模块就绪");
+    expect(markup).not.toContain("drama-recovery-disclosure");
     expect(markup).not.toMatch(
       /<aside|<main|sidebar-account|command-window|窗边的来信|演示数据/,
     );

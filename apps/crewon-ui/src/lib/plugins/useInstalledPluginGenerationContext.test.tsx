@@ -3,6 +3,7 @@ import { act, StrictMode } from "react";
 import { createRoot, type Root } from "react-dom/client";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { useInstalledPluginGenerationContext } from "./useInstalledPluginGenerationContext";
+import { PLUGIN_UI_CONTROL_DEADLINE_MS } from "./controlPluginUiSupport";
 import type {
   InstalledPluginGenerationContextInput,
   InstalledPluginGenerationContextState,
@@ -237,7 +238,7 @@ describe("Host generation context, original Control client and account journal",
     await change(flush);
     expect(posts()).toHaveLength(1);
     await act(async () => {
-      await vi.advanceTimersByTimeAsync(5_001);
+      await vi.advanceTimersByTimeAsync(PLUGIN_UI_CONTROL_DEADLINE_MS + 1);
     });
     expect(state.context.phase).toBe("uncertain");
     await change(() => state.prepareThread());

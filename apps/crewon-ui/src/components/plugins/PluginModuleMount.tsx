@@ -6,6 +6,7 @@ import {
   type PluginUiMountHandle,
 } from "../../lib/plugins/trustedPluginUiLoader";
 import { PluginUiLoaderError } from "../../lib/plugins/pluginUiValidation";
+import { PluginUiUpdateDeferredError } from "../../lib/plugins/pluginUiPresentationUpdate";
 
 export type PluginModuleMountProps = Readonly<{
   loader: TrustedPluginUiLoader;
@@ -55,6 +56,9 @@ export function PluginModuleMount({
   });
 
   function report(error: unknown, handler = errorHandler.current) {
+    // The host retains the latest props until its live lease observation recovers.
+    // The original transient error remains in loader diagnostics, without unmounting authorized content.
+    if (error instanceof PluginUiUpdateDeferredError) return;
     if (
       error instanceof PluginUiLoaderError &&
       (error.code === "plugin_ui_operation_aborted" ||
@@ -109,8 +113,13 @@ export function PluginModuleMount({
       published = true;
       current.current = { handle, owner };
       if (pending.current === controller) pending.current = null;
-      if (latestProps.current !== initialProps)
-        await handle.update(latestProps.current);
+      if (latestProps.current !== initialProps) {
+        try {
+          await handle.update(latestProps.current);
+        } catch (error) {
+          if (!(error instanceof PluginUiUpdateDeferredError)) throw error;
+        }
+      }
       if (isCurrent()) mountedHandler.current?.();
     };
     void mount().catch((error) => {
