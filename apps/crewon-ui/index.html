@@ -21,7 +21,27 @@
     <title>CrewON</title>
   </head>
   <body>
-    <div id="root"></div>
+    <div id="root">
+      <div class="crewon-startup" role="status">正在启动 CrewON…</div>
+    </div>
+    <style>
+      .crewon-startup {
+        min-height: 100vh;
+        display: grid;
+        place-items: center;
+        font:
+          15px system-ui,
+          sans-serif;
+        color: #262626;
+        background: #fafafa;
+      }
+      @media (prefers-color-scheme: dark) {
+        .crewon-startup {
+          color: #ededed;
+          background: #191919;
+        }
+      }
+    </style>
     <script type="module" src="/src/main.tsx"></script>
   </body>
 </html>

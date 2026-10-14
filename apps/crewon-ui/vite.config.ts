@@ -286,7 +286,7 @@ export default defineConfig(({ mode }) => {
         output: {
           manualChunks(id) {
             if (id === "\0vite/preload-helper.js") {
-              return "vendor";
+              return undefined;
             }
             if (!id.includes("node_modules")) {
               return undefined;
@@ -301,7 +301,8 @@ export default defineConfig(({ mode }) => {
             if (packageName && REACT_CHUNK_PACKAGES.has(packageName)) {
               return "react";
             }
-            return "vendor";
+            // Let Rollup separate lazy workbench dependencies from the login entry.
+            return undefined;
           },
         },
       },
