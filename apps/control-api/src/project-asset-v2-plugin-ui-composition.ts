@@ -16,7 +16,7 @@ export function createProjectAssetV2PluginUiRuntime(
   input: Readonly<{
     configuration: CreativeProjectPluginUiConfig;
     assets: ProjectAssetV2ApplicationService;
-    recovery: PluginProjectAssetV2RecoveryService;
+    recovery?: PluginProjectAssetV2RecoveryService;
     authorization: ConstructorParameters<
       typeof PluginProjectAssetV2ActionOwner
     >[0]["authorization"];
@@ -29,7 +29,7 @@ export function createProjectAssetV2PluginUiRuntime(
   if (!configuration) throw new Error("project_asset_v2_publication_required");
   const owner = new PluginProjectAssetV2ActionOwner({
     assets: input.assets,
-    recovery: input.recovery,
+    ...(input.recovery === undefined ? {} : { recovery: input.recovery }),
     authorization: input.authorization,
     publications: configuration.publications,
   });
@@ -62,10 +62,13 @@ export function createProjectAssetV2PluginUiRuntime(
   });
   return Object.freeze({
     owner,
-    hostUiServices: appendProjectAssetRecoveryV2UiServiceAvailability({
-      assets: available,
-      fallback: assets,
-    }),
+    hostUiServices:
+      input.recovery === undefined
+        ? assets
+        : appendProjectAssetRecoveryV2UiServiceAvailability({
+            assets: available,
+            fallback: assets,
+          }),
     close: () => owner.close(),
   });
 }

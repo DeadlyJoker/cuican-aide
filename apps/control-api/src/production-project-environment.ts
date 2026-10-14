@@ -1,4 +1,8 @@
 import {
+  captureProjectAssetCompositionConfig,
+  type ProjectAssetCompositionConfig,
+} from "./project-asset-composition.ts";
+import {
   captureProjectHistoricalQueryPluginConfiguration,
   type ProjectHistoricalQueryPluginConfiguration,
 } from "./project-historical-query-plugin-configuration.ts";
@@ -69,6 +73,10 @@ export type ProductionProjectStartupConfiguration = Readonly<{
   foundation?: ProjectFoundationStartupConfiguration;
   pluginUi?: CreativeProjectManagementUiConfig;
   textArtifacts?: Readonly<{ version: "crewon.project-text.v1" }>;
+  assetArtifacts?: ProjectAssetCompositionConfig["assetArtifacts"];
+  assetUi?: ProjectAssetCompositionConfig["assetUi"];
+  assetReadV2?: ProjectAssetCompositionConfig["assetReadV2"];
+  assetStages?: ProjectAssetCompositionConfig["assetStages"];
   textUi?: CreativeProjectPluginUiConfig;
   textRecovery?: CreativeProjectPluginUiConfig;
   conversations?: ProjectConversationConfiguration;
@@ -88,6 +96,10 @@ const allowedFields = [
   "foundation",
   "pluginUi",
   "textArtifacts",
+  "assetArtifacts",
+  "assetUi",
+  "assetReadV2",
+  "assetStages",
   "textUi",
   "textRecovery",
   "conversations",
@@ -139,6 +151,7 @@ export function parseProductionProjectStartupConfiguration(
       value.conversations,
     );
     const textPlans = captureCreativeProjectPluginUiConfig(value.textPlans);
+    const assets = captureProjectAssetCompositionConfig(value, textArtifacts);
     if (
       (textUi !== undefined ||
         textRecovery !== undefined ||
@@ -177,6 +190,7 @@ export function parseProductionProjectStartupConfiguration(
       ...(foundation === undefined ? {} : { foundation }),
       ...(pluginUi === undefined ? {} : { pluginUi }),
       ...(textArtifacts === undefined ? {} : { textArtifacts }),
+      ...assets,
       ...(textUi === undefined ? {} : { textUi }),
       ...(textRecovery === undefined ? {} : { textRecovery }),
       ...(conversations === undefined ? {} : { conversations }),

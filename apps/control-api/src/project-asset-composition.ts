@@ -1,3 +1,4 @@
+import { captureProjectConversationConfiguration } from "./project-conversation-composition.ts";
 import {
   ProjectAssetApplicationService,
   PluginProjectAssetRecoveryApplicationService,
@@ -23,6 +24,8 @@ import { pluginSecurityRecord } from "./plugin-security-validation.ts";
 export type ProjectAssetCompositionConfig = Readonly<{
   assetArtifacts?: Readonly<{ version: "crewon.project-asset.v1" }>;
   assetUi?: CreativeProjectPluginUiConfig;
+  /** Independent V2 archive reads; no mutation, adoption or recovery capability. */
+  assetReadV2?: CreativeProjectPluginUiConfig;
   assetRecovery?: CreativeProjectPluginUiConfig;
   assetStages?: CreativeProjectPluginUiConfig &
     Readonly<{ version: "crewon.project-asset-stages.v1" }>;
@@ -74,6 +77,7 @@ export function captureProjectAssetCompositionConfig(
     assetArtifacts = Object.freeze({ version: value.version });
   }
   const assetUi = captureCreativeProjectPluginUiConfig(read("assetUi")),
+    assetReadV2 = captureCreativeProjectPluginUiConfig(read("assetReadV2")),
     assetRecovery = captureCreativeProjectPluginUiConfig(read("assetRecovery"));
   if (references !== undefined) {
     const value = pluginSecurityRecord(references, ["version", "verifier"]);
@@ -88,11 +92,26 @@ export function captureProjectAssetCompositionConfig(
   }
   if (
     (assetUi !== undefined ||
+      assetReadV2 !== undefined ||
       assetRecovery !== undefined ||
       assetReferences !== undefined) &&
     assetArtifacts === undefined
   )
     throw new Error("project_asset_store_required");
+  if (
+    assetReadV2 !== undefined &&
+    (assetUi === undefined ||
+      assetReadV2.publications.some(
+        (item) =>
+          !assetUi.publications.some(
+            (parent) =>
+              parent.pluginId === item.pluginId &&
+              parent.packageDigest === item.packageDigest &&
+              parent.contributionId === item.contributionId,
+          ),
+      ))
+  )
+    throw new Error("project_asset_v2_read_publication_required");
   if (
     assetRecovery !== undefined &&
     (assetUi === undefined ||
@@ -115,7 +134,7 @@ export function captureProjectAssetCompositionConfig(
     const grant = captureCreativeProjectPluginUiConfig({
       publications: value.publications,
     });
-    const conversations = captureCreativeProjectPluginUiConfig(
+    const conversations = captureProjectConversationConfiguration(
       Object.getOwnPropertyDescriptor(input, "conversations")?.value,
     );
     if (
@@ -141,6 +160,7 @@ export function captureProjectAssetCompositionConfig(
   return Object.freeze({
     ...(assetArtifacts === undefined ? {} : { assetArtifacts }),
     ...(assetUi === undefined ? {} : { assetUi }),
+    ...(assetReadV2 === undefined ? {} : { assetReadV2 }),
     ...(assetRecovery === undefined ? {} : { assetRecovery }),
     ...(assetStages === undefined ? {} : { assetStages }),
     ...(assetReferences === undefined ? {} : { assetReferences }),

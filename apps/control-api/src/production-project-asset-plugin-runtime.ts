@@ -1,7 +1,18 @@
+import {
+  isProjectAssetV2Action,
+  isProjectAssetV2MutationAction,
+  parseProjectAssetV2Request,
+} from "@crewon/contracts/project-assets-v2";
+import {
+  createProjectAssetV2PluginUiRuntime,
+  type ProjectAssetV2PluginUiRuntime,
+} from "./project-asset-v2-plugin-ui-composition.ts";
 import { isProjectAssetStageControlOwner } from "./project-asset-stage-control-owner.ts";
 import {
   ApplicationError,
   isPluginProjectAssetActionOwner,
+  isPluginProjectAssetV2ActionOwner,
+  ProjectAssetV2ApplicationService,
   isPluginProjectAssetRecoveryActionOwner,
   type ActorContext,
   type PluginUiActionContext,
@@ -34,6 +45,7 @@ import {
 
 export type ProductionProjectAssetPluginRuntime = ProjectAssetPluginUiRuntime &
   Readonly<{
+    readV2Owner?: ProjectAssetV2PluginUiRuntime["owner"];
     invokeAuthenticatedRequest(
       request: ControlApiRequestContext,
       actor: ActorContext,
@@ -55,6 +67,8 @@ export function createProductionProjectAssetPluginRuntime(
 ): ProductionProjectAssetPluginRuntime | undefined {
   const configuration = input.projects.assetUi;
   if (configuration === undefined) {
+    if (input.projects.assetReadV2 !== undefined)
+      throw new Error("project_asset_v2_read_publication_required");
     if (input.projects.assetRecovery !== undefined)
       throw new Error("project_asset_recovery_publication_required");
     return undefined;
@@ -64,6 +78,22 @@ export function createProductionProjectAssetPluginRuntime(
   if (!(input.identity instanceof ProductionControlApiIdentity))
     throw new Error("production_project_asset_identity_required");
   assertProjectAssetPluginPublications(configuration, input.ui.publications);
+  assertProjectAssetPluginPublications(
+    input.projects.assetReadV2,
+    input.ui.publications,
+  );
+  if (
+    input.projects.assetReadV2?.publications.some(
+      (p) =>
+        !configuration.publications.some(
+          (g) =>
+            p.pluginId === g.pluginId &&
+            p.packageDigest === g.packageDigest &&
+            p.contributionId === g.contributionId,
+        ),
+    )
+  )
+    throw new Error("project_asset_v2_read_publication_required");
   assertProjectAssetPluginPublications(
     input.projects.assetRecovery,
     input.ui.publications,
@@ -130,15 +160,36 @@ export function createProductionProjectAssetPluginRuntime(
           },
         }),
   });
+  const readV2 =
+    input.projects.assetReadV2 === undefined
+      ? undefined
+      : createProjectAssetV2PluginUiRuntime({
+          configuration: input.projects.assetReadV2,
+          assets: new ProjectAssetV2ApplicationService({
+            assets: input.projects.assetService,
+            access: "read-only",
+          }),
+          authorization,
+          fallback: metadata.hostUiServices,
+        });
   let closing: Promise<void> | undefined;
   return Object.freeze({
     ...metadata,
+    ...(readV2 === undefined
+      ? {}
+      : {
+          readV2Owner: readV2.owner,
+          hostUiServices: readV2.hostUiServices,
+        }),
     invokeAuthenticatedRequest: (request, actor, command, signal, invoke) => {
+      const v2 = isProjectAssetV2Action(command.action);
       const recovery = isProjectAssetRecoveryNamespaceAction(command.action);
       if (
-        recovery
-          ? !metadata.recoveryOwner?.supportsAction(command.action)
-          : !metadata.owner.supportsAction(command.action)
+        v2
+          ? !readV2?.owner.supportsAction(command.action)
+          : recovery
+            ? !metadata.recoveryOwner?.supportsAction(command.action)
+            : !metadata.owner.supportsAction(command.action)
       )
         throw new ApplicationError(
           "validation",
@@ -148,10 +199,13 @@ export function createProductionProjectAssetPluginRuntime(
         action: command.action,
         input: command.input,
       };
-      const action = recovery
-        ? parseProjectAssetRecoveryActionRequest(raw)
-        : parseProjectAssetUiActionRequest(raw);
+      const action = v2
+        ? parseProjectAssetV2Request(raw)
+        : recovery
+          ? parseProjectAssetRecoveryActionRequest(raw)
+          : parseProjectAssetUiActionRequest(raw);
       const isMutation =
+        (v2 && isProjectAssetV2MutationAction(action.action)) ||
         Object.hasOwn(action.input, "idempotencyKey") ||
         action.action === "crewon.project-asset-recovery.v1.acknowledge";
       return currentRequests.run(
@@ -166,7 +220,11 @@ export function createProductionProjectAssetPluginRuntime(
     },
     close: () => {
       if (closing !== undefined) return closing;
-      const withdrawn = [currentRequests.close(), metadata.close()];
+      const withdrawn = [
+        currentRequests.close(),
+        readV2?.close(),
+        metadata.close(),
+      ];
       return (closing = Promise.allSettled(withdrawn).then((results) => {
         const failures = results.flatMap((result) =>
           result.status === "rejected" ? [result.reason] : [],
@@ -182,15 +240,23 @@ export function createProductionProjectAssetPluginRuntime(
 }
 
 export function productionProjectAssetOwnerConfiguration(
-  runtime: ProjectAssetPluginUiRuntime | undefined,
+  runtime:
+    | (ProjectAssetPluginUiRuntime &
+        Pick<ProductionProjectAssetPluginRuntime, "readV2Owner">)
+    | undefined,
 ): Pick<
   ProductionPluginUiConfig,
-  "ownedProjectAssetActions" | "ownedProjectAssetRecoveryActions"
+  | "ownedProjectAssetActions"
+  | "ownedProjectAssetRecoveryActions"
+  | "ownedProjectAssetV2ReadActions"
 > {
   return runtime === undefined
     ? {}
     : {
         ownedProjectAssetActions: runtime.owner,
+        ...(runtime.readV2Owner === undefined
+          ? {}
+          : { ownedProjectAssetV2ReadActions: runtime.readV2Owner }),
         ...(runtime.recoveryOwner === undefined
           ? {}
           : { ownedProjectAssetRecoveryActions: runtime.recoveryOwner }),
@@ -199,7 +265,12 @@ export function productionProjectAssetOwnerConfiguration(
 
 /** Capture failure joins only transferred genuine metadata owners, never structural copies. */
 export async function closeProductionProjectAssetOwners(
-  input: Readonly<{ assets: unknown; recovery: unknown; stages?: unknown }>,
+  input: Readonly<{
+    assets: unknown;
+    recovery: unknown;
+    stages?: unknown;
+    v2Reads?: unknown;
+  }>,
 ): Promise<void> {
   const results = await Promise.allSettled([
     isPluginProjectAssetActionOwner(input.assets)
@@ -207,6 +278,9 @@ export async function closeProductionProjectAssetOwners(
       : undefined,
     isPluginProjectAssetRecoveryActionOwner(input.recovery)
       ? input.recovery.close()
+      : undefined,
+    isPluginProjectAssetV2ActionOwner(input.v2Reads)
+      ? input.v2Reads.close()
       : undefined,
     isProjectAssetStageControlOwner(input.stages)
       ? input.stages.close()
@@ -230,10 +304,18 @@ export function captureProductionProjectAssetOwnerCleanup(
         | "ownedProjectAssetActions"
         | "ownedProjectAssetRecoveryActions"
         | "ownedProjectAssetStageActions"
+        | "ownedProjectAssetV2ReadActions"
       >
     | undefined,
 ): () => Promise<void> {
   const owners = Object.freeze({
+    v2Reads:
+      input === undefined
+        ? undefined
+        : Object.getOwnPropertyDescriptor(
+            input,
+            "ownedProjectAssetV2ReadActions",
+          )?.value,
     stages:
       input === undefined
         ? undefined

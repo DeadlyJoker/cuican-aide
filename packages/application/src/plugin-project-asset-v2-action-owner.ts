@@ -46,12 +46,27 @@ type Outcome = Readonly<{
   fingerprint: string;
   output: PluginUiJsonValue;
 }>;
+const owners = new WeakSet<object>();
+const readOnlyOwners = new WeakSet<object>();
+export function isPluginProjectAssetV2ReadActionOwner(
+  input: unknown,
+): input is PluginProjectAssetV2ActionOwner {
+  return (
+    input !== null && typeof input === "object" && readOnlyOwners.has(input)
+  );
+}
+export function isPluginProjectAssetV2ActionOwner(
+  input: unknown,
+): input is PluginProjectAssetV2ActionOwner {
+  return input !== null && typeof input === "object" && owners.has(input);
+}
 const outcomePrototype = Object.freeze(Object.create(null) as object);
 /** Actual V2 module invocation. A metadata mutation never admits a task or gives a plugin runtime authority. */
 export class PluginProjectAssetV2ActionOwner {
   readonly actions: PluginUiActionPort;
   readonly committedMetadata: PluginUiCommittedMetadataPort;
   readonly #recovery: PluginProjectAssetV2RecoveryService | undefined;
+  readonly #writeEnabled: boolean;
   readonly #bindReads: ProjectAssetV2ApplicationService["bindPluginProjectReads"];
   readonly #mutate: ProjectAssetV2ApplicationService["mutate"];
   readonly #adopt: ProjectAssetV2ApplicationService["adoptReference"];
@@ -104,6 +119,14 @@ export class PluginProjectAssetV2ActionOwner {
       | PluginProjectAssetV2RecoveryService
       | undefined;
     const p = ProjectAssetV2ApplicationService.prototype;
+    this.#writeEnabled = p.supportsMutations.call(d.assets);
+    if (!this.#writeEnabled && this.#recovery !== undefined)
+      throw new ApplicationError(
+        "validation",
+        "plugin_project_asset_v2_read_only",
+      );
+    owners.add(this);
+    if (!this.#writeEnabled) readOnlyOwners.add(this);
     this.#bindReads = p.bindPluginProjectReads.bind(d.assets);
     this.#mutate = p.mutate.bind(d.assets);
     this.#adopt = p.adoptReference.bind(d.assets);
@@ -140,8 +163,13 @@ export class PluginProjectAssetV2ActionOwner {
   }
   supportsAction(action: string): boolean {
     return (
-      isProjectAssetV2Action(action) ||
-      (this.#recovery !== undefined && isProjectAssetRecoveryV2Action(action))
+      (isProjectAssetV2Action(action) &&
+        (this.#writeEnabled ||
+          (action !== actions.adoptMediaReference &&
+            !isProjectAssetV2MutationAction(action)))) ||
+      (this.#writeEnabled &&
+        this.#recovery !== undefined &&
+        isProjectAssetRecoveryV2Action(action))
     );
   }
   assertAvailable(): void {
@@ -156,6 +184,11 @@ export class PluginProjectAssetV2ActionOwner {
   }
   #invoke(context: PluginUiActionContext) {
     this.assertAvailable();
+    if (!this.supportsAction(context.action))
+      throw new ApplicationError(
+        "authorization",
+        "plugin_project_asset_v2_read_only",
+      );
     if (this.#pending.size >= 64)
       throw new ApplicationError("conflict", "plugin_project_asset_v2_busy");
     const original = capturePluginProjectAssetV2Invocation(context),
@@ -199,7 +232,7 @@ export class PluginProjectAssetV2ActionOwner {
         (r) =>
           r.service === "crewon.project-asset-recovery" && r.apiVersion === "2",
       );
-      if ((recoveryAction || declared) && !this.#recovery)
+      if ((recoveryAction || (write && declared)) && !this.#recovery)
         throw new ApplicationError(
           "authorization",
           "plugin_project_asset_v2_recovery_unavailable",

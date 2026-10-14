@@ -536,3 +536,45 @@ test("a replacement during the open-handle read cannot become a captured startup
   );
   assert.equal(replaced, true);
 });
+
+test("production private startup preserves explicit Asset V2 readonly and owned Stage configuration without execution", () => {
+  const grant = { publications: [source] };
+  const doc = {
+    schemaVersion: PRODUCTION_PROJECT_COMPOSITION_CONFIG_SCHEMA,
+    pluginUi: { ...grant, creationOwnership: "plugin-project-v1" },
+    textArtifacts: { version: "crewon.project-text.v1" },
+    conversations: { ...grant, projectOwnership: "plugin-project-v1" },
+    assetArtifacts: { version: "crewon.project-asset.v1" },
+    assetUi: grant,
+    assetReadV2: grant,
+    assetStages: { version: "crewon.project-asset-stages.v1", ...grant },
+  };
+  const parsed = parseProductionProjectStartupConfiguration(doc);
+  const composed = composeProductionProjectStartup(parsed, authorization);
+  assert.deepEqual(composed.creativeProjects?.assetReadV2, grant);
+  assert.deepEqual(composed.creativeProjects?.assetStages, doc.assetStages);
+  assert.equal(composed.creativeProjects?.pluginGenerations, undefined);
+  for (const change of [
+    { assetArtifacts: undefined },
+    { assetUi: undefined },
+    { textArtifacts: undefined },
+    { conversations: undefined },
+    {
+      assetReadV2: {
+        publications: [
+          { ...source, packageDigest: `sha256:${"e".repeat(64)}` },
+        ],
+      },
+    },
+    { assetStages: { version: "unrecognized", ...grant } },
+    { assetReadV2: { ...grant, mutation: true } },
+  ]) {
+    const candidate = Object.fromEntries(
+      Object.entries({ ...doc, ...change }).filter(([, v]) => v !== undefined),
+    );
+    assert.throws(
+      () => parseProductionProjectStartupConfiguration(candidate),
+      /production_project_configuration_invalid/,
+    );
+  }
+});

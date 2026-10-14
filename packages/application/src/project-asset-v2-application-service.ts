@@ -34,7 +34,7 @@ import {
 /** Shared public model for UI/Agent adapters. No route, tool or installation is registered implicitly. */
 export class ProjectAssetV2ApplicationService {
   readonly #assets: ProjectAssetApplicationService;
-  readonly #adoptions: ProjectAssetMediaAdoptionApplicationService;
+  readonly #adoptions: ProjectAssetMediaAdoptionApplicationService | undefined;
   readonly #asset: ProjectAssetApplicationService["getAsset"];
   readonly #revision: ProjectAssetApplicationService["getRevision"];
   readonly #list: ProjectAssetApplicationService["listAssets"];
@@ -49,25 +49,40 @@ export class ProjectAssetV2ApplicationService {
   >;
   readonly #reference: ProjectAssetApplicationService["getReferenceRevision"];
   readonly #references: ProjectAssetApplicationService["listReferences"];
-  readonly #adopt: ProjectAssetMediaAdoptionApplicationService["adoptReference"];
+  readonly #adopt:
+    | ProjectAssetMediaAdoptionApplicationService["adoptReference"]
+    | undefined;
   constructor(
-    input: Readonly<{
-      assets: ProjectAssetApplicationService;
-      adoptions: ProjectAssetMediaAdoptionApplicationService;
-    }>,
+    input:
+      | Readonly<{
+          assets: ProjectAssetApplicationService;
+          adoptions: ProjectAssetMediaAdoptionApplicationService;
+        }>
+      | Readonly<{
+          assets: ProjectAssetApplicationService;
+          access: "read-only";
+        }>,
   ) {
-    const d = projectAssetOwnFields(input, ["assets", "adoptions"]);
+    const readOnly = Object.hasOwn(input, "access");
+    const d = projectAssetOwnFields(input, [
+      "assets",
+      readOnly ? "access" : "adoptions",
+    ]);
     if (
       !isProjectAssetApplicationService(d.assets) ||
-      types.isProxy(d.adoptions) ||
-      !(d.adoptions instanceof ProjectAssetMediaAdoptionApplicationService)
+      (readOnly
+        ? d.access !== "read-only"
+        : types.isProxy(d.adoptions) ||
+          !(d.adoptions instanceof ProjectAssetMediaAdoptionApplicationService))
     )
       throw new ApplicationError(
         "validation",
         "project_asset_v2_dependencies_invalid",
       );
     this.#assets = d.assets;
-    this.#adoptions = d.adoptions;
+    this.#adoptions = readOnly
+      ? undefined
+      : (d.adoptions as ProjectAssetMediaAdoptionApplicationService);
     this.#asset = ProjectAssetApplicationService.prototype.getAsset.bind(
       d.assets,
     );
@@ -89,10 +104,15 @@ export class ProjectAssetV2ApplicationService {
     this.#references =
       ProjectAssetApplicationService.prototype.listReferences.bind(d.assets);
     this.#adopt =
-      ProjectAssetMediaAdoptionApplicationService.prototype.adoptReference.bind(
-        d.adoptions,
-      );
+      this.#adoptions === undefined
+        ? undefined
+        : ProjectAssetMediaAdoptionApplicationService.prototype.adoptReference.bind(
+            this.#adoptions,
+          );
     Object.freeze(this);
+  }
+  supportsMutations(): boolean {
+    return this.#adoptions !== undefined;
   }
   async bindPluginProjectReads(scope: PluginProjectReadScope) {
     const assets =
@@ -104,7 +124,9 @@ export class ProjectAssetV2ApplicationService {
       ? this
       : new ProjectAssetV2ApplicationService({
           assets,
-          adoptions: this.#adoptions,
+          ...(this.#adoptions === undefined
+            ? { access: "read-only" as const }
+            : { adoptions: this.#adoptions }),
         });
   }
   async query(actor: ActorContext, input: ProjectAssetV2ReadRequest) {
@@ -173,6 +195,8 @@ export class ProjectAssetV2ApplicationService {
     input: ProjectAssetV2MutationRequest,
     options: Readonly<{ authority: ProjectAssetCommitAuthority }>,
   ) {
+    if (this.#adoptions === undefined)
+      throw new ApplicationError("authorization", "project_asset_v2_read_only");
     projectAssetOwnFields(options, ["authority"]);
     const authority = captureProjectAssetCommitAuthority(options);
     if (!authority)
@@ -272,6 +296,8 @@ export class ProjectAssetV2ApplicationService {
       ProjectAssetMediaAdoptionApplicationService["adoptReference"]
     >[2],
   ) {
+    if (this.#adopt === undefined)
+      throw new ApplicationError("authorization", "project_asset_v2_read_only");
     const request = parseProjectAssetV2Request({
       action: actions.adoptMediaReference,
       input: command,

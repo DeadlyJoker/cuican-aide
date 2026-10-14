@@ -39,6 +39,15 @@ export function assertProductionProjectPluginUiComposition(
     config.pluginUi?.configuration.publications,
   );
   assertProjectAssetPluginPublications(
+    creativeProjects?.assetReadV2,
+    config.pluginUi?.configuration.publications,
+  );
+  if (
+    creativeProjects?.assetReadV2 !== undefined &&
+    config.pluginUi?.ownedProjectAssetV2ReadActions !== undefined
+  )
+    throw new Error("project_asset_v2_read_actions_conflict");
+  assertProjectAssetPluginPublications(
     creativeProjects?.assetRecovery,
     config.pluginUi?.configuration.publications,
   );

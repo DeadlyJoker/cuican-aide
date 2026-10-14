@@ -291,6 +291,12 @@ export function createProductionProjectConversationRuntime(
             },
           },
           authority: {
+            executionAvailable: () => {
+              if (taskAuthority === undefined || input.tasks() !== core)
+                return false;
+              taskAuthority.assertActive();
+              return true;
+            },
             installations: input.store.pluginInstallationStore(),
             requests,
             installRoot: input.ui.installRoot,

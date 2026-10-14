@@ -51,6 +51,8 @@ export type ProjectAssetStageControlDependencies = Readonly<{
   authorization: PluginUiAuthorizationPort;
   authorizePackage: InstalledPluginTaskActionOwnerDependencies["authorizePackage"];
   assertExternal(actor: ActorContext): void;
+  /** Actual original execution owner readiness; metadata publication alone is not readiness. */
+  executionAvailable(): boolean;
 }>;
 type Outcome = Readonly<{
   context: PluginUiActionContext;
@@ -78,7 +80,8 @@ export class ProjectAssetStageControlOwner {
   constructor(input: ProjectAssetStageControlDependencies) {
     if (
       !(input.service instanceof ProjectAssetStageApplicationService) ||
-      input.configuration.version !== "crewon.project-asset-stages.v1"
+      input.configuration.version !== "crewon.project-asset-stages.v1" ||
+      typeof input.executionAvailable !== "function"
     )
       throw new Error("project_asset_stage_service_required");
     this.#input = Object.freeze({
@@ -103,6 +106,7 @@ export class ProjectAssetStageControlOwner {
       }),
       authorizePackage: input.authorizePackage.bind(input),
       assertExternal: input.assertExternal.bind(input),
+      executionAvailable: input.executionAvailable.bind(input),
     });
     genuineOwners.add(this);
     this.actions = Object.freeze({
@@ -178,13 +182,23 @@ export class ProjectAssetStageControlOwner {
             )
           )
             return { available: false };
-          const q = await this.#issue(actor, b.currentInstallation);
+          const executionAvailable = this.#input.executionAvailable();
+          if (typeof executionAvailable !== "boolean") unavailable();
+          const q = await this.#issue(
+            actor,
+            b.currentInstallation,
+            executionAvailable ? "execute" : "read",
+          );
+          const projectAvailable = await this.#input.service.isAvailable(
+            actor,
+            threadId,
+            q,
+          );
+          const stillAvailable = this.#input.executionAvailable();
+          if (typeof stillAvailable !== "boolean") unavailable();
+          q.assertActive();
           return {
-            available: await this.#input.service.isAvailable(
-              actor,
-              threadId,
-              q,
-            ),
+            available: projectAvailable && executionAvailable && stillAvailable,
           };
         },
       ),
@@ -214,7 +228,7 @@ export class ProjectAssetStageControlOwner {
             threadId: parsed.input.threadId,
           });
           if (b === null || b.projectId !== parsed.input.projectId) denied();
-          const q = await this.#issue(actor, b.currentInstallation);
+          const q = await this.#issue(actor, b.currentInstallation, "execute");
           return this.#input.service.startStage(actor, parsed.input, q);
         },
       ),
@@ -238,7 +252,7 @@ export class ProjectAssetStageControlOwner {
             threadId: parsed.threadId,
           });
           if (b === null || b.projectId !== parsed.projectId) denied();
-          const q = await this.#issue(actor, b.currentInstallation);
+          const q = await this.#issue(actor, b.currentInstallation, "read");
           return this.#input.service.getScriptSource(actor, parsed, q);
         },
       ),
@@ -251,16 +265,20 @@ export class ProjectAssetStageControlOwner {
       action: context.action,
       input: context.input,
     });
-    const q = await this.#issue(context.actor, {
-      tenantId: context.scope.tenantId,
-      spaceId: context.scope.spaceId,
-      profileId: context.scope.profileId,
-      pluginId: context.package.pluginId,
-      publisherId: context.package.publisherId,
-      version: context.package.version,
-      packageDigest: context.package.packageDigest,
-      selectionRevision: context.selection.revision,
-    });
+    const q = await this.#issue(
+      context.actor,
+      {
+        tenantId: context.scope.tenantId,
+        spaceId: context.scope.spaceId,
+        profileId: context.scope.profileId,
+        pluginId: context.package.pluginId,
+        publisherId: context.package.publisherId,
+        version: context.package.version,
+        packageDigest: context.package.packageDigest,
+        selectionRevision: context.selection.revision,
+      },
+      "execute",
+    );
     const live = capturePluginUiInvocationCommitAuthority(context);
     const actual: ProjectAssetStageCommitAuthority = Object.freeze({
       ...q,
@@ -300,6 +318,7 @@ export class ProjectAssetStageControlOwner {
   async #issue(
     actor: ActorContext,
     expected: ProjectToolInstallationPin,
+    purpose: "read" | "execute",
   ): Promise<ProjectAssetStageCommitAuthority> {
     this.assertAvailable();
     await this.#input.requests.assertCurrent();
@@ -453,7 +472,12 @@ export class ProjectAssetStageControlOwner {
         denied();
       if (
         (await this.#input.authorizePackage(
-          { actor, scope, candidate: checked, purpose: "submit" },
+          {
+            actor,
+            scope,
+            candidate: checked,
+            purpose: purpose === "execute" ? "submit" : "read",
+          },
           signal,
         )) !== "allow"
       )
@@ -502,7 +526,12 @@ export class ProjectAssetStageControlOwner {
             actual.packageDigest !== pkg.packageDigest ||
             !same(actual.descriptor, candidate.descriptor) ||
             (await this.#input.authorizePackage(
-              { actor, scope, candidate: actual, purpose: "submit" },
+              {
+                actor,
+                scope,
+                candidate: actual,
+                purpose: purpose === "execute" ? "submit" : "read",
+              },
               signal,
             )) !== "allow"
           )

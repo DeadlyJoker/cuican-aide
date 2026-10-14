@@ -329,3 +329,61 @@ test("dedicated asset owner accessors are rejected without execution and cannot 
     /asset_stage_owner_invalid/,
   );
 });
+
+test("production V2 archive is an explicit genuine readonly owner and cannot transfer mutation or copied authority", async (t) => {
+  const f = await fixture(t);
+  const runtime = createProductionProjectAssetPluginRuntime({
+    ...f.input,
+    projects: { ...f.projects, assetReadV2: f.projects.assetUi },
+  });
+  assert.ok(runtime?.readV2Owner);
+  t.after(() => runtime.close());
+  assert.equal(
+    runtime.readV2Owner.supportsAction("crewon.project-assets.v2.listAssets"),
+    true,
+  );
+  for (const method of [
+    "saveCandidate",
+    "selectRevision",
+    "setLocked",
+    "saveReferenceCandidate",
+    "selectReference",
+    "adoptMediaReference",
+  ]) {
+    assert.equal(
+      runtime.readV2Owner.supportsAction(`crewon.project-assets.v2.${method}`),
+      false,
+    );
+  }
+  assert.equal(
+    runtime.readV2Owner.supportsAction(
+      "crewon.project-asset-recovery.v2.getPending",
+    ),
+    false,
+  );
+  const captured = captureProductionPluginUiOwnerConfiguration({
+    configuration: f.ui,
+    ...productionProjectAssetOwnerConfiguration(runtime),
+  });
+  assert.equal(captured.ownedProjectAssetV2ReadActions, runtime.readV2Owner);
+  assert.throws(
+    () =>
+      captureProductionPluginUiActions({
+        configuration: f.ui,
+        ownedProjectAssetV2ReadActions: { ...runtime.readV2Owner } as never,
+      }),
+    /asset_v2_read_owner_invalid/,
+  );
+  assert.throws(
+    () =>
+      createProductionProjectAssetPluginRuntime({
+        ...f.input,
+        projects: {
+          ...f.projects,
+          assetUi: undefined,
+          assetReadV2: f.projects.assetUi,
+        },
+      }),
+    /asset_v2_read_publication_required/,
+  );
+});

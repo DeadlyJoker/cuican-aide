@@ -21,6 +21,11 @@ export function captureProductionPluginUiOwnerConfiguration(
     ...(input.ownedProjectAssetStageActions === undefined
       ? {}
       : { ownedProjectAssetStageActions: input.ownedProjectAssetStageActions }),
+    ...(input.ownedProjectAssetV2ReadActions === undefined
+      ? {}
+      : {
+          ownedProjectAssetV2ReadActions: input.ownedProjectAssetV2ReadActions,
+        }),
     ...(input.ownedProjectAssetActions === undefined
       ? {}
       : { ownedProjectAssetActions: input.ownedProjectAssetActions }),

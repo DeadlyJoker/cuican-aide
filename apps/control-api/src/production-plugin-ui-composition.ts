@@ -1,3 +1,4 @@
+import { isProjectAssetV2Action } from "@crewon/contracts/project-assets-v2";
 import { isProjectConversationUiNamespaceAction } from "@crewon/contracts/project-conversation-association";
 import {
   isProjectAssetStageControlOwner,
@@ -15,6 +16,8 @@ import {
   isPluginUiRecoveryApplicationService,
   type PluginUiRecoveryApplicationService,
   isPluginProjectAssetActionOwner,
+  isPluginProjectAssetV2ReadActionOwner,
+  type PluginProjectAssetV2ActionOwner,
   type PluginProjectAssetActionOwner,
   isPluginProjectAssetRecoveryActionOwner,
   type PluginProjectAssetRecoveryActionOwner,
@@ -90,6 +93,8 @@ export type ProductionPluginUiConfig = Readonly<{
   ownedProjectTextPlanActions?: PluginProjectTextPlanActionOwner;
   ownedProjectAssetStageActions?: ProjectAssetStageControlOwner;
   ownedProjectAssetActions?: PluginProjectAssetActionOwner;
+  /** Exact independently approved archive reads only. */
+  ownedProjectAssetV2ReadActions?: PluginProjectAssetV2ActionOwner;
   ownedProjectAssetRecoveryActions?: PluginProjectAssetRecoveryActionOwner;
   ownedProjectTextActions?: PluginProjectTextActionOwner;
   ownedProjectTextRecoveryActions?: PluginProjectTextRecoveryActionOwner;
@@ -134,6 +139,12 @@ export function createProductionPluginUiRuntime(
     throw new Error("production_plugin_ui_foundation_owner_invalid");
   const assetStageOwner = input.ownedProjectAssetStageActions;
   const assetOwner = input.ownedProjectAssetActions;
+  const assetV2ReadOwner = input.ownedProjectAssetV2ReadActions;
+  if (
+    assetV2ReadOwner !== undefined &&
+    !isPluginProjectAssetV2ReadActionOwner(assetV2ReadOwner)
+  )
+    throw new Error("production_plugin_ui_asset_v2_read_owner_invalid");
   const assetRecoveryOwner = input.ownedProjectAssetRecoveryActions;
   const textOwner = input.ownedProjectTextActions;
   const textRecoveryOwner = input.ownedProjectTextRecoveryActions;
@@ -191,12 +202,19 @@ export function createProductionPluginUiRuntime(
           assetOwner.committedMetadata,
           recoveryMetadata,
         );
-  const assetRecoveryMetadata =
-    assetRecoveryOwner === undefined
+  const assetV2ReadMetadata =
+    assetV2ReadOwner === undefined
       ? assetMetadata
       : combineSelectionCommittedMetadata(
-          assetRecoveryOwner.committedMetadata,
+          assetV2ReadOwner.committedMetadata,
           assetMetadata,
+        );
+  const assetRecoveryMetadata =
+    assetRecoveryOwner === undefined
+      ? assetV2ReadMetadata
+      : combineSelectionCommittedMetadata(
+          assetRecoveryOwner.committedMetadata,
+          assetV2ReadMetadata,
         );
   const assetStageMetadata =
     assetStageOwner === undefined
@@ -388,6 +406,17 @@ export function createProductionPluginUiRuntime(
                 "project_asset_stage_unavailable",
               );
             return assetStageOwner.actions.invoke(request);
+          }
+          if (isProjectAssetV2Action(request.action)) {
+            if (
+              assetV2ReadOwner === undefined ||
+              !assetV2ReadOwner.supportsAction(request.action)
+            )
+              throw new ApplicationError(
+                "conflict",
+                "plugin_ui_actions_unavailable",
+              );
+            return assetV2ReadOwner.actions.invoke(request);
           }
           if (
             request.action === "crewon.project-assets" ||
@@ -633,6 +662,7 @@ export function createProductionPluginUiRuntime(
         uploadOwner?.close(),
         assetStageOwner?.close(),
         assetOwner?.close(),
+        assetV2ReadOwner?.close(),
         assetRecoveryOwner?.close(),
         textOwner?.close(),
         textRecoveryOwner?.close(),
@@ -687,6 +717,7 @@ export function captureProductionPluginUiActions(
     throw new Error("production_plugin_ui_foundation_owner_invalid");
   for (const field of [
     "ownedProjectAssetActions",
+    "ownedProjectAssetV2ReadActions",
     "ownedProjectAssetRecoveryActions",
     "ownedProjectAssetStageActions",
   ] as const) {
@@ -703,6 +734,11 @@ export function captureProductionPluginUiActions(
     !isProjectAssetStageControlOwner(input.ownedProjectAssetStageActions)
   )
     throw new Error("production_plugin_ui_asset_stage_owner_invalid");
+  if (
+    input.ownedProjectAssetV2ReadActions !== undefined &&
+    !isPluginProjectAssetV2ReadActionOwner(input.ownedProjectAssetV2ReadActions)
+  )
+    throw new Error("production_plugin_ui_asset_v2_read_owner_invalid");
   if (
     input.ownedProjectAssetActions !== undefined &&
     !isPluginProjectAssetActionOwner(input.ownedProjectAssetActions)

@@ -206,6 +206,7 @@ export function captureCreativeProjectCompositionConfig(
         key !== "textArtifacts" &&
         key !== "assetArtifacts" &&
         key !== "assetUi" &&
+        key !== "assetReadV2" &&
         key !== "assetRecovery" &&
         key !== "assetReferences" &&
         key !== "assetStages" &&
@@ -622,6 +623,9 @@ export async function prepareCreativeProjects(
     ...(configuration.assetUi === undefined
       ? {}
       : { assetUi: configuration.assetUi }),
+    ...(configuration.assetReadV2 === undefined
+      ? {}
+      : { assetReadV2: configuration.assetReadV2 }),
     ...(configuration.assetRecovery === undefined
       ? {}
       : { assetRecovery: configuration.assetRecovery }),

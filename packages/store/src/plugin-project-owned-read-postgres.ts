@@ -1,3 +1,4 @@
+import { assertPostgresProjectAssetUiReadNamespace } from "./plugin-project-asset-ui-read-fence.ts";
 import { assertPostgresPluginProjectAssetRunRead } from "./plugin-project-asset-run-read.ts";
 import { assertPostgresPluginProjectOutlineContextRead } from "./plugin-project-outline-context-read.ts";
 import { assertPostgresAssetStageBoundRead } from "./project-asset-stage-owned-access.ts";
@@ -165,6 +166,7 @@ export async function readPostgresOwnedCreativeProject<T>(
           projectId,
         ]),
       ]);
+    await assertPostgresProjectAssetUiReadNamespace(c, input.schema, source);
     const access = await capturePostgresOwnedProjectAccess(
       c,
       input.schema,
@@ -202,6 +204,7 @@ export async function readPostgresOwnedCreativeProject<T>(
       access,
     );
     await assertPostgresAssetStageBoundRead(c, input.schema, source, call);
+    await assertPostgresProjectAssetUiReadNamespace(c, input.schema, source);
     if (call.query.projectId !== undefined)
       await assertProject({ projectId: call.query.projectId });
 
@@ -261,6 +264,7 @@ export async function readPostgresOwnedCreativeProject<T>(
       access,
     );
     await assertPostgresAssetStageBoundRead(c, input.schema, source, call);
+    await assertPostgresProjectAssetUiReadNamespace(c, input.schema, source);
     await c.query("COMMIT");
   } catch (error) {
     await rollbackPostgres(c);

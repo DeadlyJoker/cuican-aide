@@ -269,6 +269,7 @@ export function createDesktopProjectConversationRuntime(
             },
           },
           authority: {
+            executionAvailable: () => input.tasks() !== undefined,
             installations: input.store.pluginInstallationStore(),
             requests: input.installed.requests,
             installRoot: input.configuration.installRoot,

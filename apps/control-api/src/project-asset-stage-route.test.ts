@@ -217,6 +217,7 @@ async function installedFixture(
     identityChanged: false,
     wakes: 0,
     peerPrepares: 0,
+    executionReady: true,
   };
   const authorization: CreativeProjectAuthorizationPort = {
     authorize: async (input) => {
@@ -366,6 +367,8 @@ async function installedFixture(
     digester,
   });
   const owner = new ProjectAssetStageControlOwner({
+    executionAvailable: () =>
+      state.executionReady && f.tasks !== undefined && f.host !== undefined,
     service,
     conversations,
     configuration: {
@@ -498,6 +501,17 @@ for (const backend of ["sqlite", "postgres"] as const)
         ).statusCode,
         404,
       );
+      f.state.executionReady = false;
+      const notReady = await get();
+      assert.equal(notReady.statusCode, 200, notReady.body);
+      assert.deepEqual(notReady.json(), { available: false });
+      const stillReadable = await f.app.inject({
+        method: "GET",
+        url: sourceUrl,
+        headers: headers(),
+      });
+      assert.equal(stillReadable.statusCode, 200, stillReadable.body);
+      f.state.executionReady = true;
       assert.equal(f.state.peerPrepares, 0);
       assert.equal(await f.count("run_snapshots"), 0);
       f.state.projectDenied = true;
@@ -519,6 +533,10 @@ for (const backend of ["sqlite", "postgres"] as const)
       const first = await post();
       assert.equal(first.statusCode, 201, first.body);
       assert.equal(first.json().disposition, "committed");
+      assert.ok(
+        f.state.peerPrepares > 0,
+        "only the actual execution request prepares the real installed Task peer",
+      );
       assert.equal(first.json().threadRevision, 2);
       assert.equal(f.state.wakes, 1);
       const admission = await f.stages.loadAssetStageAdmission({

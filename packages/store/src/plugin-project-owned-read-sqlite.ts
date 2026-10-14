@@ -1,3 +1,4 @@
+import { assertSqliteProjectAssetUiReadNamespace } from "./plugin-project-asset-ui-read-fence.ts";
 import { assertSqlitePluginProjectAssetRunRead } from "./plugin-project-asset-run-read.ts";
 import { assertSqlitePluginProjectOutlineContextRead } from "./plugin-project-outline-context-read.ts";
 import { assertSqliteAssetStageBoundRead } from "./project-asset-stage-owned-access.ts";
@@ -134,11 +135,13 @@ export async function readSqliteOwnedCreativeProject<T>(
       installation,
     );
     assertSqlitePluginProjectRunRead(db, source.runAuthority);
+    assertSqliteProjectAssetUiReadNamespace(db, source);
     const access = captureSqliteOwnedProjectAccess(db, source);
     assertSqliteProjectRunMutationRead(db, source, access);
     assertSqlitePluginProjectAssetRunRead(db, source, access);
     assertSqlitePluginProjectOutlineContextRead(db, source, access);
     assertSqliteAssetStageBoundRead(db, source, call);
+    assertSqliteProjectAssetUiReadNamespace(db, source);
     if (source.foundationRunAuthority !== undefined)
       assertSqliteFoundationRunRead(db, source.foundationRunAuthority, {
         projectAccess: access,
@@ -192,6 +195,7 @@ export async function readSqliteOwnedCreativeProject<T>(
     assertSqlitePluginProjectAssetRunRead(db, source, access);
     assertSqlitePluginProjectOutlineContextRead(db, source, access);
     assertSqliteAssetStageBoundRead(db, source, call);
+    assertSqliteProjectAssetUiReadNamespace(db, source);
     db.exec("COMMIT");
   } catch (error) {
     try {
