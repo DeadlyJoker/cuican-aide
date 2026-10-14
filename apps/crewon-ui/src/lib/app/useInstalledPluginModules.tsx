@@ -308,6 +308,9 @@ export function useInstalledPluginModules({
             : createControlPluginUiHost)({
             client: scope.client,
             assets: scope.assets!,
+            ...(!scope.assets && scope.sessionKey
+              ? { codeCacheOwnerKey: scope.sessionKey }
+              : {}),
             assertCurrent: () => {
               if (
                 current.current !== scope ||

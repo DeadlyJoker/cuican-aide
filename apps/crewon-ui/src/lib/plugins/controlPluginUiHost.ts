@@ -34,6 +34,8 @@ import {
   type PluginUiModuleImporter,
 } from "./trustedPluginUiLoader";
 import { uiFailure } from "./pluginUiValidation";
+import { hasPluginEntryByteCache } from "./controlPluginUiCodeCapability";
+import { createPluginEntryByteImporter } from "./pluginEntryByteImporter";
 import { PluginUiLeaseLifecycle } from "./pluginUiLeaseLifecycle";
 import { PluginUiValidationFlights } from "./pluginUiValidationFlights";
 import {
@@ -92,6 +94,8 @@ export function createControlPluginUiHost(
     selectionJournal?: InstalledPluginProjectSelectionJournal;
     /** Explicit importer injection is for deterministic lifecycle tests; native URL import is the default. */
     importer?: PluginUiModuleImporter;
+    /** Stable local account partition, never an HTTP credential or authorization decision. */
+    codeCacheOwnerKey?: string;
   }>,
 ): ControlPluginUiHost {
   const {
@@ -176,6 +180,14 @@ export function createControlPluginUiHost(
   const loader = new TrustedPluginUiLoader({
     assetBasePath: "/api/v1/plugins/ui/mounts",
     routeStyle: "control-mount-assets",
+    ...(hasPluginEntryByteCache(client) && options.codeCacheOwnerKey
+      ? {
+          entryImporter: createPluginEntryByteImporter({
+            ownerKey: options.codeCacheOwnerKey,
+            importModule: options.importer,
+          }),
+        }
+      : {}),
     importer: options.importer,
     ports: {
       writeProjectSourceUploadPart: (lease, locator, bytes, signal) =>

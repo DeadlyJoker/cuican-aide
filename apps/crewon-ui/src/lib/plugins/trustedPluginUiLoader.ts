@@ -1,5 +1,4 @@
 import { pluginUiActionInputMaximumBytes } from "@crewon/contracts/project-texts-ui";
-import { PluginUiModuleCodeCache } from "./pluginUiModuleCodeCache";
 import {
   isTransientPluginUiValidationError,
   pluginUiPropsKey,
@@ -128,6 +127,15 @@ type Candidate = {
 export class TrustedPluginUiLoader {
   readonly #ports: PluginUiHostPorts;
   readonly #assetBasePath: string;
+  readonly #entryImporter:
+    | ((
+        input: Readonly<{
+          url: string;
+          lease: PluginUiLease;
+          signal: AbortSignal;
+        }>,
+      ) => Promise<unknown>)
+    | undefined;
   readonly #routeStyle: PluginUiAssetRouteStyle;
   readonly #importer: PluginUiModuleImporter;
   readonly #slots = new WeakMap<HTMLElement, Slot>();
@@ -135,12 +143,18 @@ export class TrustedPluginUiLoader {
   readonly #cleanupPending = new Set<Candidate>();
   readonly #unusedCleanup = new Map<string, Promise<void>>();
   readonly #inflight = new Set<AbortController>();
-  readonly #code = new PluginUiModuleCodeCache();
 
   constructor(
     options: Readonly<{
       ports: PluginUiHostPorts;
       assetBasePath: string;
+      entryImporter?: (
+        input: Readonly<{
+          url: string;
+          lease: PluginUiLease;
+          signal: AbortSignal;
+        }>,
+      ) => Promise<unknown>;
       routeStyle?: PluginUiAssetRouteStyle;
       importer?: PluginUiModuleImporter;
     }>,
@@ -168,6 +182,7 @@ export class TrustedPluginUiLoader {
           }),
     });
     this.#assetBasePath = checkedPluginUiAssetBase(options.assetBasePath);
+    this.#entryImporter = options.entryImporter;
     this.#routeStyle =
       options.routeStyle === undefined ? "mount-root" : options.routeStyle;
     if (
@@ -329,9 +344,15 @@ export class TrustedPluginUiLoader {
       progress("import");
       const imported = await this.#await(
         candidate,
-        this.#code.getOrImport(lease, () => {
+        Promise.resolve().then(() => {
           this.#current(candidate);
-          return this.#importer(url);
+          return this.#entryImporter
+            ? this.#entryImporter({
+                url,
+                lease: candidate.lease,
+                signal: candidate.controller.signal,
+              })
+            : this.#importer(url);
         }),
       );
       progress("authorize-instance");
@@ -344,8 +365,15 @@ export class TrustedPluginUiLoader {
       const definition = parsePluginUiDefinition(descriptor.value);
       if (definition.pluginId !== candidate.identity.pluginId)
         uiFailure("plugin_ui_module_identity_invalid");
-      this.#code.remember(lease, imported);
       const services: PluginUiServices = Object.freeze({
+        ...(this.#entryImporter
+          ? {
+              resources: Object.freeze({
+                apiVersion: "crewon.plugin-ui-resources.v1" as const,
+                entryUrl: new URL(url, location.href).href,
+              }),
+            }
+          : {}),
         invoke: (action, value, options) =>
           this.#invoke(candidate, action, value, options),
         ...(this.#ports.writeProjectSourceUploadPart === undefined ||

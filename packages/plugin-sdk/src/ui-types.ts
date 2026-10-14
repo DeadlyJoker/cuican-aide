@@ -10,6 +10,11 @@ export type PluginUiInvocationOptions = Readonly<{
   signal?: AbortSignal;
 }>;
 export type PluginUiServices = Readonly<{
+  /** Optional host locator; this carries no credential or business authority. */
+  resources?: Readonly<{
+    apiVersion: "crewon.plugin-ui-resources.v1";
+    entryUrl: string;
+  }>;
   /** Optional native v1 byte transport, scoped by the Host to this genuine mounted module. */
   projectSourceUploads?: PluginProjectSourceUploadRawPort;
   invoke(

@@ -11,6 +11,23 @@ const expired = () =>
 const parseSession = (value: unknown) =>
   value as { baseUrl: string; csrfToken: string };
 describe("Web Control account session transport", () => {
+  it.each([undefined, "unknown", "entry-bytes.v1"])(
+    "opts into cached code only for the exact verified capability header (%s)",
+    async (mode) => {
+      const t = createWebControlSessionTransport({
+        pageOrigin: origin,
+        parseSession,
+        fetch: async () => {
+          const response = session();
+          if (mode) response.headers.set("x-crewon-plugin-ui-assets", mode);
+          return response;
+        },
+      });
+      expect((await t.bootstrap()).pluginUiAssets).toBe(
+        mode === "entry-bytes.v1" ? mode : undefined,
+      );
+    },
+  );
   it("bootstraps a PIM account with one POST, without a preliminary failing GET", async () => {
     const calls: RequestInit[] = [];
     const t = createWebControlSessionTransport({

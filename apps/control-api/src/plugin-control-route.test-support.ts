@@ -278,7 +278,11 @@ export async function createPluginControlRouteFixture(
   let sourceIndex = 0;
   async function createPackage(
     version: string,
-    options: Readonly<{ pluginId?: string; nodeOnly?: boolean }> = {},
+    options: Readonly<{
+      pluginId?: string;
+      nodeOnly?: boolean;
+      uiFormat?: "single-entry" | "split";
+    }> = {},
   ) {
     const pluginId = options.pluginId ?? "test.counter";
     const sourceId = `test-source-${++sourceIndex}`;
@@ -299,6 +303,13 @@ ctx.services.provide(${JSON.stringify(pluginId)},'1',{increment:()=>({count:++co
         ",mount(root){root.textContent=label;return {update(){},dispose(){root.replaceChildren();}}}};";
       content["ui/chunk.mjs"] =
         `export const label=${JSON.stringify(version)};`;
+      if (options.uiFormat === "single-entry") {
+        content["ui/entry.mjs"] = content["ui/entry.mjs"]!.replace(
+          "import {label} from './chunk.mjs';",
+          `const label=${JSON.stringify(version)};`,
+        );
+        delete content["ui/chunk.mjs"];
+      }
     }
     for (const [path, contentBytes] of Object.entries(content))
       await writeFile(join(directory, path), contentBytes);

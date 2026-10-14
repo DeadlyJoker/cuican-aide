@@ -30,6 +30,7 @@ test("ships a unified self-contained UI and execution package with the original 
   assert.equal(descriptor.entrypoints.node, "node.mjs");
   assert.equal(descriptor.businessManifestPath, "business.json");
   assert.deepEqual(descriptor.requires, [
+    ...((() => { const [major,minor,patch]=version.split(".").map(Number); return major>50 || major===50 && (minor>1 || minor===1 && patch>=4); })() ? [{ service: "crewon.plugin-ui-resources", apiVersion: "1", optional: true }] : []),
     { service: "crewon.plugin-navigation", apiVersion: "1", optional: true },
     ...(Number(version.split(".")[0]) >= 47
       ? [

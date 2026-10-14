@@ -549,7 +549,12 @@ export default defineUiPlugin({
             />
           ) : (
             <ShortDramaWorkbenchPreview
-              referenceImage={new URL(referenceImage, import.meta.url).href}
+              referenceImage={
+                new URL(
+                  referenceImage,
+                  services.resources?.entryUrl ?? import.meta.url,
+                ).href
+              }
             />
           ),
         ),

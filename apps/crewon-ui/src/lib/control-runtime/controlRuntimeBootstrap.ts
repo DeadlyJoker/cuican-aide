@@ -5,6 +5,7 @@ import { requireDesktopBridge } from "../desktop/desktopBridge";
 import { desktopBridgeFetch } from "../desktop/desktopFetch";
 import { AgentPlatformSessionResponse } from "./agentPlatformSessionResponse";
 import { createWebControlSessionTransport } from "./webControlSessionTransport";
+import { enablePluginEntryByteCache } from "../plugins/controlPluginUiCodeCapability";
 import {
   assertAgentPlatformSessionCurrent,
   captureAgentPlatformSession,
@@ -131,6 +132,8 @@ export async function loadControlApiClient(
         origin: pageOrigin,
         fetch: transport.fetch,
       });
+      if (session.pluginUiAssets === "entry-bytes.v1")
+        enablePluginEntryByteCache(client);
       if (initialDeadlineExpired) {
         try {
           dependencies.onLateClient?.(client);

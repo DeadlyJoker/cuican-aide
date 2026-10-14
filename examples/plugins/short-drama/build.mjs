@@ -408,6 +408,7 @@ const descriptor = parsePluginPackageDescriptor({
   },
   businessManifestPath: "business.json",
   requires: [
+    { service: "crewon.plugin-ui-resources", apiVersion: "1", optional: true },
     { service: "crewon.plugin-navigation", apiVersion: "1", optional: true },
     {
       service: "crewon.project-outline-tools",

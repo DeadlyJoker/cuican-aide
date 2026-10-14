@@ -1,4 +1,8 @@
-type Session = Readonly<{ baseUrl: string; csrfToken: string }>;
+type Session = Readonly<{
+  baseUrl: string;
+  csrfToken: string;
+  pluginUiAssets?: "entry-bytes.v1";
+}>;
 
 /** Original account credentials stay in the caller's generation-bound fetch.
  * Only an explicit BFF pre-dispatch rejection may renew/replay a request.
@@ -48,7 +52,14 @@ export function createWebControlSessionTransport(input: {
         });
       }
       if (!response.ok) throw new Error("control_runtime_session_unavailable");
-      current = input.parseSession(await boundedJson(response));
+      const session = input.parseSession(await boundedJson(response));
+      current = {
+        ...session,
+        ...(response.headers.get("x-crewon-plugin-ui-assets") ===
+        "entry-bytes.v1"
+          ? { pluginUiAssets: "entry-bytes.v1" as const }
+          : {}),
+      };
       return current;
     })().finally(() => {
       pending = null;

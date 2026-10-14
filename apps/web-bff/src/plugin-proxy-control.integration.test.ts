@@ -306,6 +306,23 @@ test("actual client/BFF/Control HTTP installs immutable packages, serves authent
     origin: publicOrigin,
     fetch: otherFetch,
   });
+  const cacheHeaders = { "x-crewon-plugin-ui-code-cache": "entry-bytes.v1" };
+  const code = await browserFetch(`${publicOrigin}${assetPath}`, {
+    headers: cacheHeaders,
+  });
+  assert.equal(code.status, 200);
+  const codeTag = code.headers.get("etag")!;
+  await code.arrayBuffer();
+  const cachedCode = await browserFetch(`${publicOrigin}${assetPath}`, {
+    headers: { ...cacheHeaders, "if-none-match": codeTag },
+  });
+  assert.equal(cachedCode.status, 304);
+  assert.equal(await cachedCode.text(), "");
+  const foreignCode = await otherFetch(`${publicOrigin}${assetPath}`, {
+    headers: { ...cacheHeaders, "if-none-match": codeTag },
+  });
+  assert.ok([403, 404].includes(foreignCode.status));
+  assert.equal(foreignCode.headers.get("cache-control"), "no-store");
   assert.deepEqual(await otherClient.plugins.closeMount(mount.mountRef), {
     closed: true,
   });

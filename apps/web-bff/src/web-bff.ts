@@ -9,6 +9,11 @@ import {
   PROJECT_CONVERSATION_PROXY_DEADLINE_MS,
 } from "./project-conversation-proxy-policy.ts";
 import { createHmac, timingSafeEqual, randomUUID } from "node:crypto";
+import {
+  pluginUiCodeResponse,
+  PLUGIN_UI_CODE_CACHE_HEADER,
+  PLUGIN_UI_CODE_CACHE_MODE,
+} from "./plugin-ui-code-cache.ts";
 
 import type {
   WebIdentitySession,
@@ -162,6 +167,10 @@ export function createWebBff(config: {
               csrfToken: browserCsrf(result.session, publicOrigin, csrfSecret),
             });
             response.headers.set("set-cookie", result.setCookie);
+            response.headers.set(
+              PLUGIN_UI_CODE_CACHE_HEADER,
+              PLUGIN_UI_CODE_CACHE_MODE,
+            );
             return response;
           } catch (error) {
             return errorResponse(
@@ -188,10 +197,15 @@ export function createWebBff(config: {
         if (session instanceof Response) {
           return session;
         }
-        return jsonResponse(200, {
+        const response = jsonResponse(200, {
           baseUrl: "/",
           csrfToken: browserCsrf(session, publicOrigin, csrfSecret),
         });
+        response.headers.set(
+          PLUGIN_UI_CODE_CACHE_HEADER,
+          PLUGIN_UI_CODE_CACHE_MODE,
+        );
+        return response;
       }
       if (!isApiPath(requestUrl.pathname)) {
         return errorResponse(404, "route_not_found");
@@ -314,6 +328,12 @@ export function createWebBff(config: {
         headers.set("x-csrf-token", controlCsrfToken);
       }
 
+      const cacheEntry =
+        pluginPolicy?.outcome === "allow" &&
+        pluginPolicy.responseKind === "asset" &&
+        request.headers.get("x-crewon-plugin-ui-code-cache") ===
+          PLUGIN_UI_CODE_CACHE_MODE;
+      if (cacheEntry) headers.delete("if-none-match");
       const upstreamUrl = new URL(
         `${requestUrl.pathname}${requestUrl.search}`,
         controlTarget,
@@ -381,7 +401,10 @@ export function createWebBff(config: {
           return errorResponse(502, "control_api_response_invalid");
         }
       }
-      return proxyResponse(upstream);
+      const response = proxyResponse(upstream);
+      return cacheEntry
+        ? pluginUiCodeResponse(response, request.headers.get("if-none-match"))
+        : response;
     },
   };
 }
