@@ -81,8 +81,6 @@ import { createPluginProjectAssetRecoveryClient } from "./project-asset-recovery
 import { projectAssetRecoveryCodec } from "./project-asset-recovery-v2-codec.mjs";
 
 const contributionId = "workbench";
-// The build bundles all JS, CSS and reference imagery; no mount-relative URLs.
-export const crewonUiResourceMode = "self-contained.v1";
 function historicalQueryContext(
   data: PluginUiProps["data"],
 ): ProjectHistoricalQueryHostContext | null {
