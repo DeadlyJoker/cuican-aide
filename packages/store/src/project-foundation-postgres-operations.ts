@@ -1,10 +1,10 @@
 import { capturePostgresFoundationOwnedAccess } from "./project-foundation-owned-postgres.ts";
+import { capturePostgresFoundationRunOwnedAccess } from "./project-foundation-run-owned-access.ts";
 import {
   qualifyPluginProjectFoundationScope,
   type PluginProjectFoundationScope,
 } from "@crewon/application";
 import {
-  assertPostgresSavedSourceUploadLegacyAccess,
   assertPostgresSavedSourceUploadProjectAccess,
   foundationResultSavedSource,
 } from "./project-source-upload-legacy-access.ts";
@@ -111,6 +111,11 @@ export async function transactPostgresFoundationLegacy<
           );
     const access =
       owned ??
+      (await capturePostgresFoundationRunOwnedAccess(
+        client,
+        context.schema,
+        authority?.runTransaction,
+      )) ??
       (await capturePostgresCreativeProjectLegacyAccess(
         client,
         context.schema,
@@ -131,6 +136,7 @@ export async function transactPostgresFoundationLegacy<
       context.schema,
       authority?.runTransaction,
       isFoundationReplay(result) ? "receipt-publication" : "fresh-proposal",
+      { projectAccess: access },
     );
     if (result != null)
       await access.assertProject(
@@ -139,19 +145,12 @@ export async function transactPostgresFoundationLegacy<
     const savedSource =
       result == null ? null : foundationResultSavedSource(result);
     if (savedSource !== null) {
-      if (owned === undefined)
-        await assertPostgresSavedSourceUploadLegacyAccess(
-          client,
-          context.schema,
-          savedSource,
-        );
-      else
-        await assertPostgresSavedSourceUploadProjectAccess(
-          client,
-          context.schema,
-          savedSource,
-          access,
-        );
+      await assertPostgresSavedSourceUploadProjectAccess(
+        client,
+        context.schema,
+        savedSource,
+        access,
+      );
     }
     // The final asynchronous SQL check must not weaken the original authorization fence.
     await assertProjectFoundationCommitTransactionCurrent(authority);

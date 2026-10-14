@@ -2,6 +2,7 @@ import {
   prepareFoundationToolOwnedReads,
   qualifyFoundationToolRead,
 } from "./project-foundation-owned-reads.ts";
+import { issuePluginProjectFoundationRunMutationReadScope } from "@crewon/application/host-project-workspaces";
 import {
   ApplicationError,
   type PluginProjectReadScope,
@@ -406,7 +407,8 @@ export class ProjectFoundationToolsServiceOwner {
       run = await this.#run(i);
     await this.#policy(actor, write);
     let foundation: ProjectFoundation | null = null;
-    if (write) await this.#identityQualification(actor, i);
+    if (write && this.#d.projectOwnership === undefined)
+      await this.#identityQualification(actor, i);
     const installation = this.#foundation.installation,
       scope = {
         tenantId: actor.tenantId,
@@ -520,6 +522,21 @@ export class ProjectFoundationToolsServiceOwner {
           await current();
         },
       });
+      if (this.#d.projectOwnership !== undefined) {
+        if (this.#d.projectOwnership !== "plugin-project-v1") denied();
+        const scope = await issuePluginProjectFoundationRunMutationReadScope({
+          authority: transaction,
+          assertActive: () => {
+            this.#check(i);
+            signal.throwIfAborted();
+          },
+        });
+        foundations =
+          ProjectFoundationApplicationService.prototype.bindRunMutationReads.call(
+            foundations,
+            scope,
+          );
+      }
       const result =
         await ProjectFoundationApplicationService.prototype.saveProposal.call(
           foundations,

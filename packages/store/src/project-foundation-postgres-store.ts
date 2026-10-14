@@ -6,7 +6,6 @@ import {
 } from "./plugin-project-foundation-read-view.ts";
 import {
   assertPostgresSavedSourceUploadProjectAccess,
-  assertPostgresSavedSourceUploadLegacyAccess,
   foundationResultSavedSource,
 } from "./project-source-upload-legacy-access.ts";
 import { commitOriginalProjectMigration } from "./original-project-migration.ts";
@@ -351,7 +350,7 @@ export class PostgresProjectFoundationStore implements ProjectFoundationStore {
       async (client, access) => {
         if (!(await this.#schemaConfigured(client))) return null;
         await this.#receiptLock(client, identity);
-        await this.#admitInstallation(client, identity, authority);
+        await this.#admitInstallation(client, identity, authority, access);
         return this.#receipt(client, identity, access);
       },
       authority,
@@ -446,13 +445,15 @@ export class PostgresProjectFoundationStore implements ProjectFoundationStore {
         );
         // Serialize the canonical command before looking at a newly generated project identity.
         await this.#receiptLock(client, identity);
-        await this.#admitInstallation(client, identity, authority);
+        await this.#admitInstallation(client, identity, authority, access);
         const previous = await this.#receipt(client, identity, access);
         if (previous !== null) return previous;
         await assertPostgresFoundationRunCommit(
           client,
           this.#schema,
           authority?.runTransaction,
+          "fresh-proposal",
+          { projectAccess: access },
         );
         const scope = {
           owner: identity.owner,
@@ -690,10 +691,11 @@ export class PostgresProjectFoundationStore implements ProjectFoundationStore {
     const savedSource =
       result == null ? null : foundationResultSavedSource(result);
     if (savedSource !== null)
-      await assertPostgresSavedSourceUploadLegacyAccess(
+      await assertPostgresSavedSourceUploadProjectAccess(
         client,
         this.#schema,
         savedSource,
+        access,
       );
     return result;
   }
@@ -790,6 +792,7 @@ export class PostgresProjectFoundationStore implements ProjectFoundationStore {
     client: PoolClient,
     identity: FoundationIdentity,
     authority: ProjectFoundationCommitAuthority | undefined,
+    access: import("./creative-project-legacy-access.ts").PostgresCreativeProjectLegacyAccess,
   ) {
     const qualified = qualifyProjectFoundationPluginCommit(
       authority,
@@ -801,6 +804,7 @@ export class PostgresProjectFoundationStore implements ProjectFoundationStore {
       this.#schema,
       authority?.runTransaction,
       "receipt-publication",
+      { projectAccess: access },
     );
     if (qualified === undefined) return;
     await assertPostgresPluginInstallationPinSchema(client, this.#schema);

@@ -37,6 +37,14 @@ import {
   type FoundationIdentity,
   type FoundationPrepared,
 } from "./project-foundation-store-support.ts";
+import type {
+  CreativeProjectLegacyAccess,
+  PostgresCreativeProjectLegacyAccess,
+} from "./creative-project-legacy-access.ts";
+import {
+  assertSqlitePluginProjectWorkspaceBinding,
+  assertPostgresPluginProjectWorkspaceBinding,
+} from "./plugin-project-workspace-thread-fence.ts";
 
 export function qualifyFoundationRunMutation(
   authority: ProjectFoundationCommitAuthority | undefined,
@@ -99,6 +107,7 @@ export function assertSqliteFoundationRunCommit(
   db: DatabaseSync,
   q: ProjectFoundationRunCommitTransactionAuthority | undefined,
   mode: "fresh-proposal" | "receipt-publication" = "fresh-proposal",
+  options?: Readonly<{ projectAccess: CreativeProjectLegacyAccess }>,
 ): void {
   if (q === undefined) return;
   assertSqliteInstalledProjectRunExecution(db, q);
@@ -110,15 +119,26 @@ export function assertSqliteFoundationRunCommit(
     q.projectStageAdmission,
   );
   same(
-    loadSqliteFoundationRun(db, {
-      tenantId: q.actor.tenantId,
-      spaceId: q.actor.spaceId,
-      runId: q.run.runId,
-    }),
+    loadSqliteFoundationRun(
+      db,
+      {
+        tenantId: q.actor.tenantId,
+        spaceId: q.actor.spaceId,
+        runId: q.run.runId,
+      },
+      options,
+    ),
     q.foundationAdmission,
   );
-  const facts = captureSqliteFoundationRunFacts(db, q.projectStageAdmission);
+  const facts = captureSqliteFoundationRunFacts(
+    db,
+    q.projectStageAdmission,
+    false,
+    options,
+  );
   if (facts === null) fail();
+  if (options !== undefined)
+    assertSqlitePluginProjectWorkspaceBinding(db, facts.binding);
   if (mode === "fresh-proposal")
     assertProjectFoundationRunFoundation(
       q.foundationAdmission,
@@ -132,6 +152,7 @@ export async function assertPostgresFoundationRunCommit(
   schema: string,
   q: ProjectFoundationRunCommitTransactionAuthority | undefined,
   mode: "fresh-proposal" | "receipt-publication" = "fresh-proposal",
+  options?: Readonly<{ projectAccess: PostgresCreativeProjectLegacyAccess }>,
 ): Promise<void> {
   if (q === undefined) return;
   // Follow original Run/WorkItem/installation locks, then original project CAS namespace.
@@ -153,19 +174,28 @@ export async function assertPostgresFoundationRunCommit(
     q.projectStageAdmission,
   );
   same(
-    await loadPostgresFoundationRun(c, schema, {
-      tenantId: q.actor.tenantId,
-      spaceId: q.actor.spaceId,
-      runId: q.run.runId,
-    }),
+    await loadPostgresFoundationRun(
+      c,
+      schema,
+      {
+        tenantId: q.actor.tenantId,
+        spaceId: q.actor.spaceId,
+        runId: q.run.runId,
+      },
+      options,
+    ),
     q.foundationAdmission,
   );
   const facts = await capturePostgresFoundationRunFacts(
     c,
     schema,
     q.projectStageAdmission,
+    false,
+    options,
   );
   if (facts === null) fail();
+  if (options !== undefined)
+    await assertPostgresPluginProjectWorkspaceBinding(c, schema, facts.binding);
   if (mode === "fresh-proposal")
     assertProjectFoundationRunFoundation(
       q.foundationAdmission,

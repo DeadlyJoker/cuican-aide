@@ -7,6 +7,7 @@ import {
   captureProjectFoundationRunReadAuthority,
   type ProjectFoundationRunReadAuthority,
 } from "./project-foundation-run-commit-authority.ts";
+import type { ProjectFoundationRunCommitTransactionAuthority } from "./project-foundation-run-commit-authority.ts";
 import {
   PROJECT_WORKSPACE_TARGET_ACTION,
   parseProjectWorkspaceTargetRequest,
@@ -99,6 +100,7 @@ export function isPluginProjectMutationAction(action: string): boolean {
 type Qualified = Readonly<{
   runAuthority?: CreativeProjectRunReadAuthority;
   foundationRunAuthority?: ProjectFoundationRunReadAuthority;
+  foundationRunMutationAuthority?: ProjectFoundationRunCommitTransactionAuthority;
   purpose: "read" | "mutation";
   scope: PluginProjectWorkspaceOwnerScope;
   snapshot: Readonly<{
@@ -107,6 +109,10 @@ type Qualified = Readonly<{
     fingerprint: string;
   }>;
   request:
+    | Readonly<{
+        action: "crewon.project-foundation-run-mutation-read.v1";
+        input: Readonly<{ projectId: string }>;
+      }>
     | Readonly<{
         action:
           | "crewon.project-run-read.v1"
@@ -134,6 +140,14 @@ type Qualified = Readonly<{
   assertActive(): void;
 }>;
 const references = new WeakMap<object, Qualified>();
+/** Internal registry for deliberate Host issuers. Not exported from any package entrypoint. */
+export function registerTrustedRunProjectReadSource(source: Qualified): PluginProjectReadScope {
+  source.assertActive();
+  const ref: PluginProjectReadScope = Object.freeze({ version: "crewon.plugin-project-read-scope.v1" });
+  references.set(ref, Object.freeze(source));
+  return ref;
+}
+export type PluginProjectRunReadSource = Qualified;
 
 /** Separate original Foundation Tool evidence; never obtained from public scope hints. */
 export async function issuePluginProjectFoundationRunReadScope(

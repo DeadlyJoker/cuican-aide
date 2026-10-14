@@ -1,4 +1,5 @@
 import { captureSqliteFoundationOwnedAccess } from "./project-foundation-owned-sqlite.ts";
+import { captureSqliteFoundationRunOwnedAccess } from "./project-foundation-run-owned-access.ts";
 import {
   qualifyPluginProjectFoundationScope,
   type PluginProjectFoundationScope,
@@ -9,7 +10,6 @@ import {
 } from "./plugin-project-foundation-read-view.ts";
 import {
   assertSqliteSavedSourceUploadProjectAccess,
-  assertSqliteSavedSourceUploadLegacyAccess,
   foundationResultSavedSource,
 } from "./project-source-upload-legacy-access.ts";
 import { commitOriginalSqliteProjectMigration } from "./original-project-migration.ts";
@@ -449,6 +449,8 @@ export class SqliteProjectFoundationStore implements ProjectFoundationStore {
         assertSqliteFoundationRunCommit(
           this.#database,
           authority?.runTransaction,
+          "fresh-proposal",
+          { projectAccess: access },
         );
         const projectId = prepared.foundation.projectId;
         const project = this.#project(identity.owner, projectId, access);
@@ -732,7 +734,11 @@ export class SqliteProjectFoundationStore implements ProjectFoundationStore {
       foundationFailure("project_foundation_receipt_invalid");
     const savedSource = foundationResultSavedSource(result);
     if (savedSource !== null)
-      assertSqliteSavedSourceUploadLegacyAccess(this.#database, savedSource);
+      assertSqliteSavedSourceUploadProjectAccess(
+        this.#database,
+        savedSource,
+        access,
+      );
     return result;
   }
   #insertProject(project: CreativeProject) {
@@ -845,7 +851,12 @@ export class SqliteProjectFoundationStore implements ProjectFoundationStore {
               authority,
             );
       const access =
-        owned ?? captureSqliteCreativeProjectLegacyAccess(this.#database);
+        owned ??
+        captureSqliteFoundationRunOwnedAccess(
+          this.#database,
+          authority?.runTransaction,
+        ) ??
+        captureSqliteCreativeProjectLegacyAccess(this.#database);
       if (qualification !== undefined) {
         assertSqlitePluginInstallationPinSchema(this.#database);
         const installation = admitSqlitePluginInstallationPin(
@@ -860,6 +871,7 @@ export class SqliteProjectFoundationStore implements ProjectFoundationStore {
         this.#database,
         authority?.runTransaction,
         "receipt-publication",
+        { projectAccess: access },
       );
       const result = work(access);
       if (
@@ -875,17 +887,11 @@ export class SqliteProjectFoundationStore implements ProjectFoundationStore {
         );
         const savedSource = foundationResultSavedSource(result);
         if (savedSource !== null) {
-          if (owned === undefined)
-            assertSqliteSavedSourceUploadLegacyAccess(
-              this.#database,
-              savedSource,
-            );
-          else
-            assertSqliteSavedSourceUploadProjectAccess(
-              this.#database,
-              savedSource,
-              access,
-            );
+          assertSqliteSavedSourceUploadProjectAccess(
+            this.#database,
+            savedSource,
+            access,
+          );
         }
       }
       assertProjectFoundationCommitActive(authority);
@@ -893,6 +899,7 @@ export class SqliteProjectFoundationStore implements ProjectFoundationStore {
         this.#database,
         authority?.runTransaction,
         isFoundationReplay(result) ? "receipt-publication" : "fresh-proposal",
+        { projectAccess: access },
       );
       assertProjectFoundationCommitActive(authority);
       this.#assertOpen();

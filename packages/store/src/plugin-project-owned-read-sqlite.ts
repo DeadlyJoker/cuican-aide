@@ -1,4 +1,5 @@
 import { assertSqliteFoundationRunRead } from "./project-foundation-run-read.ts";
+import { assertSqliteFoundationRunCommit } from "./project-foundation-run-qualification.ts";
 import type { ProjectFoundationSourceReadMethod } from "./plugin-project-foundation-read-view.ts";
 import type { DatabaseSync } from "node:sqlite";
 import type { ProjectTextReadMethod } from "./plugin-project-text-read-view.ts";
@@ -121,6 +122,8 @@ export async function readSqliteOwnedCreativeProject<T>(
       assertSqliteFoundationRunRead(db, source.foundationRunAuthority, {
         projectAccess: access,
       });
+    if (source.foundationRunMutationAuthority !== undefined)
+      assertSqliteFoundationRunCommit(db, source.foundationRunMutationAuthority, "fresh-proposal", { projectAccess: access });
     source.assertActive();
     result = read(access);
     const items = Array.isArray(result)
@@ -152,6 +155,8 @@ export async function readSqliteOwnedCreativeProject<T>(
       assertSqliteFoundationRunRead(db, source.foundationRunAuthority, {
         projectAccess: access,
       });
+    if (source.foundationRunMutationAuthority !== undefined)
+      assertSqliteFoundationRunCommit(db, source.foundationRunMutationAuthority, "fresh-proposal", { projectAccess: access });
     db.exec("COMMIT");
   } catch (error) {
     try {

@@ -3,6 +3,7 @@ import {
   assertPostgresProjectRunLease,
 } from "./creative-project-run-commit-postgres.ts";
 import { assertPostgresFoundationRunRead } from "./project-foundation-run-read.ts";
+import { assertPostgresFoundationRunCommit } from "./project-foundation-run-qualification.ts";
 import type { Pool } from "pg";
 import {
   qualifyPluginProjectReadScope,
@@ -120,6 +121,10 @@ export async function readPostgresOwnedCreativeProject<T>(
         source.foundationRunAuthority,
       );
     }
+    if (source.foundationRunMutationAuthority !== undefined) {
+      await assertPostgresInstalledProjectRunExecution(c, input.schema, source.foundationRunMutationAuthority);
+      await assertPostgresProjectRunLease(c, input.schema, source.foundationRunMutationAuthority);
+    }
     const access = await capturePostgresOwnedProjectAccess(
       c,
       input.schema,
@@ -137,6 +142,8 @@ export async function readPostgresOwnedCreativeProject<T>(
         source.foundationRunAuthority,
         { projectAccess: access },
       );
+    if (source.foundationRunMutationAuthority !== undefined)
+      await assertPostgresFoundationRunCommit(c, input.schema, source.foundationRunMutationAuthority, "fresh-proposal", { projectAccess: access });
     result = await read(c, access);
     const items =
       result && typeof result === "object" && "projects" in result
@@ -171,6 +178,8 @@ export async function readPostgresOwnedCreativeProject<T>(
         source.foundationRunAuthority,
         { projectAccess: access },
       );
+    if (source.foundationRunMutationAuthority !== undefined)
+      await assertPostgresFoundationRunCommit(c, input.schema, source.foundationRunMutationAuthority, "fresh-proposal", { projectAccess: access });
     await c.query("COMMIT");
   } catch (error) {
     await rollbackPostgres(c);

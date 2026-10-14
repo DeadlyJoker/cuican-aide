@@ -6,6 +6,7 @@ export {
 
 export { issuePluginProjectConversationStageReadScope } from "./plugin-project-read-scope.ts";
 export { issuePluginProjectConversationContextReadScope } from "./plugin-project-read-scope.ts";
+export { issuePluginProjectFoundationRunMutationReadScope } from "./project-foundation-run-mutation-read-scope.ts";
 export { issuePluginProjectRunReadScope } from "./plugin-project-read-scope.ts";
 export {
   captureCreativeProjectRunReadAuthority,

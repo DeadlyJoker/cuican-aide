@@ -1,4 +1,5 @@
 import type { PluginProjectReadStoreBinding } from "./creative-project-store-port.ts";
+import { qualifyPluginProjectReadScope } from "./plugin-project-read-scope.ts";
 import { bindFoundationPluginStores } from "./project-foundation-plugin-store-view.ts";
 import {
   qualifyPluginProjectFoundationScope,
@@ -137,6 +138,43 @@ export class ProjectFoundationApplicationService {
     return new ProjectFoundationApplicationService({
       ...this.#dependencies,
       ...bindFoundationPluginStores(this.#dependencies, scope),
+    });
+  }
+  /** Original Run mutation dependency view; original Store writers and their independent lease fences are retained. */
+  bindRunMutationReads(
+    scope: import("./plugin-project-read-scope.ts").PluginProjectReadScope,
+  ) {
+    const source = qualifyPluginProjectReadScope(scope);
+    if (
+      source.foundationRunMutationAuthority === undefined ||
+      source.purpose !== "read" ||
+      this.#dependencies.projects.bindProjectReads === undefined ||
+      this.#dependencies.store.bindProjectReads === undefined
+    )
+      throw new ApplicationError(
+        "authorization",
+        "plugin_project_foundation_run_read_binding_unavailable",
+      );
+    const denied = async (): Promise<never> => {
+      throw new ApplicationError(
+        "authorization",
+        "plugin_project_foundation_run_method_mismatch",
+      );
+    };
+    return new ProjectFoundationApplicationService({
+      ...this.#dependencies,
+      projects: this.#dependencies.projects.bindProjectReads(scope),
+      store: {
+        ...this.#dependencies.store.bindProjectReads(scope),
+        loadMutationReceipt: this.#dependencies.store.loadMutationReceipt.bind(
+          this.#dependencies.store,
+        ),
+        commitProposal: this.#dependencies.store.commitProposal.bind(
+          this.#dependencies.store,
+        ),
+        commitCreation: denied,
+        commitFoundationChange: denied,
+      },
     });
   }
   createProject(
