@@ -1,5 +1,6 @@
 import { ProjectTextDocument } from "./ProjectTextDocument";
 import { useEffect, useState, useSyncExternalStore } from "react";
+import { Clapperboard } from "lucide-react";
 import type { ProjectDetails } from "./creative-project-controller";
 import { ProjectTextController } from "./ProjectTextController";
 import type { TextSnapshot } from "./ProjectTextController";
@@ -486,6 +487,7 @@ export function StoryScriptWorkbench({
         snapshot.target.kind !== "script" &&
         snapshot.phase === "ready" && (
           <div className="empty-state">
+            <Clapperboard size={18} aria-hidden="true" />
             <h2>选择分集剧本</h2>
             <p>
               {episodes.size

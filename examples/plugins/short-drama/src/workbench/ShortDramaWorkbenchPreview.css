@@ -256,6 +256,9 @@
   transform: translateY(-1px);
 }
 .drama-workbench .button.primary:disabled {
+  /* The host's .screen-shell .button.primary accent border wins on
+     specificity, so the disabled pill must re-declare a transparent border. */
+  border-color: transparent;
   background: var(--control-surface);
   color: var(--text-faint);
 }
@@ -277,8 +280,8 @@
   align-items: center;
   gap: var(--space-1);
   border: 0;
-  border-radius: var(--radius-sm);
-  padding: var(--space-1);
+  border-radius: var(--radius-md);
+  padding: var(--space-1) var(--space-2);
   background: transparent;
   color: var(--text-muted);
   transition:
@@ -542,6 +545,21 @@
 .drama-workbench .empty-state h2 {
   color: var(--text);
   font-size: 1.15em;
+}
+/* Asset pages render their empty state as a bare note (snapshot-frozen JSX);
+   give it the same quiet panel treatment as .empty-state. */
+.drama-workbench
+  .text-editor[aria-label="共享资产"]
+  > .detail-actions[aria-label="资产列表"]
+  + .detail-note {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  min-height: 140px;
+  padding: var(--space-5);
+  border-radius: var(--drama-radius-card);
+  background: var(--panel-subtle);
+  text-align: center;
 }
 .drama-workbench .revision-list {
   display: grid;
@@ -1202,6 +1220,13 @@
   border-radius: var(--radius-sm);
 }
 
+/* 生成画面卡片：主说明用正文色，后续提示保持 detail-note 的弱层级。 */
+.drama-workbench
+  .detail-panel[aria-label="生成参考画面"]
+  > p.detail-note:first-of-type {
+  color: var(--text);
+}
+
 /* Compact project tools keep the saved creative work in the first screen. */
 .drama-workbench .drama-navigation-label small {
   display: block;
@@ -1276,6 +1301,7 @@
 
 /* The current creative output is primary; shared Agent chat is a toolbar action. */
 .drama-workbench .drama-project-focus {
+  width: 100%;
   max-width: 1180px;
   margin: 0 auto;
   display: grid;
@@ -1413,6 +1439,48 @@
 .drama-workbench .drama-foundation-workbench {
   display: grid;
   gap: var(--space-4);
+}
+/* Proposal status reads as a status system: amber dot + muted text. */
+.drama-workbench .drama-foundation-workbench .preview-tag::before {
+  content: "";
+  width: 7px;
+  height: 7px;
+  flex-shrink: 0;
+  border-radius: 50%;
+  background: var(--drama-warn);
+}
+/* Wide canvas: the proposal is the working surface on the left; the creative
+   brief becomes a quieter context rail on the right. DOM order stays
+   brief-first so narrow containers fall back to brief → proposal. */
+@container drama-workbench (min-width: 1100px) {
+  .drama-workbench .drama-foundation-workbench {
+    grid-template-columns: minmax(0, 1fr) minmax(280px, 340px);
+    align-items: start;
+  }
+  .drama-workbench .drama-foundation-workbench > :not(.brief-panel) {
+    grid-column: 1 / -1;
+  }
+  .drama-workbench
+    .drama-foundation-workbench
+    > .brief-panel[aria-label="创作方案"],
+  .drama-workbench
+    .drama-foundation-workbench
+    > .brief-panel[aria-label="改编方案"] {
+    order: 1;
+  }
+  .drama-workbench
+    .drama-foundation-workbench
+    > .brief-panel[aria-label="项目创作条件"],
+  .drama-workbench
+    .drama-foundation-workbench
+    > .brief-panel[aria-label="改编目标"] {
+    order: 2;
+    border-color: transparent;
+    background: var(--panel-subtle);
+  }
+  .drama-workbench .drama-foundation-workbench .drama-form-columns {
+    grid-template-columns: minmax(0, 1fr);
+  }
 }
 .drama-workbench .drama-foundation-workbench .brief-tags {
   margin-block: var(--space-3);
@@ -1637,13 +1705,17 @@
 .drama-workbench[data-host-layout="integrated"]
   .drama-project-editor
   > .panel-heading {
+  margin-top: var(--space-1);
   margin-bottom: 12px;
 }
 .drama-workbench[data-host-layout="integrated"]
   .drama-project-editor
   > .panel-heading
   h2 {
-  font-size: 18px;
+  color: var(--text);
+  font-size: 1.35em;
+  font-weight: 650;
+  letter-spacing: -0.01em;
 }
 
 /* Home settings disclosure inherits the host's muted text tone. */
