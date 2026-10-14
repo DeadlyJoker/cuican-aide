@@ -84,37 +84,24 @@ async function mount(s, currentThread = "original-thread") {
   await settle();
   return f;
 }
-test("actual portable UI explicitly associates the current chat using its original directory and exposes it for plan selection without execution", async () => {
+test("project entry has no global chat association entry or background inspection", async () => {
   const s = service(),
     f = await mount(s);
   try {
     assert.equal(s.bindings.size, 0);
-    assert.equal(f.button("关联当前会话").disabled, false);
+    assert.doesNotMatch(
+      f.container.textContent,
+      /关联已有对话|关联当前会话|继续当前对话/u,
+    );
     assert.equal(
-      s.calls.some((c) => c.action.endsWith(".attach")),
+      s.calls.some((c) =>
+        c.action.startsWith("crewon.project-conversation-association."),
+      ),
       false,
-    );
-    await f.click(f.button("关联当前会话"));
-    const writes = s.calls.filter((c) => c.action.endsWith(".attach"));
-    assert.equal(writes.length, 1);
-    assert.equal(writes[0].input.threadId, "original-thread");
-    assert.equal(writes[0].input.workspaceId, "original-directory");
-    assert.match(f.container.textContent, /当前会话已关联此项目/u);
-    const selector = f.container.querySelector(
-      '[aria-label="计划使用的项目对话"]',
-    );
-    assert.ok([...selector.options].some((o) => o.value === "original-thread"));
-    assert.equal(
-      selector.value,
-      "",
-      "execution still requires explicit scope selection",
     );
     assert.equal(
       s.calls.some(
-        (c) =>
-          c.action.endsWith(".start") ||
-          c.action.endsWith(".createConversation") ||
-          c.action.endsWith(".startStage"),
+        (c) => c.action.endsWith(".start") || c.action.endsWith(".startStage"),
       ),
       false,
     );
@@ -122,24 +109,50 @@ test("actual portable UI explicitly associates the current chat using its origin
     await f.dispose();
   }
 });
-test("lost UI acknowledgement recovers by reading the existing relationship; reopening never resubmits or changes the original chat", async () => {
+test("removing association UI preserves existing project conversations across reopening without reattachment", async () => {
   const s = service();
-  s.lose();
-  const f = await mount(s);
-  try {
-    await f.click(f.button("关联当前会话"));
-    assert.ok(f.button("重试原关联请求"));
-    await f.click(f.button("重新读取关联"));
-    assert.match(f.container.textContent, /当前会话已关联此项目/u);
-    assert.equal(s.calls.filter((c) => c.action.endsWith(".attach")).length, 1);
-  } finally {
-    await f.dispose();
-  }
-  const cold = await mount(s);
-  try {
-    assert.match(cold.container.textContent, /当前会话已关联此项目/u);
-    assert.equal(s.calls.filter((c) => c.action.endsWith(".attach")).length, 1);
-  } finally {
-    await cold.dispose();
+  const at = "2026-10-06T00:00:00.000Z";
+  const binding = {
+    bindingId: "original-binding",
+    projectId: s.projectId,
+    threadId: "original-thread",
+    workspaceId: "original-directory",
+    revision: 1,
+    state: "active",
+    source: {
+      pluginId: "crewon.short-drama",
+      publisherId: "example.publisher",
+      version,
+      packageDigest: "sha256:" + "a".repeat(64),
+      selectionRevision: 1,
+    },
+    createdAt: at,
+    updatedAt: at,
+  };
+  s.bindings.set(binding.threadId, binding);
+  for (let attempt = 0; attempt < 2; attempt++) {
+    const f = await mount(s);
+    try {
+      const selector = f.container.querySelector(
+        '[aria-label="计划使用的项目对话"]',
+      );
+      assert.ok(
+        [...selector.options].some((o) => o.value === binding.threadId),
+      );
+      assert.equal(selector.value, "", "plan execution remains explicit");
+      assert.deepEqual(s.bindings.get(binding.threadId), binding);
+      assert.equal(
+        s.calls.some((c) =>
+          c.action.startsWith("crewon.project-conversation-association."),
+        ),
+        false,
+      );
+      assert.doesNotMatch(
+        f.container.textContent,
+        /关联已有对话|关联当前会话/u,
+      );
+    } finally {
+      await f.dispose();
+    }
   }
 });

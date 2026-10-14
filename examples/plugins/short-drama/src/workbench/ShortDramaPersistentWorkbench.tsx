@@ -42,7 +42,6 @@ import type { ProjectOutlineController } from "./ProjectOutlineController";
 import type { ProjectOutlineEditController } from "./ProjectOutlineEditController";
 import { ProjectConversationController } from "./ProjectConversationController";
 import { ProjectConversationActions } from "./ProjectConversationActions";
-import { ProjectConversationAssociationActions } from "./ProjectConversationAssociationActions";
 import type { ProjectConversationAssociationController } from "./ProjectConversationAssociationController";
 import { ProjectTextPlanController } from "./ProjectTextPlanController";
 import { ProjectPlanDisclosure } from "./ProjectPlanDisclosure";
@@ -129,7 +128,6 @@ export function ShortDramaPersistentWorkbench({
   planningDraft = null,
   association,
   associationReady = false,
-  associationThreadId = null,
   hostSurface = "workbench",
   hostPageContext = null,
   onOpenHostPage,
@@ -340,10 +338,12 @@ export function ShortDramaPersistentWorkbench({
   useEffect(() => {
     association?.setContext({
       ready: associationReady,
-      threadId: associationThreadId,
+      // Project chat is owned by the project. Do not inspect a global chat on
+      // entry; retain only recovery of a previously unconfirmed association.
+      threadId: null,
       details,
     });
-  }, [association, associationReady, associationThreadId, details]);
+  }, [association, associationReady, details]);
   useEffect(() => {
     conversations.setAutomaticOpen(ownsCentralChat);
     return () => conversations.setAutomaticOpen(false);
@@ -936,20 +936,6 @@ export function ShortDramaPersistentWorkbench({
                         blocked={projectLocked || snapshot.opening}
                       />
                     </div>
-                  )}
-                  {page === "overview" && (
-                    <details className="drama-secondary-disclosure">
-                      <summary>关联已有对话</summary>
-                      {association && (
-                        <ProjectConversationAssociationActions
-                          controller={association}
-                          blocked={otherLocked}
-                          onAttached={() => {
-                            void conversations.refresh();
-                          }}
-                        />
-                      )}
-                    </details>
                   )}
                   {page === "overview" && origin === null && (
                     <ProjectPlanDisclosure
