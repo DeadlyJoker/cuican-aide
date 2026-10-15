@@ -115,6 +115,7 @@ function fixture() {
     assertCurrent: vi.fn(),
     acquire: vi.fn(async () => lease),
     release: vi.fn(async () => {}),
+    adopt: vi.fn(async () => {}),
     opened: vi.fn(),
     diagnostic: vi.fn(),
   };
@@ -163,6 +164,10 @@ describe("shared Send creates an isolated project through the original services"
       expect.anything(),
     );
     expect(f.ports.opened).toHaveBeenCalledWith(f.module, f.binding);
+    expect(f.ports.adopt).toHaveBeenCalledWith(
+      { threadId: "thread", runId: "run" },
+      expect.any(AbortSignal),
+    );
     expect(f.raw.size).toBe(0);
     expect(f.ports.release).toHaveBeenCalledOnce();
   });
@@ -266,4 +271,23 @@ describe("shared Send creates an isolated project through the original services"
     expect(f.ports.diagnostic).toHaveBeenCalledOnce();
     expect(f.startStage.mock.calls[0][1]).not.toHaveProperty("modelId");
   });
+});
+
+it("a committed first Run survives a failed shared-runtime adoption and reconnects without another model admission", async () => {
+  const f = fixture();
+  vi.mocked(f.ports.adopt)
+    .mockRejectedValueOnce(new Error("temporary_stream_disconnect"))
+    .mockResolvedValue(undefined);
+  await expect(f.create(f.module, idea)).rejects.toThrow(
+    "temporary_stream_disconnect",
+  );
+  expect(f.startStage).toHaveBeenCalledOnce();
+  expect(f.ports.opened).not.toHaveBeenCalled();
+  const restored = createProjectChatCreation(f.ports);
+  expect(restored.pending(f.module)).toEqual(idea);
+  await restored(f.module, idea);
+  expect(f.startStage).toHaveBeenCalledOnce();
+  expect(f.ports.adopt).toHaveBeenCalledTimes(2);
+  expect(f.ports.opened).toHaveBeenCalledOnce();
+  expect(f.raw.size).toBe(0);
 });

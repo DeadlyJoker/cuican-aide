@@ -45,6 +45,10 @@ export type ProjectChatCreationPorts = Readonly<{
     signal: AbortSignal,
   ): Promise<PluginUiLease>;
   release(lease: PluginUiLease): Promise<void>;
+  adopt(
+    receipt: Readonly<{ threadId: string; runId: string }>,
+    signal: AbortSignal,
+  ): Promise<void>;
   opened(
     module: ControlPluginUiModule,
     binding: PublicProjectConversationBinding,
@@ -219,6 +223,15 @@ export function createProjectChatCreation(ports: ProjectChatCreationPorts) {
           intent.runId = result.runId;
           save();
         }
+        ports.assertCurrent();
+        await pluginUiControlRequest(
+          (signal) =>
+            ports.adopt(
+              { threadId: intent.threadId!, runId: intent.runId! },
+              signal,
+            ),
+          signal,
+        );
         ports.assertCurrent();
         ports.opened(module, intent.binding);
         ports.storage.removeItem(storageKey);

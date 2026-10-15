@@ -4,6 +4,7 @@ import type { ControlPluginUiHost } from "../plugins/controlPluginUiHost";
 import type { PluginUiPageNavigation } from "../plugins/pluginUiPageNavigation";
 import { createProjectChatCreation } from "../plugins/projectChatCreation";
 import { PluginUiLoaderError } from "../plugins/pluginUiValidation";
+import type { ControlThreadRuntime } from "../control-runtime/controlThreadRuntime";
 
 /** Borrows the existing account, mounted host and task navigation; no second chat runtime. */
 export function useInstalledPluginProjectChatCreation<
@@ -31,7 +32,13 @@ export function useInstalledPluginProjectChatCreation<
   mountedScope: RefObject<Scope | null>;
   onDiagnostic(error: unknown): void;
   rememberConversation(pluginId: string, threadId: string): void;
-  taskContextRef: RefObject<{ onOpenTask(threadId: string): void } | undefined>;
+  taskContextRef: RefObject<
+    | {
+        runtime: Pick<ControlThreadRuntime, "adoptExtensionTask"> | null;
+        onOpenTask(threadId: string): void;
+      }
+    | undefined
+  >;
 }>) {
   return useMemo(() => {
     if (
@@ -55,6 +62,14 @@ export function useInstalledPluginProjectChatCreation<
       acquire: (module, signal) =>
         host.acquireMount(module.plugin, module.contributionId, signal),
       release: (lease) => host.loader.closeUnusedMount(lease),
+      adopt: async (receipt, signal) => {
+        assertCurrent();
+        const runtime = taskContextRef.current?.runtime;
+        if (!runtime)
+          throw new PluginUiLoaderError("plugin_ui_task_runtime_unavailable");
+        await runtime.adoptExtensionTask(receipt, { signal });
+        assertCurrent();
+      },
       diagnostic: onDiagnostic,
       opened: (module, binding) => {
         assertCurrent();
