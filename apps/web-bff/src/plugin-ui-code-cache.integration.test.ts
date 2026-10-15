@@ -112,12 +112,12 @@ test("entry bytes revalidate each real mount across refresh without accepting re
   const pathFor = (mountRef: string) =>
     `/api/v1/plugins/ui/mounts/${mountRef}/assets/ui/entry.mjs`;
   let currentRef = first.mountRef;
-  const read = (tag?: string, owner = "owner") =>
+  const read = (tag?: string, owner = "owner", mode = "entry-bytes.v1") =>
     bff.handle(
       new Request(origin + pathFor(currentRef), {
         headers: {
           "cookie": `account=${owner}`,
-          "x-crewon-plugin-ui-code-cache": "entry-bytes.v1",
+          "x-crewon-plugin-ui-code-cache": mode,
           ...(tag ? { "if-none-match": tag } : {}),
         },
       }),
@@ -142,6 +142,15 @@ test("entry bytes revalidate each real mount across refresh without accepting re
     `/api/v1/plugins/ui/mounts/${second.mountRef}/assets/ui/entry.mjs`,
   );
   assert.equal((await read("W/" + etag)).status, 304);
+  const applicationCached = await read(etag, "owner", "entry-bytes.v2");
+  assert.equal(applicationCached.status, 200);
+  assert.equal(
+    applicationCached.headers.get("x-crewon-plugin-ui-entry"),
+    "unchanged.v2",
+  );
+  assert.equal(applicationCached.headers.get("etag"), etag);
+  assert.equal(applicationCached.headers.get("content-length"), "0");
+  assert.equal(await applicationCached.text(), "");
   const legacy = await browserFetch(
     origin + `/api/v1/plugins/ui/mounts/${first.mountRef}/assets/ui/entry.mjs`,
   );
@@ -150,10 +159,12 @@ test("entry bytes revalidate each real mount across refresh without accepting re
   assert.equal(await legacy.text(), code);
   const dispatched = proxied.length;
   assert.equal((await read(etag, "other")).status, 401);
-  assert.equal(proxied.length, dispatched + 1);
+  assert.equal((await read(etag, "other", "entry-bytes.v2")).status, 401);
+  assert.equal(proxied.length, dispatched + 2);
   f.policy.denyUi = true;
   const denied = await read(etag);
   assert.equal(denied.status, 403);
+  assert.equal((await read(etag, "owner", "entry-bytes.v2")).status, 403);
   assert.equal(denied.headers.get("cache-control"), "no-store");
   f.policy.denyUi = false;
   await client.plugins.closeMount(second.mountRef);

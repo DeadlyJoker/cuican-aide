@@ -13,6 +13,7 @@ import {
   pluginUiCodeResponse,
   PLUGIN_UI_CODE_CACHE_HEADER,
   PLUGIN_UI_CODE_CACHE_MODE,
+  PLUGIN_UI_CODE_CACHE_REVALIDATION_MODE,
 } from "./plugin-ui-code-cache.ts";
 
 import type {
@@ -170,6 +171,7 @@ export function createWebBff(config: {
             response.headers.set(
               PLUGIN_UI_CODE_CACHE_HEADER,
               PLUGIN_UI_CODE_CACHE_MODE,
+              PLUGIN_UI_CODE_CACHE_REVALIDATION_MODE,
             );
             return response;
           } catch (error) {
@@ -204,6 +206,7 @@ export function createWebBff(config: {
         response.headers.set(
           PLUGIN_UI_CODE_CACHE_HEADER,
           PLUGIN_UI_CODE_CACHE_MODE,
+          PLUGIN_UI_CODE_CACHE_REVALIDATION_MODE,
         );
         return response;
       }
@@ -328,11 +331,14 @@ export function createWebBff(config: {
         headers.set("x-csrf-token", controlCsrfToken);
       }
 
+      const codeCacheMode = request.headers.get(
+        "x-crewon-plugin-ui-code-cache",
+      );
       const cacheEntry =
         pluginPolicy?.outcome === "allow" &&
         pluginPolicy.responseKind === "asset" &&
-        request.headers.get("x-crewon-plugin-ui-code-cache") ===
-          PLUGIN_UI_CODE_CACHE_MODE;
+        (codeCacheMode === PLUGIN_UI_CODE_CACHE_MODE ||
+          codeCacheMode === PLUGIN_UI_CODE_CACHE_REVALIDATION_MODE);
       if (cacheEntry) headers.delete("if-none-match");
       const upstreamUrl = new URL(
         `${requestUrl.pathname}${requestUrl.search}`,
@@ -403,7 +409,13 @@ export function createWebBff(config: {
       }
       const response = proxyResponse(upstream);
       return cacheEntry
-        ? pluginUiCodeResponse(response, request.headers.get("if-none-match"))
+        ? pluginUiCodeResponse(
+            response,
+            request.headers.get("if-none-match"),
+            codeCacheMode === PLUGIN_UI_CODE_CACHE_REVALIDATION_MODE
+              ? "entry-bytes.v2"
+              : "entry-bytes.v1",
+          )
         : response;
     },
   };

@@ -113,4 +113,18 @@ describe("Web response account lifetime", () => {
     storeAgentPlatformSession("account-b");
     expect(() => scoped.clone()).toThrow("agent_platform_session_changed");
   });
+
+  it.each([204, 205, 304])(
+    "preserves the null body of HTTP %s responses",
+    (status) => {
+      const original = new Response(null, { status });
+      const scoped = new AgentPlatformSessionResponse({
+        response: original,
+        session: captureAgentPlatformSession(),
+      });
+      expect(scoped.status).toBe(status);
+      expect(scoped.body).toBeNull();
+      expect(scoped.clone().body).toBeNull();
+    },
+  );
 });

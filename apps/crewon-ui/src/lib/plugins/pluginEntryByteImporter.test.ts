@@ -76,7 +76,7 @@ describe("immutable entry bytes across page reload", () => {
       request(2).url,
       expect.objectContaining({
         headers: {
-          "x-crewon-plugin-ui-code-cache": "entry-bytes.v1",
+          "x-crewon-plugin-ui-code-cache": "entry-bytes.v2",
           "if-none-match": '"sha256:' + sha + '"',
         },
       }),
@@ -85,6 +85,34 @@ describe("immutable entry bytes across page reload", () => {
     expect(f.revokeUrl).toHaveBeenCalledTimes(2);
     expect(f.importer).toHaveBeenCalledTimes(2);
     vi.unstubAllGlobals();
+  });
+  it("revalidates application-owned cached bytes with an authenticated empty 200 and exact digest", async () => {
+    const f = fixture();
+    f.fetch.mockResolvedValueOnce(
+      new Response(bytes, { headers: { "content-type": "text/javascript" } }),
+    );
+    await f.make()(request());
+    const response = (tag = '"sha256:' + sha + '"') =>
+      new Response(null, {
+        headers: {
+          "x-crewon-plugin-ui-entry": "unchanged.v2",
+          "etag": tag,
+          "content-length": "0",
+        },
+      });
+    f.fetch.mockResolvedValueOnce(response());
+    const progress = vi.fn();
+    await f.make()({ ...request(2), onEntryRead: progress });
+    expect(progress).toHaveBeenCalledWith("entry-revalidated");
+    expect(f.store.put).toHaveBeenCalledOnce();
+    expect(f.importer).toHaveBeenCalledTimes(2);
+    f.fetch.mockResolvedValueOnce(response('"sha256:' + "0".repeat(64) + '"'));
+    await expect(f.make()(request(3))).rejects.toThrow("integrity_failed");
+    f.fetch.mockResolvedValueOnce(response());
+    await expect(f.make("other-account")(request(4))).rejects.toThrow(
+      "integrity_failed",
+    );
+    expect(f.importer).toHaveBeenCalledTimes(2);
   });
   it("does not use another account's cached bytes or turn authorization/transport errors into offline success", async () => {
     const f = fixture();

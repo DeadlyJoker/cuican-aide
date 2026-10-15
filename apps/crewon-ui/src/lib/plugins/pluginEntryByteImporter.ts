@@ -8,6 +8,7 @@ import {
   importTrustedPluginUiModule,
   type PluginUiModuleImporter,
 } from "./trustedPluginUiLoader";
+import { PluginUiLoaderError } from "./pluginUiValidation";
 
 export type PluginUiEntryImport = Readonly<{
   url: string;
@@ -84,12 +85,24 @@ export function createPluginEntryByteImporter(input: {
       credentials: "same-origin",
       signal,
       headers: {
-        "x-crewon-plugin-ui-code-cache": "entry-bytes.v1",
+        "x-crewon-plugin-ui-code-cache": "entry-bytes.v2",
         ...(cached ? { "if-none-match": tag } : {}),
       },
     });
     let bytes: ArrayBuffer;
-    if (response.status === 304 && cached) {
+    const unchanged =
+      response.headers.get("x-crewon-plugin-ui-entry") === "unchanged.v2";
+    if (
+      unchanged &&
+      (response.status !== 200 ||
+        !cached ||
+        response.headers.get("etag") !== tag ||
+        response.headers.get("content-length") !== "0")
+    )
+      throw new PluginUiLoaderError("plugin_ui_asset_integrity_failed");
+    if ((response.status === 304 && cached) || unchanged) {
+      if (!cached)
+        throw new PluginUiLoaderError("plugin_ui_asset_integrity_failed");
       bytes = cached;
       onEntryRead?.("entry-revalidated");
     } else {
@@ -99,9 +112,10 @@ export function createPluginEntryByteImporter(input: {
           response.headers.get("content-type") ?? "",
         )
       )
-        throw new Error("plugin_ui_entry_read_unavailable");
+        throw new PluginUiLoaderError("plugin_ui_entry_read_unavailable");
       const reader = response.body?.getReader();
-      if (!reader) throw new Error("plugin_ui_asset_integrity_failed");
+      if (!reader)
+        throw new PluginUiLoaderError("plugin_ui_asset_integrity_failed");
       const parts: Uint8Array[] = [];
       let length = 0;
       try {
@@ -111,7 +125,7 @@ export function createPluginEntryByteImporter(input: {
           length += part.value.byteLength;
           if (length > file.byteLength) {
             await reader.cancel();
-            throw new Error("plugin_ui_asset_integrity_failed");
+            throw new PluginUiLoaderError("plugin_ui_asset_integrity_failed");
           }
           parts.push(part.value);
         }
@@ -126,7 +140,7 @@ export function createPluginEntryByteImporter(input: {
       }
       bytes = value.buffer;
       if (length !== file.byteLength || (await hash(bytes)) !== file.sha256)
-        throw new Error("plugin_ui_asset_integrity_failed");
+        throw new PluginUiLoaderError("plugin_ui_asset_integrity_failed");
       onEntryRead?.("entry-downloaded");
       // Persist immutable bytes in the background; quota or storage contention
       // must not hold an already verified online module on the loading screen.
