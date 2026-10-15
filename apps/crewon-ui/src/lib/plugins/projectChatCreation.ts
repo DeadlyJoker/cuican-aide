@@ -125,7 +125,7 @@ export function createProjectChatCreation(ports: ProjectChatCreationPorts) {
           const request = parseProjectFoundationUiRequest({
             action: "crewon.project-foundation.v1.createProject",
             input: {
-              title: [...content.split(/\r?\n/u)[0]!].slice(0, 32).join(""),
+              title: projectChatTitle(content),
               briefText: content,
               origin: "creative",
               creativeStartMode: "confirm-plan",
@@ -319,4 +319,10 @@ function readIntent(raw: string): Intent {
     v.binding = result.binding;
   }
   return v;
+}
+
+/** Honor an explicitly named title while keeping the entire idea in the brief. */
+function projectChatTitle(content: string): string {
+  const named = /《([^《》\r\n]{1,128})》/u.exec(content)?.[1]?.trim();
+  return [...(named || content.split(/\r?\n/u)[0]!)].slice(0, 32).join("");
 }

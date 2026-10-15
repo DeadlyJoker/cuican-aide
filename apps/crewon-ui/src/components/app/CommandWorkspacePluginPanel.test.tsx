@@ -189,6 +189,43 @@ describe("plugin panels in the formal Agent shell", () => {
       container.querySelector('[data-od-id="thread-scene-tabs"]'),
     ).toBeNull();
   });
+  it("fences an owned project thread even after its plugin catalog has been withdrawn", async () => {
+    await render({
+      hostModules: [],
+      projectConversationProjectId: "project-1",
+      projectConversationComposer: <button data-project-stage>项目阶段</button>,
+    });
+    expect(container.querySelector(".command-thread-room")).toBeNull();
+    expect(container.querySelector("[data-project-stage]")).toBeNull();
+  });
+  it("withdraws plugin history and stage controls when returning to Work, even while the parent retains the thread", async () => {
+    const module = {
+      ...contribution("scoped", "短剧"),
+      pluginId: "example.drama",
+      conversationThreadIds: [thread.id],
+      conversationProjectId: "project-1",
+    };
+    const select = vi.fn();
+    const props = {
+      hostModules: [module],
+      projectConversationProjectId: "project-1",
+      projectConversationComposer: <button data-project-stage>项目阶段</button>,
+      onSelectLinkedThread: select,
+    };
+    await render(props);
+    expect(container.querySelector(".command-thread-room")).toBeNull();
+    await openPlugin(module.id);
+    expect(container.querySelector(".command-thread-room")).not.toBeNull();
+    await click('[data-nav-key="command"]');
+    expect(select).toHaveBeenLastCalledWith(null);
+    expect(container.querySelector(".command-thread-room")).toBeNull();
+    expect(container.querySelector("[data-project-stage]")).toBeNull();
+    await render(props);
+    expect(container.querySelector(".command-thread-room")).toBeNull();
+    await openPlugin(module.id);
+    expect(container.querySelector(".command-thread-room")).not.toBeNull();
+    expect(container.querySelector("[data-project-stage]")).not.toBeNull();
+  });
   it("contains original absolute shell views inside the plugin content row instead of covering the host header", async () => {
     const style = document.createElement("style");
     style.textContent =

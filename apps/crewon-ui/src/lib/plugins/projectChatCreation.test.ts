@@ -55,7 +55,7 @@ function fixture() {
           output: {
             kind: "create-project",
             disposition: "committed",
-            project,
+            project: { ...project, title: request.input.title },
             brief: {
               projectId: "project",
               briefRevision: 1,
@@ -290,4 +290,15 @@ it("a committed first Run survives a failed shared-runtime adoption and reconnec
   expect(f.ports.adopt).toHaveBeenCalledTimes(2);
   expect(f.ports.opened).toHaveBeenCalledOnce();
   expect(f.raw.size).toBe(0);
+});
+
+it("uses an explicit quoted project name without truncating the creative idea", async () => {
+  const f = fixture();
+  const content = "创建创意短剧《回声来信》：修复师收到十年后的来信。";
+  await f.create(f.module, { content });
+  const request = f.invoke.mock.calls.find(([, request]) =>
+    request.action.endsWith("createProject"),
+  )?.[1];
+  expect(request?.input.title).toBe("回声来信");
+  expect(request?.input.briefText).toBe(content);
 });

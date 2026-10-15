@@ -1,3 +1,4 @@
+import { commandPluginConversationScope } from "./commandPluginConversationScope";
 import { usePluginProjectCreationComposer } from "./usePluginProjectCreationComposer";
 import { CommandTeamSidebar } from "./CommandTeamSidebar";
 import type { ThreadCatalogNavigation } from "../../lib/thread/threadCatalogNavigation";
@@ -1045,16 +1046,14 @@ export function CommandWorkspace({
     activePluginModule?.pluginId,
     activePluginModule?.pageContext,
   ]);
-  const pluginConversationMissing = Boolean(
-    pluginSceneActive &&
-      (projectCreationComposer.eligible ||
-        !activePluginModule?.conversationThreadIds?.includes(
-          selectedThreadId ?? selectedThread?.id ?? "",
-        ) ||
-        (activePluginModule?.conversationProjectId !== undefined &&
-          activePluginModule.conversationProjectId !==
-            projectConversationProjectId)),
-  );
+  const pluginConversationScope = commandPluginConversationScope({
+    modules,
+    activePlugin: activePluginModule,
+    selectedThreadId: selectedThreadId ?? selectedThread?.id ?? null,
+    projectId: projectConversationProjectId,
+    creatingProject: projectCreationComposer.eligible,
+  });
+  const pluginConversationMissing = pluginConversationScope.missing;
   useEffect(() => {
     if (!hostModuleView.active || activeView === "command") return;
     setActiveView("command");
@@ -3533,6 +3532,20 @@ export function CommandWorkspace({
             onOpen: () => {
               closeComposerPalette();
               setSidebarSearchOpen(false);
+              if (
+                !commandPluginConversationScope({
+                  modules,
+                  activePlugin: module.pluginId ? module : undefined,
+                  selectedThreadId:
+                    selectedThreadId ?? selectedThread?.id ?? null,
+                  projectId: projectConversationProjectId,
+                  creatingProject: Boolean(
+                    module.startProjectConversation &&
+                      !module.conversationProjectId,
+                  ),
+                }).missing
+              )
+                setNewTaskDraft(false);
               hostModuleView.open(module.id);
               module.activatePage?.();
             },
@@ -3586,7 +3599,11 @@ export function CommandWorkspace({
           onOpenSettings={onOpenSettings}
           showSignedOutAccount={showSignedOutAccount}
           onQueryChange={setSidebarSearchQuery}
-          onSwitchView={switchView}
+          onSwitchView={(view) => {
+            if (view === "command" && pluginConversationScope.owned)
+              beginNewTaskDraft();
+            switchView(view);
+          }}
           onToggleCollapse={() =>
             setSidebarCollapsed((collapsed) => !collapsed)
           }
