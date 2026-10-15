@@ -33,7 +33,7 @@ import {
   type AgentVersionRuntimeBinding,
 } from "./configured-agent-version-runtime-factory.ts";
 import { loadDeviceToolRuntime } from "./device-tool-runtime-config.ts";
-import { createConfiguredPimSandboxToolRuntime } from "./pim-sandbox-tool-runtime.ts";
+import { createDeclaredPimSandboxToolRuntime } from "./pim-sandbox-tool-runtime.ts";
 import { loadRemoteMcpRuntimeConfig } from "./remote-mcp-runtime-config.ts";
 import type { RemoteMcpRuntimeConfig } from "./remote-mcp-runtime-config.ts";
 import {
@@ -369,7 +369,10 @@ async function createBoundToolRuntime(
         ),
       );
     }
-    const pimSandbox = createConfiguredPimSandboxToolRuntime(environment);
+    const pimSandbox = createDeclaredPimSandboxToolRuntime(
+      environment,
+      version.tools,
+    );
     if (pimSandbox !== undefined) {
       runtimes.push(creation.own(pimSandbox));
     }

@@ -148,6 +148,46 @@ test("carries the ambient PIM sandbox into independently bound agent runtimes", 
   await runtime.close?.();
 });
 
+test("isolated plugin model sources do not inherit undeclared PIM workspace tools", async (context) => {
+  const version = compileAgentVersion(source(), { sha256 });
+  const path = temporaryFile(context);
+  writeFileSync(path, JSON.stringify(config(version.contentDigest, null)));
+  const factory = loadAgentVersionRuntimeFactory(path, {
+    CREWON_PIM_SANDBOX_BASE_URL: "https://pim.example.com",
+    CREWON_PIM_SANDBOX_USERNAME: "admin",
+    CREWON_PIM_SANDBOX_PASSWORD: "secret",
+    CREWON_PIM_SANDBOX_AGENT_ID: "42",
+  });
+  const runtime = await factory.create({ tenantId: "tenant-1", version });
+  assert.deepEqual(runtime.toolRuntime.definitions(), []);
+  await runtime.close?.();
+});
+
+test("a bound model cannot partially declare or alter the PIM workspace tool suite", async (context) => {
+  const environment = {
+    CREWON_PIM_SANDBOX_BASE_URL: "https://pim.example.com",
+    CREWON_PIM_SANDBOX_USERNAME: "admin",
+    CREWON_PIM_SANDBOX_PASSWORD: "secret",
+    CREWON_PIM_SANDBOX_AGENT_ID: "42",
+  };
+  const definitions = createConfiguredPimSandboxToolRuntime(environment)!
+    .definitions()
+    .map((definition) => JSON.parse(stableJson(definition)));
+  for (const tools of [
+    definitions.slice(0, 1),
+    definitions.map((definition) => ({ ...definition, description: "altered" })),
+  ]) {
+    const version = compileAgentVersion({ ...source(), tools }, { sha256 });
+    const path = temporaryFile(context);
+    writeFileSync(path, JSON.stringify(config(version.contentDigest, null)));
+    const factory = loadAgentVersionRuntimeFactory(path, environment);
+    await assert.rejects(
+      factory.create({ tenantId: "tenant-1", version }),
+      /agent_version_runtime_pim_tools_mismatch/u,
+    );
+  }
+});
+
 test("requires an explicitly named provider credential at startup", (context) => {
   const version = compileAgentVersion(source(), { sha256 });
   const path = temporaryFile(context);

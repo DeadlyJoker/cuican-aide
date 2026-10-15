@@ -8,6 +8,7 @@ import {
   type ToolInvocation,
   type ToolRuntimePort,
 } from "@crewon/tool-broker";
+import { isDeepStrictEqual } from "node:util";
 
 import {
   PimSandboxMutationOutcomeUnknownError,
@@ -211,6 +212,33 @@ export function createConfiguredPimSandboxToolRuntime(
       password: environment.CREWON_PIM_SANDBOX_PASSWORD!,
     }),
   );
+}
+
+/** A bound version may only materialize sandbox tools it explicitly declares. */
+export function createDeclaredPimSandboxToolRuntime(
+  environment: Readonly<Record<string, string | undefined>>,
+  declaredTools: readonly ToolDefinition[],
+): ToolRuntimePort | undefined {
+  const declaredSandboxTools = declaredTools.filter((tool) =>
+    definitions.some(
+      (candidate) =>
+        tool.kind === "function" &&
+        candidate.kind === "function" &&
+        tool.name === candidate.name,
+    ),
+  );
+  if (declaredSandboxTools.length === 0) return undefined;
+  if (
+    declaredSandboxTools.length !== definitions.length ||
+    definitions.some(
+      (candidate) =>
+        !declaredSandboxTools.some((tool) =>
+          isDeepStrictEqual(tool, candidate),
+        ),
+    )
+  )
+    throw new Error("agent_version_runtime_pim_tools_mismatch");
+  return createConfiguredPimSandboxToolRuntime(environment);
 }
 
 function definition(
