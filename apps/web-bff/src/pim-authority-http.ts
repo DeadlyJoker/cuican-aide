@@ -1,4 +1,5 @@
 import { timingSafeEqual } from "node:crypto";
+import type { createPimPluginExecutionAuthority } from "./pim-plugin-execution-authority.ts";
 import type {
   PimControlActor,
   PimControlSessions,
@@ -9,6 +10,12 @@ const paths = new Map<string, "identity" | "policy">([
   ["/internal/crewon/pim/profile", "policy"],
   ["/internal/crewon/pim/plugin-policy", "policy"],
   ["/internal/crewon/pim/control-policy", "policy"],
+  ...[
+    "execution-actor",
+    "execution-package",
+    "project-service-policy",
+    "task-unmetered-policy",
+  ].map((path) => [`/internal/crewon/pim/${path}`, "policy"] as const),
 ] as const);
 /** Private server-to-server protocol, hosted by the same BFF authority. Every
  * call authenticates its independent service credential before reading its body.
@@ -17,6 +24,7 @@ export function createPimAuthorityHttp(input: {
   sessions: PimControlSessions;
   identityServiceToken: string;
   policyServiceToken: string;
+  execution?: ReturnType<typeof createPimPluginExecutionAuthority>;
 }) {
   for (const token of [input.identityServiceToken, input.policyServiceToken])
     if (!/^[\x21-\x7e]{32,8192}$/u.test(token))
@@ -38,6 +46,21 @@ export function createPimAuthorityHttp(input: {
         return error(401, "pim_authority_service_required");
       try {
         const value = await body(request);
+        const operation = url.pathname.split("/").at(-1)!;
+        if (
+          [
+            "execution-actor",
+            "execution-package",
+            "project-service-policy",
+            "task-unmetered-policy",
+          ].includes(operation)
+        ) {
+          if (!input.execution)
+            return error(403, "pim_plugin_execution_not_configured");
+          return json(
+            await input.execution.handle(operation, value, request.signal),
+          );
+        }
         if (url.pathname.endsWith("/verify")) {
           exact(value, ["accessToken"]);
           if (

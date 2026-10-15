@@ -40,9 +40,9 @@ test("host workbench focuses on creation and results instead of repeating the pr
     assert.equal(f.container.querySelector(".drama-topbar"),null);
     assert.equal(f.container.querySelector(".drama-home-projects"),null);
     assert.equal(f.container.querySelector(".drama-recovery-disclosure"),null);
-    assert.equal(f.container.querySelector("h1").textContent,"新建短剧");
+    assert.equal(f.container.querySelector("h1").textContent,"从想法开始");
     await snapshot("host-creation-heading",f.container.querySelector(".drama-home-hero>h1").outerHTML);
-    assert.equal(f.container.querySelectorAll("textarea").length,1);
+    assert.equal(f.container.querySelectorAll("textarea").length,0);
   } finally {await f.dispose();}
 });
 
@@ -69,23 +69,25 @@ test("failed sidebar reads stay visible and retry only when the user requests it
   } finally { await f.dispose(); }
 });
 
-test("successful host project creation navigates both rails to the saved project exactly once", async () => {
+test("host project entry uses the shared Agent composer and never opens a second creative form", async () => {
   const base=foundationService(), calls=[], props=foundationProps();
-  const f=fixture(definition,{props:{...props,data:{...props.data,hostPresentation:{surface:"workbench",context:{}}}},services:{async invoke(action,input,options){
+  const presentation={surface:"workbench",context:{}};
+  const f=fixture(definition,{props:{...props,data:{...props.data,hostPresentation:presentation}},services:{async invoke(action,input,options){
     if(action.startsWith("crewon.plugin-navigation")){calls.push({action,input});throw new Error("named_navigation_fixture");}
     return base.services.invoke(action,input,options);
   }}});
   try {
     await settle();
-    await f.input(f.container.querySelector("#drama-project-idea"),"未来来信的悬疑短剧");
-    await f.click(f.button("确认创作需求"));
-    await f.click(f.button("创建项目"));
+    assert.equal(f.container.querySelector("textarea,form"),null);
+    assert.match(f.container.textContent,/在中间告诉 Agent/);
+    assert.equal(base.methodCalls("createProject").length,0);
+    assert.equal(calls.length,0);
+    f.instance.update({...props,data:{...props.data,hostPresentation:{...presentation,context:{createOrigin:"creative"}}}});
     await settle();
-    assert.equal(base.methodCalls("createProject").length,1);
-    assert.equal(calls.length,1);
-    assert.equal(calls[0].input.context.stage,"overview");
-    assert.equal(calls[0].input.context.projectId,[...base.metadata.records.keys()][0]);
-    assert.equal(base.calls.some(c=>/startStage|createConversation|generation/.test(c.action)),false);
+    assert.equal(f.container.querySelector("dialog[open]"),null);
+    assert.equal(f.container.querySelector("textarea,form"),null);
+    assert.equal(base.calls.some(c=>/startStage|createConversation|createProject|generation/.test(c.action)),false);
+    if(process.env.CREWON_PROJECT_ENTRY_VISUAL_FIXTURE) await writeFile(process.env.CREWON_PROJECT_ENTRY_VISUAL_FIXTURE,`<!doctype html><html lang="zh"><meta charset="utf-8"><title>短剧项目入口 · 组件验收（测试数据）</title><style>:root{--bg:#fafafa;--text:#202020;--text-muted:#555;--border:#d8d8d8;--control-surface-active:#e8e8e8;--user-ui-font-size:14px}body{margin:0;font-family:system-ui}main{width:560px;min-height:600px;margin:auto;border-inline:1px solid var(--border)}</style><body><main>${f.container.innerHTML}</main></body></html>`);
   }finally{await f.dispose();}
 });
 

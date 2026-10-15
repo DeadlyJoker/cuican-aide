@@ -1,3 +1,4 @@
+import { createInstalledPluginModelSelection } from "./installed-plugin-model-selection.ts";
 import { assertProjectHistoricalQueryPluginPublications } from "./project-historical-query-plugin-configuration.ts";
 import {
   ApplicationError,
@@ -33,6 +34,7 @@ import {
   InstalledPluginCreditQuoteAuthority,
   InstalledPluginTaskHttpAuthority,
 } from "./installed-plugin-credit-quote-authority.ts";
+import { InstalledPluginUnmeteredAuthority } from "./installed-plugin-unmetered-authority.ts";
 import { InstalledProjectConversationCreditQuoteAuthority } from "./installed-project-conversation-credit-quote-authority.ts";
 import {
   assertInstalledPluginTaskConfiguration,
@@ -214,38 +216,54 @@ export async function createInstalledPluginTaskRuntime(
         return pluginSecurityUiDecision(response);
       },
     });
-    const quoteDependencies = {
-      endpoint: configuration.quoteAuthority,
-      http,
-      digester: dependencies.digester,
-      currentSignal: () => current().currentSignal(),
-      assertCurrent: () => current().assertCurrent(),
-    };
-    const legacyQuotes = new InstalledPluginCreditQuoteAuthority(
-      quoteDependencies,
-    );
-    const conversationQuotes =
-      configuration.projectConversationQuotes === undefined
-        ? undefined
-        : new InstalledProjectConversationCreditQuoteAuthority(
-            quoteDependencies,
-          );
-    const quotes: ExtensionCreditQuotePort = Object.freeze({
-      quoteGeneration: legacyQuotes.quoteGeneration.bind(legacyQuotes),
-      ...(conversationQuotes === undefined
-        ? {}
-        : {
-            quoteProjectConversationGeneration:
-              conversationQuotes.quoteProjectConversationGeneration.bind(
-                conversationQuotes,
-              ),
-          }),
-    });
+    let quotes: ExtensionCreditQuotePort | undefined;
+    if (configuration.unmeteredAuthority === undefined) {
+      if (configuration.quoteAuthority === undefined)
+        throw new Error("installed_plugin_credit_authority_required");
+      const quoteDependencies = {
+        endpoint: configuration.quoteAuthority,
+        http,
+        digester: dependencies.digester,
+        currentSignal: () => current().currentSignal(),
+        assertCurrent: () => current().assertCurrent(),
+      };
+      const legacyQuotes = new InstalledPluginCreditQuoteAuthority(
+        quoteDependencies,
+      );
+      const conversationQuotes =
+        configuration.projectConversationQuotes === undefined
+          ? undefined
+          : new InstalledProjectConversationCreditQuoteAuthority(
+              quoteDependencies,
+            );
+      quotes = Object.freeze({
+        quoteGeneration: legacyQuotes.quoteGeneration.bind(legacyQuotes),
+        ...(conversationQuotes === undefined
+          ? {}
+          : {
+              quoteProjectConversationGeneration:
+                conversationQuotes.quoteProjectConversationGeneration.bind(
+                  conversationQuotes,
+                ),
+            }),
+      });
+    }
     core = await createInstalledPluginTaskRuntimeCore({
       store: dependencies.store,
       requests,
       installRoot: configuration.installRoot,
       maximumPackages: configuration.maximumPackages,
+      ...(configuration.models === undefined
+        ? {}
+        : {
+            modelSelection: createInstalledPluginModelSelection({
+              bindings: configuration.models,
+              store: dependencies.store,
+              digester: dependencies.digester,
+              assertCurrent: () => current().assertCurrent(),
+              currentSignal: () => current().currentSignal(),
+            }),
+          }),
       publications: ui.publications.map(({ pluginId, packageDigest }) => ({
         pluginId,
         packageDigest,
@@ -254,7 +272,16 @@ export async function createInstalledPluginTaskRuntime(
       businessAuthorization,
       uiAuthorization: authorization,
       authorizePackage,
-      creditQuotes: quotes,
+      ...(configuration.unmeteredAuthority === undefined
+        ? { creditQuotes: quotes! }
+        : {
+            unmeteredTasks: new InstalledPluginUnmeteredAuthority({
+              endpoint: configuration.unmeteredAuthority,
+              http,
+              currentSignal: () => current().currentSignal(),
+              assertCurrent: () => current().assertCurrent(),
+            }),
+          }),
       clock: dependencies.clock,
       ids: dependencies.ids,
       digester: dependencies.digester,

@@ -1,3 +1,7 @@
+import {
+  parseInstalledPluginModelBindings,
+  type InstalledPluginModelBinding,
+} from "./installed-plugin-model-selection.ts";
 import { constants, type Stats } from "node:fs";
 import { lstat, open, realpath } from "node:fs/promises";
 import { isAbsolute, resolve } from "node:path";
@@ -20,9 +24,11 @@ export type InstalledPluginTaskConfiguration = Readonly<{
   installRoot: string;
   peer: Readonly<{ origin: string; token: string }>;
   packageAuthority: InstalledPluginTaskEndpoint;
-  quoteAuthority: InstalledPluginTaskEndpoint;
+  quoteAuthority?: InstalledPluginTaskEndpoint;
+  unmeteredAuthority?: InstalledPluginTaskEndpoint;
   timeoutMs: number;
   maximumPackages: number;
+  models?: readonly InstalledPluginModelBinding[];
   projectConversationQuotes?: Readonly<{
     version: typeof PROJECT_CONVERSATION_CREDIT_QUOTE_VERSION;
   }>;
@@ -48,14 +54,25 @@ export function parseInstalledPluginTaskConfiguration(
       "installRoot",
       "peer",
       "packageAuthority",
-      "quoteAuthority",
+      ...(Object.hasOwn(input as object, "quoteAuthority")
+        ? ["quoteAuthority"]
+        : []),
       "timeoutMs",
       "maximumPackages",
+      ...(Object.hasOwn(input as object, "models") ? ["models"] : []),
+      ...(Object.hasOwn(input as object, "unmeteredAuthority")
+        ? ["unmeteredAuthority"]
+        : []),
       ...(Object.hasOwn(input as object, "projectConversationQuotes")
         ? ["projectConversationQuotes"]
         : []),
     ]);
-    if (value.schemaVersion !== INSTALLED_PLUGIN_TASK_CONFIG_SCHEMA) invalid();
+    if (
+      value.schemaVersion !== INSTALLED_PLUGIN_TASK_CONFIG_SCHEMA ||
+      (value.quoteAuthority === undefined &&
+        value.unmeteredAuthority === undefined)
+    )
+      invalid();
     const peer = pluginSecurityRecord(value.peer, [
       "origin",
       "tokenEnvironmentVariable",
@@ -94,9 +111,19 @@ export function parseInstalledPluginTaskConfiguration(
         token: verifiedPeer.token,
       }),
       packageAuthority: endpoint(value.packageAuthority, environment),
-      quoteAuthority: endpoint(value.quoteAuthority, environment),
+      ...(value.quoteAuthority === undefined
+        ? {}
+        : { quoteAuthority: endpoint(value.quoteAuthority, environment) }),
+      ...(value.unmeteredAuthority === undefined
+        ? {}
+        : {
+            unmeteredAuthority: endpoint(value.unmeteredAuthority, environment),
+          }),
       timeoutMs: value.timeoutMs as number,
       maximumPackages: value.maximumPackages as number,
+      ...(value.models === undefined
+        ? {}
+        : { models: parseInstalledPluginModelBindings(value.models) }),
       ...(projectConversationQuotes === undefined
         ? {}
         : {
@@ -108,14 +135,26 @@ export function parseInstalledPluginTaskConfiguration(
     const redacted = () => ({
       ...configuration,
       peer: { origin: configuration.peer.origin, token: "[REDACTED]" },
+      ...(configuration.unmeteredAuthority === undefined
+        ? {}
+        : {
+            unmeteredAuthority: {
+              url: configuration.unmeteredAuthority.url,
+              serviceToken: "[REDACTED]",
+            },
+          }),
       packageAuthority: {
         url: configuration.packageAuthority.url,
         serviceToken: "[REDACTED]",
       },
-      quoteAuthority: {
-        url: configuration.quoteAuthority.url,
-        serviceToken: "[REDACTED]",
-      },
+      ...(configuration.quoteAuthority === undefined
+        ? {}
+        : {
+            quoteAuthority: {
+              url: configuration.quoteAuthority.url,
+              serviceToken: "[REDACTED]",
+            },
+          }),
     });
     Object.defineProperties(configuration, {
       toJSON: { value: redacted },

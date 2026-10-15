@@ -1,6 +1,7 @@
 import {
   ControlApiClientError,
   ControlApiProtocolError,
+  ControlApiTransportError,
 } from "@crewon/control-client";
 import type { PluginUiProps } from "@crewon/plugin-sdk/ui";
 import { PluginUiLoaderError } from "./pluginUiValidation";
@@ -14,6 +15,7 @@ export class PluginUiUpdateDeferredError extends PluginUiLoaderError {
 
 export function isTransientPluginUiValidationError(error: unknown): boolean {
   return (
+    error instanceof ControlApiTransportError ||
     (error instanceof ControlApiClientError && error.status >= 500) ||
     (error instanceof ControlApiProtocolError &&
       error.code === "control_api_error_envelope_invalid" &&

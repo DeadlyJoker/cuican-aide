@@ -31,6 +31,7 @@ export type InstalledPluginWorkerConfig = Readonly<{
   profileAuthority: InstalledPluginWorkerEndpoint;
   packageAuthority: InstalledPluginWorkerEndpoint;
   networkAuthority: InstalledPluginWorkerEndpoint | null;
+  projectServiceAuthority?: InstalledPluginWorkerEndpoint;
   historicalScope: PluginProfileScope | null;
   timeoutMs: number;
 }>;
@@ -115,6 +116,9 @@ export function parseInstalledPluginWorkerConfig(
       "installRoot",
       "releaseDocumentPath",
       ...authorityNames,
+      ...(Object.hasOwn(input as object, "projectServiceAuthority")
+        ? ["projectServiceAuthority"]
+        : []),
       "historicalScope",
       "timeoutMs",
     ]);
@@ -136,6 +140,14 @@ export function parseInstalledPluginWorkerConfig(
         value.networkAuthority === null
           ? null
           : endpoint(value.networkAuthority, environment),
+      ...(value.projectServiceAuthority === undefined
+        ? {}
+        : {
+            projectServiceAuthority: endpoint(
+              value.projectServiceAuthority,
+              environment,
+            ),
+          }),
       historicalScope:
         value.historicalScope === null
           ? null

@@ -27,12 +27,13 @@ export interface PimPluginProfilePort {
     membershipDigest: string;
   }): Promise<Profile>;
 }
-type Session = Readonly<{
-  web: WebIdentitySession;
+type Session = {
+  readonly web: WebIdentitySession;
   accountToken: string;
-  actor: PimControlActor;
-  issuedAt: number;
-}>;
+  readonly actor: PimControlActor;
+  readonly profileId: string;
+  readonly issuedAt: number;
+};
 const COOKIE_NAME = "__Host-crewon-control";
 
 /** Exchanges a real PIM account for a bounded, Control-only opaque credential.
@@ -109,13 +110,6 @@ export class PimControlSessions implements WebIdentitySessionPort {
     signal: AbortSignal,
   ): Promise<{ session: WebIdentitySession; setCookie: string }> {
     this.#prune();
-    if (
-      this.#sessions.size >= this.#capacity &&
-      ![...this.#sessions.values()].some(
-        (session) => session.accountToken === accountToken,
-      )
-    )
-      throw new Error("pim_control_session_capacity_exceeded");
     const account = await this.#accounts.verify(accountToken, signal);
     const actor = await this.#accountActor(account);
     const profile = await this.#profiles.resolveVerifiedAccount({
@@ -128,15 +122,20 @@ export class PimControlSessions implements WebIdentitySessionPort {
     this.#prune();
     const existing = [...this.#sessions.values()].find(
       (session) =>
-        session.accountToken === accountToken &&
         sameActor(session.actor, actor) &&
+        session.profileId === profile.scope.profileId &&
+        account.expiresAt >= Date.parse(session.web.expiresAt) &&
         Date.parse(session.web.expiresAt) - this.#now() >= 1000,
     );
-    if (existing)
+    if (existing) {
+      // Refreshing one tab must not replace the shared Cookie/CSRF identity used by another tab.
+      // This token has just passed live PIM actor and profile checks; the original Web expiry stays fixed.
+      existing.accountToken = accountToken;
       return {
         session: existing.web,
         setCookie: `${COOKIE_NAME}=${existing.web.sessionId}; Path=/; HttpOnly; Secure; SameSite=Strict; Max-Age=${Math.floor((Date.parse(existing.web.expiresAt) - this.#now()) / 1000)}`,
       };
+    }
     if (this.#sessions.size >= this.#capacity)
       throw new Error("pim_control_session_capacity_exceeded");
     const issuedAt = this.#now();
@@ -147,7 +146,13 @@ export class PimControlSessions implements WebIdentitySessionPort {
       controlAccessToken: randomBytes(32).toString("base64url"),
       expiresAt: new Date(expiresAt).toISOString(),
     });
-    const session = Object.freeze({ web, accountToken, actor, issuedAt });
+    const session: Session = {
+      web,
+      accountToken,
+      actor,
+      profileId: profile.scope.profileId,
+      issuedAt,
+    };
     this.#sessions.set(web.sessionId, session);
     this.#tokens.set(web.controlAccessToken, session);
     return {
@@ -166,7 +171,29 @@ export class PimControlSessions implements WebIdentitySessionPort {
     const current = this.#sessions.get(id);
     // A stale cookie can never switch the new browser account back to an old one.
     // Missing credentials after logout cannot authorize through the remaining cookie.
-    if (!current || input.pimAccessToken !== current.accountToken) return null;
+    if (!current || !input.pimAccessToken) return null;
+    if (input.pimAccessToken !== current.accountToken) {
+      // Different tokens can belong to one account after refresh, but a Cookie
+      // never authenticates a different account or a missing/revoked credential.
+      try {
+        const account = await this.#accounts.verify(
+          input.pimAccessToken,
+          AbortSignal.timeout(5000),
+        );
+        const actor = await this.#accountActor(account);
+        if (!sameActor(actor, current.actor)) return null;
+        const profile = await this.#profiles.resolveVerifiedAccount({
+          actor,
+          membershipDigest: membershipDigest(account),
+        });
+        assertProfile(profile, actor);
+        if (profile.scope.profileId !== current.profileId) return null;
+        this.#prune();
+        if (this.#sessions.get(id) !== current) return null;
+      } catch {
+        return null;
+      }
+    }
     return current.web;
   }
   async resolvePublicPluginAsset(input: {
@@ -195,6 +222,36 @@ export class PimControlSessions implements WebIdentitySessionPort {
   }
   async pluginProfile(actor: PimControlActor, signal: AbortSignal) {
     return (await this.#current(this.#forActor(actor), signal)).profile.scope;
+  }
+  /** Private Worker lookup. The saved Run owner is resolved only through a live PIM session. */
+  async executionActor(
+    owner: Pick<PimControlActor, "tenantId" | "spaceId" | "actorId">,
+    signal: AbortSignal,
+  ): Promise<PimControlActor | null> {
+    this.#prune();
+    const session = [...this.#sessions.values()].find(
+      (s) =>
+        s.actor.tenantId === owner.tenantId &&
+        s.actor.spaceId === owner.spaceId &&
+        s.actor.actorId === owner.actorId,
+    );
+    if (!session) return null;
+    await this.#current(session, signal);
+    return session.actor;
+  }
+  async executionProfile(scope: Profile["scope"], signal: AbortSignal) {
+    this.#prune();
+    const session = [...this.#sessions.values()].find(
+      (s) =>
+        s.actor.tenantId === scope.tenantId &&
+        s.actor.spaceId === scope.spaceId &&
+        s.profileId === scope.profileId,
+    );
+    if (!session) throw new Error("pim_control_session_required");
+    const current = await this.#current(session, signal);
+    if (current.profile.scope.profileId !== scope.profileId)
+      throw new Error("pim_control_profile_denied");
+    return { actor: session.actor, ...current };
   }
   async controlPolicy(
     input: {
@@ -299,6 +356,8 @@ export class PimControlSessions implements WebIdentitySessionPort {
     });
     assertProfile(profile, actor);
     signal.throwIfAborted();
+    if (profile.scope.profileId !== session.profileId)
+      throw new Error("pim_control_profile_denied");
     if (
       this.#sessions.get(session.web.sessionId) !== session ||
       Date.parse(session.web.expiresAt) <= this.#now()

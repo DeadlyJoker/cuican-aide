@@ -34,7 +34,10 @@ import {
   type PluginUiModuleImporter,
 } from "./trustedPluginUiLoader";
 import { uiFailure } from "./pluginUiValidation";
-import { hasPluginEntryByteCache } from "./controlPluginUiCodeCapability";
+import {
+  hasPluginEntryByteCache,
+  pluginEntryByteCacheFetch,
+} from "./controlPluginUiCodeCapability";
 import { createPluginEntryByteImporter } from "./pluginEntryByteImporter";
 import { PluginUiLeaseLifecycle } from "./pluginUiLeaseLifecycle";
 import { PluginUiValidationFlights } from "./pluginUiValidationFlights";
@@ -184,6 +187,7 @@ export function createControlPluginUiHost(
       ? {
           entryImporter: createPluginEntryByteImporter({
             ownerKey: options.codeCacheOwnerKey,
+            fetch: pluginEntryByteCacheFetch(client),
             importModule: options.importer,
           }),
         }

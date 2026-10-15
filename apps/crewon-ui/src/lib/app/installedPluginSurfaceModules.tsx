@@ -25,6 +25,13 @@ export function installedPluginSurfaceModules(
     pages: PluginUiPageSnapshot;
     navigation: PluginUiPageNavigation;
     conversationThreads?: ReadonlyMap<string, readonly string[]>;
+    startProjectConversation?(
+      module: ControlPluginUiModule,
+      input: Readonly<{ content: string; modelId?: string }>,
+    ): Promise<void>;
+    projectCreationDraft?(
+      module: ControlPluginUiModule,
+    ): Readonly<{ content: string; modelId?: string }> | undefined;
     render(
       module: ControlPluginUiModule,
       state: InstalledPluginSurfaceRenderState,
@@ -70,6 +77,24 @@ export function installedPluginSurfaceModules(
             pageContext: page.context,
             closePage: () => input.navigation.closeFromHost(page.pageId),
             activatePage: () => input.navigation.activateFromHost(page.pageId),
+          }
+        : {}),
+      ...(conversationProjectId === undefined &&
+      input.startProjectConversation &&
+      [
+        "crewon.project-foundation",
+        "crewon.project-conversations",
+        "crewon.project-workspace-target",
+      ].every((service) =>
+        module.plugin.descriptor.requires.some(
+          (r) => r.service === service && r.apiVersion === "1",
+        ),
+      )
+        ? {
+            projectCreationDraft: input.projectCreationDraft?.(module),
+            startProjectConversation: (
+              request: Readonly<{ content: string; modelId?: string }>,
+            ) => input.startProjectConversation!(module, request),
           }
         : {}),
       createPage: () => input.navigation.openFromHost(module.key),

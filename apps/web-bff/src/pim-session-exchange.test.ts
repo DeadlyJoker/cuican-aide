@@ -5,6 +5,7 @@ import { PimControlSessions } from "./pim-control-sessions.ts";
 
 const origin = "https://crewon.example.test";
 const token = "e30.eyJzdWIiOiIxIn0.c2ln";
+const refreshedToken = "e30.eyJzdWIiOiIxIiwiZ2VuIjoxfQ.c2ln";
 function fixture() {
   const accounts = new Map<string, string>();
   let calls = 0;
@@ -12,15 +13,19 @@ function fixture() {
     issuer: origin + "/identity/pim",
     packages: new Map(),
     accounts: {
-      verify: async () => ({
-        userId: 1,
-        tenantId: 2,
-        spaceId: 3,
-        userRole: "user",
-        tenantRole: "member",
-        spaceRole: "member",
-        expiresAt: Date.now() + 3600000,
-      }),
+      verify: async (accessToken) => {
+        if (![token, refreshedToken].includes(accessToken))
+          throw new Error("pim_account_denied");
+        return {
+          userId: 1,
+          tenantId: 2,
+          spaceId: 3,
+          userRole: "user",
+          tenantRole: "member",
+          spaceRole: "member",
+          expiresAt: Date.now() + 3600000,
+        };
+      },
     },
     profiles: {
       resolveVerifiedAccount: async ({ actor, membershipDigest }) => ({
@@ -97,6 +102,26 @@ test("PIM bootstrap uses a same-origin credential exchange and exposes only the 
     401,
   );
   assert.equal(calls(), 1);
+});
+test("valid refreshed credentials in a second tab preserve the original Cookie and browser CSRF while invalid credentials stay rejected", async () => {
+  const f = fixture();
+  const exchange = async (accessToken: string) =>
+    f.bff.handle(
+      new Request(origin + "/control-api/session", {
+        method: "POST",
+        headers: { origin, authorization: `Bearer ${accessToken}` },
+      }),
+    );
+  const first = await exchange(token),
+    second = await exchange(refreshedToken);
+  assert.equal(second.status, 200);
+  assert.equal(
+    second.headers.get("set-cookie")!.split(";")[0],
+    first.headers.get("set-cookie")!.split(";")[0],
+  );
+  assert.deepEqual(await second.json(), await first.json());
+  assert.equal((await exchange("e30.e30.c2ln")).status, 401);
+  assert.equal(f.calls(), 0);
 });
 test("rejects cross-origin exchange, actor/body injection and non-PIM bearer without reaching Control", async () => {
   const { bff, calls } = fixture();

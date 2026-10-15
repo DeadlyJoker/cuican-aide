@@ -1,3 +1,4 @@
+import { useInstalledPluginProjectChatCreation } from "./useInstalledPluginProjectChatCreation";
 import {
   PluginUiPageNavigation,
   EMPTY_PLUGIN_UI_PAGE_SNAPSHOT,
@@ -28,6 +29,7 @@ import {
   type ControlPluginUiCatalog,
 } from "../plugins/controlPluginUiCatalog";
 import { PluginUiLoaderError } from "../plugins/pluginUiValidation";
+import { isTransientPluginUiValidationError } from "../plugins/pluginUiPresentationUpdate";
 import { AGENT_PLATFORM_SESSION_CHANGED_EVENT } from "../agent-platform/agentPlatformClient";
 import type { Locale } from "../i18n";
 import type { Theme } from "../theme";
@@ -480,7 +482,7 @@ export function useInstalledPluginModules({
           // its mounted identity; the independent live lease monitor and every
           // action still recheck authority. Explicit denials/schema errors withdraw.
           const transient =
-            (error instanceof ControlApiClientError && error.status >= 500) ||
+            isTransientPluginUiValidationError(error) ||
             (error instanceof PluginUiLoaderError &&
               [
                 "plugin_ui_control_timeout",
@@ -703,12 +705,29 @@ export function useInstalledPluginModules({
     () => Object.freeze(JSON.parse(taskRunIdsKey)),
     [taskRunIdsKey],
   );
+  const projectChatCreation = useInstalledPluginProjectChatCreation({
+    scope,
+    host,
+    pageNavigation,
+    enabled: taskContextEnabled,
+    currentScope: current,
+    mountedScope,
+    onDiagnostic,
+    rememberConversation,
+    taskContextRef,
+  });
   const hostModules = useMemo<readonly CommandWorkspaceHostModule[]>(() => {
     if (!host || !catalog || !pageNavigation) return EMPTY_MODULES;
     return installedPluginSurfaceModules({
       catalog,
       pages,
       navigation: pageNavigation,
+      ...(projectChatCreation
+        ? {
+            startProjectConversation: projectChatCreation,
+            projectCreationDraft: projectChatCreation.pending,
+          }
+        : {}),
       conversationThreads:
         openedConversations?.scope === scope
           ? openedConversations.threads
@@ -754,6 +773,7 @@ export function useInstalledPluginModules({
     });
   }, [
     host,
+    projectChatCreation,
     catalog,
     pageNavigation,
     pages,

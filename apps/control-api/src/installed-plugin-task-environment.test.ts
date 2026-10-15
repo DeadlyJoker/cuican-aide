@@ -48,7 +48,7 @@ test("strict deployment captures environment secrets and redacts both inspect an
   assertInstalledPluginTaskConfiguration(result);
   assert.equal(result.installRoot, document.installRoot);
   assert.equal(
-    result.quoteAuthority.serviceToken,
+    result.quoteAuthority!.serviceToken,
     environment.FIXTURE_SERVICE_TOKEN,
   );
   assert.ok(Object.isFrozen(result));
@@ -221,4 +221,60 @@ test("project conversation quotes require an explicit exact protocol; old deploy
         ),
       /configuration_invalid/,
     );
+});
+
+test("unmetered policy is explicit, independently captured and redacted without changing existing metered deployment", () => {
+  assert.equal(
+    parseInstalledPluginTaskConfiguration(document, environment)
+      .unmeteredAuthority,
+    undefined,
+  );
+  const raw = {
+    ...document,
+    unmeteredAuthority: {
+      ...document.quoteAuthority,
+      url: "https://fixture-authority.example/unmetered",
+    },
+  };
+  const captured = parseInstalledPluginTaskConfiguration(raw, environment);
+  raw.unmeteredAuthority.url = "https://changed.example/";
+  assert.equal(
+    captured.unmeteredAuthority!.url,
+    "https://fixture-authority.example/unmetered",
+  );
+  for (const text of [JSON.stringify(captured), inspect(captured)])
+    assert.ok(!text.includes(environment.FIXTURE_SERVICE_TOKEN));
+  for (const unmeteredAuthority of [
+    null,
+    { ...document.quoteAuthority, url: "http://fixture.example/free" },
+    { ...document.quoteAuthority, defaultBalance: 100 },
+  ])
+    assert.throws(
+      () =>
+        parseInstalledPluginTaskConfiguration(
+          { ...document, unmeteredAuthority },
+          environment,
+        ),
+      /configuration_invalid/,
+    );
+});
+
+test("explicit unmetered deployment needs no fabricated quote URL; missing both funding authorities remains invalid", () => {
+  const { quoteAuthority: _, ...base } = document;
+  assert.throws(
+    () => parseInstalledPluginTaskConfiguration(base, environment),
+    /configuration_invalid/,
+  );
+  const result = parseInstalledPluginTaskConfiguration(
+    {
+      ...base,
+      unmeteredAuthority: {
+        ...document.quoteAuthority,
+        url: "https://fixture-authority.example/unmetered",
+      },
+    },
+    environment,
+  );
+  assert.equal(result.quoteAuthority, undefined);
+  assert.ok(result.unmeteredAuthority);
 });

@@ -1,3 +1,4 @@
+import { createRemoteProjectServices } from "./remote-project-services.ts";
 import { createHash } from "node:crypto";
 import type {
   ActorContext,
@@ -369,6 +370,11 @@ export function createInstalledPluginWorkerAuthority(
     return scope;
   };
   const execution: InstalledPluginExecutionConfig = Object.freeze({
+    ...(config.projectServiceAuthority === undefined
+      ? {}
+      : createRemoteProjectServices((body, signal) =>
+          http.post(config.projectServiceAuthority!, body, signal),
+        )),
     installRoot: config.installRoot,
     authorization: Object.freeze({
       authorize: async (

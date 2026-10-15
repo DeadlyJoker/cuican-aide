@@ -11,6 +11,10 @@ import { PimAccountAuthority } from "./pim-account-authority.ts";
 import { PimControlSessions } from "./pim-control-sessions.ts";
 import { createPimAuthorityHttp } from "./pim-authority-http.ts";
 import { readWebPluginPackageApprovals } from "./web-plugin-package-approvals.ts";
+import {
+  createPimPluginExecutionAuthority,
+  readPimPluginExecutionGrants,
+} from "./pim-plugin-execution-authority.ts";
 
 export type WebIdentityRuntime = Readonly<{
   identity: WebIdentitySessionPort;
@@ -77,6 +81,17 @@ export async function createWebIdentityRuntime(
       accountExchange: current,
       authority: createPimAuthorityHttp({
         sessions: current,
+        ...(environment.CREWON_WEB_PIM_PLUGIN_EXECUTION_GRANTS_JSON ===
+        undefined
+          ? {}
+          : {
+              execution: createPimPluginExecutionAuthority(
+                current,
+                readPimPluginExecutionGrants(
+                  environment.CREWON_WEB_PIM_PLUGIN_EXECUTION_GRANTS_JSON,
+                ),
+              ),
+            }),
         identityServiceToken: required(
           environment,
           "CREWON_IDENTITY_SERVICE_TOKEN",

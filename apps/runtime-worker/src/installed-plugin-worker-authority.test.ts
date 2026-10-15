@@ -740,3 +740,95 @@ test("legacy policy deny reason remains compatible without accepting installatio
     await owner.close();
   }
 });
+
+test("remote business services require an explicit captured endpoint and live exact service admission; no implicit grant or alternate store", async () => {
+  const absent = createInstalledPluginWorkerAuthority(config(), async () => {
+    throw new Error("unexpected");
+  });
+  assert.equal(
+    absent.installedPluginExecution.projectFoundationTools,
+    undefined,
+  );
+  await absent.close();
+  const raw = {
+    ...document(),
+    projectServiceAuthority: {
+      url: "https://authority.example/projects",
+      serviceTokenEnvironmentVariable: "FIXTURE_AUTHORITY_TOKEN",
+    },
+  };
+  const captured = parseInstalledPluginWorkerConfig(raw, environment);
+  assert.ok(!JSON.stringify(captured).includes(token));
+  assert.ok(!inspect(captured).includes(token));
+  for (const endpoint of [
+    null,
+    {
+      ...raw.projectServiceAuthority,
+      url: "http://authority.example/projects",
+    },
+    { ...raw.projectServiceAuthority, allowAll: true },
+  ])
+    assert.throws(() =>
+      parseInstalledPluginWorkerConfig(
+        { ...raw, projectServiceAuthority: endpoint },
+        environment,
+      ),
+    );
+  let allow = true;
+  const calls: unknown[] = [];
+  const authority = createInstalledPluginWorkerAuthority(
+    captured,
+    async (_url, options) => {
+      calls.push(JSON.parse(options!.body as string));
+      return response({ outcome: allow ? "allow" : "deny" });
+    },
+  );
+  const project = authority.installedPluginExecution.projectTools!;
+  const permission = {
+    actor,
+    action: "creativeProject:write" as const,
+    resource: {
+      kind: "creativeProject" as const,
+      tenantId: actor.tenantId,
+      spaceId: actor.spaceId,
+      projectId: "project",
+    },
+  };
+  assert.equal(
+    (await project.authorization.authorize(permission)).outcome,
+    "allow",
+  );
+  assert.deepEqual(calls[0], {
+    schemaVersion: "crewon.plugin-project-service-policy.v1",
+    kind: "permission",
+    permission,
+  });
+  allow = false;
+  assert.equal(
+    (await project.authorization.authorize(permission)).outcome,
+    "deny",
+  );
+  const before = calls.length;
+  await assert.rejects(
+    project.authorization.authorize({
+      ...permission,
+      resource: { ...permission.resource, spaceId: "foreign" },
+    }),
+  );
+  assert.equal(calls.length, before);
+  await assert.rejects(
+    authority.installedPluginExecution.projectFoundationTools!.authorizeService(
+      {} as never,
+      new AbortController().signal,
+    ),
+  );
+  assert.equal(calls.length, before);
+  assert.throws(
+    () =>
+      authority.installedPluginExecution.projectFoundationTools!.createFoundations(
+        { store: {} } as never,
+      ),
+    /remote_project_service_denied/,
+  );
+  await authority.close();
+});

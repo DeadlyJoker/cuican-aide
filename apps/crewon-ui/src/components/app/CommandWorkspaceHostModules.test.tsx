@@ -667,3 +667,52 @@ it("publishes the shared composer model and clears it when the available catalog
   expect(publish).toHaveBeenLastCalledWith(null);
   expect(container!.querySelector(".command-window")).toBe(shell);
 });
+
+it("plugin entry Send uses the shared composer, immediately shows the original idea, and cannot send into a retained unrelated thread", async () => {
+  let finish!: () => void;
+  const launch = vi.fn<
+      NonNullable<CommandWorkspaceHostModule["startProjectConversation"]>
+    >(
+      () =>
+        new Promise<void>((resolve) => {
+          finish = resolve;
+        }),
+    ),
+    ordinarySend = vi.fn();
+  const module: CommandWorkspaceHostModule = {
+    id: "drama-entry",
+    pluginId: "crewon.drama",
+    label: "AI 短剧",
+    startProjectConversation: launch,
+    content: <article>创作成果</article>,
+  };
+  await render({
+    composerValue: "未来来信的故事",
+    hostModules: [module],
+    onSend: ordinarySend,
+    selectedThreadId: "unrelated-history",
+  });
+  await openModule(module.id);
+  const composer = container!.querySelector<HTMLTextAreaElement>(
+    "#desktop-task-input",
+  );
+  expect(composer).not.toBeNull();
+  expect(composer!.disabled).toBe(false);
+  await act(async () => {
+    composer!.dispatchEvent(
+      new KeyboardEvent("keydown", { key: "Enter", bubbles: true }),
+    );
+  });
+  expect(launch).toHaveBeenCalledOnce();
+  expect(launch.mock.calls[0][0]).toMatchObject({ content: "未来来信的故事" });
+  expect(ordinarySend).not.toHaveBeenCalled();
+  expect(
+    container!.querySelector('[aria-label="新项目对话"]')?.textContent,
+  ).toContain("未来来信的故事");
+  expect(
+    container!
+      .querySelector(".hero-center")
+      ?.classList.contains("has-command-thread"),
+  ).toBe(true);
+  await act(async () => finish());
+});

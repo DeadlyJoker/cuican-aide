@@ -1,3 +1,4 @@
+import { usePluginProjectCreationComposer } from "./usePluginProjectCreationComposer";
 import { CommandTeamSidebar } from "./CommandTeamSidebar";
 import type { ThreadCatalogNavigation } from "../../lib/thread/threadCatalogNavigation";
 import type { RecordedTaskChanges } from "../../lib/task-detail/recordedTaskChanges";
@@ -1022,6 +1023,11 @@ export function CommandWorkspace({
         (module) => module.id === hostModuleView.selectedId && module.pluginId,
       )
     : undefined;
+  const projectCreationComposer = usePluginProjectCreationComposer(
+    activePluginModule,
+    locale,
+    hostModuleAvailability?.ownerKey ?? null,
+  );
   const pluginSceneActive = Boolean(
     hostModuleView.active && hostModuleView.pluginId,
   );
@@ -1041,9 +1047,13 @@ export function CommandWorkspace({
   ]);
   const pluginConversationMissing = Boolean(
     pluginSceneActive &&
-      (!activePluginModule?.conversationThreadIds?.includes(
-        selectedThreadId ?? selectedThread?.id ?? "",
-      ) || (activePluginModule?.conversationProjectId !== undefined && activePluginModule.conversationProjectId !== projectConversationProjectId)),
+      (projectCreationComposer.eligible ||
+        !activePluginModule?.conversationThreadIds?.includes(
+          selectedThreadId ?? selectedThread?.id ?? "",
+        ) ||
+        (activePluginModule?.conversationProjectId !== undefined &&
+          activePluginModule.conversationProjectId !==
+            projectConversationProjectId)),
   );
   useEffect(() => {
     if (!hostModuleView.active || activeView === "command") return;
@@ -2430,11 +2440,16 @@ export function CommandWorkspace({
       isSending ||
       !trimmed ||
       executionIntentBlocked ||
-      pluginConversationMissing
+      (pluginConversationMissing && !projectCreationComposer.eligible) ||
+      projectCreationComposer.busy
     ) {
       return;
     }
     onChangeComposerValue("");
+    if (pluginConversationMissing && projectCreationComposer.eligible) {
+      projectCreationComposer.submit(trimmed, model || undefined);
+      return;
+    }
     const shouldCreateNewThread = composerShouldCreateNewThread;
     if (shouldCreateNewThread) {
       pendingThreadExecutionTargetRef.current = executionTarget;
@@ -3631,11 +3646,14 @@ export function CommandWorkspace({
             <section
               className={classNames(
                 "hero-center",
-                showCommandThread && "has-command-thread",
+                (showCommandThread || projectCreationComposer.room) &&
+                  "has-command-thread",
               )}
               data-od-id="primary-work-area"
             >
-              {commandThreadRoom ? (
+              {projectCreationComposer.room ? (
+                projectCreationComposer.room
+              ) : commandThreadRoom ? (
                 commandThreadRoom
               ) : (
                 <>
@@ -3648,8 +3666,14 @@ export function CommandWorkspace({
                       </h1>
                       <p className="scene-subtitle">
                         {locale === "zh"
-                          ? activePluginModule?.conversationProjectId ? "项目对话尚未就绪，连接状态见左侧。" : "选择左侧项目即可开始对话，成果在右侧查看与编辑。"
-                          : activePluginModule?.conversationProjectId ? "The project conversation is not ready. Check its status in the sidebar." : "Choose a project to start chatting. View and edit results on the right."}
+                          ? activePluginModule?.conversationProjectId
+                            ? "项目对话尚未就绪，连接状态见左侧。"
+                            : projectCreationComposer.eligible
+                              ? "描述你的故事想法，发送后将建立项目，与 Agent 一起完善。"
+                              : "选择左侧项目即可开始对话，成果在右侧查看与编辑。"
+                          : activePluginModule?.conversationProjectId
+                            ? "The project conversation is not ready. Check its status in the sidebar."
+                            : "Choose a project to start chatting. View and edit results on the right."}
                       </p>
                     </header>
                   ) : (
@@ -3854,7 +3878,12 @@ export function CommandWorkspace({
                     </>
                   }
                   dataOdId="ai-composer"
-                  disabled={isSending || pluginConversationMissing}
+                  disabled={
+                    isSending ||
+                    projectCreationComposer.busy ||
+                    (pluginConversationMissing &&
+                      !projectCreationComposer.eligible)
+                  }
                   id="desktop-task-input"
                   palettes={
                     <>

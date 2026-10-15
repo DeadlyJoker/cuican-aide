@@ -346,6 +346,9 @@ importers:
       '@crewon/contracts':
         specifier: workspace:*
         version: link:../../packages/contracts
+      '@crewon/domain':
+        specifier: workspace:*
+        version: link:../../packages/domain
       '@crewon/process-lifecycle':
         specifier: workspace:*
         version: link:../../packages/process-lifecycle

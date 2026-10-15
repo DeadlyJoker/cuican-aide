@@ -102,7 +102,7 @@ test("exchanges the existing account for an opaque Control credential and secure
     await sessions.resolve({
       cookie: created.setCookie.split(";")[0]!,
       userAgent: null,
-      pimAccessToken: "different-account",
+      pimAccessToken: "other-account",
     }),
     null,
   );
@@ -331,4 +331,90 @@ test("public module imports revalidate account and profile, and never extend exp
     }),
     /pim_control_profile_denied/,
   );
+});
+
+test("refreshed credentials in two tabs keep one verified account Cookie, fixed expiry and independent account isolation", async () => {
+  const f = fixture(1);
+  const a = await f.sessions.exchange("account-old-token", signal());
+  f.setTime(f.getTime() + 10000);
+  const b = await f.sessions.exchange("account-refreshed-token", signal());
+  assert.deepEqual(b.session, a.session);
+  const cookie = a.setCookie.split(";", 1)[0]!;
+  for (const pimAccessToken of [
+    "account-old-token",
+    "account-refreshed-token",
+  ]) {
+    assert.deepEqual(
+      await f.sessions.resolve({ cookie, userAgent: null, pimAccessToken }),
+      a.session,
+    );
+    await f.sessions.verifyControlToken(a.session.controlAccessToken, signal());
+  }
+  assert.equal(
+    await f.sessions.resolve({
+      cookie,
+      userAgent: null,
+      pimAccessToken: "other-account",
+    }),
+    null,
+  );
+  assert.equal(await f.sessions.resolve({ cookie, userAgent: null }), null);
+  f.denyAccount();
+  assert.equal(
+    await f.sessions.resolve({
+      cookie,
+      userAgent: null,
+      pimAccessToken: "account-old-token",
+    }),
+    null,
+  );
+  await assert.rejects(
+    f.sessions.verifyControlToken(a.session.controlAccessToken, signal()),
+  );
+});
+
+test("private Worker owner and profile lookups require the original live account and are withdrawn with its session", async () => {
+  const f = fixture();
+  const created = await f.sessions.exchange("account", signal());
+  const actor = pimControlAccountActor(f.account);
+  const scope = await f.sessions.pluginProfile(actor, signal());
+  assert.deepEqual(await f.sessions.executionActor(actor, signal()), actor);
+  assert.deepEqual(
+    (await f.sessions.executionProfile(scope, signal())).actor,
+    actor,
+  );
+  assert.equal(
+    await f.sessions.executionActor({ ...actor, actorId: "foreign" }, signal()),
+    null,
+  );
+  await assert.rejects(
+    f.sessions.executionProfile({ ...scope, profileId: "foreign" }, signal()),
+  );
+  f.denyAccount();
+  await assert.rejects(
+    f.sessions.executionActor(actor, signal()),
+    /pim_account_denied/,
+  );
+  f.sessions.revokeCookie(created.setCookie.split(";")[0]!);
+  assert.equal(await f.sessions.executionActor(actor, signal()), null);
+});
+
+test("a refreshed token cannot reuse the old Cookie after the durable account profile changes", async () => {
+  const f = fixture();
+  const first = await f.sessions.exchange("account", signal());
+  const [key, profile] = [...f.profiles.entries()][0]!;
+  f.profiles.set(key, {
+    ...profile,
+    scope: { ...profile.scope, profileId: "replacement-profile" },
+  });
+  assert.equal(
+    await f.sessions.resolve({
+      cookie: first.setCookie.split(";")[0]!,
+      userAgent: null,
+      pimAccessToken: "refreshed-account",
+    }),
+    null,
+  );
+  const second = await f.sessions.exchange("refreshed-account", signal());
+  assert.notEqual(second.session.sessionId, first.session.sessionId);
 });

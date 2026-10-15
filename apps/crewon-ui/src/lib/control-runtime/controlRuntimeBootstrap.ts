@@ -133,7 +133,7 @@ export async function loadControlApiClient(
         fetch: transport.fetch,
       });
       if (session.pluginUiAssets === "entry-bytes.v1")
-        enablePluginEntryByteCache(client);
+        enablePluginEntryByteCache(client, transport.fetch);
       if (initialDeadlineExpired) {
         try {
           dependencies.onLateClient?.(client);

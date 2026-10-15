@@ -339,6 +339,22 @@ describe("installed plugin directory App composition (real Control client)", () 
     expect(state.hostModules).toEqual([]);
     expect(state.hostModuleAvailability.state).toBe("unavailable");
   });
+  it("does not remove a mounted plugin on a response-less network outage or a gateway HTML error", async () => {
+    let mode: "ok" | "network" | "gateway" = "ok";
+    const wire = controlUiClient(() => {
+      if (mode === "network") throw new TypeError("fetch failed");
+      if (mode === "gateway") return new Response("<html>bad gateway</html>", { status: 502 });
+      return controlUiResponse({ plugins: [item("example.a")], next: null });
+    });
+    await render(wire.client);
+    const original = state.hostModules;
+    for (const next of ["network", "gateway"] as const) {
+      mode = next;
+      await refresh();
+      expect(state.hostModules).toBe(original);
+      expect(state.hostModuleAvailability.state).toBe("available");
+    }
+  });
   it("fails closed on a refresh error, bounds diagnostics and restores the directory only from a successful new snapshot", async () => {
     let failing = false;
     const wire = controlUiClient(() =>

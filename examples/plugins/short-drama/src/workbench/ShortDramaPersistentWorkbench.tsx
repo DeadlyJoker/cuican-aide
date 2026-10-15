@@ -220,9 +220,13 @@ export function ShortDramaPersistentWorkbench({
   );
   const [newOrigin, setNewOrigin] = useState<"creative" | "novel" | null>(null);
   useEffect(() => {
-    if (hostSurface === "workbench" && hostPageContext?.createOrigin)
+    if (
+      hostSurface === "workbench" &&
+      hostPageContext?.createOrigin &&
+      (!onOpenHostPage || hostPageContext.createOrigin === "novel")
+    )
       setNewOrigin(hostPageContext.createOrigin);
-  }, [hostSurface, hostPageContext?.createOrigin]);
+  }, [hostSurface, hostPageContext?.createOrigin, onOpenHostPage]);
   const [creativeDraft, setCreativeDraft] = useState(() =>
     emptyCreationDraft("creative"),
   );

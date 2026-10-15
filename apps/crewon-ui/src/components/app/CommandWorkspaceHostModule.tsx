@@ -32,6 +32,12 @@ export type CommandWorkspaceHostModule = Readonly<{
   pageContext?: PluginUiJsonValue;
   /** Selected project is a presentation constraint, never an authority grant. */
   conversationProjectId?: string;
+  /** Explicit user Send creates an isolated project and its first Agent turn. */
+  startProjectConversation?(
+    input: Readonly<{ content: string; modelId?: string }>,
+  ): Promise<void>;
+  /** Read-only restoration hint. Retrying still uses the original authenticated coordinator. */
+  projectCreationDraft?: Readonly<{ content: string; modelId?: string }>;
   createPage?(): void;
   closePage?(): void;
   activatePage?(): void;

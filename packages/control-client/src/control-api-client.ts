@@ -1,10 +1,12 @@
 import {
   ControlApiClientError,
   ControlApiProtocolError,
+  ControlApiTransportError,
 } from "./control-api-errors.ts";
 export {
   ControlApiClientError,
   ControlApiProtocolError,
+  ControlApiTransportError,
 } from "./control-api-errors.ts";
 import { ProjectMediaResultControlClient } from "./project-media-result-control-client.ts";
 import { ProjectMediaGenerationControlClient } from "./project-media-generation-control-client.ts";
@@ -1802,6 +1804,9 @@ export class ControlApiClient {
       signal: options.signal,
       ...(options.redirect === undefined ? {} : { redirect: options.redirect }),
       ...(body === null ? {} : { body: JSON.stringify(body) }),
+    }).catch((error: unknown) => {
+      if (options.signal?.aborted) throw error;
+      throw new ControlApiTransportError(error);
     });
     if (!options.expectedStatuses.includes(response.status)) {
       throw await controlApiError(response, options.maximumResponseBytes);

@@ -1,5 +1,13 @@
 import type { ErrorCategory } from "@crewon/contracts";
 
+/** A request failed before an HTTP response; it is not a business rejection or evidence of revocation. */
+export class ControlApiTransportError extends Error {
+  constructor(cause: unknown) {
+    super("control_api_transport_unavailable", { cause });
+    this.name = "ControlApiTransportError";
+  }
+}
+
 export class ControlApiClientError extends Error {
   readonly status: number;
   readonly category: ErrorCategory;
