@@ -1055,6 +1055,11 @@ export function CommandWorkspace({
   });
   const pluginConversationMissing = pluginConversationScope.missing;
   useEffect(() => {
+    // Project/sidebar/tab navigation can arrive after a normal homepage draft.
+    // Only the resolved original project thread may replace that draft.
+    if (pluginSceneActive && !pluginConversationMissing) setNewTaskDraft(false);
+  }, [pluginSceneActive, pluginConversationMissing, selectedThreadId]);
+  useEffect(() => {
     if (!hostModuleView.active || activeView === "command") return;
     setActiveView("command");
     window.history.replaceState(

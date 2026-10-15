@@ -222,7 +222,10 @@ describe("plugin panels in the formal Agent shell", () => {
     expect(container.querySelector("[data-project-stage]")).toBeNull();
     await render(props);
     expect(container.querySelector(".command-thread-room")).toBeNull();
-    await openPlugin(module.id);
+    await render({
+      ...props,
+      hostModuleRequest: { id: module.id, requestKey: "return-to-project" },
+    });
     expect(container.querySelector(".command-thread-room")).not.toBeNull();
     expect(container.querySelector("[data-project-stage]")).not.toBeNull();
   });
