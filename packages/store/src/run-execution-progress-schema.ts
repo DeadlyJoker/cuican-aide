@@ -18,8 +18,18 @@ export function runExecutionProgressSchemaSql(
       IF NEW.state_json->>'status' IN ('completed','failed','canceled') THEN
         DELETE FROM ${prefix}run_execution_progress WHERE tenant_id=NEW.tenant_id AND run_id=NEW.run_id;
       END IF; RETURN NEW; END $$;
-    DROP TRIGGER IF EXISTS retire_terminal_run_execution_progress ON ${prefix}run_snapshots;
-    CREATE TRIGGER retire_terminal_run_execution_progress AFTER UPDATE OF state_json ON ${prefix}run_snapshots FOR EACH ROW EXECUTE FUNCTION ${prefix}retire_terminal_run_execution_progress();`
+    DO $progress_trigger$ BEGIN
+      IF NOT EXISTS (
+        SELECT 1 FROM pg_trigger t WHERE t.tgrelid='${prefix}run_snapshots'::regclass
+          AND t.tgname='retire_terminal_run_execution_progress' AND t.tgenabled='O'
+          AND t.tgtype=17 AND t.tgqual IS NULL AND t.tgnargs=0
+          AND t.tgfoid='${prefix}retire_terminal_run_execution_progress()'::regprocedure
+          AND ARRAY(SELECT unnest(t.tgattr))=ARRAY[(SELECT attnum FROM pg_attribute WHERE attrelid=t.tgrelid AND attname='state_json')]::smallint[]
+      ) THEN
+        DROP TRIGGER IF EXISTS retire_terminal_run_execution_progress ON ${prefix}run_snapshots;
+    CREATE TRIGGER retire_terminal_run_execution_progress AFTER UPDATE OF state_json ON ${prefix}run_snapshots FOR EACH ROW EXECUTE FUNCTION ${prefix}retire_terminal_run_execution_progress();
+      END IF;
+    END $progress_trigger$;`
     );
   return (
     table +

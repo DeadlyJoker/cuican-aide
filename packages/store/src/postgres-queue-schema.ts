@@ -39,8 +39,12 @@ export function postgresQueueSchemaSql(schema: string): string {
         OR (status = 'leased' AND lease_owner_id IS NOT NULL AND lease_id IS NOT NULL AND lease_expires_at IS NOT NULL AND delivered_at IS NULL)
         OR (status = 'delivered' AND lease_owner_id IS NULL AND lease_id IS NULL AND lease_expires_at IS NULL AND delivered_at IS NOT NULL))
     );
-    CREATE INDEX IF NOT EXISTS outbox_claim_idx
+    DO $existing_index$ BEGIN
+      IF to_regclass('${schema}.outbox_claim_idx') IS NULL THEN
+        CREATE INDEX IF NOT EXISTS outbox_claim_idx
       ON ${schema}.outbox(status, available_at, lease_expires_at, outbox_order);
+      END IF;
+    END $existing_index$;
 
     CREATE TABLE IF NOT EXISTS ${schema}.work_items (
       work_item_order bigint GENERATED ALWAYS AS IDENTITY PRIMARY KEY,
@@ -56,8 +60,12 @@ export function postgresQueueSchemaSql(schema: string): string {
         OR (status = 'leased' AND lease_owner_id IS NOT NULL AND lease_id IS NOT NULL AND lease_expires_at IS NOT NULL AND completed_at IS NULL)
         OR (status = 'completed' AND lease_owner_id IS NULL AND lease_id IS NULL AND lease_expires_at IS NULL AND completed_at IS NOT NULL))
     );
-    CREATE INDEX IF NOT EXISTS work_items_claim_idx
+    DO $existing_index$ BEGIN
+      IF to_regclass('${schema}.work_items_claim_idx') IS NULL THEN
+        CREATE INDEX IF NOT EXISTS work_items_claim_idx
       ON ${schema}.work_items(status, available_at, lease_expires_at, work_item_order);
+      END IF;
+    END $existing_index$;
     ${postgresOutboxRetentionSchemaSql(schema)}
     UPDATE ${schema}.schema_migrations SET version = 2 WHERE component = 'durable_queue' AND version = 1;`;
 }

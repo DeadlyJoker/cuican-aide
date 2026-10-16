@@ -32,10 +32,18 @@ export function sqliteActiveRunIndexSql(): string {
 }
 
 export function postgresActiveRunIndexSql(schema: string): string {
-  return `ALTER TABLE ${schema}.run_snapshots ADD COLUMN IF NOT EXISTS active_read boolean GENERATED ALWAYS AS (${POSTGRES_LIVE_VALUE}) STORED;
-    CREATE INDEX IF NOT EXISTS run_snapshots_live_scope_idx
+  return `DO $active_read$ BEGIN
+      IF NOT EXISTS (SELECT 1 FROM pg_attribute WHERE attrelid='${schema}.run_snapshots'::regclass AND attname='active_read' AND NOT attisdropped) THEN
+        ALTER TABLE ${schema}.run_snapshots ADD COLUMN IF NOT EXISTS active_read boolean GENERATED ALWAYS AS (${POSTGRES_LIVE_VALUE}) STORED;
+      END IF;
+    END $active_read$;
+    DO $existing_index$ BEGIN
+      IF to_regclass('${schema}.run_snapshots_live_scope_idx') IS NULL THEN
+        CREATE INDEX IF NOT EXISTS run_snapshots_live_scope_idx
     ON ${schema}.run_snapshots(tenant_id, space_id, run_id)
-    WHERE ${POSTGRES_LIVE_RUN_PREDICATE};`;
+    WHERE ${POSTGRES_LIVE_RUN_PREDICATE};
+      END IF;
+    END $existing_index$;`;
 }
 
 /** The query returns at most two rows and suppresses oversized JSON before decoding. */

@@ -262,25 +262,57 @@ export function postgresThreadSchemaSql(schema: string): string {
     END
     $thread_rollback_v5$;
 
-    CREATE INDEX IF NOT EXISTS thread_events_tenant_thread_idx
+    DO $existing_index$ BEGIN
+      IF to_regclass('${schema}.thread_events_tenant_thread_idx') IS NULL THEN
+        CREATE INDEX IF NOT EXISTS thread_events_tenant_thread_idx
       ON ${schema}.thread_events(tenant_id, thread_id, sequence);
-    CREATE INDEX IF NOT EXISTS threads_visible_list_idx
+      END IF;
+    END $existing_index$;
+    DO $existing_index$ BEGIN
+      IF to_regclass('${schema}.threads_visible_list_idx') IS NULL THEN
+        CREATE INDEX IF NOT EXISTS threads_visible_list_idx
       ON ${schema}.threads(tenant_id, space_id, updated_at DESC, thread_id DESC)
       WHERE status != 'deleted';
-    CREATE INDEX IF NOT EXISTS thread_goal_events_tenant_thread_idx
+      END IF;
+    END $existing_index$;
+    DO $existing_index$ BEGIN
+      IF to_regclass('${schema}.thread_goal_events_tenant_thread_idx') IS NULL THEN
+        CREATE INDEX IF NOT EXISTS thread_goal_events_tenant_thread_idx
       ON ${schema}.thread_goal_events(tenant_id, thread_id, sequence);
-    CREATE INDEX IF NOT EXISTS messages_tenant_thread_idx
+      END IF;
+    END $existing_index$;
+    DO $existing_index$ BEGIN
+      IF to_regclass('${schema}.messages_tenant_thread_idx') IS NULL THEN
+        CREATE INDEX IF NOT EXISTS messages_tenant_thread_idx
       ON ${schema}.messages(tenant_id, thread_id, sequence);
-    CREATE INDEX IF NOT EXISTS model_history_tenant_thread_idx
+      END IF;
+    END $existing_index$;
+    DO $existing_index$ BEGIN
+      IF to_regclass('${schema}.model_history_tenant_thread_idx') IS NULL THEN
+        CREATE INDEX IF NOT EXISTS model_history_tenant_thread_idx
       ON ${schema}.model_history_items(tenant_id, thread_id, sequence);
-    CREATE INDEX IF NOT EXISTS message_invalidations_thread_idx
+      END IF;
+    END $existing_index$;
+    DO $existing_index$ BEGIN
+      IF to_regclass('${schema}.message_invalidations_thread_idx') IS NULL THEN
+        CREATE INDEX IF NOT EXISTS message_invalidations_thread_idx
       ON ${schema}.message_invalidations(tenant_id, thread_id, message_sequence);
-    CREATE UNIQUE INDEX IF NOT EXISTS model_history_tool_call_key_idx
+      END IF;
+    END $existing_index$;
+    DO $existing_index$ BEGIN
+      IF to_regclass('${schema}.model_history_tool_call_key_idx') IS NULL THEN
+        CREATE UNIQUE INDEX IF NOT EXISTS model_history_tool_call_key_idx
       ON ${schema}.model_history_items(thread_id, run_id, call_id)
       WHERE item_type = 'tool_call';
-    CREATE UNIQUE INDEX IF NOT EXISTS model_history_tool_result_key_idx
+      END IF;
+    END $existing_index$;
+    DO $existing_index$ BEGIN
+      IF to_regclass('${schema}.model_history_tool_result_key_idx') IS NULL THEN
+        CREATE UNIQUE INDEX IF NOT EXISTS model_history_tool_result_key_idx
       ON ${schema}.model_history_items(thread_id, run_id, call_id)
       WHERE item_type = 'tool_result';
+      END IF;
+    END $existing_index$;
     ${postgresModelHistoryContextSchemaSql(schema)}
     UPDATE ${schema}.schema_migrations SET version = 7
       WHERE component = 'thread_authority' AND version = 6;

@@ -29,8 +29,10 @@ export function compactionCheckpointSchemaSql(
   END $checkpoint$;
   DO $checkpoint_trigger$
   BEGIN
+    IF NOT EXISTS (SELECT 1 FROM pg_trigger WHERE tgrelid='${prefix}run_snapshots'::regclass AND tgname='retire_terminal_compaction_checkpoint') THEN
     CREATE TRIGGER retire_terminal_compaction_checkpoint AFTER UPDATE OF state_json ON ${prefix}run_snapshots
       FOR EACH ROW WHEN (NEW.state_json->>'status' IN ('completed','failed','canceled')) EXECUTE FUNCTION ${prefix}retire_terminal_compaction_checkpoint();
+    END IF;
   EXCEPTION WHEN duplicate_object THEN NULL;
   END $checkpoint_trigger$;`
       : `

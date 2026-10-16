@@ -1,0 +1,26 @@
+{
+  "scope": "Isolated local PostgreSQL 18 test cluster, UTF8 fixture database; no user database accessed",
+  "trigger": "Reopen the real Control factory while two ordinary Worker lanes execute admitted Workflows",
+  "observedFailure": {
+    "sqlState": "40P01",
+    "databaseLogTime": "2026-10-16 18:52:53.634 CST",
+    "writerStatement": "INSERT INTO fixture_schema.outbox (...) VALUES (...) ",
+    "writerPid": 43234,
+    "migratorPid": 43236,
+    "relationOid": 3999886,
+    "cycle": [
+      "writer waits for RowExclusiveLock blocked by migrator",
+      "migrator waits for AccessExclusiveLock blocked by writer"
+    ],
+    "additionalLocalization": "A separately held ROW EXCLUSIVE lock reproduced redundant DDL waits in index creation and existing compaction trigger creation during Store open"
+  },
+  "change": "Catalog guards avoid repeating installed constraint, generated-column, index and trigger DDL. Existing fresh/legacy migrations and repair semantics remain.",
+  "regressions": [
+    "packages/store/src/postgres-live-reopen.test.ts: Store opens while live tables are ROW EXCLUSIVE locked; canonical snapshot and healthy trigger OIDs unchanged",
+    "packages/store/src/postgres-live-reopen.test.ts: disabled outbox/progress triggers repaired; retired message ID reuse and identity mutation still rejected; terminal progress removed",
+    "apps/control-api/src/postgres-workflow-deployment.integration.test.ts: overlapping producer streams and per-chat final results after closing/reopening the HTTP server",
+    "packages/store/src/run-execution-progress-migration.test.ts: concurrent legacy progress migration preserves Run events",
+    "packages/store/src/compaction-checkpoint-migration.test.ts: legacy checkpoint migration"
+  ],
+  "limitations": "Synthetic model streams, real database/compiler/factories/HTTP; no installed desktop or live provider acceptance and no power-loss durability claim"
+}

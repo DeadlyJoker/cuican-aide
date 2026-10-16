@@ -79,8 +79,10 @@ export function postgresRunSchemaSql(schema: string): string {
     END $guard$;
     DO $trigger$
     BEGIN
+      IF NOT EXISTS (SELECT 1 FROM pg_trigger WHERE tgrelid='${schema}.run_events'::regclass AND tgname='run_output_receipt_duplicate_guard') THEN
       CREATE TRIGGER run_output_receipt_duplicate_guard BEFORE INSERT ON ${schema}.run_events
         FOR EACH ROW EXECUTE FUNCTION ${schema}.guard_run_output_duplicate();
+      END IF;
     EXCEPTION WHEN duplicate_object THEN NULL;
     END $trigger$;
 
@@ -97,33 +99,48 @@ export function postgresRunSchemaSql(schema: string): string {
     END $progress$;
     DO $progress_trigger$
     BEGIN
+      IF NOT EXISTS (SELECT 1 FROM pg_trigger WHERE tgrelid='${schema}.run_events'::regclass AND tgname='run_progress_receipt_duplicate_guard') THEN
       CREATE TRIGGER run_progress_receipt_duplicate_guard BEFORE INSERT ON ${schema}.run_events
         FOR EACH ROW EXECUTE FUNCTION ${schema}.guard_run_progress_duplicate();
+      END IF;
     EXCEPTION WHEN duplicate_object THEN NULL;
     END $progress_trigger$;
 
-    CREATE INDEX IF NOT EXISTS run_events_tenant_run_idx
+    DO $existing_index$ BEGIN
+      IF to_regclass('${schema}.run_events_tenant_run_idx') IS NULL THEN
+        CREATE INDEX IF NOT EXISTS run_events_tenant_run_idx
       ON ${schema}.run_events(tenant_id, run_id, sequence);
-    CREATE INDEX IF NOT EXISTS run_thread_bindings_thread_idx
+      END IF;
+    END $existing_index$;
+    DO $existing_index$ BEGIN
+      IF to_regclass('${schema}.run_thread_bindings_thread_idx') IS NULL THEN
+        CREATE INDEX IF NOT EXISTS run_thread_bindings_thread_idx
       ON ${schema}.run_thread_bindings(tenant_id, thread_id, run_id);
+      END IF;
+    END $existing_index$;
 
     DO $migration$
     BEGIN
+      IF NOT EXISTS (SELECT 1 FROM pg_constraint WHERE conrelid='${schema}.outbox'::regclass AND conname='outbox_run_authority_fk') THEN
       ALTER TABLE ${schema}.outbox ADD CONSTRAINT outbox_run_authority_fk
         FOREIGN KEY (tenant_id, run_id)
         REFERENCES ${schema}.run_snapshots(tenant_id, run_id) ON DELETE CASCADE;
+      END IF;
     EXCEPTION WHEN duplicate_object THEN NULL;
     END $migration$;
     DO $migration$
     BEGIN
+      IF NOT EXISTS (SELECT 1 FROM pg_constraint WHERE conrelid='${schema}.work_items'::regclass AND conname='work_items_run_authority_fk') THEN
       ALTER TABLE ${schema}.work_items ADD CONSTRAINT work_items_run_authority_fk
         FOREIGN KEY (tenant_id, run_id)
         REFERENCES ${schema}.run_snapshots(tenant_id, run_id) ON DELETE CASCADE;
+      END IF;
     EXCEPTION WHEN duplicate_object THEN NULL;
     END $migration$;
 
     DO $migration$
     BEGIN
+      IF NOT EXISTS (SELECT 1 FROM pg_constraint WHERE conrelid='${schema}.run_snapshots'::regclass AND conname='run_snapshots_goal_accounting_v2_ck') THEN
       ALTER TABLE ${schema}.run_snapshots
         ADD CONSTRAINT run_snapshots_goal_accounting_v2_ck CHECK (
           state_json->>'status' IN ('completed', 'failed', 'canceled')
@@ -134,6 +151,7 @@ export function postgresRunSchemaSql(schema: string): string {
             AND jsonb_typeof(state_json->'goalAccounting') = 'object'
           )
         );
+      END IF;
     EXCEPTION WHEN duplicate_object THEN NULL;
     END $migration$;
 

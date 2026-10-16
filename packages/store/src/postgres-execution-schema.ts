@@ -61,10 +61,18 @@ export function postgresExecutionSchemaSql(schema: string): string {
         REFERENCES ${schema}.run_attempts(attempt_id) ON DELETE RESTRICT
     );
 
-    CREATE INDEX IF NOT EXISTS run_steps_run_idx
+    DO $existing_index$ BEGIN
+      IF to_regclass('${schema}.run_steps_run_idx') IS NULL THEN
+        CREATE INDEX IF NOT EXISTS run_steps_run_idx
       ON ${schema}.run_steps(tenant_id, run_id, status, step_id);
-    CREATE INDEX IF NOT EXISTS run_attempts_step_idx
+      END IF;
+    END $existing_index$;
+    DO $existing_index$ BEGIN
+      IF to_regclass('${schema}.run_attempts_step_idx') IS NULL THEN
+        CREATE INDEX IF NOT EXISTS run_attempts_step_idx
       ON ${schema}.run_attempts(tenant_id, run_id, step_id, attempt_number);
+      END IF;
+    END $existing_index$;
 
     CREATE TABLE IF NOT EXISTS ${schema}.thread_continuations (
       tenant_id text NOT NULL,
@@ -93,10 +101,14 @@ export function postgresExecutionSchemaSql(schema: string): string {
         REFERENCES ${schema}.model_history_items(thread_id, sequence) ON DELETE CASCADE
     );
 
-    CREATE INDEX IF NOT EXISTS thread_continuations_thread_idx
+    DO $existing_index$ BEGIN
+      IF to_regclass('${schema}.thread_continuations_thread_idx') IS NULL THEN
+        CREATE INDEX IF NOT EXISTS thread_continuations_thread_idx
       ON ${schema}.thread_continuations(
         tenant_id, thread_id, through_history_sequence
       );
+      END IF;
+    END $existing_index$;
 
     CREATE TABLE IF NOT EXISTS ${schema}.thread_model_states (
       tenant_id text NOT NULL,
@@ -134,12 +146,20 @@ export function postgresExecutionSchemaSql(schema: string): string {
         REFERENCES ${schema}.work_items(work_item_id) ON DELETE RESTRICT
     );
 
-    CREATE INDEX IF NOT EXISTS tool_execution_receipts_run_idx
+    DO $existing_index$ BEGIN
+      IF to_regclass('${schema}.tool_execution_receipts_run_idx') IS NULL THEN
+        CREATE INDEX IF NOT EXISTS tool_execution_receipts_run_idx
       ON ${schema}.tool_execution_receipts(tenant_id, run_id, status, receipt_id);
-    CREATE INDEX IF NOT EXISTS tool_execution_receipts_attempt_idx
+      END IF;
+    END $existing_index$;
+    DO $existing_index$ BEGIN
+      IF to_regclass('${schema}.tool_execution_receipts_attempt_idx') IS NULL THEN
+        CREATE INDEX IF NOT EXISTS tool_execution_receipts_attempt_idx
       ON ${schema}.tool_execution_receipts(
         tenant_id, run_id, step_id, attempt_id
       );
+      END IF;
+    END $existing_index$;
 
     CREATE TABLE IF NOT EXISTS ${schema}.tool_approvals (
       approval_id text PRIMARY KEY,
@@ -165,17 +185,27 @@ export function postgresExecutionSchemaSql(schema: string): string {
         REFERENCES ${schema}.work_items(work_item_id) ON DELETE RESTRICT
     );
 
-    CREATE INDEX IF NOT EXISTS tool_approvals_run_idx
+    DO $existing_index$ BEGIN
+      IF to_regclass('${schema}.tool_approvals_run_idx') IS NULL THEN
+        CREATE INDEX IF NOT EXISTS tool_approvals_run_idx
       ON ${schema}.tool_approvals(tenant_id, run_id, status, approval_id);
-    CREATE INDEX IF NOT EXISTS tool_approvals_action_idx
+      END IF;
+    END $existing_index$;
+    DO $existing_index$ BEGIN
+      IF to_regclass('${schema}.tool_approvals_action_idx') IS NULL THEN
+        CREATE INDEX IF NOT EXISTS tool_approvals_action_idx
       ON ${schema}.tool_approvals(tenant_id, run_id, action_digest);
+      END IF;
+    END $existing_index$;
 
     DO $migration$
     BEGIN
+      IF NOT EXISTS (SELECT 1 FROM pg_constraint WHERE conrelid='${schema}.run_steps'::regclass AND conname='run_steps_current_attempt_fk') THEN
       ALTER TABLE ${schema}.run_steps ADD CONSTRAINT run_steps_current_attempt_fk
         FOREIGN KEY (tenant_id, run_id, step_id, current_attempt_id)
         REFERENCES ${schema}.run_attempts(tenant_id, run_id, step_id, attempt_id)
         DEFERRABLE INITIALLY DEFERRED;
+      END IF;
     EXCEPTION WHEN duplicate_object THEN NULL;
     END $migration$;
 

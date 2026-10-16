@@ -24,12 +24,24 @@ export function postgresModelHistoryContextSchemaSql(schema: string): string {
       PRIMARY KEY (tenant_id, thread_id, sequence),
       FOREIGN KEY (tenant_id, thread_id) REFERENCES ${schema}.model_history_context_state(tenant_id, thread_id) ON DELETE CASCADE
     );
-    CREATE INDEX IF NOT EXISTS model_history_context_compactions
+    DO $existing_index$ BEGIN
+      IF to_regclass('${schema}.model_history_context_compactions') IS NULL THEN
+        CREATE INDEX IF NOT EXISTS model_history_context_compactions
       ON ${schema}.model_history_context_refs(tenant_id, thread_id, sequence) WHERE item_type='compaction';
-    CREATE INDEX IF NOT EXISTS model_history_context_content
+      END IF;
+    END $existing_index$;
+    DO $existing_index$ BEGIN
+      IF to_regclass('${schema}.model_history_context_content') IS NULL THEN
+        CREATE INDEX IF NOT EXISTS model_history_context_content
       ON ${schema}.model_history_context_refs(tenant_id, thread_id, sequence) WHERE item_type<>'compaction';
-    CREATE INDEX IF NOT EXISTS model_history_context_instructions
+      END IF;
+    END $existing_index$;
+    DO $existing_index$ BEGIN
+      IF to_regclass('${schema}.model_history_context_instructions') IS NULL THEN
+        CREATE INDEX IF NOT EXISTS model_history_context_instructions
       ON ${schema}.model_history_context_refs(tenant_id, thread_id, sequence) WHERE boundary_kind='instruction';
+      END IF;
+    END $existing_index$;
 
     CREATE OR REPLACE FUNCTION ${schema}.invalidate_model_history_context() RETURNS trigger
     LANGUAGE plpgsql AS $context_invalidation$

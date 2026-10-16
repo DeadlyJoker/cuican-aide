@@ -18,10 +18,18 @@ export function sqliteMessageRunEvidenceIndexSql(): string {
 }
 
 export function postgresMessageRunEvidenceIndexSql(schema: string): string {
-  return `CREATE INDEX IF NOT EXISTS message_run_start_evidence_idx
+  return `DO $existing_index$ BEGIN
+      IF to_regclass('${schema}.message_run_start_evidence_idx') IS NULL THEN
+        CREATE INDEX IF NOT EXISTS message_run_start_evidence_idx
     ON ${schema}.idempotency_receipts(tenant_id, (result_json #>> '{messages,0,messageId}'), run_id)
     WHERE ${POSTGRES_TURN_START_EVIDENCE_PREDICATE};
-    CREATE INDEX IF NOT EXISTS message_run_output_evidence_idx
+      END IF;
+    END $existing_index$;
+    DO $existing_index$ BEGIN
+      IF to_regclass('${schema}.message_run_output_evidence_idx') IS NULL THEN
+        CREATE INDEX IF NOT EXISTS message_run_output_evidence_idx
     ON ${schema}.run_events(tenant_id, (event_json->'data'->>'messageId'), run_id)
-    WHERE ${POSTGRES_MESSAGE_COMPLETED_EVIDENCE_PREDICATE};`;
+    WHERE ${POSTGRES_MESSAGE_COMPLETED_EVIDENCE_PREDICATE};
+      END IF;
+    END $existing_index$;`;
 }

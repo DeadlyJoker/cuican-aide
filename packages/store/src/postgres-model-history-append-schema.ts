@@ -9,9 +9,13 @@ export function postgresModelHistoryAppendSchemaSql(schema: string): string {
       PRIMARY KEY (tenant_id, thread_id),
       FOREIGN KEY (tenant_id, thread_id) REFERENCES ${schema}.threads(tenant_id, thread_id) ON DELETE CASCADE
     );
-    CREATE INDEX IF NOT EXISTS model_history_non_tool_sequence_idx
+    DO $existing_index$ BEGIN
+      IF to_regclass('${schema}.model_history_non_tool_sequence_idx') IS NULL THEN
+        CREATE INDEX IF NOT EXISTS model_history_non_tool_sequence_idx
       ON ${schema}.model_history_items(tenant_id, thread_id, sequence)
       WHERE item_type NOT IN ('tool_call', 'tool_result');
+      END IF;
+    END $existing_index$;
 
     CREATE OR REPLACE FUNCTION ${schema}.advance_model_history_append_state() RETURNS trigger
     LANGUAGE plpgsql AS $history_append$
