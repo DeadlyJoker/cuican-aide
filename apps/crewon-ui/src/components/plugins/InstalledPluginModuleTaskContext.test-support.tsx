@@ -1,3 +1,5 @@
+import type { GetThreadTranscriptWindowResponse } from "@crewon/contracts";
+import { fixtureTranscriptSnapshot } from "../../lib/control-runtime/controlTranscriptSnapshot.test-support";
 // @ts-expect-error This focused Vitest fixture reads an externally built artifact in Node; product UI has no filesystem API.
 import { readFileSync } from "node:fs";
 // @ts-expect-error Vitest's native ESM importer is a Node-only test fixture, outside the renderer API.
@@ -336,8 +338,8 @@ export async function installedModuleTaskFixture() {
           threadId: thread.threadId,
           run: activeRun ? runs.get(activeRun) : null,
         });
-      if (url.pathname === "/api/v1/threads/thread-1/transcript-window")
-        return json({
+      if (url.pathname === "/api/v1/threads/thread-1/transcript-window" || url.pathname === "/api/v1/threads/thread-1/transcript-snapshot") {
+        const window: GetThreadTranscriptWindowResponse = {
           schemaVersion: "crewon.transcript-window.v0",
           messageWindow: {
             schemaVersion: "crewon.message-window.v0",
@@ -351,13 +353,15 @@ export async function installedModuleTaskFixture() {
           },
           runBindings: messages.map((message) => ({
             messageId: message.messageId,
-            runId: bindings.get(message.messageId),
+            runId: bindings.get(message.messageId)!,
             source:
               message.role === "user"
                 ? "turnStartReceipt"
                 : "messageCompletedEvent",
           })),
-        });
+        };
+        return json(url.pathname.endsWith("/transcript-snapshot") ? fixtureTranscriptSnapshot(window, [...runs.values()], activeRun ? runs.get(activeRun)! : null) : window);
+      }
       const taskMatch =
         /^\/api\/v1\/extensions\/crewon\.comfyui-krea2\/tasks\/([^/]+)$/u.exec(
           url.pathname,

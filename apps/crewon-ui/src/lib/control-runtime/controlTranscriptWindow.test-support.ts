@@ -150,7 +150,8 @@ export function transcriptFixture(
         });
       if (
         parsed.pathname.endsWith("/message-window") ||
-        parsed.pathname.endsWith("/transcript-window")
+        parsed.pathname.endsWith("/transcript-window") ||
+        parsed.pathname.endsWith("/transcript-snapshot")
       ) {
         const query = parseThreadMessageWindowQuery(
           Object.fromEntries(parsed.searchParams),
@@ -204,24 +205,41 @@ export function transcriptFixture(
                 })
               : null,
         };
+        const transcriptWindow = {
+          schemaVersion: "crewon.transcript-window.v0",
+          messageWindow,
+          runBindings: data.map((message) => ({
+            messageId: message.messageId,
+            runId: message.content.startsWith("legacy:")
+              ? null
+              : `run-${Math.ceil(message.sequence / 2)}`,
+            source: message.content.startsWith("legacy:")
+              ? "unassociated"
+              : message.role === "user"
+                ? "turnStartReceipt"
+                : "messageCompletedEvent",
+          })),
+        };
+        if (parsed.pathname.endsWith("/transcript-snapshot")) {
+          const ids = new Set(
+            transcriptWindow.runBindings.flatMap((binding) =>
+              binding.runId === null ? [] : [binding.runId],
+            ),
+          );
+          if (active) ids.add(active.runId);
+          return json({
+            schemaVersion: "crewon.transcript-snapshot.v0",
+            transcriptWindow,
+            activeRunId: active?.runId ?? null,
+            runs: [...ids].map((id) =>
+              active?.runId === id ? active : transcriptRun(id),
+            ),
+          });
+        }
         return json(
           parsed.pathname.endsWith("/message-window")
             ? messageWindow
-            : {
-                schemaVersion: "crewon.transcript-window.v0",
-                messageWindow,
-                runBindings: data.map((message) => ({
-                  messageId: message.messageId,
-                  runId: message.content.startsWith("legacy:")
-                    ? null
-                    : `run-${Math.ceil(message.sequence / 2)}`,
-                  source: message.content.startsWith("legacy:")
-                    ? "unassociated"
-                    : message.role === "user"
-                      ? "turnStartReceipt"
-                      : "messageCompletedEvent",
-                })),
-              },
+            : transcriptWindow,
         );
       }
       if (parsed.pathname.endsWith("/task-changes"))

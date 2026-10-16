@@ -89,8 +89,8 @@ function hasCanonicalAnswer(thread: Thread, runId: string, text: string) {
 describe("Run terminal receipt and canonical transcript settlement", () => {
   it("publishes the terminal receipt while canonical HTTP is pending and keeps received text", async () => {
     const { state, callbacks, runtime, feed } = fixture();
-    const release = settlementDeferred<ReturnType<typeof state.transcript>>();
-    state.client.getThreadTranscriptWindow.mockImplementation(
+    const release = settlementDeferred<ReturnType<typeof state.snapshot>>();
+    state.client.getThreadTranscriptSnapshot.mockImplementation(
       () => release.promise,
     );
     const { turn } = await runtime.startTurn(
@@ -112,7 +112,7 @@ describe("Run terminal receipt and canonical transcript settlement", () => {
         }),
       ),
     );
-    expect(state.client.getThreadTranscriptWindow).toHaveBeenCalledOnce();
+    expect(state.client.getThreadTranscriptSnapshot).toHaveBeenCalledOnce();
     expect(callbacks.onTextDelta).toHaveBeenCalledWith(
       settlementThreadId,
       "Received draft",
@@ -120,7 +120,7 @@ describe("Run terminal receipt and canonical transcript settlement", () => {
     expect(callbacks.onTextReset).not.toHaveBeenCalled();
     expect(callbacks.onRunSettled).not.toHaveBeenCalled();
 
-    release.resolve(state.transcript());
+    release.resolve(state.snapshot());
     await vi.waitFor(() =>
       expect(callbacks.onRunSettled).toHaveBeenCalledExactlyOnceWith(
         settlementThreadId,
@@ -175,8 +175,8 @@ describe("Run terminal receipt and canonical transcript settlement", () => {
       runStatusPollDelay: (signal) =>
         Promise.race([poll.promise, waitForSettlementAbort(signal)]),
     });
-    const canonical = settlementDeferred<ReturnType<typeof state.transcript>>();
-    state.client.getThreadTranscriptWindow.mockImplementation(
+    const canonical = settlementDeferred<ReturnType<typeof state.snapshot>>();
+    state.client.getThreadTranscriptSnapshot.mockImplementation(
       () => canonical.promise,
     );
     const { turn } = await runtime.startTurn(
@@ -190,7 +190,7 @@ describe("Run terminal receipt and canonical transcript settlement", () => {
     await vi.waitFor(() =>
       expect(callbacks.onRunTerminal).toHaveBeenCalledOnce(),
     );
-    canonical.resolve(state.transcript());
+    canonical.resolve(state.snapshot());
     await vi.waitFor(() =>
       expect(callbacks.onRunSettled).toHaveBeenCalledOnce(),
     );
@@ -257,13 +257,13 @@ describe("Run terminal receipt and canonical transcript settlement", () => {
   it("settles an older Run without replacing the newer Run presentation", async () => {
     const { state, callbacks, runtime, feed } = fixture();
     const releaseOld =
-      settlementDeferred<ReturnType<typeof state.transcript>>();
-    state.client.getThreadTranscriptWindow.mockImplementationOnce(
+      settlementDeferred<ReturnType<typeof state.snapshot>>();
+    state.client.getThreadTranscriptSnapshot.mockImplementationOnce(
       () => releaseOld.promise,
     );
     const first = await runtime.startTurn(settlementThreadId, "Older question");
     state.complete(first.turn.id, "Older durable answer");
-    const oldTranscript = state.transcript();
+    const oldTranscript = state.snapshot();
     feed(first.turn.id).emit(settlementDelta(first.turn.id, 1, "Older draft"));
     feed(first.turn.id).emit(settlementCompleted(first.turn.id));
     await vi.waitFor(() =>
@@ -281,7 +281,7 @@ describe("Run terminal receipt and canonical transcript settlement", () => {
       }),
     );
     await vi.waitFor(() =>
-      expect(state.client.getThreadTranscriptWindow).toHaveBeenCalledOnce(),
+      expect(state.client.getThreadTranscriptSnapshot).toHaveBeenCalledOnce(),
     );
 
     const second = await runtime.startTurn(
@@ -409,6 +409,7 @@ describe("Run terminal receipt and canonical transcript settlement", () => {
     incomplete.runBindings = incomplete.runBindings.filter(
       (binding) => binding.messageId === `${turn.id}:user`,
     );
+    state.client.getThreadTranscriptSnapshot.mockResolvedValueOnce({ ...state.snapshot(), transcriptWindow: incomplete });
     state.client.getThreadTranscriptWindow.mockResolvedValueOnce(incomplete);
     feed(turn.id).emit(
       settlementDelta(turn.id, 1, "Preserve this received text"),
@@ -742,9 +743,9 @@ describe("Run terminal receipt and canonical transcript settlement", () => {
   it("cancels a pending canonical read at rollback and never revives its removed Run", async () => {
     const { state, callbacks, runtime, feed } = fixture();
     const releaseOld =
-      settlementDeferred<ReturnType<typeof state.transcript>>();
+      settlementDeferred<ReturnType<typeof state.snapshot>>();
     let pendingSignal: AbortSignal | undefined;
-    state.client.getThreadTranscriptWindow.mockImplementationOnce(
+    state.client.getThreadTranscriptSnapshot.mockImplementationOnce(
       (_threadId, _query, request) => {
         pendingSignal = request?.signal;
         return releaseOld.promise;
@@ -755,14 +756,14 @@ describe("Run terminal receipt and canonical transcript settlement", () => {
       "Will be rolled back",
     );
     state.complete(turn.id);
-    const removedTranscript = state.transcript();
+    const removedTranscript = state.snapshot();
     feed(turn.id).emit(settlementDelta(turn.id, 1, "Removed draft"));
     feed(turn.id).emit(settlementCompleted(turn.id));
     await vi.waitFor(() =>
       expect(callbacks.onRunTerminal).toHaveBeenCalledOnce(),
     );
     await vi.waitFor(() =>
-      expect(state.client.getThreadTranscriptWindow).toHaveBeenCalledOnce(),
+      expect(state.client.getThreadTranscriptSnapshot).toHaveBeenCalledOnce(),
     );
 
     const rolledBack = await runtime.rollbackThread(settlementThreadId);

@@ -1,3 +1,5 @@
+import { fixtureTranscriptSnapshot } from "../control-runtime/controlTranscriptSnapshot.test-support";
+import type { GetThreadTranscriptWindowResponse } from "@crewon/contracts";
 // @vitest-environment happy-dom
 import { act, StrictMode, useState } from "react";
 import { createRoot, type Root } from "react-dom/client";
@@ -95,6 +97,24 @@ describe("App Thread detail lifecycle", () => {
       archivedAt: null,
       deletedAt: null,
     };
+    const historicalRun = {
+              runId: "run-1",
+              threadId: thread.threadId,
+              status: "completed",
+              revision: 3,
+              lastSequence: 3,
+              cancelRequested: false,
+              waitingApproval: null,
+              collaborationMode: "default",
+              purpose: "turn",
+              workflowVersionBinding: null,
+              goalBinding: null,
+              outputRef: "message:canonical-answer",
+              failure: null,
+              createdAt: at,
+              updatedAt: at,
+              terminalAt: at,
+            } as const;
     const client = new ControlApiClient({
       baseUrl: "http://control.test",
       fetch: async (input, init) => {
@@ -111,8 +131,8 @@ describe("App Thread detail lifecycle", () => {
             threadId: thread.threadId,
             run: null,
           });
-        if (path.endsWith("/transcript-window"))
-          return Response.json({
+        if (path.endsWith("/transcript-window") || path.endsWith("/transcript-snapshot")) {
+          const window: GetThreadTranscriptWindowResponse = {
             schemaVersion: "crewon.transcript-window.v0",
             messageWindow: {
               schemaVersion: "crewon.message-window.v0",
@@ -155,28 +175,10 @@ describe("App Thread detail lifecycle", () => {
                 source: "messageCompletedEvent",
               },
             ],
-          });
-        if (path === "/api/v1/runs/run-1")
-          return Response.json({
-            run: {
-              runId: "run-1",
-              threadId: thread.threadId,
-              status: "completed",
-              revision: 3,
-              lastSequence: 3,
-              cancelRequested: false,
-              waitingApproval: null,
-              collaborationMode: "default",
-              purpose: "turn",
-              workflowVersionBinding: null,
-              goalBinding: null,
-              outputRef: "message:canonical-answer",
-              failure: null,
-              createdAt: at,
-              updatedAt: at,
-              terminalAt: at,
-            },
-          });
+          };
+          return Response.json(path.endsWith("/transcript-snapshot") ? fixtureTranscriptSnapshot(window, [historicalRun], null) : window);
+        }
+        if (path === "/api/v1/runs/run-1") return Response.json({ run: historicalRun });
         if (path === "/api/v1/runs/run-1/plan")
           return Response.json({
             runId: "run-1",
@@ -294,7 +296,7 @@ describe("App Thread detail lifecycle", () => {
     );
     expect(state!.threadDetailCacheUsage.retainedThreads).toBe(3);
     expect(
-      requests.some((request) => request.path.endsWith("/transcript-window")),
+      requests.some((request) => request.path.endsWith("/transcript-snapshot")),
     ).toBe(true);
     expect(
       requests.some((request) =>

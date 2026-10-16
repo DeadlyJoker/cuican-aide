@@ -223,12 +223,12 @@ it("cancels repeated full-runtime reads even when transport ignores abort, and r
   const onThread = vi.fn();
   const f = transcriptFixture(2, { onThread });
   f.runtime.setThreadEventStreamFocus(null);
-  const realRead = f.client.getThreadTranscriptWindow.bind(f.client);
+  const realRead = f.client.getThreadTranscriptSnapshot.bind(f.client);
   const response = await realRead("thread-1");
   const releases: (() => void)[] = [];
   let entered: (() => void) | undefined;
   const read = vi
-    .spyOn(f.client, "getThreadTranscriptWindow")
+    .spyOn(f.client, "getThreadTranscriptSnapshot")
     .mockImplementation(
       async () =>
         new Promise((resolve) => {

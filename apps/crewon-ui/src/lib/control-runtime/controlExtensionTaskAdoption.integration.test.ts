@@ -1,3 +1,5 @@
+import type { GetThreadTranscriptWindowResponse } from "@crewon/contracts";
+import { fixtureTranscriptSnapshot } from "./controlTranscriptSnapshot.test-support";
 import { afterEach, describe, expect, it, vi } from "vitest";
 import type { RunEventView, RunView } from "@crewon/contracts";
 import { ControlApiClient } from "@crewon/control-client";
@@ -135,8 +137,8 @@ function fixture() {
                 : run
               : activeRun,
         });
-      if (url.pathname === "/api/v1/threads/thread-1/transcript-window")
-        return json({
+      if (url.pathname === "/api/v1/threads/thread-1/transcript-window" || url.pathname === "/api/v1/threads/thread-1/transcript-snapshot") {
+        const window: GetThreadTranscriptWindowResponse = {
           schemaVersion: "crewon.transcript-window.v0",
           messageWindow: {
             schemaVersion: "crewon.message-window.v0",
@@ -156,7 +158,10 @@ function fixture() {
                 ? "turnStartReceipt"
                 : "messageCompletedEvent",
           })),
-        });
+        };
+        const current = activeRun === undefined ? (run.status === "completed" ? null : run) : activeRun;
+        return json(url.pathname.endsWith("/transcript-snapshot") ? fixtureTranscriptSnapshot(window, [run], current) : window);
+      }
       if (url.pathname === "/api/v1/runs/run-1/plan")
         return json({
           runId: receipt.runId,
@@ -457,7 +462,7 @@ describe("host-created extension task adoption over Control HTTP/SSE", () => {
     "cancels an in-flight transcript after %s without adopting a Run or publishing its late snapshot",
     async (action) => {
       const f = fixture();
-      const gate = f.hold("/api/v1/threads/thread-1/transcript-window");
+      const gate = f.hold("/api/v1/threads/thread-1/transcript-snapshot");
       const controller = new AbortController();
       const adoption = f.runtime.adoptExtensionTask(receipt, {
         signal: controller.signal,
@@ -467,7 +472,7 @@ describe("host-created extension task adoption over Control HTTP/SSE", () => {
         expect(
           f.requests.some((request) =>
             request.path.startsWith(
-              "/api/v1/threads/thread-1/transcript-window",
+              "/api/v1/threads/thread-1/transcript-snapshot",
             ),
           ),
         ).toBe(true),
@@ -480,7 +485,7 @@ describe("host-created extension task adoption over Control HTTP/SSE", () => {
         expect(
           f.requests.find((request) =>
             request.path.startsWith(
-              "/api/v1/threads/thread-1/transcript-window",
+              "/api/v1/threads/thread-1/transcript-snapshot",
             ),
           )!.signal!.aborted,
         ).toBe(true),

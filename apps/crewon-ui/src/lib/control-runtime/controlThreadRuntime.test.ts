@@ -536,6 +536,23 @@ function fakeClient({
     };
   };
   return Object.assign(client, {
+    // Legacy test row readers remain fixture inputs. Product code makes one
+    // snapshot request; HTTP-level tests independently enforce that boundary.
+    getThreadTranscriptSnapshot: vi.fn<ControlApiClient["getThreadTranscriptSnapshot"]>(async (threadId, query, options) => {
+      const activeRead = client.getThreadActiveRun(threadId, options);
+      const transcriptWindow = await client.getThreadTranscriptWindow(threadId, query, options);
+      const last = client.listThreadRuns.mock.results.at(-1)?.value;
+      const candidates: RunView[] = last ? (await last).data : [];
+      const { run: active } = await activeRead;
+      const ids = new Set(transcriptWindow.runBindings.flatMap((binding) => binding.runId === null ? [] : [binding.runId]));
+      if (active) ids.add(active.runId);
+      const snapshotRuns = [];
+      for (const id of ids) {
+        const run = active?.runId === id ? active : candidates.find((run) => run.runId === id) ?? (await client.getRunInThread(threadId, id, options)).run;
+        snapshotRuns.push(run);
+      }
+      return structuredClone({ schemaVersion: "crewon.transcript-snapshot.v0" as const, transcriptWindow, activeRunId: active?.runId ?? null, runs: snapshotRuns });
+    }),
     getThreadMessageWindow:
       vi.fn<ControlApiClient["getThreadMessageWindow"]>(messageWindow),
     getRunInThread: vi.fn<ControlApiClient["getRunInThread"]>(

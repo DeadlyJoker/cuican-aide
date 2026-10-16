@@ -181,8 +181,8 @@ it("retains the current page on navigation failure and cancels outstanding navig
 
 it("renders bounded navigation and explicit partial/unknown history states", async () => {
   const f = transcriptFixture(2);
-  const fetchWindow = f.client.getThreadTranscriptWindow.bind(f.client);
-  vi.spyOn(f.client, "getThreadTranscriptWindow").mockImplementation(
+  const fetchWindow = f.client.getThreadTranscriptSnapshot.bind(f.client);
+  vi.spyOn(f.client, "getThreadTranscriptSnapshot").mockImplementation(
     (id, query, options) => fetchWindow(id, { ...query, limit: 1 }, options),
   );
   try {

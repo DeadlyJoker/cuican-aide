@@ -118,6 +118,8 @@ function liveHttpFixture() {
         return json(
           await durable.client.getThreadActiveRun(settlementThreadId),
         );
+      if (url.pathname === `${threadPath}/transcript-snapshot`)
+        return json(durable.snapshot(Object.fromEntries(url.searchParams)));
       if (url.pathname === `${threadPath}/transcript-window`)
         return json(durable.transcript());
       if (url.pathname === `${threadPath}/goal`)

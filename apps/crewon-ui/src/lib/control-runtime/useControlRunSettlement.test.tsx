@@ -13,7 +13,7 @@ import {
 Object.assign(globalThis, { IS_REACT_ACT_ENVIRONMENT: true });
 
 it.each(["terminal event", "closed stream"])(
-  "publishes the settled Thread once after draining text from a %s",
+  "shows the terminal receipt before drain and publishes canonical output once after a %s",
   async (source) => {
     const h = await harness();
     try {
@@ -29,8 +29,14 @@ it.each(["terminal event", "closed stream"])(
         expect(h.drain).toHaveBeenCalledOnce();
       });
       expect(h.read).toHaveBeenCalledTimes(2);
-      expect(h.shown()[0]!.turns[0]!.status).toBe("inProgress");
-      expect(h.active()).toEqual({ "thread-1": "run-1", "other": "run-other" });
+      expect(h.shown()[0]!.turns[0]).toMatchObject({
+        status: "completed",
+        controlCanonicalSyncPending: true,
+        controlPendingReplyDraft: { text: "Answer" },
+      });
+      expect(h.shown()[0]!.turns[0]!.items.some((item) => item.type === "agentMessage")).toBe(false);
+      expect(h.active()).toEqual({ other: "run-other" });
+      expect(h.reset).not.toHaveBeenCalled();
       await act(async () => h.releaseDrain());
       await vi.waitFor(async () => {
         await act(async () => {});
@@ -43,6 +49,8 @@ it.each(["terminal event", "closed stream"])(
           expect.objectContaining({ type: "agentMessage", text: "Answer" }),
         ]),
       });
+      expect(h.shown()[0]!.turns[0]).not.toHaveProperty("controlCanonicalSyncPending", true);
+      expect(h.shown()[0]!.turns[0]).not.toHaveProperty("controlPendingReplyDraft");
       expect(h.read).toHaveBeenCalledTimes(2);
       expect(h.notice).not.toHaveBeenCalled();
       expect(h.fixture.mutations).toHaveLength(0);
@@ -157,10 +165,10 @@ it.each(["active Run", "optional Plan"])(
         return response;
       }
       if (phase === "active Run") {
-        const original = h.fixture.client.getThreadActiveRun.bind(
+        const original = h.fixture.client.getThreadTranscriptSnapshot.bind(
           h.fixture.client,
         );
-        vi.spyOn(h.fixture.client, "getThreadActiveRun").mockImplementationOnce(
+        vi.spyOn(h.fixture.client, "getThreadTranscriptSnapshot").mockImplementationOnce(
           (...args) => hold(original(...args)),
         );
       } else {
@@ -440,6 +448,16 @@ async function harness(options: { finalHistory?: "unavailable" } = {}) {
       };
     },
   );
+  const readSnapshot = fixture.client.getThreadTranscriptSnapshot.bind(fixture.client);
+  vi.spyOn(fixture.client, "getThreadTranscriptSnapshot").mockImplementation(async (...args) => {
+    const snapshot = await readSnapshot(...args);
+    const transcriptWindow = { ...snapshot.transcriptWindow, runBindings: snapshot.transcriptWindow.runBindings.map((binding) => binding.messageId === "replacement-user" ? { ...binding, runId: "run-replacement" } : binding) };
+    const rows = new Map(snapshot.runs.map((r) => [r.runId, r]));
+    rows.set(run.runId, run);
+    const ids = new Set(transcriptWindow.runBindings.flatMap((binding) => binding.runId === null ? [] : [binding.runId]));
+    if (snapshot.activeRunId) ids.add(snapshot.activeRunId);
+    return { ...snapshot, transcriptWindow, runs: [...ids].map((id) => rows.get(id)!) };
+  });
   let stream!: ReadableStreamDefaultController<Uint8Array>;
   let streamRunId!: string;
   let signal!: AbortSignal;

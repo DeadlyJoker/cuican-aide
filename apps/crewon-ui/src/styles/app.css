@@ -3771,6 +3771,10 @@ textarea:focus-visible {
   grid-template-rows: minmax(0, 1fr);
 }
 
+.transcript:has(> .transcript-window-controls) {
+  grid-template-rows: auto minmax(0, 1fr);
+}
+
 .message-list {
   justify-items: center;
   gap: 7px;

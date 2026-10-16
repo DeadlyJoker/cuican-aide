@@ -1,3 +1,4 @@
+import { TranscriptWindowControls } from "./TranscriptWindowControls";
 import { controlPendingReplyDraft } from "../lib/control-runtime/controlRunTerminalPresentation";
 import { useStreamingTextPreview } from "./StreamingTextScope";
 import { ProjectPlanningRunScope } from "./project-planning/ProjectPlanningScope";
@@ -484,6 +485,7 @@ export function Transcript({
 
   return (
     <main className="transcript">
+      {thread && <TranscriptWindowControls thread={thread} locale={locale} />}
       <div
         className="message-list"
         role="log"
@@ -520,6 +522,9 @@ export function Transcript({
                   : "";
             return (
               <section key={`legacy:${item.id}`}>
+                <p className="transcript-history-note">
+                  {locale === "zh" ? "历史消息，执行状态未知" : "Historical message; execution status unknown"}
+                </p>
                 <TranscriptMessage
                   item={item}
                   durableMessageId={item.id}
@@ -555,6 +560,11 @@ export function Transcript({
             return null;
           return (
             <ProjectPlanningRunScope runId={turn.id} key={`${turn.id}:${row.itemIds[0] ?? "active"}`}>
+              {historyWindow && row.continuation && row.itemIds.length > 0 ? (
+                <p className="transcript-history-note">
+                  {locale === "zh" ? "本页显示本轮的部分内容" : "This page shows part of this turn"}
+                </p>
+              ) : null}
               <TranscriptTurn
                 turn={turn}
                 turnIndex={turnIndex}

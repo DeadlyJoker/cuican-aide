@@ -1,3 +1,7 @@
+import {
+  formatThreadMessageWindowCursor,
+  parseThreadMessageWindowQuery,
+} from "@crewon/contracts";
 import { ControlApiClient } from "@crewon/control-client";
 import type {
   ActiveAgentVersionCatalogResponse,
@@ -206,6 +210,68 @@ export function settlementClient() {
           : ("messageCompletedEvent" as const),
     })),
   });
+  const snapshot = (query: unknown = {}) => {
+    const full = transcript();
+    const { position, limit } = parseThreadMessageWindowQuery(
+      query,
+      settlementThreadId,
+    );
+    const candidates = full.messageWindow.data.filter(
+      (message) =>
+        position === null ||
+        (position.direction === "older"
+          ? message.sequence < position.messageSequence
+          : message.sequence > position.messageSequence),
+    );
+    const selected =
+      position?.direction === "newer"
+        ? candidates.slice(0, limit)
+        : candidates.slice(-limit);
+    const edge = (direction: "older" | "newer") => {
+      const message = direction === "older" ? selected[0] : selected.at(-1);
+      if (
+        !message ||
+        !full.messageWindow.data.some((m) =>
+          direction === "older"
+            ? m.sequence < message.sequence
+            : m.sequence > message.sequence,
+        )
+      )
+        return null;
+      return formatThreadMessageWindowCursor(settlementThreadId, {
+        direction,
+        messageSequence: message.sequence,
+        threadRevision: full.messageWindow.threadRevision,
+      });
+    };
+    const transcriptWindow = {
+      ...full,
+      messageWindow: {
+        ...full.messageWindow,
+        data: selected,
+        olderCursor: edge("older"),
+        newerCursor: edge("newer"),
+      },
+      runBindings: selected.map(
+        (message) =>
+          full.runBindings.find((b) => b.messageId === message.messageId)!,
+      ),
+    };
+    const activeRun =
+      [...runs.values()].find(
+        (run) => !["completed", "failed", "canceled"].includes(run.status),
+      ) ?? null;
+    const ids = new Set(
+      transcriptWindow.runBindings.map((binding) => binding.runId),
+    );
+    if (activeRun) ids.add(activeRun.runId);
+    return structuredClone({
+      schemaVersion: "crewon.transcript-snapshot.v0" as const,
+      transcriptWindow,
+      runs: [...ids].map((id) => runs.get(id)!),
+      activeRunId: activeRun?.runId ?? null,
+    });
+  };
   const client = Object.assign(
     new ControlApiClient({
       baseUrl: "http://127.0.0.1:3210",
@@ -268,6 +334,9 @@ export function settlementClient() {
           };
         },
       ),
+      getThreadTranscriptSnapshot: vi.fn<
+        ControlApiClient["getThreadTranscriptSnapshot"]
+      >(async (_threadId, query) => snapshot(query)),
       getThreadTranscriptWindow: vi.fn<
         ControlApiClient["getThreadTranscriptWindow"]
       >(async () => transcript()),
@@ -302,6 +371,7 @@ export function settlementClient() {
   return {
     client,
     transcript,
+    snapshot,
     complete(runId: string, content = "Canonical answer", lastSequence = 2) {
       const previous = runs.get(runId)!;
       const message: MessageView = {
