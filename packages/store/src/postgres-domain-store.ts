@@ -1,3 +1,4 @@
+import { PostgresWorkflowRunQueryStore } from "./postgres-workflow-run-query.ts";
 import { PostgresProjectAssetV2RecoveryStore } from "./project-asset-vtwo-recovery-store.ts";
 import {
   ExperimentalPostgresWorkflowRunCompositionStore,
@@ -460,6 +461,15 @@ export class PostgresDomainStore
     digester: WorkflowContentDigester,
   ): PostgresWorkflowVersionStore {
     return new PostgresWorkflowVersionStore(this.pool, this.schema, digester);
+  }
+
+  /** Bounded read-only capability. Construction does not migrate or enable Workflow execution. */
+  workflowRunReadStore(): PostgresWorkflowRunQueryStore {
+    this.assertOpen();
+    return new PostgresWorkflowRunQueryStore(this.pool, this.schema, {
+      assertOpen: () => this.assertOpen(),
+      loadRun: (client, locator) => this.loadRunWithin(client, locator),
+    });
   }
 
   /** Admission foundation only. Neither construction nor migration enables a scheduler. */

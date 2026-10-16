@@ -1,3 +1,7 @@
+import {
+  registerWorkflowControlRoutes,
+  type WorkflowControlServices,
+} from "./workflow-control-routes.ts";
 import { registerThreadTranscriptSnapshotRoute } from "./thread-transcript-snapshot-route.ts";
 import { registerProjectMediaResultRoutes } from "./project-media-result-route.ts";
 import type { InstalledProjectMediaResultRuntime } from "./installed-project-media-result-runtime.ts";
@@ -265,7 +269,7 @@ import type {
   ThreadSandboxPort,
 } from "./pim-sandbox-client.ts";
 
-export type ControlApiDependencies = Readonly<{
+export type ControlApiDependencies = Readonly<WorkflowControlServices & {
   application: RunApplicationService;
   offices?: OfficeApplicationService | null;
   extensions?: ExtensionConfigurationApplicationService | null;
@@ -1462,6 +1466,10 @@ export function buildControlApi(
   registerThreadMessageWindowRoute(app, dependencies);
   registerThreadTranscriptWindowRoute(app, dependencies);
   registerThreadTranscriptSnapshotRoute(app, dependencies);
+  registerWorkflowControlRoutes(app, {
+    ...dependencies,
+    workflowGateCommitted: () => wakeOutbox(dependencies.outboxWakeup),
+  });
   registerThreadCatalogRoute(app, dependencies);
   if (dependencies.officeThreads) {
     registerOfficeThreadRoutes(app, {

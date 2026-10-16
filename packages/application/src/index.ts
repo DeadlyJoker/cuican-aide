@@ -382,3 +382,5 @@ export {
   qualifyPluginProjectFoundationScope,
   type PluginProjectFoundationScope,
 } from "./plugin-project-foundation-scope.ts";
+
+export * from "./workflow-run-query-service.ts";

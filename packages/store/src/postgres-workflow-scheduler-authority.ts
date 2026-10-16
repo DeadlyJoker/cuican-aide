@@ -25,11 +25,13 @@ export async function readPostgresWorkflowSchedulerAuthority(
   run: RunState,
   context: Awaited<ReturnType<typeof readPostgresWorkflowCompositionContext>>,
   ops: Pick<PostgresWorkflowChildOperations, "loadChild">,
-  options: { humanGatesEnabled: boolean },
+  options: { humanGatesEnabled: boolean; lock?: "update" | "snapshot" },
 ) {
   if (run.goalBinding !== null || run.goalAccounting !== null)
     throw new RunStoreError("workflow_root_goal_unsupported");
-  const execution = await readPostgresWorkflowExecution(client, sql, input);
+  const execution = await readPostgresWorkflowExecution(client, sql, input, {
+    lock: options.lock ?? "update",
+  });
   if (!execution) throw new RunStoreError("workflow_execution_not_found");
   if (
     execution.workflowId !== input.binding.workflowId ||
@@ -43,7 +45,7 @@ export async function readPostgresWorkflowSchedulerAuthority(
     execution,
     context.workflow,
   );
-  if (!rows.size && !run.cancelRequested)
+  if (!rows.size && !run.cancelRequested && options.lock !== "snapshot")
     throw new RunStoreError("workflow_composition_authority_missing");
   const admissions = new Map<string, WorkflowNodeAttemptAdmission>();
   for (const row of rows.values())

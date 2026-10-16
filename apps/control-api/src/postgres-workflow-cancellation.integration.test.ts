@@ -91,6 +91,10 @@ pgTest(
         false,
       );
       assert.equal((await client.getRun(current.runId)).run.status, "canceled");
+      const execution = await client.getWorkflowRunSnapshot(current.runId);
+      assert.equal(execution.run.status, "canceled");
+      assert.equal(execution.execution!.status, "canceled");
+      assert.ok(execution.nodes.every((node) => node.status === "canceled"));
       assert.deepEqual(
         snapshot.transcriptWindow.messageWindow.data,
         before.transcriptWindow.messageWindow.data,

@@ -6527,6 +6527,189 @@
           "503": { "$ref": "#/components/responses/Error" }
         }
       }
+    },
+    "/api/v1/workflow-runs/{runId}": {
+      "get": {
+        "operationId": "getWorkflowRunSnapshot",
+        "parameters": [
+          {
+            "$ref": "#/components/parameters/RunId"
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "A bounded, authorized consistent Workflow snapshot",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/WorkflowRunSnapshotResponse"
+                }
+              }
+            }
+          },
+          "400": {
+            "$ref": "#/components/responses/Error"
+          },
+          "401": {
+            "$ref": "#/components/responses/Error"
+          },
+          "403": {
+            "$ref": "#/components/responses/Error"
+          },
+          "404": {
+            "$ref": "#/components/responses/Error"
+          },
+          "409": {
+            "$ref": "#/components/responses/Error"
+          },
+          "500": {
+            "$ref": "#/components/responses/Error"
+          },
+          "503": {
+            "$ref": "#/components/responses/Error"
+          }
+        }
+      }
+    },
+    "/api/v1/workflow-runs/{runId}/nodes/{nodeId}/gates/{gateRequestId}": {
+      "get": {
+        "operationId": "getWorkflowHumanGate",
+        "parameters": [
+          {
+            "$ref": "#/components/parameters/RunId"
+          },
+          {
+            "name": "nodeId",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "minLength": 1,
+              "maxLength": 512
+            }
+          },
+          {
+            "name": "gateRequestId",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "minLength": 1,
+              "maxLength": 512
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "A bounded, authorized consistent Workflow snapshot",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/WorkflowHumanGateResponse"
+                }
+              }
+            }
+          },
+          "400": {
+            "$ref": "#/components/responses/Error"
+          },
+          "401": {
+            "$ref": "#/components/responses/Error"
+          },
+          "403": {
+            "$ref": "#/components/responses/Error"
+          },
+          "404": {
+            "$ref": "#/components/responses/Error"
+          },
+          "409": {
+            "$ref": "#/components/responses/Error"
+          },
+          "500": {
+            "$ref": "#/components/responses/Error"
+          },
+          "503": {
+            "$ref": "#/components/responses/Error"
+          }
+        }
+      }
+    },
+    "/api/v1/workflow-runs/{runId}/nodes/{nodeId}/gates/{gateRequestId}/decisions": {
+      "post": {
+        "operationId": "decideWorkflowHumanGate",
+        "description": "One immutable decision per gate request. Exact actor, outcome and input replays the durable decision; a changed command conflicts. The gate request identity is the idempotency boundary.",
+        "parameters": [
+          {
+            "$ref": "#/components/parameters/RunId"
+          },
+          {
+            "name": "nodeId",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "minLength": 1,
+              "maxLength": 512
+            }
+          },
+          {
+            "name": "gateRequestId",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "minLength": 1,
+              "maxLength": 512
+            }
+          },
+          {
+            "$ref": "#/components/parameters/CsrfToken"
+          }
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/DecideWorkflowHumanGateRequest"
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "A bounded, authorized consistent Workflow snapshot",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/WorkflowHumanGateMutationResponse"
+                }
+              }
+            }
+          },
+          "400": {
+            "$ref": "#/components/responses/Error"
+          },
+          "401": {
+            "$ref": "#/components/responses/Error"
+          },
+          "403": {
+            "$ref": "#/components/responses/Error"
+          },
+          "404": {
+            "$ref": "#/components/responses/Error"
+          },
+          "409": {
+            "$ref": "#/components/responses/Error"
+          },
+          "500": {
+            "$ref": "#/components/responses/Error"
+          },
+          "503": {
+            "$ref": "#/components/responses/Error"
+          }
+        }
+      }
     }
   },
   "components": {
@@ -15295,6 +15478,495 @@
           }
         },
         "description": "Ordered original afterPluginId/limit paging, scope authorized by the actual owner. Status grants no service access."
+      },
+      "WorkflowHumanGateAuthorityView": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": [
+          "tenantId",
+          "spaceId",
+          "runId",
+          "nodeId",
+          "binding",
+          "claimId",
+          "gateRequestId",
+          "approvalPolicyId",
+          "inputDigest"
+        ],
+        "properties": {
+          "tenantId": {
+            "type": "string",
+            "minLength": 1,
+            "maxLength": 512
+          },
+          "spaceId": {
+            "type": "string",
+            "minLength": 1,
+            "maxLength": 512
+          },
+          "runId": {
+            "type": "string",
+            "minLength": 1,
+            "maxLength": 512
+          },
+          "nodeId": {
+            "type": "string",
+            "minLength": 1,
+            "maxLength": 512
+          },
+          "binding": {
+            "type": "object",
+            "additionalProperties": false,
+            "required": [
+              "workflowId",
+              "workflowVersionId",
+              "contentDigest"
+            ],
+            "properties": {
+              "workflowId": {
+                "type": "string",
+                "minLength": 1,
+                "maxLength": 512
+              },
+              "workflowVersionId": {
+                "type": "string",
+                "minLength": 1,
+                "maxLength": 512
+              },
+              "contentDigest": {
+                "type": "string",
+                "pattern": "^sha256:[a-f0-9]{64}$"
+              }
+            }
+          },
+          "claimId": {
+            "type": "string",
+            "minLength": 1,
+            "maxLength": 512
+          },
+          "gateRequestId": {
+            "type": "string",
+            "minLength": 1,
+            "maxLength": 512
+          },
+          "approvalPolicyId": {
+            "type": "string",
+            "minLength": 1,
+            "maxLength": 512
+          },
+          "inputDigest": {
+            "type": "string",
+            "pattern": "^sha256:[a-f0-9]{64}$"
+          }
+        }
+      },
+      "WorkflowHumanGateDecisionView": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": [
+          "authority",
+          "actor",
+          "outcome",
+          "decidedAt"
+        ],
+        "properties": {
+          "authority": {
+            "$ref": "#/components/schemas/WorkflowHumanGateAuthorityView"
+          },
+          "actor": {
+            "type": "object",
+            "additionalProperties": false,
+            "required": [
+              "tenantId",
+              "spaceId",
+              "actorId",
+              "principalId"
+            ],
+            "properties": {
+              "tenantId": {
+                "type": "string",
+                "minLength": 1,
+                "maxLength": 512
+              },
+              "spaceId": {
+                "type": "string",
+                "minLength": 1,
+                "maxLength": 512
+              },
+              "actorId": {
+                "type": "string",
+                "minLength": 1,
+                "maxLength": 512
+              },
+              "principalId": {
+                "type": "string",
+                "minLength": 1,
+                "maxLength": 512
+              }
+            }
+          },
+          "outcome": {
+            "type": "string",
+            "enum": [
+              "approved",
+              "rejected"
+            ]
+          },
+          "decidedAt": {
+            "type": "string",
+            "format": "date-time"
+          }
+        }
+      },
+      "WorkflowHumanGateResponse": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": [
+          "schemaVersion",
+          "authority",
+          "title",
+          "instruction",
+          "input",
+          "status",
+          "decision"
+        ],
+        "properties": {
+          "schemaVersion": {
+            "type": "string",
+            "const": "crewon.workflow-human-gate.v0"
+          },
+          "authority": {
+            "$ref": "#/components/schemas/WorkflowHumanGateAuthorityView"
+          },
+          "title": {
+            "type": "string",
+            "maxLength": 512
+          },
+          "instruction": {
+            "type": "string",
+            "maxLength": 9999
+          },
+          "input": {
+            "$ref": "#/components/schemas/PluginUiJsonValue",
+            "description": "Frozen intermediate node input, at most 32768 UTF-8 bytes; uses node value limits rather than root admission input limits."
+          },
+          "status": {
+            "type": "string",
+            "enum": [
+              "waitingHuman",
+              "completed",
+              "failed",
+              "canceled"
+            ]
+          },
+          "decision": {
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/WorkflowHumanGateDecisionView"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          }
+        }
+      },
+      "DecideWorkflowHumanGateRequest": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": [
+          "inputDigest",
+          "decision"
+        ],
+        "properties": {
+          "inputDigest": {
+            "type": "string",
+            "pattern": "^sha256:[a-f0-9]{64}$"
+          },
+          "decision": {
+            "type": "string",
+            "enum": [
+              "approved",
+              "rejected"
+            ]
+          }
+        }
+      },
+      "WorkflowHumanGateMutationResponse": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": [
+          "disposition",
+          "decision"
+        ],
+        "properties": {
+          "disposition": {
+            "type": "string",
+            "enum": [
+              "committed",
+              "replayed"
+            ]
+          },
+          "decision": {
+            "$ref": "#/components/schemas/WorkflowHumanGateDecisionView"
+          }
+        }
+      },
+      "WorkflowRunNodeView": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": [
+          "nodeId",
+          "kind",
+          "title",
+          "agentVersionId",
+          "status",
+          "inputDigest",
+          "resultDigest",
+          "failureCode",
+          "child",
+          "gate",
+          "output"
+        ],
+        "properties": {
+          "nodeId": {
+            "type": "string",
+            "minLength": 1,
+            "maxLength": 512
+          },
+          "kind": {
+            "type": "string",
+            "enum": [
+              "agent",
+              "verification",
+              "humanGate"
+            ]
+          },
+          "title": {
+            "type": "string",
+            "maxLength": 512
+          },
+          "agentVersionId": {
+            "anyOf": [
+              {
+                "type": "string",
+                "minLength": 1,
+                "maxLength": 512
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "status": {
+            "type": "string",
+            "enum": [
+              "pending",
+              "running",
+              "waitingHuman",
+              "completed",
+              "failed",
+              "canceled",
+              "unknown"
+            ]
+          },
+          "inputDigest": {
+            "anyOf": [
+              {
+                "type": "string",
+                "pattern": "^sha256:[a-f0-9]{64}$"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "resultDigest": {
+            "anyOf": [
+              {
+                "type": "string",
+                "pattern": "^sha256:[a-f0-9]{64}$"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "failureCode": {
+            "anyOf": [
+              {
+                "type": "string",
+                "minLength": 1,
+                "maxLength": 128
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "child": {
+            "anyOf": [
+              {
+                "type": "object",
+                "additionalProperties": false,
+                "required": [
+                  "runId",
+                  "threadId",
+                  "status",
+                  "revision"
+                ],
+                "properties": {
+                  "runId": {
+                    "type": "string",
+                    "minLength": 1,
+                    "maxLength": 512
+                  },
+                  "threadId": {
+                    "type": "string",
+                    "minLength": 1,
+                    "maxLength": 512
+                  },
+                  "status": {
+                    "$ref": "#/components/schemas/RunStatus"
+                  },
+                  "revision": {
+                    "type": "integer",
+                    "minimum": 1
+                  }
+                }
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "gate": {
+            "anyOf": [
+              {
+                "type": "object",
+                "additionalProperties": false,
+                "required": [
+                  "gateRequestId",
+                  "approvalPolicyId",
+                  "inputDigest"
+                ],
+                "properties": {
+                  "gateRequestId": {
+                    "type": "string",
+                    "minLength": 1,
+                    "maxLength": 512
+                  },
+                  "approvalPolicyId": {
+                    "type": "string",
+                    "minLength": 1,
+                    "maxLength": 512
+                  },
+                  "inputDigest": {
+                    "type": "string",
+                    "pattern": "^sha256:[a-f0-9]{64}$"
+                  }
+                }
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "output": {
+            "$ref": "#/components/schemas/PluginUiJsonValue"
+          }
+        }
+      },
+      "WorkflowRunSnapshotResponse": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": [
+          "schemaVersion",
+          "run",
+          "workflow",
+          "input",
+          "execution",
+          "nodes"
+        ],
+        "properties": {
+          "schemaVersion": {
+            "type": "string",
+            "const": "crewon.workflow-run-snapshot.v0"
+          },
+          "run": {
+            "$ref": "#/components/schemas/RunView"
+          },
+          "workflow": {
+            "type": "object",
+            "additionalProperties": false,
+            "required": [
+              "name",
+              "description"
+            ],
+            "properties": {
+              "name": {
+                "type": "string",
+                "minLength": 1,
+                "maxLength": 512
+              },
+              "description": {
+                "type": "string",
+                "maxLength": 8192
+              }
+            }
+          },
+          "input": {
+            "$ref": "#/components/schemas/WorkflowInput"
+          },
+          "execution": {
+            "anyOf": [
+              {
+                "type": "object",
+                "additionalProperties": false,
+                "required": [
+                  "revision",
+                  "status",
+                  "cancelRequested",
+                  "updatedAt"
+                ],
+                "properties": {
+                  "revision": {
+                    "type": "integer",
+                    "minimum": 1
+                  },
+                  "status": {
+                    "type": "string",
+                    "enum": [
+                      "running",
+                      "waitingHuman",
+                      "completed",
+                      "failed",
+                      "canceled"
+                    ]
+                  },
+                  "cancelRequested": {
+                    "type": "boolean"
+                  },
+                  "updatedAt": {
+                    "type": "string",
+                    "format": "date-time"
+                  }
+                }
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "nodes": {
+            "type": "array",
+            "minItems": 1,
+            "maxItems": 64,
+            "items": {
+              "$ref": "#/components/schemas/WorkflowRunNodeView"
+            }
+          }
+        }
       }
     }
   }

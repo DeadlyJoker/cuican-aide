@@ -1,3 +1,11 @@
+import { WorkflowControlClient } from "./workflow-control-client.ts";
+import type {
+  WorkflowGateLocator,
+  WorkflowRunSnapshotResponse,
+  WorkflowHumanGateResponse,
+  WorkflowHumanGateMutationResponse,
+  DecideWorkflowHumanGateRequest,
+} from "@crewon/contracts";
 import {
   parseThreadTranscriptSnapshotResponse,
   MAX_THREAD_TRANSCRIPT_SNAPSHOT_RESPONSE_BYTES,
@@ -1314,6 +1322,28 @@ export class ControlApiClient {
     });
   }
 
+  getWorkflowRunSnapshot(
+    runId: string,
+    options: ControlApiRequestOptions = {},
+  ): Promise<WorkflowRunSnapshotResponse> {
+    return this.#workflowClient().getWorkflowRunSnapshot(runId, options);
+  }
+
+  getWorkflowHumanGate(
+    locator: WorkflowGateLocator,
+    options: ControlApiRequestOptions = {},
+  ): Promise<WorkflowHumanGateResponse> {
+    return this.#workflowClient().getWorkflowHumanGate(locator, options);
+  }
+
+  decideWorkflowHumanGate(
+    locator: WorkflowGateLocator,
+    body: DecideWorkflowHumanGateRequest,
+    options: ControlApiRequestOptions = {},
+  ): Promise<WorkflowHumanGateMutationResponse> {
+    return this.#workflowClient().decideWorkflowHumanGate(locator, body, options);
+  }
+
   getRun(
     runId: string,
     options: ControlApiRequestOptions = {},
@@ -1657,6 +1687,12 @@ export class ControlApiClient {
       fetch: (url, init) => this.#fetch(url, init),
       protocolError: (code) => new ControlApiProtocolError(code),
     });
+  }
+
+  #workflowClient(): WorkflowControlClient {
+    return new WorkflowControlClient((method, path, body, options) =>
+      this.#json(method, path, body, options),
+    );
   }
 
   #extensionClient(): ExtensionControlClient {

@@ -1600,6 +1600,55 @@ export interface paths {
     patch?: never;
     trace?: never;
   };
+  "/api/v1/workflow-runs/{runId}": {
+    parameters: {
+      query?: never;
+      header?: never;
+      path?: never;
+      cookie?: never;
+    };
+    get: operations["getWorkflowRunSnapshot"];
+    put?: never;
+    post?: never;
+    delete?: never;
+    options?: never;
+    head?: never;
+    patch?: never;
+    trace?: never;
+  };
+  "/api/v1/workflow-runs/{runId}/nodes/{nodeId}/gates/{gateRequestId}": {
+    parameters: {
+      query?: never;
+      header?: never;
+      path?: never;
+      cookie?: never;
+    };
+    get: operations["getWorkflowHumanGate"];
+    put?: never;
+    post?: never;
+    delete?: never;
+    options?: never;
+    head?: never;
+    patch?: never;
+    trace?: never;
+  };
+  "/api/v1/workflow-runs/{runId}/nodes/{nodeId}/gates/{gateRequestId}/decisions": {
+    parameters: {
+      query?: never;
+      header?: never;
+      path?: never;
+      cookie?: never;
+    };
+    get?: never;
+    put?: never;
+    /** @description One immutable decision per gate request. Exact actor, outcome and input replays the durable decision; a changed command conflicts. The gate request identity is the idempotency boundary. */
+    post: operations["decideWorkflowHumanGate"];
+    delete?: never;
+    options?: never;
+    head?: never;
+    patch?: never;
+    trace?: never;
+  };
 }
 export type webhooks = Record<string, never>;
 export interface components {
@@ -3946,6 +3995,111 @@ export interface components {
       metadata: components["schemas"]["PluginCompositionMetadataStatus"];
       plugins: components["schemas"]["PluginCompositionStatusEntry"][];
       next: components["schemas"]["PluginNamespaceId"] | null;
+    };
+    WorkflowHumanGateAuthorityView: {
+      tenantId: string;
+      spaceId: string;
+      runId: string;
+      nodeId: string;
+      binding: {
+        workflowId: string;
+        workflowVersionId: string;
+        contentDigest: string;
+      };
+      claimId: string;
+      gateRequestId: string;
+      approvalPolicyId: string;
+      inputDigest: string;
+    };
+    WorkflowHumanGateDecisionView: {
+      authority: components["schemas"]["WorkflowHumanGateAuthorityView"];
+      actor: {
+        tenantId: string;
+        spaceId: string;
+        actorId: string;
+        principalId: string;
+      };
+      /** @enum {string} */
+      outcome: "approved" | "rejected";
+      /** Format: date-time */
+      decidedAt: string;
+    };
+    WorkflowHumanGateResponse: {
+      /** @constant */
+      schemaVersion: "crewon.workflow-human-gate.v0";
+      authority: components["schemas"]["WorkflowHumanGateAuthorityView"];
+      title: string;
+      instruction: string;
+      /** @description Frozen intermediate node input, at most 32768 UTF-8 bytes; uses node value limits rather than root admission input limits. */
+      input: components["schemas"]["PluginUiJsonValue"];
+      /** @enum {string} */
+      status: "waitingHuman" | "completed" | "failed" | "canceled";
+      decision: components["schemas"]["WorkflowHumanGateDecisionView"] | null;
+    };
+    DecideWorkflowHumanGateRequest: {
+      inputDigest: string;
+      /** @enum {string} */
+      decision: "approved" | "rejected";
+    };
+    WorkflowHumanGateMutationResponse: {
+      /** @enum {string} */
+      disposition: "committed" | "replayed";
+      decision: components["schemas"]["WorkflowHumanGateDecisionView"];
+    };
+    WorkflowRunNodeView: {
+      nodeId: string;
+      /** @enum {string} */
+      kind: "agent" | "verification" | "humanGate";
+      title: string;
+      agentVersionId: string | null;
+      /** @enum {string} */
+      status:
+        | "pending"
+        | "running"
+        | "waitingHuman"
+        | "completed"
+        | "failed"
+        | "canceled"
+        | "unknown";
+      inputDigest: string | null;
+      resultDigest: string | null;
+      failureCode: string | null;
+      child: {
+        runId: string;
+        threadId: string;
+        status: components["schemas"]["RunStatus"];
+        revision: number;
+      } | null;
+      gate: {
+        gateRequestId: string;
+        approvalPolicyId: string;
+        inputDigest: string;
+      } | null;
+      output: components["schemas"]["PluginUiJsonValue"];
+    };
+    WorkflowRunSnapshotResponse: {
+      /** @constant */
+      schemaVersion: "crewon.workflow-run-snapshot.v0";
+      run: components["schemas"]["RunView"];
+      workflow: {
+        name: string;
+        description: string;
+      };
+      input: components["schemas"]["WorkflowInput"];
+      execution: {
+        revision: number;
+        /** @enum {string} */
+        status:
+          | "running"
+          | "waitingHuman"
+          | "completed"
+          | "failed"
+          | "canceled";
+        cancelRequested: boolean;
+        /** Format: date-time */
+        updatedAt: string;
+      } | null;
+      nodes: components["schemas"]["WorkflowRunNodeView"][];
     };
   };
   responses: {
@@ -7850,6 +8004,104 @@ export interface operations {
       404: components["responses"]["Error"];
       409: components["responses"]["Error"];
       413: components["responses"]["Error"];
+      500: components["responses"]["Error"];
+      503: components["responses"]["Error"];
+    };
+  };
+  getWorkflowRunSnapshot: {
+    parameters: {
+      query?: never;
+      header?: never;
+      path: {
+        runId: components["parameters"]["RunId"];
+      };
+      cookie?: never;
+    };
+    requestBody?: never;
+    responses: {
+      /** @description A bounded, authorized consistent Workflow snapshot */
+      200: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          "application/json": components["schemas"]["WorkflowRunSnapshotResponse"];
+        };
+      };
+      400: components["responses"]["Error"];
+      401: components["responses"]["Error"];
+      403: components["responses"]["Error"];
+      404: components["responses"]["Error"];
+      409: components["responses"]["Error"];
+      500: components["responses"]["Error"];
+      503: components["responses"]["Error"];
+    };
+  };
+  getWorkflowHumanGate: {
+    parameters: {
+      query?: never;
+      header?: never;
+      path: {
+        runId: components["parameters"]["RunId"];
+        nodeId: string;
+        gateRequestId: string;
+      };
+      cookie?: never;
+    };
+    requestBody?: never;
+    responses: {
+      /** @description A bounded, authorized consistent Workflow snapshot */
+      200: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          "application/json": components["schemas"]["WorkflowHumanGateResponse"];
+        };
+      };
+      400: components["responses"]["Error"];
+      401: components["responses"]["Error"];
+      403: components["responses"]["Error"];
+      404: components["responses"]["Error"];
+      409: components["responses"]["Error"];
+      500: components["responses"]["Error"];
+      503: components["responses"]["Error"];
+    };
+  };
+  decideWorkflowHumanGate: {
+    parameters: {
+      query?: never;
+      header?: {
+        /** @description Required by the identity adapter for cookie-authenticated mutations. */
+        "X-CSRF-Token"?: components["parameters"]["CsrfToken"];
+      };
+      path: {
+        runId: components["parameters"]["RunId"];
+        nodeId: string;
+        gateRequestId: string;
+      };
+      cookie?: never;
+    };
+    requestBody: {
+      content: {
+        "application/json": components["schemas"]["DecideWorkflowHumanGateRequest"];
+      };
+    };
+    responses: {
+      /** @description A bounded, authorized consistent Workflow snapshot */
+      200: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          "application/json": components["schemas"]["WorkflowHumanGateMutationResponse"];
+        };
+      };
+      400: components["responses"]["Error"];
+      401: components["responses"]["Error"];
+      403: components["responses"]["Error"];
+      404: components["responses"]["Error"];
+      409: components["responses"]["Error"];
       500: components["responses"]["Error"];
       503: components["responses"]["Error"];
     };

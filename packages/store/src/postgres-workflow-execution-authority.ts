@@ -14,6 +14,7 @@ export async function readPostgresWorkflowExecution(
   client: PoolClient,
   sql: string,
   input: { tenantId: string; runId: string },
+  options: { lock: "update" | "snapshot" } = { lock: "update" },
 ): Promise<WorkflowExecutionState | null> {
   const result = await client.query<{
     revision: string;
@@ -21,7 +22,7 @@ export async function readPostgresWorkflowExecution(
     updated_at: Date;
   }>(
     `SELECT revision,updated_at,CASE WHEN octet_length(state_json::text)<=${MAX_WORKFLOW_EXECUTION_BYTES} THEN state_json ELSE NULL END AS state_json
-     FROM ${sql}.workflow_executions WHERE tenant_id=$1 AND run_id=$2 FOR UPDATE`,
+     FROM ${sql}.workflow_executions WHERE tenant_id=$1 AND run_id=$2${options.lock === "update" ? " FOR UPDATE" : ""}`,
     [input.tenantId, input.runId],
   );
   const row = result.rows[0];

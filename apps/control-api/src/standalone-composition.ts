@@ -1,3 +1,5 @@
+import type { WorkflowControlServices } from "./workflow-control-routes.ts";
+import { WorkflowRunQueryService } from "@crewon/application";
 import { ModelPricingApplicationService } from "@crewon/application";
 import { ModelSpendingApplicationService } from "@crewon/application";
 import { OfficeThreadApplicationService } from "@crewon/application";
@@ -127,6 +129,8 @@ type PreparedControlPlugins = {
 };
 
 type ControlApiCompositionConfig = Readonly<{
+  /** Borrowed service; its owner must supply the current frozen gate policy and retain its Store. */
+  workflowHumanGates?: WorkflowControlServices["workflowHumanGates"];
   desktopWorkspaceRegistryPath?: string;
   storageAdmission?: StorageAdmissionPort;
   localStoragePaths?: readonly string[];
@@ -830,6 +834,14 @@ function composeControlApi(
       approvals,
       agentVersions,
       workflowVersions,
+      workflowHumanGates: config.workflowHumanGates,
+      workflowQueries:
+        store instanceof PostgresDomainStore
+          ? new WorkflowRunQueryService({
+              store: store.workflowRunReadStore(),
+              authorization,
+            })
+          : null,
       agentVersionCatalogs,
       artifacts,
       automations,
