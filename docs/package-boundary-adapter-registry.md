@@ -67,3 +67,11 @@ Foundation Node 工具沿[原 Native 执行](./native-local-plugin-execution.md)
 反向测试继续拒绝相邻文件、嵌套路径、私有 Host 子路径、SDK 根/UI 及无关媒体能力；渲染端禁止规则不变。另两处 Native DNS 类型导入改为原 Worker `network-egress.ts` 稳定入口，没有扩大共享媒体的许可范围。该修复补齐静态边界登记，不重新启用业务插件，也不证明结构化大纲产品已验收。
 
 同一提交的 `plugin-ui-host-service-availability.ts` 使用两个独立公开契约的服务名/版本常量，核对实际 Host 可用性，不提供服务对象或调用权限。因此仅该可用性适配文件额外登记 `@crewon/contracts/project-outlines` 与 `@crewon/contracts/project-outline-edits`，相邻模块仍禁止这些子路径。Store 的结构化大纲比较则直接复用原 `textEqual`，它保留相同的严格比较和错误码，删除重复 `node:util` 导入，没有新增 Store 例外。
+
+## 共享 PIM 沙箱适配器归属（2026-10-16）
+
+Worker 原先通过跨应用相对路径直接加载 Control 的 `pim-sandbox-client.ts`，导致生产类型图和工具执行依赖 HTTP 服务应用。该适配器负责远程沙箱目录、文件、Git 和命令派发，归入已有 `@crewon/device-dispatch/pim-sandbox-client` 公开子入口；Control 原路径保留兼容重导出，Worker 改用公开包入口。实现和错误类身份保持一致，没有新增执行器或修改网络协议。
+
+`node:path` 仅许可给 `device-dispatch/src/pim-sandbox-client.ts`，移除 Control 旧文件的对应例外。Control 登记对 Device Dispatch 的运行时依赖。既有沙箱测试继续覆盖响应体上限、取消、未知执行结果、写入串行及清理失败；不放开 Renderer 权限。
+
+两个服务增加 `typecheck:production`，用于隔离生产代码的本地检查。原 `typecheck` 与 CI 完整检查仍包含全部测试。新增解析 TypeScript 实际依赖图的边界测试，防止 `exclude` 下的测试辅助或其他应用通过传递导入重新进入生产检查。

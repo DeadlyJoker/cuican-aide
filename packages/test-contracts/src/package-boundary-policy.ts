@@ -117,6 +117,8 @@ const packageBoundaries: readonly Boundary[] = [
   },
   {
     packageName: "device-dispatch",
+    // Shared PIM sandbox adapter normalizes paths before remote dispatch.
+    allowedFileImports: { "pim-sandbox-client.ts": ["node:path"] },
     allowedBareImports: [
       "node:crypto",
       "node:https",

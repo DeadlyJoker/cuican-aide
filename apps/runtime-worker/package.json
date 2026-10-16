@@ -12,7 +12,8 @@
     "release:rollback": "node --experimental-strip-types src/release-rollback-main.ts",
     "start": "node --experimental-strip-types src/main.ts",
     "test": "pnpm license:check && node scripts/test-installed-plugin-examples.mjs",
-    "typecheck": "tsc -p tsconfig.json --noEmit"
+    "typecheck": "tsc -p tsconfig.json --noEmit",
+    "typecheck:production": "tsc -p tsconfig.production.json --noEmit"
   },
   "dependencies": {
     "@crewon/agent-kernel": "workspace:*",

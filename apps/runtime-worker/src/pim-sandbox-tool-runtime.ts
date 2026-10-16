@@ -15,7 +15,7 @@ import {
   PimThreadSandbox,
   type SandboxCommandView,
   type ThreadSandboxPort,
-} from "../../control-api/src/pim-sandbox-client.ts";
+} from "@crewon/device-dispatch/pim-sandbox-client";
 
 const SANDBOX_ROOT = "/workspace";
 const MAX_TOOL_OUTPUT_BYTES = 64 * 1024;

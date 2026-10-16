@@ -93,7 +93,7 @@ import type {
   AgentVersionRuntimeResolverPort,
 } from "./agent-version-runtime.ts";
 import { KernelContextCompactor } from "./kernel-context-compactor.ts";
-import type { ThreadSandboxPort } from "../../control-api/src/pim-sandbox-client.ts";
+import type { ThreadSandboxPort } from "@crewon/device-dispatch/pim-sandbox-client";
 import { createPimSandboxToolRuntime } from "./pim-sandbox-tool-runtime.ts";
 
 const ROUTE: RunRoute = {

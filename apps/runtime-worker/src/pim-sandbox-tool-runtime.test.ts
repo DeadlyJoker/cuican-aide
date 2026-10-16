@@ -11,7 +11,7 @@ import type {
 import {
   PimSandboxMutationOutcomeUnknownError,
   type ThreadSandboxPort,
-} from "../../control-api/src/pim-sandbox-client.ts";
+} from "@crewon/device-dispatch/pim-sandbox-client";
 import {
   createConfiguredPimSandboxToolRuntime,
   createPimSandboxToolRuntime,

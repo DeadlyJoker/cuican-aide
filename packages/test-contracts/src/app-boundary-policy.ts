@@ -10,7 +10,6 @@ const controlApiBaseBoundary = {
     "extension-host-router.ts": ["node:util"],
     "extension-worker-environment.ts": ["node:util"],
     "paused-admission.ts": ["node:stream"],
-    "pim-sandbox-client.ts": ["node:path"],
     // SQLite delivery hints observe file metadata without opening the database.
     "sqlite-outbox-wakeup.ts": ["node:fs", "node:path"],
   },
@@ -22,6 +21,7 @@ const controlApiBaseBoundary = {
     "@crewon/artifacts",
     "@crewon/contracts",
     "@crewon/domain",
+    "@crewon/device-dispatch",
     "@crewon/store",
     "fastify",
     "uuid",
@@ -32,6 +32,7 @@ const controlApiBaseBoundary = {
     "@crewon/artifacts",
     "@crewon/contracts",
     "@crewon/domain",
+    "@crewon/device-dispatch",
     "@crewon/process-lifecycle",
     "@crewon/store",
     "fastify",

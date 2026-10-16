@@ -9,13 +9,15 @@
     "test": "pnpm license:check && node --experimental-strip-types --test src/*.test.ts",
     "test:installed-plugin-full-app": "node scripts/test-installed-plugin-full-app.mjs",
     "typecheck": "tsc -p tsconfig.json --noEmit",
-    "verify:desktop-base": "node --experimental-strip-types scripts/verify-desktop-base-runtime.mts"
+    "verify:desktop-base": "node --experimental-strip-types scripts/verify-desktop-base-runtime.mts",
+    "typecheck:production": "tsc -p tsconfig.production.json --noEmit"
   },
   "dependencies": {
     "@crewon/agent-version": "workspace:*",
     "@crewon/application": "workspace:*",
     "@crewon/artifacts": "workspace:*",
     "@crewon/contracts": "workspace:*",
+    "@crewon/device-dispatch": "workspace:*",
     "@crewon/domain": "workspace:*",
     "@crewon/media-runtime": "workspace:*",
     "@crewon/plugin-host": "workspace:*",
