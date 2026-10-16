@@ -11,6 +11,7 @@ import { workflowAdmissionDigest } from "../../../packages/store/src/workflow-ru
 import { compositionInput } from "../../../packages/store/src/workflow-run-composition.test-support.ts";
 import { PinnedRunExecutionPolicy } from "./standalone-adapters.ts";
 import { RuntimeWorker } from "./runtime-worker.ts";
+import type { ExperimentalWorkflowScheduler } from "./workflow-scheduler.ts";
 
 type Fixture = Awaited<ReturnType<typeof postgresCompositionFixture>>;
 type Request = Parameters<ModelTransportPort["stream"]>[0];
@@ -21,6 +22,9 @@ export async function postgresWorkflowChildWorker(
   f: Fixture,
   t: TestContext,
   output: (request: Request) => string = () => '{"topic":"child-result"}',
+  options: Readonly<{
+    experimentalScheduler?: ExperimentalWorkflowScheduler;
+  }> = {},
 ) {
   const store = await f.open();
   const workflow = parseCompiledWorkflowVersion(
@@ -42,6 +46,9 @@ export async function postgresWorkflowChildWorker(
   const worker = new RuntimeWorker(
     {
       store,
+      ...(options.experimentalScheduler
+        ? { experimentalWorkflowScheduler: options.experimentalScheduler }
+        : {}),
       execution: new RunExecutionService({
         store,
         clock: { now: () => new Date().toISOString() },

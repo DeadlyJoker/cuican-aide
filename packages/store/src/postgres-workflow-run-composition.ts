@@ -10,7 +10,12 @@ import {
   type CommitRunInput,
   type CommitRunResult,
   type RunLocator,
+  type ThreadLocator,
+  type CommitThreadInput,
+  type CommitThreadResult,
   type WorkflowRunCompositionStore,
+  type WorkflowRunFinalizationStore,
+  type WorkflowSchedulerPassResult,
   type WorkflowSchedulerInput,
   type WorkflowNodeAttemptAdmission,
   type WorkItem,
@@ -19,6 +24,7 @@ import {
   composeWorkflowNodeInput,
   parseWorkflowVersionIdentityId,
   type RunState,
+  type ThreadState,
 } from "@crewon/domain";
 import { validatePostgresSchemaName } from "./postgres-queue-schema.ts";
 import { advisoryLock } from "./postgres-thread-lock.ts";
@@ -52,6 +58,8 @@ import {
 import { workflowNodeValue } from "./workflow-node-value.ts";
 import { beginPostgresRunAttempt } from "./postgres-execution-authority.ts";
 import { reconcilePostgresWorkflowChildren } from "./postgres-workflow-child-reconciliation.ts";
+import { finalizePostgresWorkflowRoot } from "./postgres-workflow-root-finalization.ts";
+import { finishPostgresWorkflowSchedulerPass } from "./postgres-workflow-scheduler.ts";
 
 type AdmitInput = Parameters<
   WorkflowRunCompositionStore["admitWorkflowNodes"]
@@ -72,6 +80,18 @@ export type PostgresWorkflowCompositionDependencies =
     Readonly<{
       assertOpen(): void;
       loadRoot(client: PoolClient, input: RunLocator): Promise<RunState | null>;
+      loadRootThread(
+        client: PoolClient,
+        input: ThreadLocator,
+      ): Promise<ThreadState | null>;
+      commitRootThread(
+        client: PoolClient,
+        input: CommitThreadInput,
+      ): Promise<CommitThreadResult>;
+      settleRootWork(
+        client: PoolClient,
+        input: WorkflowSchedulerInput,
+      ): Promise<void>;
       validateLease(
         client: PoolClient,
         input: WorkflowSchedulerInput,
@@ -83,9 +103,9 @@ export type PostgresWorkflowCompositionDependencies =
       ): Promise<CommitRunResult>;
     }>;
 
-/** Experimental atomic handoff. Finalization, human decisions and production routing are separate capabilities. */
+/** Experimental persistent execution. Human decisions, cancellation and production routing remain separate capabilities. */
 export class ExperimentalPostgresWorkflowRunCompositionStore
-  implements WorkflowRunCompositionStore
+  implements WorkflowRunCompositionStore, WorkflowRunFinalizationStore
 {
   readonly #pool: Pool;
   readonly #schema: string;
@@ -464,6 +484,77 @@ export class ExperimentalPostgresWorkflowRunCompositionStore
     if (decision?.outcome !== "allow")
       throw new RunStoreError("workflow_scheduler_policy_denied");
   }
+  async finalizeWorkflowRun(
+    input: WorkflowSchedulerInput,
+  ): Promise<
+    Awaited<ReturnType<WorkflowRunFinalizationStore["finalizeWorkflowRun"]>>
+  > {
+    return this.#transaction(
+      input,
+      async (client, run, context, time) => {
+        if (!terminal(run.status))
+          await this.#authorize(client, run, context.workItem);
+        const result = await finalizePostgresWorkflowRoot(
+          client,
+          this.#sql,
+          input,
+          run,
+          context,
+          this.#settlingOperations(time),
+          {
+            now: new Date(time.now).toISOString(),
+            nextId: this.#id,
+            alreadySettled: time.alreadySettled,
+          },
+        );
+        if (!terminal(run.status))
+          await this.#authorize(client, run, context.workItem);
+        return result;
+      },
+      { lease: "settling" },
+    );
+  }
+  async finishWorkflowSchedulerPass(
+    input: WorkflowSchedulerInput,
+  ): Promise<WorkflowSchedulerPassResult> {
+    return this.#transaction(
+      input,
+      async (client, run, context, time) => {
+        if (!terminal(run.status))
+          await this.#authorize(client, run, context.workItem);
+        const result = await finishPostgresWorkflowSchedulerPass(
+          client,
+          this.#sql,
+          input,
+          run,
+          context,
+          this.#settlingOperations(time),
+          {
+            maximum: this.#maximum,
+            now: new Date(time.now).toISOString(),
+            nextId: this.#id,
+            alreadySettled: time.alreadySettled,
+          },
+        );
+        if (!terminal(run.status))
+          await this.#authorize(client, run, context.workItem);
+        return result;
+      },
+      { lease: "settling" },
+    );
+  }
+  #settlingOperations(time: {
+    expiresAt: number;
+  }): PostgresWorkflowCompositionDependencies {
+    return {
+      ...this.#d,
+      settleRootWork: async (client, input) => {
+        const lease = await this.#d.validateLease(client, input);
+        time.expiresAt = Math.min(time.expiresAt, lease.expiresAt);
+        await this.#d.settleRootWork(client, input);
+      },
+    };
+  }
   async #transaction<T>(
     input: WorkflowSchedulerInput,
     execute: (
@@ -472,12 +563,25 @@ export class ExperimentalPostgresWorkflowRunCompositionStore
       context: Awaited<
         ReturnType<typeof readPostgresWorkflowCompositionContext>
       >,
-      time: { now: number; expiresAt: number },
+      time: { now: number; expiresAt: number; alreadySettled: boolean },
     ) => Promise<T>,
+    options: Readonly<{ lease: "current" | "settling" }> = { lease: "current" },
   ): Promise<T> {
     this.#d.assertOpen();
-    for (const id of [input.tenantId, input.runId, input.schedulerOperationId])
+    for (const id of [
+      input.tenantId,
+      input.runId,
+      input.schedulerOperationId,
+      input.lease.workItemId,
+      input.lease.ownerId,
+      input.lease.leaseId,
+    ])
       parseWorkflowVersionIdentityId(id, "workflow_composition_input_invalid");
+    if (
+      !Number.isSafeInteger(input.lease.leaseEpoch) ||
+      input.lease.leaseEpoch < 1
+    )
+      throw new RunStoreError("workflow_composition_input_invalid");
     const client = await this.#pool.connect();
     try {
       await client.query("BEGIN");
@@ -491,7 +595,40 @@ export class ExperimentalPostgresWorkflowRunCompositionStore
         throw new RunStoreError("workflow_root_state_limit");
       const run = await this.#d.loadRoot(client, input);
       if (!run) throw new RunStoreError("run_not_found");
-      const time = await this.#d.validateLease(client, input);
+      let alreadySettled = false;
+      if (options.lease === "settling" && terminal(run.status)) {
+        const row = (
+          await client.query<{
+            tenant_id: string;
+            run_id: string;
+            status: string;
+            lease_epoch: string;
+          }>(
+            `SELECT tenant_id,run_id,status,lease_epoch FROM ${this.#sql}.work_items WHERE work_item_id=$1 FOR UPDATE`,
+            [input.lease.workItemId],
+          )
+        ).rows[0];
+        if (
+          !row ||
+          row.tenant_id !== input.tenantId ||
+          row.run_id !== input.runId
+        )
+          throw new RunStoreError("work_item_scope_mismatch");
+        if (Number(row.lease_epoch) !== input.lease.leaseEpoch)
+          throw new RunStoreError("stale_lease");
+        alreadySettled = row.status === "completed";
+      }
+      const clock = alreadySettled
+        ? (
+            await client.query<{ now: Date }>("SELECT clock_timestamp() AS now")
+          ).rows[0]!.now.getTime()
+        : null;
+      const time = {
+        ...(alreadySettled
+          ? { now: clock!, expiresAt: clock! }
+          : await this.#d.validateLease(client, input)),
+        alreadySettled,
+      };
       const context = await readPostgresWorkflowCompositionContext(
         client,
         this.#sql,
@@ -499,7 +636,35 @@ export class ExperimentalPostgresWorkflowRunCompositionStore
       );
       await assertPostgresWorkflowCompositionSchema(client, this.#schema);
       const result = await execute(client, run, context, time);
-      await this.#d.validateLease(client, input);
+      if (options.lease === "current")
+        await this.#d.validateLease(client, input);
+      else {
+        const row = (
+          await client.query<{
+            tenant_id: string;
+            run_id: string;
+            status: string;
+            lease_epoch: string;
+          }>(
+            `SELECT tenant_id,run_id,status,lease_epoch FROM ${this.#sql}.work_items WHERE work_item_id=$1`,
+            [input.lease.workItemId],
+          )
+        ).rows[0];
+        if (
+          !row ||
+          row.tenant_id !== input.tenantId ||
+          row.run_id !== input.runId ||
+          row.status !== "completed" ||
+          Number(row.lease_epoch) !== input.lease.leaseEpoch
+        )
+          throw new RunStoreError("workflow_scheduler_ack_missing");
+        if (!alreadySettled) {
+          const now = (
+            await client.query<{ now: Date }>("SELECT clock_timestamp() AS now")
+          ).rows[0]!.now.getTime();
+          if (now >= time.expiresAt) throw new RunStoreError("lease_expired");
+        }
+      }
       await client.query("COMMIT");
       return structuredClone(result);
     } catch (error) {

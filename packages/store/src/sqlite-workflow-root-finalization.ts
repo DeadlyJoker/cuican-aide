@@ -1,8 +1,12 @@
+import {
+  workflowRootOutcome,
+  workflowRootFinalizationKey,
+  prepareWorkflowRootCompletion,
+} from "./workflow-root-result.ts";
 import type { DatabaseSync } from "node:sqlite";
 import {
   canonicalJson,
   RunStoreError,
-  splitWorkflowModelFragment,
   type CommitRunInput,
   type CommitRunResult,
   type CommitThreadInput,
@@ -12,12 +16,7 @@ import {
   type WorkItemLeaseInput,
   type WorkflowRunFinalizationStore,
 } from "@crewon/application";
-import {
-  composeWorkflowOutput,
-  type RunState,
-  type ThreadState,
-  type RunLifecycleEvent,
-} from "@crewon/domain";
+import { type RunState, type ThreadState } from "@crewon/domain";
 import { readSqliteWorkflowCompositionContext } from "./sqlite-workflow-composition-context.ts";
 import { readSqliteWorkflowExecution } from "./sqlite-workflow-execution-authority.ts";
 import {
@@ -26,8 +25,6 @@ import {
 } from "./sqlite-workflow-node-authority.ts";
 import { readSqliteWorkflowChildren } from "./sqlite-workflow-child-dispatch.ts";
 import { readSqliteWorkflowRunOutput } from "./sqlite-workflow-run-output.ts";
-import { workflowNodeValue } from "./workflow-node-value.ts";
-import { workflowAdmissionDigest } from "./workflow-run-admission-validation.ts";
 import { readSqliteWorkflowHumanGates } from "./sqlite-workflow-human-gate-authority.ts";
 
 export type WorkflowRootOperations = {
@@ -140,53 +137,18 @@ export function finalizeSqliteWorkflowRoot(
     if (!["completed", "failed", "canceled"].includes(state.status))
       throw new RunStoreError("workflow_finalization_pending");
   }
-  let output: ReturnType<typeof workflowNodeValue> | null = null;
-  let failureCode: string | null =
-    execution.status === "failed" ? "workflow_node_failed" : null;
-  if (execution.status === "completed") {
-    try {
-      output = workflowNodeValue(
-        composeWorkflowOutput({
-          workflow: context.workflow,
-          outputValues: context.workflow.outputNodeIds.map((nodeId) => {
-            const row = rows.get(nodeId);
-            if (!row?.output_json)
-              throw new RunStoreError("workflow_output_authority_missing");
-            return { nodeId, value: JSON.parse(row.output_json) };
-          }),
-        }),
-        context.workflow.outputSchema,
-      );
-    } catch (error) {
-      // Each node value was already validated. An over-budget aggregate is a known terminal outcome.
-      if (
-        error instanceof RunStoreError &&
-        error.code === "workflow_node_value_limit"
-      )
-        failureCode = "workflow_output_limit";
-      else throw error;
-    }
-  }
-  const idempotency = {
-    scope: canonicalJson({
-      namespace: "workflow.root-finalize.v1",
-      tenantId: input.tenantId,
-    }),
-    key: input.runId,
-    requestFingerprint: workflowAdmissionDigest.sha256(
-      canonicalJson({
-        binding: input.binding,
-        executionDigest: workflowAdmissionDigest.sha256(
-          canonicalJson(execution),
-        ),
-        outcome: canceled
-          ? { status: "canceled", reasonCode: "workflow_cancel_requested" }
-          : output
-            ? { status: "completed", digest: output.digest }
-            : { status: "failed", failureCode },
-      }),
-    ),
-  };
+  const { output, failureCode } = workflowRootOutcome({
+    execution,
+    workflow: context.workflow,
+    rows,
+  });
+  const idempotency = workflowRootFinalizationKey({
+    ...input,
+    execution,
+    output,
+    failureCode,
+    canceled,
+  });
   const prior = db
     .prepare(
       `SELECT tenant_id,run_id,
@@ -251,23 +213,17 @@ export function finalizeSqliteWorkflowRoot(
   if (run.status !== "running" && !(canceled && run.status === "queued"))
     throw new RunStoreError("workflow_root_terminal_authority_missing");
   const now = new Date(ops.now()).toISOString();
-  const events: RunLifecycleEvent[] = [];
-  const envelope = () => ({
-    schemaVersion: "crewon.run-event.v0" as const,
-    identity: { runId: run.runId },
-    eventId: options.nextId(),
-    sequence: run.lastSequence + events.length + 1,
-    occurredAt: now,
-  });
+  let thread: ThreadState | null = null,
+    historyHead = 0;
   if (output) {
-    const threadSize = db
+    const size = db
       .prepare(
         "SELECT length(CAST(state_json AS BLOB)) AS n FROM threads WHERE tenant_id=? AND thread_id=?",
       )
       .get(run.tenantId, run.threadId);
-    if (threadSize && Number(threadSize.n) > 65536)
+    if (size && Number(size.n) > 65536)
       throw new RunStoreError("workflow_root_thread_limit");
-    const thread = ops.loadRootThread({
+    thread = ops.loadRootThread({
       tenantId: run.tenantId,
       threadId: run.threadId,
     });
@@ -278,112 +234,25 @@ export function finalizeSqliteWorkflowRoot(
         "SELECT COALESCE(MAX(sequence),0) AS n FROM model_history_items WHERE tenant_id=? AND thread_id=?",
       )
       .get(run.tenantId, run.threadId)!;
-    const message = {
-      messageId: options.nextId(),
-      tenantId: run.tenantId,
-      threadId: run.threadId,
-      sequence: thread.lastMessageSequence + 1,
-      role: "assistant" as const,
-      content: output.json,
-      contentDigest: output.digest,
-      createdAt: now,
-      origin: null,
-      proposedPlan: null,
-    };
-    const written = ops.commitRootThread({
-      tenantId: run.tenantId,
-      idempotency,
-      expectedRevision: thread.revision,
-      events: [
-        {
-          schemaVersion: "crewon.thread-event.v0",
-          identity: { threadId: thread.threadId },
-          eventId: options.nextId(),
-          sequence: thread.lastEventSequence + 1,
-          occurredAt: now,
-          type: "thread.message.appended",
-          data: {
-            messageId: message.messageId,
-            messageSequence: message.sequence,
-            role: message.role,
-            contentDigest: output.digest,
-          },
-        },
-      ],
-      messages: [message],
-      history: {
-        expectedLastSequence: Number(head.n),
-        items: splitWorkflowModelFragment(output.json).map(
-          (content, index) => ({
-            schemaVersion: "crewon.model-history-item.v0" as const,
-            itemId: options.nextId(),
-            tenantId: run.tenantId,
-            threadId: run.threadId,
-            sequence: Number(head.n) + index + 1,
-            runId: run.runId,
-            segmentId: null,
-            createdAt: now,
-            type: "message" as const,
-            role: "assistant" as const,
-            source: "assistant_completion" as const,
-            content,
-            contentDigest: workflowAdmissionDigest.sha256(content),
-          }),
-        ),
-      },
-    });
-    if (written.disposition !== "committed")
-      throw new RunStoreError("workflow_root_terminal_authority_missing");
-    events.push({
-      ...envelope(),
-      type: "message.completed",
-      data: {
-        messageId: message.messageId,
-        messageSequence: message.sequence,
-        role: "assistant",
-        contentDigest: output.digest,
-      },
-    });
-    events.push({
-      ...envelope(),
-      type: "run.completed",
-      data: { outputRef: `message:${message.messageId}` },
-    });
-  } else if (canceled) {
-    events.push({
-      ...envelope(),
-      type: "run.canceled",
-      data: { reasonCode: "workflow_cancel_requested" },
-    });
-  } else {
-    events.push({
-      ...envelope(),
-      type: "run.failed",
-      data: { code: failureCode!, retryable: false },
-    });
+    historyHead = Number(head.n);
   }
-  const result = ops.commitRootRun(
-    {
-      tenantId: run.tenantId,
-      idempotency,
-      expectedRevision: run.revision,
-      events,
-      workItems: [],
-      outbox: events.map((event) => ({
-        messageId: options.nextId(),
-        tenantId: run.tenantId,
-        runId: run.runId,
-        topic: "run.updated",
-        payload: {
-          eventId: event.eventId,
-          eventType: event.type,
-          throughSequence: event.sequence,
-        },
-        createdAt: now,
-      })),
-    },
-    input.lease,
-  );
+  const prepared = prepareWorkflowRootCompletion({
+    run,
+    thread,
+    historyHead,
+    output,
+    failureCode,
+    canceled,
+    idempotency,
+    now,
+    nextId: options.nextId,
+  });
+  if (
+    prepared.thread &&
+    ops.commitRootThread(prepared.thread).disposition !== "committed"
+  )
+    throw new RunStoreError("workflow_root_terminal_authority_missing");
+  const result = ops.commitRootRun(prepared.commit, input.lease);
   if (result.disposition !== "committed") corrupt();
   if (Buffer.byteLength(canonicalJson(result)) > 16384)
     throw new RunStoreError("workflow_root_receipt_limit");

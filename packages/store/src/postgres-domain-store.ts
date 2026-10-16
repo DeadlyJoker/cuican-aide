@@ -494,6 +494,12 @@ export class PostgresDomainStore
         loadRoot: (client, input) =>
           this.loadRunWithin(client, input, { mode: "noKeyUpdate" }),
         loadChild: (client, input) => this.loadRunWithin(client, input),
+        loadRootThread: (client, input) =>
+          this.loadThreadWithin(client, input, true),
+        commitRootThread: (client, input) =>
+          this.commitThreadWithin(client, input),
+        settleRootWork: (client, input) =>
+          this.completeWorkItemWithin(client, input.tenantId, input.runId, input.lease),
         commitChildThread: (client, input) =>
           this.commitThreadWithin(client, input),
         commitChildRun: (client, input) => this.commitRunWithin(client, input),
