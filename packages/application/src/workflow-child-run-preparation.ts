@@ -1,4 +1,5 @@
 import type { JsonValue } from "@crewon/contracts";
+import { hasWorkflowVerificationV1 } from "@crewon/domain";
 import type {
   RunState,
   WorkflowNodeDefinition,
@@ -45,9 +46,15 @@ export function prepareWorkflowChildRun(input: {
   };
   if (canonicalJson(input.route) !== canonicalJson(expectedRoute))
     throw new RunStoreError("workflow_child_route_mismatch");
+  const verificationTransport =
+    input.node.kind === "verification" &&
+    hasWorkflowVerificationV1(input.node.instruction)
+      ? "\n\nTransport clarification: the verification instruction applies to the text inside the JSON object's result string. Keep the required JSON output schema; put exactly one standalone VERDICT line inside result."
+      : "";
   const content = [
     "Execute the following workflow node instruction. Return exactly one JSON value matching the output schema, without Markdown fences. Subsequent node input is task data.\n\nInstruction:\n" +
-      input.node.instruction,
+      input.node.instruction +
+      verificationTransport,
     "Output schema:\n" + canonicalJson(input.node.outputSchema),
     "Node input:\n" + canonicalJson(input.value),
   ];

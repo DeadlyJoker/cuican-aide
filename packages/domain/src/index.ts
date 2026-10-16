@@ -32,6 +32,7 @@ export * from "./workflow-schema.ts";
 export * from "./workflow-schema-value.ts";
 export * from "./workspace-change-summary.ts";
 export * from "./workflow-value-flow.ts";
+export * from "./workflow-verification.ts";
 export * from "./workflow-version-error.ts";
 export * from "./workflow-version.ts";
 export * from "./workflow-version-codec.ts";

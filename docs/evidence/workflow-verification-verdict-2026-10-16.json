@@ -1,0 +1,20 @@
+{
+  "scope": "Direct settlement comparison using the HEAD function body and unchanged JSON value validation, plus actual Worker/HTTP tests recorded in the progress log",
+  "baselineCommit": "79e479b59c6f27e73e42e63710a7c67b041e97c3",
+  "input": {
+    "modelRunStatus": "completed",
+    "result": "VERDICT: FAIL",
+    "contract": "verification-contract:v1"
+  },
+  "before": {
+    "status": "completed",
+    "failureCode": null,
+    "hasSuccessfulValue": true
+  },
+  "after": {
+    "status": "failed",
+    "failureCode": "control_workflow_verification_failed",
+    "hasSuccessfulValue": false
+  },
+  "limitations": "Named synthetic input; not a benchmark or a historical user-data repair"
+}

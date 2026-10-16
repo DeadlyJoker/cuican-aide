@@ -1,4 +1,9 @@
-import type { RunState, WorkflowValueSchema } from "@crewon/domain";
+import {
+  workflowVerificationResultError,
+  type RunState,
+  type WorkflowValueSchema,
+  type WorkflowNodeDefinition,
+} from "@crewon/domain";
 import { RunStoreError } from "@crewon/application";
 import { workflowNodeValue } from "./workflow-node-value.ts";
 
@@ -9,6 +14,7 @@ export function workflowChildOutcome(input: {
   output: string | null;
   outputError?: unknown;
   schema: WorkflowValueSchema;
+  node: Pick<WorkflowNodeDefinition, "kind" | "instruction">;
 }) {
   if (!["completed", "failed", "canceled"].includes(input.child.status))
     throw new RunStoreError("workflow_child_not_terminal");
@@ -26,6 +32,8 @@ export function workflowChildOutcome(input: {
       if (typeof input.output !== "string")
         throw new RunStoreError("workflow_child_output_authority_corrupt");
       value = workflowNodeValue(JSON.parse(input.output), input.schema);
+      failureCode = workflowVerificationResultError(input.node, value.value);
+      if (failureCode !== null) value = null;
     } catch (error) {
       if (
         error instanceof SyntaxError ||

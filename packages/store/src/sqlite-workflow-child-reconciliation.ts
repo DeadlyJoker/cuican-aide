@@ -88,6 +88,7 @@ export function reconcileSqliteWorkflowChildren(
       output,
       outputError,
       schema: admission.claim.node.outputSchema,
+      node: admission.claim.node,
     });
     finishSqliteRunAttempt(db, {
       tenantId: current.tenantId,

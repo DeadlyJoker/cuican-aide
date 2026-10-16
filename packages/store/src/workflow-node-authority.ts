@@ -9,6 +9,7 @@ import type {
   RunStepState,
   RunAttemptState,
 } from "@crewon/domain";
+import { workflowVerificationResultError } from "@crewon/domain";
 import { workflowNodeValue } from "./workflow-node-value.ts";
 
 export type WorkflowNodeRow = {
@@ -96,7 +97,11 @@ export function validateWorkflowNodeRows(
         JSON.parse(row.output_json),
         definition.outputSchema,
       );
-      if (output.digest !== row.output_digest) corrupt();
+      if (
+        output.digest !== row.output_digest ||
+        workflowVerificationResultError(definition, output.value) !== null
+      )
+        corrupt();
     } else if (row.output_json !== null || row.output_digest !== null)
       corrupt();
     if (

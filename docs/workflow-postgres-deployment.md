@@ -81,6 +81,16 @@ const worker = await createPostgresRuntimeWorker({
 
 不改变 schema 版本、队列语义或已有数据，也不跳过旧版本迁移。回归在另一连接持有活动表的 ROW EXCLUSIVE 锁时重新打开 Store，要求无 DDL 锁等待；另验证健康触发器 OID 不变、被禁用触发器修复后继续保留 Outbox 去重和终态进度清理行为。
 
+## 现有 UI Verifier 的业务语义
+
+带有完整冻结 `verification-contract:v1` 指令的独立 Verifier，在持久 Worker 路径也使用原 UI 的判定规则。结构化输出仍必须符合该节点原有 JSON schema；已有 UI 定义的结果 schema 对应信封为 `{ "result": "...\nVERDICT: PASS" }`。指令中的独立 verdict 行约束应用于 `result` 文本，子任务准备增加明确的传输说明，不改写冻结定义或已有模型历史。
+
+模型 Run 完成后，父调度器再次判定业务结果：精确的一行 PASS 才能完成；FAIL、缺失、重复、缩进或非规范 verdict 均失败。失败节点不发布成功输出摘要，父任务不制造成功回复；实际模型原文仍保存在子 Run 的规范历史中供检查。重开后结算原子任务，不重新采样。普通没有声明这个文本协议的结构化 Verifier 保留原 schema 语义，不猜测任意 JSON 字段的含义。
+
+前后端使用 Domain 的同一纯函数，renderer 从 `@crewon/domain/workflow-verification` 子入口引用，避免导入总入口的 Node 类型和其他领域实现。保留原前端导出的标记及全部旧指令字节；不修改 HTTP、事件、表结构或旧任务数据。若保留记录把一个明确 FAIL 的 v1 结果标为 completed，即使其摘要及结算指纹相符，也不能当作有效完成权威继续推进；读取拒绝该不一致，不自动重写历史或补发任务。
+
+审批意见当前仍只有旧 renderer 消息记录，现有持久审批 HTTP 协议只接受决定和输入摘要。前端迁移之前须单独提供意见的持久协议及同事务回执绑定；不能先写一条普通消息再批准，也不能默默丢弃意见。该缺口尚未在本批关闭。
+
 ## 验证范围
 
 集成测试使用本机独立 PostgreSQL、正式 Control/Worker 工厂、实际 AgentVersion 编译器与 Release 激活、真实 HTTP/SDK/SSE 和现有授权实现。覆盖单槽跨人工审批与重启恢复、双会话模型调用重叠与各自结果回流、发布切换互斥、入库拒绝原子回滚、审批身份变更和撤权后取消。

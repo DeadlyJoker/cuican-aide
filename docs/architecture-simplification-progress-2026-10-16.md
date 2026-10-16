@@ -289,3 +289,23 @@ PG 实验调度已具备入库、交接、结果结算、停放、人工审批�
 本批最终源码专项 19 项通过，包含真实 CLI/Control/Worker 重启、发布/审批/取消边界、共享配置及 SDK 校验，无跳过；既有生产 Main 前置校验、Extension 装配及 Worker 环境 27 项通过。Contracts 全量 755、Control Client 全量 273、AgentVersion 全量 146 项通过，生成类型与许可证检查通过；OpenAPI 和架构/生产类型图检查 56 项通过，其中架构部分 37 项。Contracts、AgentVersion、Control Client、Runtime Worker、Control API 完整类型检查通过；最终新增进程夹具和 Client 委托整理后再次完成 Control/Client 完整类型检查。没有改 UI 或启用用户部署，不宣称安装版可见 UI 验收。
 
 仓库 TypeScript 入口、格式和 diff 检查通过。测试子进程均已退出，独立库 schema 与其他客户端归零后，已关闭本批 PostgreSQL 并确认无运行服务。改动提交在原 `codex/runtime-concurrency-result-streaming` 分支，未推送。
+
+## 第十七批：迁移前补齐 Verifier 的业务判定
+
+前端接管核对发现，既有 UI 的人工意见仍保存在隐藏消息中，且 `verification-contract:v1` 的 PASS/FAIL 判断只在 renderer。直接切换到后台会丢失这两项语义。本批先关闭其中的 Verifier 缺口：原标记、完整指令、作者可见指令和文本判定收敛到 Domain 的同一纯函数，前端保持原导出和判定行为；SQLite/PostgreSQL 节点结算与保留完成权威也使用它，不新增调度器或重复解析规则。
+
+只对完整冻结 v1 文本协议的 Verifier 启用该判定，普通结构化 Verifier 继续沿自己的 schema。子任务仍输出合法 JSON，传输说明明确 verdict 位于 `result` 字符串中；冻结定义和既有模型历史不变。模型完成不等于核验通过：FAIL 或无效 verdict 导致节点、Step/Attempt 和根任务失败，无成功回复；实际子 Run 原文仍可读取。保留的 completed 记录若具有明确 FAIL，即使摘要及结算指纹一致也拒绝作为有效权威，不自动重写历史。
+
+前端通过显式 `@crewon/domain/workflow-verification` 子入口共享规则，避免总入口把其他领域的 Node 类型带入 renderer。原发布指令字节、HTTP、事件和表结构保持。初次 UI 构建因总入口的 Buffer 类型依赖失败，已改用纯子入口后完成正式构建，没有给 renderer 添加 Node 类型来绕过边界。
+
+实测 SQLite 子模型完成后关闭 Worker、重开结算，仅有原来的两次模型调用；PASS 成功，FAIL、重复和缺失 verdict 均失败。正式 PostgreSQL Control/Worker、HTTP/SDK 验证父失败与子模型 completed 的区别、原文保留、唯一回复或无成功回复、终态 SSE 及重开快照。前端沿既有 Workflow/Command 组件断言验证，并通过明确模拟数据预览检查失败文案、节点产出、返回列表及重新进入；1280×720、390×600、900×450 下无页面横向溢出，输入区仍可见。预览不是安装版账号或新后台前端适配的验收，未改变 CSS 或产品布局。
+
+审批意见的持久协议和同事务回执绑定仍未完成，前端执行权尚未切换；下一步继续补齐该兼容条件，再迁移前端并退役旧推进。生产请求级授权、SQLite/桌面接线、Team、资源作用域、生命周期、自主子 Agent 和安装式插件专项继续保留在原目标内。
+
+直接取原 HEAD `79e479b59` 的结算函数体，以相同合法 schema、相同 v1 指令和 `{result:"VERDICT: FAIL"}` 对照：旧函数返回 completed、无 failure 且有成功值，新函数返回 failed、`control_workflow_verification_failed` 且没有成功值。只读旧函数体，依赖的 JSON/schema 值校验未改变；诊断临时文件已删除。该命名合成输入与真实 Worker/HTTP 专项共同定位问题，不是性能样本或用户历史数据修复。证据见 `docs/evidence/workflow-verification-verdict-2026-10-16.json`。
+
+本批相关 PostgreSQL/SQLite/Worker/HTTP/CLI/流恢复/发布/迁移回归同一次运行 632 项全部通过、无跳过；加强后的最终 Verifier 专项 10 项通过，包括原文保留、父失败 SSE 和自洽摘要也不能把旧 FAIL 当作完成。Domain 全量 404 项、最终 Workflow/Command 23 文件 221 项、最终架构及生产类型图 37 项通过。Domain、Application、Store、Runtime Worker、Control API 完整类型检查通过；最终加强测试后再次完成 Worker/Control 完整检查。UI lint（含 Electron）及正式 build 通过，登录入口 eager JavaScript 仍为 326427 字节并通过 512 KiB 预算。
+
+较广回归期间主机负载一度为 37.39，构建和检查明显变慢；632 项耗时约 634 秒，不据此推断产品性能，也未延长测试截止时间或停止用户进程。模拟预览标签、临时入口、诊断源文件和本批 Vite 服务已清理，样式未修改。安装版真实账号与真实供应商验收仍未完成。
+
+仓库 TypeScript 入口、格式和 diff 检查通过。最终专项结束后，独立 PostgreSQL 的业务 schema 与其他客户端归零，已关闭本批启动的测试实例并确认无运行服务；未读取用户数据库。改动继续提交在 `codex/runtime-concurrency-result-streaming`，未推送。

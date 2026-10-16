@@ -5,6 +5,12 @@ import type {
   WorkflowVersionView,
 } from "@crewon/contracts";
 import type { ControlApiClient } from "@crewon/control-client";
+import {
+  WORKFLOW_VERIFICATION_CONTRACT_V1,
+  workflowVerificationInstructionV1 as verificationContractV1Instruction,
+  workflowVerificationTextError,
+  visibleWorkflowVerificationInstruction,
+} from "@crewon/domain/workflow-verification";
 
 import type {
   CrewonWorkflowExecution,
@@ -20,18 +26,8 @@ const PAGE_SIZE = 100;
 const MAX_PAGES = 100;
 const DEFAULT_POLL_INTERVAL_MS = 250;
 const DEFAULT_RUN_DEADLINE_MS = 15 * 60 * 1_000;
-const VERIFICATION_FAILED_ERROR = "control_workflow_verification_failed";
-const VERIFICATION_INVALID_ERROR = "control_workflow_verification_invalid";
-
 export const CONTROL_WORKFLOW_VERIFICATION_CONTRACT_V1 =
-  "[Control Workflow · verification-contract:v1]" as const;
-
-const VERIFICATION_CONTRACT_V1_INSTRUCTION = [
-  CONTROL_WORKFLOW_VERIFICATION_CONTRACT_V1,
-  "输出必须且只能包含一行独立 verdict；该行必须逐字等于 `VERDICT: PASS` 或 `VERDICT: FAIL`。",
-  "verdict 使用大写英文和 ASCII 冒号，不得缩进、加前缀、加后缀或输出第二行 VERDICT。",
-  "只有全部验收条件有可核验证据时才能 PASS；缺失、冲突或无法核验时必须 FAIL。",
-].join("\n");
+  WORKFLOW_VERIFICATION_CONTRACT_V1;
 
 const promptSchema = {
   type: "object" as const,
@@ -753,47 +749,15 @@ function verificationError(
   node: Pick<WorkflowVersionView["nodes"][number], "instruction">,
   output: string,
 ): string | null {
-  if (!hasVerificationContractV1(node.instruction)) {
-    return legacyVerificationVerdictFailed(output)
-      ? VERIFICATION_FAILED_ERROR
-      : null;
-  }
-
-  const candidates = output
-    .split(/\n/u)
-    .map((line) => (line.endsWith("\r") ? line.slice(0, -1) : line))
-    .filter((line) => /^VERDICT\b/iu.test(line.trim()));
-  if (candidates.length !== 1) return VERIFICATION_INVALID_ERROR;
-  if (candidates[0] === "VERDICT: PASS") return null;
-  if (candidates[0] === "VERDICT: FAIL") return VERIFICATION_FAILED_ERROR;
-  return VERIFICATION_INVALID_ERROR;
-}
-
-function legacyVerificationVerdictFailed(output: string): boolean {
-  return /^VERDICT\s*:\s*FAIL\b/imu.test(output);
-}
-
-function verificationContractV1Instruction(instruction: string): string {
-  return `${instruction.trim()}\n\n${VERIFICATION_CONTRACT_V1_INSTRUCTION}`;
-}
-
-function hasVerificationContractV1(instruction: string): boolean {
-  return instruction.endsWith(`\n\n${VERIFICATION_CONTRACT_V1_INSTRUCTION}`);
+  return workflowVerificationTextError(node.instruction, output);
 }
 
 function visibleWorkflowNodeInstruction(
   node: WorkflowVersionView["nodes"][number],
 ): string {
-  if (
-    node.kind !== "verification" ||
-    !hasVerificationContractV1(node.instruction)
-  ) {
-    return node.instruction;
-  }
-  return node.instruction.slice(
-    0,
-    -`\n\n${VERIFICATION_CONTRACT_V1_INSTRUCTION}`.length,
-  );
+  return node.kind === "verification"
+    ? visibleWorkflowVerificationInstruction(node.instruction)
+    : node.instruction;
 }
 
 function agentNodePrompt(

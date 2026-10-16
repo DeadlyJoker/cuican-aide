@@ -71,6 +71,7 @@ export async function reconcilePostgresWorkflowChildren(
       output,
       outputError,
       schema: admission.claim.node.outputSchema,
+      node: admission.claim.node,
     });
     await finishPostgresRunAttempt(client, sql, {
       tenantId: current.tenantId,
