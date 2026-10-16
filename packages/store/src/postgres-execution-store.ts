@@ -368,6 +368,7 @@ export class PostgresExecutionStore
       state,
       events,
     );
+    await super.wakeCanceledReconciliationWithin(client, state, events);
   }
 
   async loadToolExecutionReceipt(

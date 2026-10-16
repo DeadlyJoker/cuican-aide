@@ -16,7 +16,6 @@ import {
 } from "@crewon/application";
 import type { RunState, RunStepState } from "@crewon/domain";
 import type { PostgresWorkflowCompositionDependencies } from "./postgres-workflow-run-composition.ts";
-import { postgresWorkflowNodeAdmission } from "./postgres-workflow-node-authority.ts";
 import { assertPostgresWorkflowCompositionSchema } from "./postgres-workflow-composition-schema.ts";
 import { readPostgresWorkflowCompositionContext } from "./postgres-workflow-composition-context.ts";
 import { readPostgresWorkflowSchedulerAuthority } from "./postgres-workflow-scheduler-authority.ts";
@@ -396,13 +395,7 @@ export class PostgresWorkflowHumanGates implements WorkflowHumanGateStore {
     if (!gate || gate.authority.gateRequestId !== locator.gateRequestId)
       throw new RunStoreError("workflow_gate_not_found");
     const row = authority.rows.get(locator.nodeId)!;
-    const admission = await postgresWorkflowNodeAdmission(
-      client,
-      this.#sql,
-      authority.execution,
-      context.workflow,
-      row,
-    );
+    const admission = authority.admissions.get(locator.nodeId)!;
     return {
       ...authority,
       run,

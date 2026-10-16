@@ -1,3 +1,4 @@
+import { readPostgresWorkflowCancellationRequest } from "./postgres-workflow-cancellation-authority.ts";
 import type { PoolClient } from "pg";
 import {
   canonicalJson,
@@ -50,10 +51,23 @@ export async function finalizePostgresWorkflowRoot(
     options,
   );
   const { execution, rows, children } = authority;
-  if (run.cancelRequested || execution.cancelRequested)
+  const canceled =
+    run.cancelRequested &&
+    execution.cancelRequested &&
+    execution.status === "canceled";
+  if (run.cancelRequested) {
+    const proof = await readPostgresWorkflowCancellationRequest(
+      client,
+      sql,
+      run,
+    );
+    if (!proof.signaled)
+      throw new RunStoreError("workflow_cancellation_recovery_required");
+  }
+  if ((run.cancelRequested || execution.cancelRequested) && !canceled)
     throw new RunStoreError("workflow_cancellation_recovery_required");
   if (
-    !["completed", "failed"].includes(execution.status) ||
+    (!["completed", "failed"].includes(execution.status) && !canceled) ||
     execution.nodes.some((node) =>
       ["running", "unknown", "waitingHuman"].includes(node.status),
     ) ||
@@ -73,7 +87,7 @@ export async function finalizePostgresWorkflowRoot(
     execution,
     output,
     failureCode,
-    canceled: false,
+    canceled,
   });
   const prior = (
     await client.query<{
@@ -101,7 +115,8 @@ export async function finalizePostgresWorkflowRoot(
     });
     if (
       canonicalJson(receipt.state) !== canonicalJson(run) ||
-      run.status !== (output ? "completed" : "failed") ||
+      run.status !==
+        (canceled ? "canceled" : output ? "completed" : "failed") ||
       receipt.events.length !== (output ? 2 : 1) ||
       receipt.workItems.length !== 0 ||
       receipt.outbox.length !== receipt.events.length
@@ -123,12 +138,20 @@ export async function finalizePostgresWorkflowRoot(
       (await readPostgresWorkflowRunOutput(client, sql, run)) !== output.json
     )
       corrupt();
-    if (!output && (run.failure?.code !== failureCode || run.failure.retryable))
+    if (
+      !output &&
+      !canceled &&
+      (run.failure?.code !== failureCode || run.failure.retryable)
+    )
       corrupt();
+    if (canceled && (run.outputRef !== null || run.failure !== null)) corrupt();
     if (!options.alreadySettled) await ops.settleRootWork(client, input);
     return { disposition: "replayed", run };
   }
-  if (options.alreadySettled || run.status !== "running")
+  if (
+    options.alreadySettled ||
+    (run.status !== "running" && !(canceled && run.status === "queued"))
+  )
     throw new RunStoreError("workflow_root_terminal_authority_missing");
   await reserve(client, `idempotency:${idempotency.scope}:${idempotency.key}`);
   // Do not hold a parent Run while waiting for a different Thread transaction.
@@ -164,7 +187,7 @@ export async function finalizePostgresWorkflowRoot(
     historyHead,
     output,
     failureCode,
-    canceled: false,
+    canceled,
     idempotency,
     now: options.now,
     nextId: options.nextId,

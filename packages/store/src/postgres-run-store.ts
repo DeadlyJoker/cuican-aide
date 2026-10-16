@@ -1,3 +1,4 @@
+import { signalPostgresWorkflowCancellationRequest } from "./postgres-workflow-cancellation.ts";
 import { readPostgresActiveRun } from "./postgres-active-run-read.ts";
 import { validateWorkflowSchedulerWorkItems } from "./workflow-run-admission-validation.ts";
 import { assertPostgresOrdinaryTurnProjectScope } from "./project-conversation-ordinary-turn-fence.ts";
@@ -1208,7 +1209,14 @@ export class PostgresRunStore extends PostgresThreadStore implements RunStore {
       );
     }
     const locator = { tenantId: input.tenantId, runId };
-    const current = await this.loadRunWithin(client, locator, true);
+    // Child terminal wake FK checks must retain KEY SHARE while a root cancellation signals siblings.
+    const current = await this.loadRunWithin(
+      client,
+      locator,
+      input.events.some((event) => event.type === "run.cancel.requested")
+        ? { mode: "noKeyUpdate" }
+        : true,
+    );
     if ((current?.revision ?? 0) !== input.expectedRevision) {
       throw new RunStoreError("revision_conflict");
     }
@@ -1360,11 +1368,22 @@ export class PostgresRunStore extends PostgresThreadStore implements RunStore {
   }
 
   protected async wakeCanceledReconciliationWithin(
-    _client: PoolClient,
-    _state: RunState,
-    _events: readonly RunLifecycleEvent[],
+    client: PoolClient,
+    state: RunState,
+    events: readonly RunLifecycleEvent[],
   ): Promise<void> {
-    // Receipt storage is owned by PostgresExecutionStore, which implements this hook.
+    await signalPostgresWorkflowCancellationRequest(
+      client,
+      this.schemaSql(),
+      state,
+      events,
+      {
+        loadChild: (connection, locator) =>
+          this.loadRunWithin(connection, locator),
+        commitChildRun: (connection, input) =>
+          this.commitRunWithin(connection, input),
+      },
+    );
   }
 
   async listRunEvents(

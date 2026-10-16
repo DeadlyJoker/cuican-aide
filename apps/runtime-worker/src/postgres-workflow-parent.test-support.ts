@@ -1,6 +1,5 @@
 import assert from "node:assert/strict";
 import type { TestContext } from "node:test";
-import { RunStoreError } from "@crewon/application";
 import { postgresCompositionFixture } from "../../../packages/store/src/postgres-workflow-composition.test-support.ts";
 import { compositionInput } from "../../../packages/store/src/workflow-run-composition.test-support.ts";
 import { postgresWorkflowChildWorker } from "./postgres-workflow-worker.test-support.ts";
@@ -17,7 +16,7 @@ export async function claimParent(f: Fixture, id = "parent-final") {
   assert.equal(claim.workItem.runId, f.root.runId);
   return compositionInput(f.input.binding, claim);
 }
-/** Ordinary Worker plus the existing experimental scheduler. Unsupported PG cancellation stays explicit. */
+/** Ordinary Worker plus the existing experimental scheduler, including durable PG cancellation. */
 export async function postgresParentWorker(
   f: Fixture,
   t: TestContext,
@@ -52,9 +51,8 @@ export async function postgresParentWorker(
     finishWorkflowSchedulerPass: (input) =>
       f.composition.finishWorkflowSchedulerPass(input),
     finalizeWorkflowRun: (input) => f.composition.finalizeWorkflowRun(input),
-    propagateWorkflowCancellation: async () => {
-      throw new RunStoreError("workflow_cancellation_recovery_required");
-    },
+    propagateWorkflowCancellation: (input) =>
+      f.composition.propagateWorkflowCancellation(input),
   });
   return postgresWorkflowChildWorker(f, t, options.output, {
     ...options.child,

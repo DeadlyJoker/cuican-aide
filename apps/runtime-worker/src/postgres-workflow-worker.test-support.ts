@@ -11,6 +11,7 @@ import { workflowAdmissionDigest } from "../../../packages/store/src/workflow-ru
 import { compositionInput } from "../../../packages/store/src/workflow-run-composition.test-support.ts";
 import { PinnedRunExecutionPolicy } from "./standalone-adapters.ts";
 import { RuntimeWorker } from "./runtime-worker.ts";
+import type { RuntimeWorkerConfig } from "./runtime-worker.ts";
 import type { ExperimentalWorkflowScheduler } from "./workflow-scheduler.ts";
 import type { ToolRuntimePort } from "@crewon/tool-broker";
 
@@ -27,6 +28,7 @@ export async function postgresWorkflowChildWorker(
     experimentalScheduler?: ExperimentalWorkflowScheduler;
     transport?: ModelTransportPort;
     toolRuntime?: ToolRuntimePort;
+    cancellationScheduler?: RuntimeWorkerConfig["cancellationScheduler"];
   }> = {},
 ) {
   const store = await f.open();
@@ -96,7 +98,9 @@ export async function postgresWorkflowChildWorker(
       nextLeaseId: () => `${prefix}-lease-${++ids}`,
       scanIntervalMs: null,
       leaseDurationMs: 60_000,
-      cancellationScheduler: { every: () => () => {} },
+      cancellationScheduler: options.cancellationScheduler ?? {
+        every: () => () => {},
+      },
     },
   );
   t.after(() => worker.close());

@@ -51,7 +51,7 @@ export async function readPostgresWorkflowChildren(
   state: WorkflowExecutionState,
   parent: RunState,
   context: Awaited<ReturnType<typeof readPostgresWorkflowCompositionContext>>,
-  ops: PostgresWorkflowChildOperations,
+  ops: Pick<PostgresWorkflowChildOperations, "loadChild">,
 ) {
   const rows = await client.query<PostgresWorkflowChildRow>(
     `SELECT node_id,claim_id,child_thread_id,child_run_id,input_digest,wake_work_item_id,

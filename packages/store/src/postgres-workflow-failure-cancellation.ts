@@ -16,11 +16,13 @@ import {
 } from "./postgres-workflow-node-authority.ts";
 import type { WorkflowNodeRow } from "./workflow-node-authority.ts";
 import { readPostgresWorkflowChildWork } from "./postgres-workflow-child-work.ts";
-import { prepareWorkflowChildCancellation } from "./workflow-child-cancellation.ts";
+import {
+  lockPostgresWorkflowChild,
+  commitPostgresWorkflowChildCancellation,
+} from "./postgres-workflow-child-cancellation.ts";
 import { cancelPostgresWorkflowUnstartedNodes } from "./postgres-workflow-unstarted-cancellation.ts";
 import { writePostgresWorkflowExecution } from "./postgres-workflow-execution-authority.ts";
 import { workflowAdmissionDigest } from "./workflow-run-admission-validation.ts";
-import { RECONCILIATION_CANCEL_WAKE } from "./reconciliation-cancellation-wake.ts";
 
 /** Caller owns the parent Run. Child/receipt/queue locks are try-only, never wait while holding the parent. */
 export async function stopPostgresWorkflowFailedSiblings(
@@ -47,11 +49,7 @@ export async function stopPostgresWorkflowFailedSiblings(
   for (const target of input.children.values()) {
     if (terminal(target.run.status)) continue;
     // A sibling may have changed since authority was loaded. Fence it before re-reading or writing.
-    await reserve(client, `run:${parent.tenantId}:${target.child_run_id}`);
-    const child = await ops.loadChild(client, {
-      tenantId: parent.tenantId,
-      runId: target.child_run_id,
-    });
+    const child = await lockPostgresWorkflowChild(client, parent, target, ops);
     if (!child) corrupt();
     if (terminal(child.status)) continue;
     const work = await readPostgresWorkflowChildWork(
@@ -79,51 +77,13 @@ export async function stopPostgresWorkflowFailedSiblings(
       key: target.claim_id,
       requestFingerprint: fingerprint(parent, child, target, failure),
     };
-    await reserve(
+    await commitPostgresWorkflowChildCancellation(
       client,
-      `idempotency:${idempotency.scope}:${idempotency.key}`,
+      sql,
+      { child, actorId: parent.createdByActorId, idempotency, work: work.work },
+      ops,
+      input.nextId,
     );
-    await reserve(client, `thread:${child.tenantId}:${child.threadId}`);
-    // NOWAIT row locks prevent deadlock with a Worker that owns this queue before acquiring the Run.
-    try {
-      const locked = await client.query(
-        `SELECT work_item_id FROM ${sql}.work_items WHERE work_item_id=$1 AND tenant_id=$2 AND run_id=$3 AND status IN ('pending','leased') FOR UPDATE NOWAIT`,
-        [work.work.workItemId, child.tenantId, child.runId],
-      );
-      if (locked.rowCount !== 1)
-        throw new RunStoreError("workflow_child_work_authority_missing");
-    } catch (error) {
-      if (
-        error &&
-        typeof error === "object" &&
-        "code" in error &&
-        error.code === "55P03"
-      )
-        throw new RunStoreError("postgres_retryable");
-      throw error;
-    }
-    const result = await ops.commitChildRun(
-      client,
-      prepareWorkflowChildCancellation(
-        { child, actorId: parent.createdByActorId, idempotency },
-        (
-          await client.query<{ now: Date }>("SELECT clock_timestamp() AS now")
-        ).rows[0]!.now.toISOString(),
-        input.nextId,
-      ),
-    );
-    if (result.disposition !== "committed") corrupt();
-    const woke = await client.query(
-      `UPDATE ${sql}.work_items SET available_at=LEAST(available_at,clock_timestamp()),last_error_code=$1 WHERE work_item_id=$2 AND tenant_id=$3 AND run_id=$4 AND status IN ('pending','leased')`,
-      [
-        RECONCILIATION_CANCEL_WAKE,
-        work.work.workItemId,
-        child.tenantId,
-        child.runId,
-      ],
-    );
-    if (woke.rowCount !== 1)
-      throw new RunStoreError("workflow_child_work_authority_missing");
   }
   const nodes = await cancelPostgresWorkflowUnstartedNodes(
     client,
@@ -237,17 +197,6 @@ function fingerprint(
       claimId: target.claim_id,
     }),
   );
-}
-async function reserve(client: PoolClient, key: string) {
-  if (
-    (
-      await client.query<{ acquired: boolean }>(
-        "SELECT pg_try_advisory_xact_lock(hashtextextended($1,0)) AS acquired",
-        [key],
-      )
-    ).rows[0]?.acquired !== true
-  )
-    throw new RunStoreError("postgres_retryable");
 }
 function terminal(status: string) {
   return ["completed", "failed", "canceled"].includes(status);

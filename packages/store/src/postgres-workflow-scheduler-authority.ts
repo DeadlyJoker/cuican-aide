@@ -3,6 +3,7 @@ import type { PoolClient } from "pg";
 import {
   RunStoreError,
   type WorkflowSchedulerInput,
+  type WorkflowNodeAttemptAdmission,
 } from "@crewon/application";
 import type { RunState } from "@crewon/domain";
 import { readPostgresWorkflowExecution } from "./postgres-workflow-execution-authority.ts";
@@ -23,7 +24,7 @@ export async function readPostgresWorkflowSchedulerAuthority(
   input: Pick<WorkflowSchedulerInput, "tenantId" | "runId" | "binding">,
   run: RunState,
   context: Awaited<ReturnType<typeof readPostgresWorkflowCompositionContext>>,
-  ops: PostgresWorkflowChildOperations,
+  ops: Pick<PostgresWorkflowChildOperations, "loadChild">,
   options: { humanGatesEnabled: boolean },
 ) {
   if (run.goalBinding !== null || run.goalAccounting !== null)
@@ -42,15 +43,19 @@ export async function readPostgresWorkflowSchedulerAuthority(
     execution,
     context.workflow,
   );
-  if (!rows.size)
+  if (!rows.size && !run.cancelRequested)
     throw new RunStoreError("workflow_composition_authority_missing");
+  const admissions = new Map<string, WorkflowNodeAttemptAdmission>();
   for (const row of rows.values())
-    await postgresWorkflowNodeAdmission(
-      client,
-      sql,
-      execution,
-      context.workflow,
-      row,
+    admissions.set(
+      row.node_id,
+      await postgresWorkflowNodeAdmission(
+        client,
+        sql,
+        execution,
+        context.workflow,
+        row,
+      ),
     );
   const children = await readPostgresWorkflowChildren(
     client,
@@ -84,5 +89,5 @@ export async function readPostgresWorkflowSchedulerAuthority(
     steps.rows.some((row) => !ids.has(row.step_id))
   )
     throw new RunStoreError("workflow_root_step_authority_conflict");
-  return { execution, rows, children, gates };
+  return { execution, rows, children, gates, admissions };
 }

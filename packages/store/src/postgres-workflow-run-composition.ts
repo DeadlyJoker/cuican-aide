@@ -1,3 +1,10 @@
+import { migratePostgresWorkflowCancellation } from "./postgres-workflow-cancellation-schema.ts";
+import { propagatePostgresWorkflowCancellation } from "./postgres-workflow-cancellation.ts";
+import {
+  withPostgresWorkflowTransaction,
+  type WorkflowTransactionCallback,
+  type WorkflowTransactionMode,
+} from "./postgres-workflow-transaction.ts";
 import {
   PostgresWorkflowHumanGates,
   insertPostgresWorkflowGate,
@@ -10,7 +17,6 @@ import { stopPostgresWorkflowFailedSiblings } from "./postgres-workflow-failure-
 import { randomUUID } from "node:crypto";
 import type { Pool, PoolClient } from "pg";
 import {
-  ApplicationError,
   RunStoreError,
   canonicalJson,
   initialWorkflowExecution,
@@ -25,6 +31,7 @@ import {
   type WorkflowRunCompositionStore,
   type WorkflowRunFinalizationStore,
   type WorkflowHumanGateStore,
+  type WorkflowRunSchedulerStore,
   type WorkflowSchedulerPassResult,
   type WorkflowSchedulerInput,
   type WorkflowNodeAttemptAdmission,
@@ -37,19 +44,12 @@ import {
   type ThreadState,
 } from "@crewon/domain";
 import { validatePostgresSchemaName } from "./postgres-queue-schema.ts";
-import { advisoryLock } from "./postgres-thread-lock.ts";
 import {
   normalizePostgresError,
   rollbackPostgres,
 } from "./postgres-store-support.ts";
-import {
-  assertPostgresProviderSettingsAdmissionOpen,
-  lockProviderSettingsTenant,
-} from "./postgres-model-provider-settings-store.ts";
-import {
-  migratePostgresWorkflowComposition,
-  assertPostgresWorkflowCompositionSchema,
-} from "./postgres-workflow-composition-schema.ts";
+import { assertPostgresProviderSettingsAdmissionOpen } from "./postgres-model-provider-settings-store.ts";
+import { migratePostgresWorkflowComposition } from "./postgres-workflow-composition-schema.ts";
 import { readPostgresWorkflowCompositionContext } from "./postgres-workflow-composition-context.ts";
 import {
   readPostgresWorkflowExecution,
@@ -114,12 +114,9 @@ export type PostgresWorkflowCompositionDependencies =
       ): Promise<CommitRunResult>;
     }>;
 
-/** Experimental persistent execution. Human decisions require explicit policy; root cancellation and production routing remain separate capabilities. */
+/** Experimental persistent execution. Human decisions require explicit policy; production routing remains off. */
 export class ExperimentalPostgresWorkflowRunCompositionStore
-  implements
-    WorkflowRunCompositionStore,
-    WorkflowRunFinalizationStore,
-    WorkflowHumanGateStore
+  implements WorkflowRunSchedulerStore, WorkflowHumanGateStore
 {
   readonly #pool: Pool;
   readonly #schema: string;
@@ -178,6 +175,7 @@ export class ExperimentalPostgresWorkflowRunCompositionStore
       await migratePostgresWorkflowComposition(client, this.#schema);
       if (this.#gates)
         await migratePostgresWorkflowHumanGates(client, this.#schema);
+      await migratePostgresWorkflowCancellation(client, this.#schema);
       await client.query("COMMIT");
     } catch (error) {
       await rollbackPostgres(client);
@@ -576,7 +574,7 @@ export class ExperimentalPostgresWorkflowRunCompositionStore
     return this.#transaction(
       input,
       async (client, run, context, time) => {
-        if (!terminal(run.status))
+        if (!terminal(run.status) && !run.cancelRequested)
           await this.#authorize(client, run, context.workItem);
         const result = await finalizePostgresWorkflowRoot(
           client,
@@ -592,7 +590,7 @@ export class ExperimentalPostgresWorkflowRunCompositionStore
             humanGatesEnabled: this.#gates !== null,
           },
         );
-        if (!terminal(run.status))
+        if (!terminal(run.status) && !run.cancelRequested)
           await this.#authorize(client, run, context.workItem);
         return result;
       },
@@ -605,7 +603,7 @@ export class ExperimentalPostgresWorkflowRunCompositionStore
     return this.#transaction(
       input,
       async (client, run, context, time) => {
-        if (!terminal(run.status))
+        if (!terminal(run.status) && !run.cancelRequested)
           await this.#authorize(client, run, context.workItem);
         const result = await finishPostgresWorkflowSchedulerPass(
           client,
@@ -622,11 +620,28 @@ export class ExperimentalPostgresWorkflowRunCompositionStore
             humanGatesEnabled: this.#gates !== null,
           },
         );
-        if (!terminal(run.status))
+        if (!terminal(run.status) && !run.cancelRequested)
           await this.#authorize(client, run, context.workItem);
         return result;
       },
       { lease: "settling" },
+    );
+  }
+  async propagateWorkflowCancellation(input: WorkflowSchedulerInput) {
+    return this.#transaction(input, (client, run, context, time) =>
+      propagatePostgresWorkflowCancellation(
+        client,
+        this.#sql,
+        input,
+        run,
+        context,
+        this.#d,
+        {
+          humanGatesEnabled: this.#gates !== null,
+          now: new Date(time.now).toISOString(),
+          nextId: this.#id,
+        },
+      ),
     );
   }
   async loadWorkflowHumanGate(
@@ -655,124 +670,15 @@ export class ExperimentalPostgresWorkflowRunCompositionStore
   }
   async #transaction<T>(
     input: WorkflowSchedulerInput,
-    execute: (
-      client: PoolClient,
-      run: RunState,
-      context: Awaited<
-        ReturnType<typeof readPostgresWorkflowCompositionContext>
-      >,
-      time: { now: number; expiresAt: number; alreadySettled: boolean },
-    ) => Promise<T>,
-    options: Readonly<{ lease: "current" | "settling" }> = { lease: "current" },
+    execute: WorkflowTransactionCallback<T>,
+    options: WorkflowTransactionMode = { lease: "current" },
   ): Promise<T> {
-    this.#d.assertOpen();
-    for (const id of [
-      input.tenantId,
-      input.runId,
-      input.schedulerOperationId,
-      input.lease.workItemId,
-      input.lease.ownerId,
-      input.lease.leaseId,
-    ])
-      parseWorkflowVersionIdentityId(id, "workflow_composition_input_invalid");
-    if (
-      !Number.isSafeInteger(input.lease.leaseEpoch) ||
-      input.lease.leaseEpoch < 1
-    )
-      throw new RunStoreError("workflow_composition_input_invalid");
-    const client = await this.#pool.connect();
-    try {
-      await client.query("BEGIN");
-      await lockProviderSettingsTenant(client, this.#sql, input.tenantId);
-      await advisoryLock(client, `run:${input.tenantId}:${input.runId}`);
-      const bytes = await client.query<{ bytes: number }>(
-        `SELECT octet_length(state_json::text) AS bytes FROM ${this.#sql}.run_snapshots WHERE tenant_id=$1 AND run_id=$2`,
-        [input.tenantId, input.runId],
-      );
-      if (bytes.rows[0] && bytes.rows[0].bytes > 16384)
-        throw new RunStoreError("workflow_root_state_limit");
-      const run = await this.#d.loadRoot(client, input);
-      if (!run) throw new RunStoreError("run_not_found");
-      let alreadySettled = false;
-      if (options.lease === "settling" && terminal(run.status)) {
-        const row = (
-          await client.query<{
-            tenant_id: string;
-            run_id: string;
-            status: string;
-            lease_epoch: string;
-          }>(
-            `SELECT tenant_id,run_id,status,lease_epoch FROM ${this.#sql}.work_items WHERE work_item_id=$1 FOR UPDATE`,
-            [input.lease.workItemId],
-          )
-        ).rows[0];
-        if (
-          !row ||
-          row.tenant_id !== input.tenantId ||
-          row.run_id !== input.runId
-        )
-          throw new RunStoreError("work_item_scope_mismatch");
-        if (Number(row.lease_epoch) !== input.lease.leaseEpoch)
-          throw new RunStoreError("stale_lease");
-        alreadySettled = row.status === "completed";
-      }
-      const clock = alreadySettled
-        ? (
-            await client.query<{ now: Date }>("SELECT clock_timestamp() AS now")
-          ).rows[0]!.now.getTime()
-        : null;
-      const time = {
-        ...(alreadySettled
-          ? { now: clock!, expiresAt: clock! }
-          : await this.#d.validateLease(client, input)),
-        alreadySettled,
-      };
-      const context = await readPostgresWorkflowCompositionContext(
-        client,
-        this.#sql,
-        { ...input, run },
-      );
-      await assertPostgresWorkflowCompositionSchema(client, this.#schema);
-      const result = await execute(client, run, context, time);
-      if (options.lease === "current")
-        await this.#d.validateLease(client, input);
-      else {
-        const row = (
-          await client.query<{
-            tenant_id: string;
-            run_id: string;
-            status: string;
-            lease_epoch: string;
-          }>(
-            `SELECT tenant_id,run_id,status,lease_epoch FROM ${this.#sql}.work_items WHERE work_item_id=$1`,
-            [input.lease.workItemId],
-          )
-        ).rows[0];
-        if (
-          !row ||
-          row.tenant_id !== input.tenantId ||
-          row.run_id !== input.runId ||
-          row.status !== "completed" ||
-          Number(row.lease_epoch) !== input.lease.leaseEpoch
-        )
-          throw new RunStoreError("workflow_scheduler_ack_missing");
-        if (!alreadySettled) {
-          const now = (
-            await client.query<{ now: Date }>("SELECT clock_timestamp() AS now")
-          ).rows[0]!.now.getTime();
-          if (now >= time.expiresAt) throw new RunStoreError("lease_expired");
-        }
-      }
-      await client.query("COMMIT");
-      return structuredClone(result);
-    } catch (error) {
-      await rollbackPostgres(client);
-      throw error instanceof ApplicationError
-        ? error
-        : normalizePostgresError(error);
-    } finally {
-      client.release();
-    }
+    return withPostgresWorkflowTransaction(input, execute, options, {
+      pool: this.#pool,
+      sql: this.#sql,
+      schema: this.#schema,
+      dependencies: this.#d,
+    });
   }
 }
 function terminal(status: RunState["status"]) {

@@ -1,3 +1,4 @@
+import { readPostgresWorkflowCancellationRequest } from "./postgres-workflow-cancellation-authority.ts";
 import type { PoolClient } from "pg";
 import {
   RunStoreError,
@@ -38,10 +39,12 @@ export async function finishPostgresWorkflowSchedulerPass(
     ops,
     options,
   );
-  if (run.cancelRequested || execution.cancelRequested)
+  if (run.cancelRequested)
+    await readPostgresWorkflowCancellationRequest(client, sql, run);
+  if (execution.cancelRequested && !run.cancelRequested)
     throw new RunStoreError("workflow_cancellation_recovery_required");
   let liveChildren = 0,
-    ready = false;
+    ready = run.cancelRequested !== execution.cancelRequested;
   for (const node of execution.nodes) {
     if (node.claimId === null || node.kind === "humanGate") continue;
     const row = children.get(node.claimId)!;
@@ -84,7 +87,11 @@ export async function finishPostgresWorkflowSchedulerPass(
   }
   if (options.alreadySettled)
     throw new RunStoreError("workflow_root_terminal_authority_missing");
-  if (execution.status !== "failed" && liveChildren < options.maximum) {
+  if (
+    !run.cancelRequested &&
+    execution.status !== "failed" &&
+    liveChildren < options.maximum
+  ) {
     const completed = new Set(
       execution.nodes
         .filter((node) => node.status === "completed")
