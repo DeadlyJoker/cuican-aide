@@ -1,4 +1,5 @@
 import { readPostgresActiveRun } from "./postgres-active-run-read.ts";
+import { validateWorkflowSchedulerWorkItems } from "./workflow-run-admission-validation.ts";
 import { assertPostgresOrdinaryTurnProjectScope } from "./project-conversation-ordinary-turn-fence.ts";
 import { RECONCILIATION_CANCEL_WAKE } from "./reconciliation-cancellation-wake.ts";
 import {
@@ -1173,6 +1174,7 @@ export class PostgresRunStore extends PostgresThreadStore implements RunStore {
     options: Readonly<{
       executionLease?: WorkItemLeaseInput;
       history?: ModelHistoryAppend;
+      workflowSchedulerAdmission?: true;
     }> = {},
   ): Promise<CommitRunResult> {
     const runId = validateCommitInput(input);
@@ -1294,14 +1296,23 @@ export class PostgresRunStore extends PostgresThreadStore implements RunStore {
     validateOutbox(input.outbox, runId, input.tenantId, (id) =>
       outboxIds.has(id),
     );
-    validateWorkItems(
-      input.workItems,
-      runId,
-      input.tenantId,
-      input.events.at(-1)?.sequence ?? 0,
-      (id) => workItemIds.has(id),
-      input.threadAdmission === undefined ? "default" : "manualCompaction",
-    );
+    if (options.workflowSchedulerAdmission) {
+      validateWorkflowSchedulerWorkItems(
+        input.workItems,
+        runId,
+        input.tenantId,
+        (id) => workItemIds.has(id),
+      );
+    } else {
+      validateWorkItems(
+        input.workItems,
+        runId,
+        input.tenantId,
+        input.events.at(-1)?.sequence ?? 0,
+        (id) => workItemIds.has(id),
+        input.threadAdmission === undefined ? "default" : "manualCompaction",
+      );
+    }
     await writePostgresRunSnapshot(
       client,
       this.schemaSql(),

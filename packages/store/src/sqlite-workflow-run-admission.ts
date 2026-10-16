@@ -9,14 +9,12 @@ import {
   type RunRoute,
   type ThreadLocator,
   type ThreadScopedLocator,
-  type WorkflowRunAdmissionAuthority,
   type WorkflowRunAdmissionStore,
   type WorkflowRunInputAuthority,
   type WorkflowVersionAsset,
 } from "@crewon/application";
 import {
   MAX_WORKFLOW_DEFINITION_BYTES,
-  reduceRunLifecycleEvent,
   type ThreadState,
 } from "@crewon/domain";
 import {
@@ -30,8 +28,11 @@ import {
   validateWorkflowInputAuthority,
 } from "./workflow-run-admission-validation.ts";
 
-// Includes JSON escaping of the already canonical definition plus bounded route/asset metadata.
-const MAX_AUTHORITY_BYTES = MAX_WORKFLOW_DEFINITION_BYTES * 2 + 16_384;
+import {
+  MAX_WORKFLOW_ADMISSION_RECEIPT_BYTES as MAX_AUTHORITY_BYTES,
+  decodeWorkflowAdmissionReceipt,
+  completeWorkflowAdmissionReplay,
+} from "./workflow-run-admission-receipt.ts";
 
 /** Server-owned, synchronous admission. Never perform network I/O inside SQLite's write transaction. */
 export type SqliteWorkflowRouteResolver = (
@@ -247,54 +248,13 @@ export class ExperimentalSqliteWorkflowRunAdmissionStore
         }
       | undefined;
     if (!row) return null;
-    if (row.tenant_id !== input.tenantId)
-      throw new RunStoreError("tenant_id_mismatch");
-    if (row.fingerprint === null)
-      throw new RunStoreError("workflow_run_admission_receipt_invalid");
-    if (row.fingerprint !== input.idempotency.requestFingerprint)
-      throw new RunStoreError("idempotency_conflict");
+    const decoded = decodeWorkflowAdmissionReceipt(input, row);
     try {
-      if (row.result_json === null || row.authority_json === null)
-        throw new Error("missing workflow receipt");
-      const run = JSON.parse(row.result_json) as CommitRunResult;
-      const authority = JSON.parse(
-        row.authority_json,
-      ) as WorkflowRunAdmissionAuthority;
-      validateWorkflowAdmissionAuthority(input, authority);
-      if (
-        run.disposition !== "committed" ||
-        run.state.runId !== row.run_id ||
-        run.state.threadId !== input.threadId ||
-        run.state.spaceId !== input.spaceId ||
-        run.state.tenantId !== input.tenantId ||
-        run.events.length !== 1 ||
-        stableJson(reduceRunLifecycleEvent(null, run.events[0]!)) !==
-          stableJson(run.state)
-      )
-        throw new Error("mismatched workflow receipt");
-      const ref = run.workItems[0]?.payload.workflowInput as
-        | { valueId: string; valueDigest: string }
-        | undefined;
-      if (!ref) throw new Error("missing input reference");
-      const value = this.#loadInput({
-        tenantId: input.tenantId,
-        runId: row.run_id,
-        valueId: ref.valueId,
-        valueDigest: ref.valueDigest,
-      });
-      if (!value) throw new Error("missing workflow input");
-      validateWorkflowAdmissionPreparation(input, authority, {
-        commit: {
-          tenantId: input.tenantId,
-          idempotency: input.idempotency,
-          expectedRevision: 0,
-          events: run.events,
-          workItems: run.workItems,
-          outbox: run.outbox,
-        },
-        workflowInputValue: value,
-      });
-      return { authority, run: { ...run, disposition: "replayed" } };
+      return completeWorkflowAdmissionReplay(
+        input,
+        decoded,
+        this.#loadInput(decoded.inputRef),
+      );
     } catch (cause) {
       throw new RunStoreError("workflow_run_admission_receipt_invalid", {
         cause,

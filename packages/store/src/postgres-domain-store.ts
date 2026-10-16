@@ -1,4 +1,8 @@
 import { PostgresProjectAssetV2RecoveryStore } from "./project-asset-vtwo-recovery-store.ts";
+import {
+  ExperimentalPostgresWorkflowRunAdmissionStore,
+  type PostgresWorkflowRouteResolver,
+} from "./postgres-workflow-run-admission.ts";
 import { PostgresProjectMediaInputStageStore } from "./project-media-input-stage-store.ts";
 import { PostgresProjectAssetUiIntentJournalStore } from "./project-asset-ui-intent-postgres-store.ts";
 import { PostgresProjectAssetStore } from "./project-asset-postgres-store.ts";
@@ -452,6 +456,25 @@ export class PostgresDomainStore
     digester: WorkflowContentDigester,
   ): PostgresWorkflowVersionStore {
     return new PostgresWorkflowVersionStore(this.pool, this.schema, digester);
+  }
+
+  /** Admission foundation only. Neither construction nor migration enables a scheduler. */
+  experimentalWorkflowRunAdmissionStore(
+    resolveRouteWithinTransaction: PostgresWorkflowRouteResolver,
+  ): ExperimentalPostgresWorkflowRunAdmissionStore {
+    this.assertOpen();
+    return new ExperimentalPostgresWorkflowRunAdmissionStore(
+      this.pool,
+      this.schema,
+      {
+        assertOpen: () => this.assertOpen(),
+        loadThread: (client, locator) =>
+          this.loadThreadWithin(client, locator, true),
+        commitRun: (client, input) =>
+          this.commitRunWithin(client, input, { workflowSchedulerAdmission: true }),
+        resolveRouteWithinTransaction,
+      },
+    );
   }
   static override async open(
     options: PostgresThreadStoreOptions,

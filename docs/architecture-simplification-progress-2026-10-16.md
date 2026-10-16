@@ -122,3 +122,21 @@ Application 的 Automation 与 Workspace 回执优先实现及既有 18 项测�
 本批验证：控制层目录与真实 Transcript 历史控件共 54 个文件、506 项在同一次运行全部通过；命令工作区 20 个文件、196 项全部通过。Renderer/Electron 完整类型检查及正式 UI build 通过，登录入口 eager JavaScript 仍为 326427 字节并通过现有预算检查；本批不宣称包体下降。仓库 TypeScript 边界、格式和 diff 检查通过。此前 13 项控制层失败均已修复或按当前正式错误/Portal 契约加强验证，没有删除测试、提高重试次数或延长超时。
 
 安装式插件专项仍有两项已知问题未处理：旧测试引用已变化的结果区标签，另有原生成记录的明确选择入口缺口。它们不通过忽略测试或重新加入通用连接面板解决，应单独沿实际插件任务路径修复和验收。因此不声称 UI 全量、安装版真实账号或自主子 Agent 已完成。下一阶段仍是 Team/Workflow 的后端持久执行权迁移。
+
+## 第八批：补齐 PostgreSQL Workflow 原子入库基础
+
+核查生产接线后确认，现有持久 DAG 调度和原子入库只存在于 SQLite 实验路径；PostgreSQL 缺少对应入库能力，Control 的生产组合也未提供 Workflow Run 服务。因此没有通过打开实验开关来宣称执行权迁移完成，本批先补齐后端迁移所需的 PostgreSQL 入库能力。
+
+新增 `PostgresDomainStore.experimentalWorkflowRunAdmissionStore`，显式迁移独立版本表、根输入与入库权威表。租户/空间/Thread、冻结 WorkflowVersion、路由、根输入摘要及调度引用在入库时核对，Run、事件、队列、Outbox、输入和回执在同一 PostgreSQL 事务中提交。同键重试先核对原回执，不依赖之后改变的 Thread、版本或路由；不同新键争用同一 Thread 时只允许一个活跃根任务。普通 `commitRun` 仍不能提交调度 payload，只有内部原子入库路径持有该能力。
+
+SQLite 和 PostgreSQL 共用纯函数回执校验，保留 SQLite 事务内同步执行方式，没有为了代码复用引入跨 await 的 SQLite 写事务。PostgreSQL 继续采用自己的事务、锁和类型，不新增通用仓储框架。根输入保持现有 32 KiB、深度与字段预算，读取回执及版本仍有字节上限；没有重写模型历史或迁移用户旧数据。
+
+新路径在取得 Thread 入库锁并准备好根任务后，对拟用 Run 锁使用非阻塞尝试，冲突即回滚，而不是持有 Thread 再等待普通写入者已持有的 Run。真实独立连接验证了该分支：锁未释放时请求已经拒绝、各表零写入，释放后同键可提交一次。
+
+验证使用本机独立临时 PostgreSQL 18.6，只通过 Unix Socket 访问；最终使用单独 UTF-8 数据库，未连接已有用户或服务数据库。实际检查发现 PostgreSQL 18 将 NOT NULL 作为独立约束报告，结构校验兼容该形式，并继续验证列的非空性、约束当前性、主键、唯一性及外键。
+
+- 最终同一次存储回归 99 项全部通过、无跳过：新增 PostgreSQL 入库 25 项、普通 PostgreSQL Run 46 项、既有 SQLite 入库 16 项、历史快照 12 项。
+- 新入库验证覆盖同键独立连接竞争、不同键竞争、COMMIT 已生效但响应丢失后的重开恢复、末尾输入/回执写失败后的完整回滚、权限作用域和提供方切换隔离、错误摘要/引用/输入拒绝、未来或残缺结构拒绝且不修复覆盖、中文/Emoji 原文与 UTF-8 字节数、超限持久值拒绝。
+- Workflow Worker、生产隔离、包边界及实际生产类型图共 57 项通过，确认生产 Worker 仍不会把未接入的 Workflow 根任务当普通模型请求采样。Store、Control API、Runtime Worker 完整类型检查通过。临时 PostgreSQL 已关闭；仓库边界、格式与 diff 检查通过。
+
+本批仍是持久调度的入库基础，尚未启用生产 Workflow API 或切换前端执行权。后续必须完成 PostgreSQL 节点/子 Run 原子交接、完成唤醒、人工门、取消及最终收敛，并接入真实服务器策略和可见投影，再迁移 Team/Workflow 前端；现有旧记录继续保留。自主子 Agent 和安装式插件专项也仍未完成，不能据入库测试通过宣称整套改造完成。
