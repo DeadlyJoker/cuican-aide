@@ -279,13 +279,24 @@ for (const backend of ["sqlite", "postgres"] as const) {
           toolCount: 2,
           execution,
         });
-        assert.equal((await limited.worker().wake()).kind, "retried");
-        assert.equal(limited.executions(), 1);
-        assert.equal(capacity.resourceSnapshot().reservedBytes, 0);
-        assert.equal(limited.requests.length, 1);
-        await limited.makeDue();
-        await limited.reopen();
-        assert.equal((await limited.worker().wake()).kind, "completed");
+        const firstPass = await limited.worker().wake();
+        if (execution === "serial") {
+          // Each durable result is acknowledged before the next call reserves its slot.
+          assert.equal(firstPass.kind, "completed");
+          assert.equal(limited.executions(), 2);
+          assert.equal(limited.requests.length, 2);
+          assert.equal(capacity.resourceSnapshot().reservedBytes, 0);
+          await limited.reopen();
+          assert.equal((await limited.worker().wake()).kind, "idle");
+        } else {
+          assert.equal(firstPass.kind, "retried");
+          assert.equal(limited.executions(), 1);
+          assert.equal(capacity.resourceSnapshot().reservedBytes, 0);
+          assert.equal(limited.requests.length, 1);
+          await limited.makeDue();
+          await limited.reopen();
+          assert.equal((await limited.worker().wake()).kind, "completed");
+        }
         assert.equal(limited.executions(), 2);
         assert.equal(capacity.resourceSnapshot().reservedBytes, 0);
         assert.deepEqual(limited.requests, normal.requests);

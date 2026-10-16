@@ -1,0 +1,457 @@
+{
+  "baselineCommit": "3bdfef37a5e392b6a0c874b402059245fa061ae7",
+  "environment": {
+    "node": "24.18.1",
+    "pnpm": "10.33.0",
+    "platform": "macOS"
+  },
+  "scope": "isolated SQLite and loopback HTTP/SSE; controlled model; not installed desktop acceptance",
+  "samples": {
+    "queueBefore": [
+      {
+        "scenario": "production-scan",
+        "enqueueToModelEntryMs": 906.569,
+        "releasedLaneToNextModelEntryMs": 868.846708,
+        "maximumActive": 2
+      }
+    ],
+    "toolsBefore": [
+      {
+        "marks": {
+          "modelRequest1": 52.0445000000002,
+          "call-1:started": 76.53987500000017,
+          "call-2:started": 76.70125000000007,
+          "call-1:resolved": 81.88137500000016,
+          "call-2:resolved": 377.70045900000014,
+          "modelRequest2": 436.75866700000006,
+          "runCompleted": 485.43033400000013
+        },
+        "earlyCompleted": 0,
+        "model": [
+          null,
+          null
+        ],
+        "store": {
+          "claimNextWorkItem": {
+            "calls": 1,
+            "ms": 0.87
+          },
+          "loadRun": {
+            "calls": 45,
+            "ms": 10.67
+          },
+          "renewWorkItemLease": {
+            "calls": 21,
+            "ms": 9.88
+          },
+          "commitLeasedRun": {
+            "calls": 1,
+            "ms": 1.11
+          },
+          "listRunEvents": {
+            "calls": 2,
+            "ms": 0.85
+          },
+          "loadThread": {
+            "calls": 3,
+            "ms": 0.97
+          },
+          "loadThreadModelState": {
+            "calls": 2,
+            "ms": 0.3
+          },
+          "beginRunAttempt": {
+            "calls": 4,
+            "ms": 3.27
+          },
+          "loadThreadContinuation": {
+            "calls": 2,
+            "ms": 0.88
+          },
+          "loadRunProviderTurnState": {
+            "calls": 2,
+            "ms": 0.78
+          },
+          "appendRunProgressEvents": {
+            "calls": 3,
+            "ms": 6.26
+          },
+          "recordModelCall": {
+            "calls": 4,
+            "ms": 6.02
+          },
+          "checkpointRunAttempt": {
+            "calls": 2,
+            "ms": 1.62
+          },
+          "appendRunOutputEvents": {
+            "calls": 2,
+            "ms": 1.99
+          },
+          "recordModelUsage": {
+            "calls": 2,
+            "ms": 7.89
+          },
+          "loadModelHistoryHead": {
+            "calls": 4,
+            "ms": 1.09
+          },
+          "commitToolSample": {
+            "calls": 1,
+            "ms": 2.63
+          },
+          "loadToolExecutionReceiptByAction": {
+            "calls": 2,
+            "ms": 0.09
+          },
+          "prepareToolExecution": {
+            "calls": 2,
+            "ms": 1.03
+          },
+          "transitionToolExecution": {
+            "calls": 2,
+            "ms": 0.91
+          },
+          "loadThreadGoal": {
+            "calls": 3,
+            "ms": 1.25
+          },
+          "commitToolExecutionCompletion": {
+            "calls": 2,
+            "ms": 11.05
+          },
+          "commitTextRunCompletion": {
+            "calls": 1,
+            "ms": 12.71
+          }
+        }
+      }
+    ],
+    "focusedAfter": [
+      {
+        "marks": {
+          "modelRequest1": 46.73749999999973,
+          "call-1:started": 93.23987499999976,
+          "call-2:started": 93.39654199999995,
+          "call-1:resolved": 98.54766699999982,
+          "toolCommit1": 101.80958299999975,
+          "call-2:resolved": 394.3589999999999,
+          "toolCommit2": 399.1256669999998,
+          "modelRequest2": 409.8939169999999,
+          "runCompleted": 426.2201249999998
+        },
+        "earlyCompleted": 1,
+        "model": [
+          null,
+          null
+        ],
+        "store": {
+          "claimNextWorkItem": {
+            "calls": 1,
+            "ms": 0.8
+          },
+          "loadRun": {
+            "calls": 45,
+            "ms": 5.58
+          },
+          "renewWorkItemLease": {
+            "calls": 21,
+            "ms": 6.45
+          },
+          "commitLeasedRun": {
+            "calls": 1,
+            "ms": 1.22
+          },
+          "listRunEvents": {
+            "calls": 2,
+            "ms": 0.4
+          },
+          "loadThread": {
+            "calls": 3,
+            "ms": 0.43
+          },
+          "loadThreadModelState": {
+            "calls": 2,
+            "ms": 0.12
+          },
+          "beginRunAttempt": {
+            "calls": 4,
+            "ms": 3.22
+          },
+          "loadThreadContinuation": {
+            "calls": 2,
+            "ms": 0.29
+          },
+          "loadRunProviderTurnState": {
+            "calls": 2,
+            "ms": 0.54
+          },
+          "appendRunProgressEvents": {
+            "calls": 3,
+            "ms": 3.35
+          },
+          "recordModelCall": {
+            "calls": 4,
+            "ms": 5.35
+          },
+          "checkpointRunAttempt": {
+            "calls": 2,
+            "ms": 1.42
+          },
+          "appendRunOutputEvents": {
+            "calls": 2,
+            "ms": 3.14
+          },
+          "recordModelUsage": {
+            "calls": 2,
+            "ms": 2.53
+          },
+          "loadModelHistoryHead": {
+            "calls": 4,
+            "ms": 0.56
+          },
+          "commitToolSample": {
+            "calls": 1,
+            "ms": 6.85
+          },
+          "loadToolExecutionReceiptByAction": {
+            "calls": 2,
+            "ms": 0.27
+          },
+          "prepareToolExecution": {
+            "calls": 2,
+            "ms": 2.54
+          },
+          "transitionToolExecution": {
+            "calls": 2,
+            "ms": 0.89
+          },
+          "loadThreadGoal": {
+            "calls": 3,
+            "ms": 0.36
+          },
+          "commitToolExecutionCompletion": {
+            "calls": 2,
+            "ms": 5.07
+          },
+          "commitTextRunCompletion": {
+            "calls": 1,
+            "ms": 3.62
+          }
+        }
+      },
+      {
+        "scenario": "production-scan",
+        "enqueueToModelEntryMs": 22.93249999999989,
+        "releasedLaneToNextModelEntryMs": 21.242249999999785,
+        "maximumActive": 2
+      }
+    ],
+    "outbox": [
+      {
+        "mode": "file-hint",
+        "scanMs": 60000,
+        "commitToClientMs": 17
+      },
+      {
+        "mode": "file-hint-reconnect",
+        "scanMs": 60000,
+        "commitToClientMs": 6
+      },
+      {
+        "mode": "missing-hint-scan-fallback",
+        "scanMs": 1000,
+        "commitToClientMs": 816
+      }
+    ],
+    "accepted": [
+      {
+        "scenario": "HTTP-SSE",
+        "releaseToVisibleCompletionMs": 59.68237499999941,
+        "maximumActive": 2
+      },
+      {
+        "marks": {
+          "modelRequest1": 66.26904200000001,
+          "call-1:started": 95.99562500000002,
+          "call-2:started": 96.15525000000002,
+          "call-1:resolved": 102.51537499999995,
+          "toolCommit1": 108.35429199999999,
+          "call-2:resolved": 397.5353339999999,
+          "toolCommit2": 401.222084,
+          "modelRequest2": 425.18279200000006,
+          "runCompleted": 454.769959
+        },
+        "earlyCompleted": 1,
+        "model": [
+          {
+            "startedAt": "2026-10-16T03:33:04.879Z",
+            "finishedAt": "2026-10-16T03:33:04.911Z",
+            "httpTiming": {
+              "admittedMs": 1,
+              "dispatchedMs": 1,
+              "finishedMs": 32,
+              "firstByteMs": 24,
+              "firstCompletedItemMs": 29,
+              "headersMs": 23,
+              "lastByteMs": 24,
+              "readClosedMs": 30,
+              "streamEndMs": 32,
+              "terminalMs": 32
+            }
+          },
+          {
+            "startedAt": "2026-10-16T03:33:05.246Z",
+            "finishedAt": "2026-10-16T03:33:05.271Z",
+            "httpTiming": {
+              "admittedMs": 1,
+              "dispatchedMs": 1,
+              "finishedMs": 25,
+              "firstByteMs": 15,
+              "firstCompletedItemMs": 22,
+              "headersMs": 15,
+              "lastByteMs": 15,
+              "readClosedMs": 22,
+              "streamEndMs": 25,
+              "terminalMs": 25
+            }
+          }
+        ],
+        "store": {
+          "claimNextWorkItem": {
+            "calls": 1,
+            "ms": 1.28
+          },
+          "loadRun": {
+            "calls": 45,
+            "ms": 7.16
+          },
+          "renewWorkItemLease": {
+            "calls": 21,
+            "ms": 11.23
+          },
+          "commitLeasedRun": {
+            "calls": 1,
+            "ms": 3.48
+          },
+          "listRunEvents": {
+            "calls": 2,
+            "ms": 3.63
+          },
+          "loadThread": {
+            "calls": 3,
+            "ms": 3.49
+          },
+          "loadThreadModelState": {
+            "calls": 2,
+            "ms": 1.09
+          },
+          "beginRunAttempt": {
+            "calls": 4,
+            "ms": 2.24
+          },
+          "loadThreadContinuation": {
+            "calls": 2,
+            "ms": 0.52
+          },
+          "loadRunProviderTurnState": {
+            "calls": 2,
+            "ms": 0.34
+          },
+          "appendRunProgressEvents": {
+            "calls": 3,
+            "ms": 3.75
+          },
+          "recordModelCall": {
+            "calls": 4,
+            "ms": 5.59
+          },
+          "checkpointRunAttempt": {
+            "calls": 2,
+            "ms": 1.12
+          },
+          "appendRunOutputEvents": {
+            "calls": 2,
+            "ms": 3.95
+          },
+          "recordModelUsage": {
+            "calls": 2,
+            "ms": 2.4
+          },
+          "loadModelHistoryHead": {
+            "calls": 4,
+            "ms": 0.37
+          },
+          "commitToolSample": {
+            "calls": 1,
+            "ms": 4.31
+          },
+          "loadToolExecutionReceiptByAction": {
+            "calls": 2,
+            "ms": 0.12
+          },
+          "prepareToolExecution": {
+            "calls": 2,
+            "ms": 0.81
+          },
+          "transitionToolExecution": {
+            "calls": 2,
+            "ms": 1.41
+          },
+          "loadThreadGoal": {
+            "calls": 3,
+            "ms": 0.18
+          },
+          "commitToolExecutionCompletion": {
+            "calls": 2,
+            "ms": 5.95
+          },
+          "commitTextRunCompletion": {
+            "calls": 1,
+            "ms": 5.37
+          }
+        }
+      },
+      {
+        "scenario": "actual-local-file-child",
+        "totalMs": 108.76270799999998,
+        "childMs": 64.69849999999997,
+        "readMs": 1.798292
+      },
+      {
+        "scenario": "production-scan",
+        "enqueueToModelEntryMs": 46.897166999999854,
+        "releasedLaneToNextModelEntryMs": 21.53704199999993,
+        "maximumActive": 2
+      }
+    ],
+    "commandAdapter": [
+      {
+        "scenario": "actual-workspace-command",
+        "isolatedMs": 35.44583299999999,
+        "slowMs": 322.0482499999998,
+        "queuedQuickMs": 347.48020799999995
+      }
+    ]
+  },
+  "verification": {
+    "acceptance": {
+      "passed": 25,
+      "failed": 0,
+      "command": "NODE_COMPILE_CACHE=/tmp/crewon-node24-compile-cache node --test --test-concurrency=1 [seven focused test files]"
+    },
+    "realCommandAdapter": {
+      "passed": 9,
+      "failed": 0
+    },
+    "toolRecovery": {
+      "passed": 22,
+      "skipped": 19,
+      "failed": 0,
+      "skipReason": "PostgreSQL test database not configured"
+    },
+    "fullSuites": "stopped after missing frozen plugin package fixtures; not fully green",
+    "desktopUI": "not validated",
+    "schemaChanges": false
+  }
+}

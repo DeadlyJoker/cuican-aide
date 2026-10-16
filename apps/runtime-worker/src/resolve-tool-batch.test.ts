@@ -83,3 +83,58 @@ test("preserves result ordering and never starts the next serial call after a fa
   );
   assert.equal(called, false);
 });
+
+test("publishes the completed prefix while a later sibling is pending and joins it on consumer failure", async () => {
+  const { streamToolBatch } = await import("./resolve-tool-batch.ts");
+  let release!: (value: string) => void;
+  const later = new Promise<string>((resolve) => {
+    release = resolve;
+  });
+  const stream = streamToolBatch({
+    mode: "parallel",
+    calls: [async () => "first", () => later],
+  });
+  assert.deepEqual(await stream.next(), {
+    done: false,
+    value: { status: "fulfilled", value: "first" },
+  });
+  let closed = false;
+  const closing = stream.return().then(() => {
+    closed = true;
+  });
+  for (let i = 0; i < 5; i++) await Promise.resolve();
+  assert.equal(
+    closed,
+    false,
+    "lease ownership must outlive every started tool",
+  );
+  release("second");
+  await closing;
+  assert.equal(closed, true);
+});
+
+test("a slower first sibling preserves canonical tool-result order", async () => {
+  const { streamToolBatch } = await import("./resolve-tool-batch.ts");
+  let release!: (value: string) => void;
+  const first = new Promise<string>((resolve) => {
+    release = resolve;
+  });
+  const stream = streamToolBatch({
+    mode: "parallel",
+    calls: [() => first, async () => "second"],
+  });
+  let seen = false;
+  const next = stream.next().then((value) => {
+    seen = true;
+    return value;
+  });
+  for (let i = 0; i < 5; i++) await Promise.resolve();
+  assert.equal(seen, false);
+  release("first");
+  assert.equal((await next).value?.status, "fulfilled");
+  assert.deepEqual((await stream.next()).value, {
+    status: "fulfilled",
+    value: "second",
+  });
+  await stream.return();
+});

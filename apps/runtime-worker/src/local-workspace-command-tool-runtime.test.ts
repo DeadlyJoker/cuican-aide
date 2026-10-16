@@ -5,6 +5,7 @@ import {
   mkdirSync,
   mkdtempSync,
   readFileSync,
+  writeFileSync,
   rmSync,
   symlinkSync,
 } from "node:fs";
@@ -342,20 +343,72 @@ test("releases completed results in both sandbox policy runtimes", async () => {
   }
 });
 
+test("measures the real workspace command adapter and its shared-workspace serialization", async (t) => {
+  const directory = mkdtempSync(join(tmpdir(), "crewon-command-latency-"));
+  try {
+    writeFileSync(join(directory, "sample.txt"), "workspace-result");
+    const runtime = createLocalWorkspaceCommandToolRuntime(directory);
+    const run = async (label: string, command: string) => {
+      const input = approvedCommand(
+        runtime,
+        JSON.stringify({ command, timeoutSeconds: 10 }),
+        "danger-full-access",
+        { runId: label, callId: label },
+      );
+      const started = performance.now();
+      const result = await runtime.execute(input, new AbortController().signal);
+      assert.equal(result.status, "completed");
+      if (result.status !== "completed")
+        throw Error("command did not complete");
+      const output = JSON.parse(result.result.output);
+      assert.equal(output.exitCode, 0, output.stderr);
+      runtime.acknowledgeExecutionResult?.({
+        ...input,
+        status: "completed",
+        providerReceiptId: result.providerReceiptId,
+      });
+      return { elapsedMs: performance.now() - started, stdout: output.stdout };
+    };
+    const isolated = await run("isolated", "cat sample.txt");
+    assert.equal(isolated.stdout, "workspace-result");
+    const slow = run("slow-run", "sleep 0.3; printf slow");
+    const queued = run("other-run", "cat sample.txt");
+    const [a, b] = await Promise.all([slow, queued]);
+    assert.equal(b.stdout, "workspace-result");
+    assert.ok(
+      b.elapsedMs >= 250,
+      "commands sharing a workspace must retain the mutation fence",
+    );
+    t.diagnostic(
+      JSON.stringify({
+        scenario: "actual-workspace-command",
+        isolatedMs: isolated.elapsedMs,
+        slowMs: a.elapsedMs,
+        queuedQuickMs: b.elapsedMs,
+      }),
+    );
+  } finally {
+    rmSync(directory, { recursive: true, force: true });
+  }
+});
+
 function approvedCommand(
   runtime: ToolRuntimePort,
   input: string,
   sandboxMode: ToolExecutionPolicyContext["sandboxMode"] = "workspace-write",
+  identity?: { runId: string; callId: string },
 ): ToolExecutionCommand {
+  const runId = identity?.runId ?? "run-1";
+  const callId = identity?.callId ?? "call-1";
   const policy = runtime.executionPolicy("function", "workspace_run_command", {
     sandboxMode,
   });
   assert.ok(policy);
   const actionIntent = {
     schemaVersion: "crewon.action-intent.v0" as const,
-    runId: "run-1",
+    runId,
     segmentId: "segment-1",
-    callId: "call-1",
+    callId,
     tool: {
       kind: "function" as const,
       name: "workspace_run_command",
@@ -368,7 +421,7 @@ function approvedCommand(
   const actionDigest = sha256(canonicalActionIntent(actionIntent));
   return {
     schemaVersion: "crewon.tool-invocation.v0",
-    executionId: "execution-1",
+    executionId: identity === undefined ? "execution-1" : `${runId}:${callId}`,
     executionLease: {
       workItemId: "work-1",
       stepId: "step-1",
@@ -387,10 +440,10 @@ function approvedCommand(
       approvalRevision: 2,
       decidedAt: "2026-09-03T00:00:00.000Z",
     },
-    idempotencyKey: "run-1/tool/call-1",
-    runId: "run-1",
+    idempotencyKey: `${runId}/tool/${callId}`,
+    runId,
     segmentId: "segment-1",
-    callId: "call-1",
+    callId,
     kind: "function",
     name: "workspace_run_command",
     input,

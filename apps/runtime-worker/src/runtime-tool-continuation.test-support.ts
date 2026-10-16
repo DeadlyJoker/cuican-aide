@@ -68,6 +68,7 @@ export async function createFixture(
     crashAfterResolved?: boolean;
     unknownOutcome?: boolean;
     toolCount?: number;
+    executeFixtureTool?: (callId: string) => Promise<void>;
     execution?: "serial" | "parallel";
     holdResult?: { entered(): void; wait: Promise<void> };
     output?: string;
@@ -230,8 +231,9 @@ export async function createFixture(
     new Map([
       [
         "function:fixture_tool",
-        async () => {
+        async (invocation) => {
           executed += 1;
+          await options.executeFixtureTool?.(invocation.callId);
           if (options.providerFailure)
             throw new ToolBrokerError("provider_write_failed", {
               cause: "x".repeat(1024 * 1024),

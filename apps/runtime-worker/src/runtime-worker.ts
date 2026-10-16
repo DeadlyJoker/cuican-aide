@@ -39,7 +39,7 @@ import {
 } from "./tool-execution-capacity.ts";
 import { withWorkerToolDispatch } from "./plugins/worker-tool-dispatch-authority.ts";
 import { settleCanceledToolResults } from "./canceled-tool-results.ts";
-import { resolveToolBatch } from "./resolve-tool-batch.ts";
+import { streamToolBatch } from "./resolve-tool-batch.ts";
 import { createHash } from "node:crypto";
 import { setImmediate as yieldToEventLoop } from "node:timers/promises";
 import { loadRuntimeModelContext } from "./runtime-model-context.ts";
@@ -2629,7 +2629,7 @@ export class RuntimeWorker {
     );
     if (canRunInParallel)
       for (const prepared of preparedCalls) await prepared.preflight?.();
-    const resolved = await resolveToolBatch({
+    const resolved = streamToolBatch({
       mode: canRunInParallel ? "parallel" : "sequential",
       shouldContinue: ({ resolution }) => resolution.status === "completed",
       calls: preparedCalls.map((prepared) => async () => {
@@ -2639,7 +2639,7 @@ export class RuntimeWorker {
     });
 
     this.#queries.confirmedClaim(claim);
-    for (const result of resolved) {
+    for await (const result of resolved) {
       this.#queries.confirmedClaim(claim);
       // Commit the successful prefix before surfacing a later failure. This
       // avoids reconciling finished calls on every pressure retry.

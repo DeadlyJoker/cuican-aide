@@ -281,7 +281,9 @@ async function createFixture(context: TestContext, scanIntervalMs: number) {
       await exited;
     }
   });
-  const ready = await childMessage(child, "ready");
+  const ready = await childMessage(child, "ready").catch((error: unknown) => {
+    throw new Error("fixture_writer_startup_failed", { cause: error });
+  });
   assert.equal(ready.pid, child.pid, errors);
   function openStream(afterSequence: number) {
     const controller = new AbortController();

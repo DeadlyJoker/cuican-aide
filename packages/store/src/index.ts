@@ -97,3 +97,9 @@ export {
   SqliteProjectAssetV2RecoveryStore,
   PostgresProjectAssetV2RecoveryStore,
 } from "./project-asset-vtwo-recovery-store.ts";
+
+export {
+  watchSqliteAvailability,
+  type SqliteAvailabilityHintPort,
+  type SqliteAvailabilityWatchFactory,
+} from "./sqlite-availability.ts";

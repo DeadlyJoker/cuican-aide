@@ -1,22 +1,52 @@
-/** Keep lease ownership until every started Tool call has settled, including errors. */
-export async function resolveToolBatch<T>(input: {
+type ToolBatchInput<T> = {
   calls: readonly (() => Promise<T>)[];
   mode: "parallel" | "sequential";
   shouldContinue?: (value: T) => boolean;
-}): Promise<PromiseSettledResult<T>[]> {
+};
+
+/** Publish the settled input-order prefix without waiting for later siblings.
+ * Always join started calls before lease/resource ownership can be released.
+ */
+export async function* streamToolBatch<T>(
+  input: ToolBatchInput<T>,
+): AsyncGenerator<PromiseSettledResult<T>, void> {
   if (input.mode === "sequential") {
-    const values: PromiseSettledResult<T>[] = [];
     for (const call of input.calls) {
+      let result: PromiseSettledResult<T>;
       try {
-        const value = await call();
-        values.push({ status: "fulfilled", value });
-        if (input.shouldContinue?.(value) === false) break;
+        result = { status: "fulfilled", value: await call() };
       } catch (reason) {
-        values.push({ status: "rejected", reason });
-        break;
+        result = { status: "rejected", reason };
       }
+      yield result;
+      if (
+        result.status === "rejected" ||
+        input.shouldContinue?.(result.value) === false
+      )
+        break;
     }
-    return values;
+    return;
   }
-  return Promise.allSettled(input.calls.map(async (call) => call()));
+  const started = input.calls.map((call) =>
+    Promise.resolve()
+      .then(call)
+      .then(
+        (value) => ({ status: "fulfilled" as const, value }),
+        (reason) => ({ status: "rejected" as const, reason }),
+      ),
+  );
+  try {
+    for (const result of started) yield await result;
+  } finally {
+    await Promise.all(started);
+  }
+}
+
+/** Compatibility collector for callers that need the complete ordered batch. */
+export async function resolveToolBatch<T>(
+  input: ToolBatchInput<T>,
+): Promise<PromiseSettledResult<T>[]> {
+  const results: PromiseSettledResult<T>[] = [];
+  for await (const result of streamToolBatch(input)) results.push(result);
+  return results;
 }

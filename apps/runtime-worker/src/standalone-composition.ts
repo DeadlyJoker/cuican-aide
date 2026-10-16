@@ -7,6 +7,7 @@ import {
   type RuntimeCleanupHandle,
 } from "./runtime-composition-lifetime.ts";
 import type { StorageAdmissionPort } from "@crewon/application";
+import { watchSqliteAvailability } from "@crewon/store";
 import { createLocalStorageAdmissionOwner } from "@crewon/store";
 import {
   CrewONAgentKernel,
@@ -268,6 +269,7 @@ export async function createStandaloneRuntimeWorker(
       },
       releasePlan,
       inputs,
+      config.databasePath,
     );
   } catch (error) {
     await inputs.lifetime.close().catch(() => {});
@@ -464,6 +466,7 @@ async function composeRuntimeWorker(
   config: PreparedRuntimeWorkerConfig,
   releasePlan: RuntimeAgentVersionReleasePlan,
   inputs: ReturnType<typeof ownCompositionInputs>,
+  sqliteDatabasePath?: string,
 ): Promise<StandaloneRuntimeWorker> {
   const { lifetime } = inputs;
   const ids = new UuidV7ApplicationIdGenerator();
@@ -754,6 +757,12 @@ async function composeRuntimeWorker(
       afterToolReceiptCommitted: config.afterToolReceiptCommitted,
     }),
   });
+  if (sqliteDatabasePath !== undefined && config.scanIntervalMs !== null) {
+    lifetime.own(watchSqliteAvailability({
+      databasePath: sqliteDatabasePath,
+      receiver: pool,
+    }), { phase: "stop" });
+  }
   let providerProbeServer: RuntimeProviderProbeServer | null = null;
   let workspacePrivateServer: RuntimeWorkspacePrivateServer | null = null;
   let extensionHostServer: RuntimeExtensionHostServer | null = null;
