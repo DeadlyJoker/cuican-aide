@@ -1,8 +1,11 @@
 import {
+  canonicalJson,
   RunStoreError,
   type WorkflowExecutionState,
   type WorkflowExecutionStore,
 } from "@crewon/application";
+
+export const MAX_WORKFLOW_EXECUTION_BYTES = 524_288;
 
 export function decodeState(input: unknown): WorkflowExecutionState {
   let value: unknown = input;
@@ -198,7 +201,7 @@ function validNodeTransition(
   current: WorkflowExecutionState["nodes"][number],
   next: WorkflowExecutionState["nodes"][number],
 ): boolean {
-  if (stableJson(current) === stableJson(next)) return true;
+  if (canonicalJson(current) === canonicalJson(next)) return true;
   if (current.status === "pending")
     return (
       next.status === "running" ||
@@ -284,8 +287,4 @@ function exactKeys(value: object, keys: readonly string[]): boolean {
     actual.length === expected.length &&
     actual.every((key, index) => key === expected[index])
   );
-}
-
-function stableJson(value: unknown): string {
-  return JSON.stringify(value);
 }

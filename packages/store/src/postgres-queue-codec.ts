@@ -11,6 +11,7 @@ import {
   validateOutbox,
   validateWorkItems,
 } from "./store-invariants.ts";
+import { validateWorkflowSchedulerWorkItems } from "./workflow-run-admission-validation.ts";
 
 export type PostgresQueueItemRow = Readonly<{
   tenant_id: string;
@@ -48,22 +49,30 @@ export function decodePostgresWorkItem(row: PostgresQueueItemRow): WorkItem {
   ) as WorkItem;
   stableJson(value);
   const throughSequence = value.payload.throughSequence;
-  validateWorkItems(
-    [value],
-    row.run_id,
-    row.tenant_id,
-    typeof throughSequence === "number" ? throughSequence : Number.NaN,
-    () => false,
-    value.payload.trigger === "goalContinuation"
-      ? "goalContinuation"
-      : value.payload.trigger === "goalActivation"
-        ? "goalActivation"
-        : value.payload.trigger === "manualCompaction"
-          ? "manualCompaction"
-          : value.payload.trigger === "automationInvocation"
-            ? "automationInvocation"
-            : "default",
-  );
+  if (value.payload.trigger === "workflowScheduler") {
+    validateWorkflowSchedulerWorkItems(
+      [value],
+      row.run_id,
+      row.tenant_id,
+      () => false,
+    );
+  } else
+    validateWorkItems(
+      [value],
+      row.run_id,
+      row.tenant_id,
+      typeof throughSequence === "number" ? throughSequence : Number.NaN,
+      () => false,
+      value.payload.trigger === "goalContinuation"
+        ? "goalContinuation"
+        : value.payload.trigger === "goalActivation"
+          ? "goalActivation"
+          : value.payload.trigger === "manualCompaction"
+            ? "manualCompaction"
+            : value.payload.trigger === "automationInvocation"
+              ? "automationInvocation"
+              : "default",
+    );
   if (
     value.kind !== row.kind ||
     !samePostgresTimestamp(value.createdAt, row.created_at)

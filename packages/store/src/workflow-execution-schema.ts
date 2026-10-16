@@ -1,6 +1,7 @@
 import { DatabaseSync } from "node:sqlite";
 import { RunStoreError } from "@crewon/application";
 import type { PoolClient } from "pg";
+import { advisoryLock } from "./postgres-thread-lock.ts";
 
 const SCHEMA_VERSION = 1;
 
@@ -31,6 +32,7 @@ export async function migratePostgresWorkflowExecutions(
   client: PoolClient,
   schema: string,
 ): Promise<void> {
+  await advisoryLock(client, `${schema}:workflow-execution-migration`);
   await client.query(`CREATE TABLE IF NOT EXISTS ${schema}.workflow_execution_schema (
     singleton boolean PRIMARY KEY DEFAULT true CHECK (singleton),
     version integer NOT NULL

@@ -15,6 +15,7 @@ import {
   type WorkflowExecutionStore,
 } from "@crewon/application";
 import type { Pool, PoolClient } from "pg";
+import { advisoryLock } from "./postgres-thread-lock.ts";
 import {
   migratePostgresWorkflowExecutions,
   migrateSqliteWorkflowExecutions,
@@ -185,6 +186,25 @@ function assertStandaloneSqliteWorkflowWriter(
     throw new RunStoreError("workflow_execution_composition_required");
 }
 
+async function assertStandalonePostgresWorkflowWriter(
+  client: PoolClient,
+  schema: string,
+  input: { tenantId: string; runId: string },
+): Promise<void> {
+  await advisoryLock(client, `run:${input.tenantId}:${input.runId}`);
+  const relation = await client.query<{ present: boolean }>(
+    "SELECT to_regclass($1) IS NOT NULL AS present",
+    [`${schema}.run_snapshots`],
+  );
+  if (!relation.rows[0]?.present) return;
+  const root = await client.query(
+    `SELECT 1 FROM "${schema}".run_snapshots WHERE tenant_id=$1 AND run_id=$2 AND state_json->>'purpose'='workflow'`,
+    [input.tenantId, input.runId],
+  );
+  if (root.rows.length)
+    throw new RunStoreError("workflow_execution_composition_required");
+}
+
 export class PostgresWorkflowExecutionStore implements WorkflowExecutionStore {
   readonly #pool: Pool;
   readonly #schema: string;
@@ -215,6 +235,7 @@ export class PostgresWorkflowExecutionStore implements WorkflowExecutionStore {
     const client = await this.#pool.connect();
     try {
       await client.query("BEGIN");
+      await assertStandalonePostgresWorkflowWriter(client, this.#schema, state);
       const inserted = await client.query(
         `INSERT INTO ${this.#schema}.workflow_executions
          (tenant_id, run_id, revision, state_json, updated_at)
@@ -292,6 +313,7 @@ export class PostgresWorkflowExecutionStore implements WorkflowExecutionStore {
     const client = await this.#pool.connect();
     try {
       await client.query("BEGIN");
+      await assertStandalonePostgresWorkflowWriter(client, this.#schema, input);
       const receipt = await client.query<{
         fingerprint: string;
         state_json: unknown;

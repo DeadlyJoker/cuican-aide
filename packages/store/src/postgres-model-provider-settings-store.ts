@@ -511,7 +511,7 @@ export async function assertPostgresProviderSettingsAdmissionOpen(
   }
 }
 
-async function lockProviderSettingsTenant(
+export async function lockProviderSettingsTenant(
   client: PoolClient,
   schema: string,
   tenantId: string,

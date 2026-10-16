@@ -15,7 +15,10 @@ import {
 } from "./workflow-run-admission.test-support.ts";
 import { workflowAdmissionDigest } from "./workflow-run-admission-validation.ts";
 
-export async function postgresWorkflowAdmissionFixture(t: TestContext) {
+export async function postgresWorkflowAdmissionFixture(
+  t: TestContext,
+  options: { asset?: ReturnType<typeof admissionVersion> } = {},
+) {
   const connectionString = process.env.CREWON_TEST_POSTGRES_URL!;
   const schema = `workflow_admit_${randomUUID().replaceAll("-", "_")}`;
   const sql = `"${schema}"`;
@@ -38,7 +41,7 @@ export async function postgresWorkflowAdmissionFixture(t: TestContext) {
   await seedThread(store);
   const versions = store.workflowVersionStore(workflowAdmissionDigest);
   await versions.migrate();
-  const asset = admissionVersion();
+  const asset = options.asset ?? admissionVersion();
   await versions.registerWorkflowVersion(asset);
   let routeCalls = 0,
     prepareCalls = 0;

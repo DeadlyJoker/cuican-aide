@@ -5,11 +5,12 @@ import {
 } from "@crewon/application";
 import {
   assertTransition,
+  MAX_WORKFLOW_EXECUTION_BYTES,
   decodeState,
   validateState,
 } from "./workflow-execution-state.ts";
 
-export const MAX_WORKFLOW_EXECUTION_BYTES = 524_288;
+export { MAX_WORKFLOW_EXECUTION_BYTES } from "./workflow-execution-state.ts";
 
 export function readSqliteWorkflowExecution(
   database: DatabaseSync,

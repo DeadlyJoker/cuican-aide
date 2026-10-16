@@ -1,5 +1,9 @@
 import { PostgresProjectAssetV2RecoveryStore } from "./project-asset-vtwo-recovery-store.ts";
 import {
+  ExperimentalPostgresWorkflowRunCompositionStore,
+  type PostgresWorkflowCompositionOptions,
+} from "./postgres-workflow-run-composition.ts";
+import {
   ExperimentalPostgresWorkflowRunAdmissionStore,
   type PostgresWorkflowRouteResolver,
 } from "./postgres-workflow-run-admission.ts";
@@ -476,6 +480,44 @@ export class PostgresDomainStore
       },
     );
   }
+  /** Explicit lease-fenced child handoff; construction does not migrate or enable production routing. */
+  experimentalWorkflowRunCompositionStore(
+    options: PostgresWorkflowCompositionOptions,
+  ): ExperimentalPostgresWorkflowRunCompositionStore {
+    this.assertOpen();
+    return new ExperimentalPostgresWorkflowRunCompositionStore(
+      this.pool,
+      this.schema,
+      {
+        assertOpen: () => this.assertOpen(),
+        loadRoot: (client, input) => this.loadRunWithin(client, input, true),
+        loadChild: (client, input) => this.loadRunWithin(client, input),
+        commitChildThread: (client, input) =>
+          this.commitThreadWithin(client, input),
+        commitChildRun: (client, input) => this.commitRunWithin(client, input),
+        commitRoot: (client, input, lease) =>
+          this.commitRunWithin(client, input, { executionLease: lease }),
+        validateLease: async (client, input) => {
+          await this.validateExecutionLeaseWithin(
+            client,
+            input.tenantId,
+            input.runId,
+            input.lease,
+          );
+          const result = await client.query<{ expires: Date; now: Date }>(
+            `SELECT lease_expires_at AS expires,clock_timestamp() AS now FROM ${this.schemaSql()}.work_items WHERE work_item_id=$1`,
+            [input.lease.workItemId],
+          );
+          return {
+            now: result.rows[0]!.now.getTime(),
+            expiresAt: result.rows[0]!.expires.getTime(),
+          };
+        },
+      },
+      options,
+    );
+  }
+
   static override async open(
     options: PostgresThreadStoreOptions,
   ): Promise<PostgresDomainStore> {
