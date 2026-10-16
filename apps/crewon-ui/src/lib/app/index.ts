@@ -9,7 +9,7 @@ export {
 } from "./workspaceUiAuthority";
 export {
   useAppChromeEffects,
-  useAppConnectionEffects,
+  useAppDemoEffects,
   useAppDocumentPreferenceEffects,
   useAppKeyboardShortcutEffects,
   useAppModelResponseTimeoutEffect,

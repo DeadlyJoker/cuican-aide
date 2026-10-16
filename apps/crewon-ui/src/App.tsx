@@ -40,7 +40,7 @@ import {
   useAppChromeEffects,
   useAppConfirmDialog,
   useAppControlToolApprovals,
-  useAppConnectionEffects,
+  useAppDemoEffects,
   useAppConnectionHandlerSet,
   useAppCoordinatorRefs,
   useAppDocumentPreferenceEffects,
@@ -59,7 +59,6 @@ import {
   useInstalledPluginModules,
   useAppTerminalState,
   useAppThreadSelection,
-  useAppServerEventHandlerSet,
   useAppThreadListEffects,
   useAppThreadMetadataEffects,
   useAppViewSyncEffects,
@@ -144,7 +143,7 @@ export function App({
   const modelProviderSettingsAvailable =
     controlClient !== null || providerCredentialStore() !== null;
   const personalizationStore = browserPersonalizationSettingsStore();
-  const { isDemoPreview, platform, principalSessionEnabled, serverUrl } =
+  const { isDemoPreview, platform, serverUrl } =
     useAppEnvironment();
   // Who you are in CrewON. The model account below is a separate credential.
   const platformAccount = useAgentPlatformAccount();
@@ -547,7 +546,6 @@ export function App({
     preserveThreadsAfterConnectionLoss,
     retryConnection,
     showDemoThreads,
-    switchToDemoThreads,
   } = useAppConnectionHandlerSet({
     getClient: () => clientRef.current,
     localeRef,
@@ -785,64 +783,17 @@ export function App({
     writeOfficeConfigFile,
   });
 
-  const { handleNotification, handleServerRequest } =
-    useAppServerEventHandlerSet({
-      appendTerminalOutputDelta,
-      appViewRef,
-      automationRunByTurnRef:
-        automationCompletionAuthority.automationRunByTurnRef,
-      capabilityPanelRef,
-      clientRef,
-      controlThreadAuthority: workspaceUiAuthority === "control",
-      libraryPanelRef,
-      localeRef,
-      officeRunByTurnRef,
-      onResourceBindingUpdated:
-        providerResourceComposer.handleBindingNotification,
-      openLibraryRef,
-      openThreadSettingsPanelRef,
-      readAutomationRunItems:
-        automationCompletionAuthority.readAutomationRunItems,
-      refreshComposerSlashCommands: () => {
-        setSlashCommandRefreshKey((key) => key + 1);
-      },
-      refreshSettingsSectionRef,
-      ...threadState,
-      ...workspaceStatus,
-      ...chromeState,
-      setCapabilityPanel,
-      setLibraryPanel,
-      setNotice,
-      ...pendingRequests,
-      settingsSectionRef,
-      syncAutomationRun: automationCompletionAuthority.syncAutomationRun,
-      terminalProcessIdRef,
-    });
-
-  useAppConnectionEffects({
-    clientRef,
-    connectionAttempt,
+  useAppDemoEffects({
     connectionState,
-    emptySelectionBehavior:
-      draftWorkspaceCwd === undefined ? "selectFirst" : "preserve",
-    enabled: false,
-    handleNotification,
-    handleServerRequest,
     isDemo,
-    isDemoPreview,
     locale,
-    manageThreads: threadAuthority.legacyManagesThreads,
-    preserveThreadsAfterConnectionLoss,
-    principalSessionEnabled,
     selectedThread,
-    ...threadState,
-    serverUrl,
-    ...workspaceStatus,
-    setConnectionAttempt,
-    setConnectionState,
-    setNotice,
-    showDemoThreads,
-    switchToDemoThreads,
+    selectedThreadId,
+    setThreads: threadState.setThreads,
+    setAccountStatus: workspaceStatus.setAccountStatus,
+    setConversationSummary: workspaceStatus.setConversationSummary,
+    setGitRemoteDiff: workspaceStatus.setGitRemoteDiff,
+    setThreadGoal: workspaceStatus.setThreadGoal,
   });
 
   useAppChromeEffects({

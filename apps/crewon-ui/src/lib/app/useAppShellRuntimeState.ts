@@ -9,7 +9,7 @@ export function useAppShellRuntimeState() {
   const localeRef = useRef(locale);
   const [theme, setTheme] = useState<Theme>(getInitialTheme);
   const [connectionState, setConnectionState] =
-    useState<ConnectionState>("connecting");
+    useState<ConnectionState>("disconnected");
   const [connectionAttempt, setConnectionAttempt] = useState(0);
   const [notice, setNotice] = useState<NoticeState | null>(null);
 
