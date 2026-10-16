@@ -73,6 +73,7 @@ import type {
 import {
   ControlApiClient,
   ControlApiClientError,
+  ControlApiTransportError,
   ControlApiProtocolError,
   streamRunEvents,
   streamThreadEvents,
@@ -844,7 +845,7 @@ export class ControlThreadRuntime {
           throw error;
         }
         const retryableUnknownOutcome =
-          error instanceof TypeError ||
+          error instanceof ControlApiTransportError ||
           error instanceof ControlApiProtocolError ||
           (error instanceof ControlApiClientError &&
             error.category === "unknownOutcome");

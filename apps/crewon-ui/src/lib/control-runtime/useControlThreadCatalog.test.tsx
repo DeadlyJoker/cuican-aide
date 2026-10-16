@@ -292,7 +292,11 @@ describe("React catalog lifecycle", () => {
         await state.waitForStreamingTextDrain(selected);
       });
       expect(element.textContent).toContain("stream survives paging");
-      const searchInput = element.querySelector<HTMLInputElement>(
+      const dialog = document.querySelector<HTMLElement>(
+        "[data-command-search-dialog]",
+      )!;
+      expect(dialog).not.toBeNull();
+      const searchInput = dialog.querySelector<HTMLInputElement>(
         "[data-sidebar-search-input]",
       )!;
       act(() => {
@@ -309,14 +313,33 @@ describe("React catalog lifecycle", () => {
       );
       expect(state.threadCatalogIds).toEqual([]);
       expect(state.selectedThreadId).toBe(selected);
-      const continuation = [...element.querySelectorAll("button")].find(
-        (button) => button.textContent === "Continue search",
-      );
-      expect(continuation).toBeUndefined();
       expect(catalogNavigation?.hasOlder).toBe(true);
-      expect(
-        element.querySelector<HTMLElement>("[data-search-empty]")?.hidden,
-      ).toBe(true);
+      expect(dialog.querySelector("[data-search-empty]")).toBeNull();
+      expect(dialog.textContent).toContain(
+        "No results on this page. Browse another page.",
+      );
+      const nextPage = [
+        ...dialog.querySelectorAll<HTMLButtonElement>("button"),
+      ].find((button) => button.textContent === "Next page");
+      expect(nextPage).toBeDefined();
+      expect(nextPage!.disabled).toBe(false);
+      const readsBeforeNavigation = client.getThreadCatalog.mock.calls.length;
+      act(() => nextPage!.click());
+      await flush();
+      // Sparse results scan a bounded batch of four pages per user action.
+      expect(client.getThreadCatalog).toHaveBeenCalledTimes(
+        readsBeforeNavigation + 4,
+      );
+      expect(client.getThreadCatalog).toHaveBeenLastCalledWith(
+        expect.objectContaining({
+          search: "needle",
+          cursor: expect.any(String),
+        }),
+        expect.anything(),
+      );
+      expect(catalogNavigation?.hasNewer).toBe(true);
+      expect(state.selectedThreadId).toBe(selected);
+      expect(element.textContent).toContain("stream survives paging");
       expect(state.threads.some((thread) => thread.id === selected)).toBe(true);
       expect(state.threads.length).toBeLessThanOrEqual(4);
     } finally {

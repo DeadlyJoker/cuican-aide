@@ -44,6 +44,92 @@ function api(fetch: typeof globalThis.fetch) {
   });
 }
 describe("original project Turn key and physical lifetime", () => {
+  it("retains an unknown intent through later CAS conflicts without allocating a replacement key", async () => {
+    const bodies: unknown[] = [];
+    const key = vi.fn(() => "original-key");
+    const owner = new ControlProjectConversationTurn(
+      api(async (_url, init) => {
+        bodies.push(JSON.parse(String(init?.body)));
+        if (bodies.length === 1) throw new TypeError("lost ACK");
+        return Response.json(
+          {
+            error: {
+              category: "conflict",
+              code: "project_conversation_revision_conflict",
+              requestId: "fixture",
+            },
+          },
+          { status: 409 },
+        );
+      }),
+      key,
+    );
+    try {
+      await expect(owner.start(input)).rejects.toMatchObject({
+        name: "ControlApiTransportError",
+        cause: { message: "lost ACK" },
+      });
+      for (const revision of [4, 5]) {
+        await expect(
+          owner.start({
+            ...input,
+            expectedThreadRevision: revision,
+            selection: {
+              ...input.selection,
+              binding: { ...binding, revision },
+            },
+          }),
+        ).rejects.toThrow("project_conversation_revision_conflict");
+        expect(owner.retainedSelection("thread")).toEqual(input.selection);
+      }
+      expect(bodies).toEqual([bodies[0], bodies[0], bodies[0]]);
+      expect(key).toHaveBeenCalledOnce();
+    } finally {
+      await owner.close();
+    }
+  });
+
+  it("allows a new reviewed intent after an initial explicit CAS rejection", async () => {
+    let keyCount = 0;
+    const key = vi.fn(() => `key-${++keyCount}`);
+    const bodies: Array<{
+      idempotencyKey: string;
+      expectedThreadRevision: number;
+    }> = [];
+    const owner = new ControlProjectConversationTurn(
+      api(async (_url, init) => {
+        bodies.push(JSON.parse(String(init?.body)));
+        return Response.json(
+          {
+            error: {
+              category: "conflict",
+              code: "project_conversation_revision_conflict",
+              requestId: "fixture",
+            },
+          },
+          { status: 409 },
+        );
+      }),
+      key,
+    );
+    try {
+      await expect(owner.start(input)).rejects.toThrow(
+        "project_conversation_revision_conflict",
+      );
+      expect(owner.retainedSelection("thread")).toBeNull();
+      await expect(
+        owner.start({ ...input, expectedThreadRevision: 4 }),
+      ).rejects.toThrow("project_conversation_revision_conflict");
+      expect(
+        bodies.map(({ expectedThreadRevision }) => expectedThreadRevision),
+      ).toEqual([3, 4]);
+      expect(bodies[0]!.idempotencyKey).not.toBe(bodies[1]!.idempotencyKey);
+      expect(key).toHaveBeenCalledTimes(2);
+    } finally {
+      await owner.close();
+    }
+  });
+
   it("ambiguous response retry retains original revisions/body/key even when the Thread advanced", async () => {
     const bodies: unknown[] = [];
     const key = vi.fn(() => "original-key");
@@ -55,7 +141,10 @@ describe("original project Turn key and physical lifetime", () => {
       }),
       key,
     );
-    await expect(owner.start(input)).rejects.toThrow("lost ACK");
+    await expect(owner.start(input)).rejects.toMatchObject({
+      name: "ControlApiTransportError",
+      cause: { message: "lost ACK" },
+    });
     expect(owner.retainedSelection("thread")).toEqual(input.selection);
     expect(owner.retainedSelection("other-thread")).toBeNull();
     expect(() => owner.start({ ...input, content: "different" })).toThrow(

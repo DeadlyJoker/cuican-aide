@@ -1,4 +1,4 @@
-import { describe, expect, it } from "vitest";
+import { describe, expect, it, vi } from "vitest";
 import type {
   WorkspaceOperationEventView,
   WorkspaceOperationView,
@@ -15,6 +15,55 @@ import {
 import { validateThreadSnapshot } from "./controlWorkspaceRuntimeSupport";
 
 describe("ControlWorkspaceRuntime", () => {
+  it.each(["transport", "closed", "programming"] as const)(
+    "bounds recovery of a workspace mutation after %s failure",
+    async (mode) => {
+      const error = new TypeError("mutation failed");
+      const controlClient = client(async (input, init = {}) => {
+        const url = String(input);
+        if (isThreadRead(url)) return json(threadSnapshot("thread-1", 7));
+        if (isWorkspaceList(url) && !isCreate(url, init))
+          return json(listResponse([]));
+        if (isCreate(url, init)) {
+          if (mode === "closed") runtime.close();
+          throw error;
+        }
+        throw new Error(`unexpected request ${url}`);
+      });
+      const mutation = vi.spyOn(controlClient, "createWorkspaceListOperation");
+      if (mode === "programming") mutation.mockRejectedValue(error);
+      const key = vi.fn(() => "retained-key");
+      const runtime = new ControlWorkspaceRuntime({
+        client: controlClient,
+        eventStream: emptyStream,
+        idempotencyKey: key,
+      });
+      try {
+        await runtime.selectThread("thread-1");
+        const work = runtime.create("thread-1", 100);
+        if (mode === "transport") {
+          await expect(work).rejects.toMatchObject({
+            name: "ControlApiTransportError",
+            cause: error,
+          });
+        } else {
+          await expect(work).rejects.toBe(error);
+        }
+        expect(mutation).toHaveBeenCalledTimes(mode === "transport" ? 2 : 1);
+        expect(mutation.mock.calls.map((call) => call.slice(0, 3))).toEqual(
+          Array.from({ length: mode === "transport" ? 2 : 1 }, () => [
+            "thread-1",
+            { expectedThreadRevision: 7, maxEntries: 100 },
+            "retained-key",
+          ]),
+        );
+        expect(key).toHaveBeenCalledOnce();
+      } finally {
+        runtime.close();
+      }
+    },
+  );
+
   it("uses only the canonical Thread snapshot fields as Workspace authority", () => {
     const { thread } = threadSnapshot("thread-1", 7);
     const canonical = { thread };

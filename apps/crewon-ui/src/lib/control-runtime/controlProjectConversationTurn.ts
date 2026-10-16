@@ -20,6 +20,7 @@ type Pending = {
   selection: ProjectConversationComposerSelection;
   physical: Promise<Readonly<{ threadId: string; runId: string }>> | null;
   accepted: Readonly<{ threadId: string; runId: string }> | null;
+  unknown: boolean;
 };
 
 /** An ambiguous request retains its exact original body/key; hydration retries cannot submit a second Turn. */
@@ -88,6 +89,7 @@ export class ControlProjectConversationTurn {
         }),
         physical: null,
         accepted: null,
+        unknown: false,
       };
       this.#pending.set(input.threadId, pending);
     }
@@ -106,8 +108,10 @@ export class ControlProjectConversationTurn {
           return original.accepted;
         },
         (error: unknown) => {
-          // An explicit rejection is terminal. Transport/protocol failures remain unknown and retain the original key.
+          // Only an initial known rejection proves this intent was not admitted.
+          // A later CAS failure cannot resolve an earlier unknown acknowledgement.
           if (
+            !original.unknown &&
             error instanceof ControlApiClientError &&
             error.status === 409 &&
             [
@@ -116,6 +120,7 @@ export class ControlProjectConversationTurn {
             ].includes(error.code)
           )
             this.#pending.delete(input.threadId);
+          else original.unknown = true;
           throw error;
         },
       )

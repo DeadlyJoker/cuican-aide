@@ -8,6 +8,58 @@ import type { AutomationView, RunView } from "@crewon/contracts";
 import { ControlAutomationRuntime } from "./controlAutomationRuntime";
 
 describe("ControlAutomationRuntime", () => {
+  it.each(["transport", "abort", "programming"] as const)(
+    "bounds same-key recovery and does not retry %s errors outside its policy",
+    async (mode) => {
+      const controller = new AbortController();
+      const error =
+        mode === "abort"
+          ? new DOMException("request canceled", "AbortError")
+          : new TypeError("mutation failed");
+      const controlClient = client(async (input) => {
+        const url = String(input);
+        if (url.endsWith("/automations/automation-1"))
+          return json({ automation: automation() });
+        if (url.endsWith("/threads/thread-1")) return json(threadResponse());
+        if (url.endsWith(":run-now")) {
+          if (mode === "abort") controller.abort();
+          throw error;
+        }
+        throw new Error(`unexpected request ${url}`);
+      });
+      const mutation = vi.spyOn(controlClient, "runAutomationNow");
+      if (mode === "programming") mutation.mockRejectedValue(error);
+      const key = vi.fn(() => "retained-key");
+      const adopter = { adoptAutomationRun: vi.fn(async () => undefined) };
+      const runtime = new ControlAutomationRuntime({
+        client: controlClient,
+        adopter,
+        idempotencyKey: key,
+      });
+      const work = runtime.runAutomationNow("automation-1", {
+        signal: controller.signal,
+      });
+      if (mode === "transport") {
+        await expect(work).rejects.toMatchObject({
+          name: "ControlApiTransportError",
+          cause: error,
+        });
+      } else {
+        await expect(work).rejects.toBe(error);
+      }
+      expect(mutation).toHaveBeenCalledTimes(mode === "transport" ? 2 : 1);
+      expect(mutation.mock.calls.map((call) => call.slice(0, 3))).toEqual(
+        Array.from({ length: mode === "transport" ? 2 : 1 }, () => [
+          "automation-1",
+          { expectedAutomationRevision: 1, expectedThreadRevision: 2 },
+          "retained-key",
+        ]),
+      );
+      expect(key).toHaveBeenCalledOnce();
+      expect(adopter.adoptAutomationRun).not.toHaveBeenCalled();
+    },
+  );
+
   it("propagates the authority AbortSignal through paginated list requests", async () => {
     const controller = new AbortController();
     const signals: Array<AbortSignal | null | undefined> = [];

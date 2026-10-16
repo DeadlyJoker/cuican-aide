@@ -3,7 +3,11 @@ import type {
   WorkspaceOperationEventView,
   WorkspaceOperationView,
 } from "@crewon/contracts";
-import { ControlApiClient, ControlApiClientError } from "@crewon/control-client";
+import {
+  ControlApiClient,
+  ControlApiClientError,
+  ControlApiTransportError,
+} from "@crewon/control-client";
 
 export const PAGE_SIZE = 100;
 export const MAX_LIST_PAGES = 100;
@@ -60,10 +64,8 @@ export function isGenerationCurrent(
   controller: AbortController,
 ): boolean {
   return (
-      !closed &&
-      generation === currentGeneration &&
-      !controller.signal.aborted
-    );
+    !closed && generation === currentGeneration && !controller.signal.aborted
+  );
 }
 
 export function requireWorkspaceClient(
@@ -76,10 +78,9 @@ export function requireWorkspaceClient(
   return client;
 }
 
-export function validateThreadSnapshot<Snapshot extends CanonicalThreadSnapshot>(
-  response: Snapshot,
-  threadId: string,
-): Snapshot {
+export function validateThreadSnapshot<
+  Snapshot extends CanonicalThreadSnapshot,
+>(response: Snapshot, threadId: string): Snapshot {
   if (
     response.thread.threadId !== threadId ||
     !Number.isSafeInteger(response.thread.revision) ||
@@ -97,7 +98,7 @@ type CanonicalThreadSnapshot = Readonly<{
 
 export function isUnknownNetwork(error: unknown): boolean {
   return (
-    error instanceof TypeError ||
+    error instanceof ControlApiTransportError ||
     (error instanceof ControlApiClientError &&
       error.category === "unknownOutcome")
   );
@@ -107,7 +108,9 @@ export function isConflict(error: unknown): boolean {
   return error instanceof ControlApiClientError && error.status === 409;
 }
 
-export function isStreamableOperation(operation: WorkspaceOperationView): boolean {
+export function isStreamableOperation(
+  operation: WorkspaceOperationView,
+): boolean {
   return (
     operation.status === "pending" || operation.status === "unknownOutcome"
   );

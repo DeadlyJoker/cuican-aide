@@ -13,6 +13,7 @@ import { parseThreadWorkspaceId } from "@crewon/contracts";
 import {
   ControlApiClient,
   ControlApiClientError,
+  ControlApiTransportError,
   ControlApiProtocolError,
   parseRunView,
   RunViewValidationError,
@@ -175,7 +176,7 @@ export class ControlAutomationRuntime {
           throw error;
         }
         const unknownOutcome =
-          error instanceof TypeError ||
+          error instanceof ControlApiTransportError ||
           error instanceof ControlApiProtocolError ||
           (error instanceof ControlApiClientError &&
             error.category === "unknownOutcome");

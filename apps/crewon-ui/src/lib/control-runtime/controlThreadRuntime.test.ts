@@ -23,6 +23,7 @@ import type {
 import {
   ControlApiClient,
   ControlApiClientError,
+  ControlApiTransportError,
 } from "@crewon/control-client";
 
 import {
@@ -1871,7 +1872,7 @@ describe("Control thread runtime", () => {
       runs: [],
     });
     vi.mocked(client.rollbackThread).mockRejectedValueOnce(
-      new TypeError("connection reset after commit"),
+      new ControlApiTransportError(new TypeError("connection reset after commit")),
     );
     const idempotencyKey = vi.fn(
       (operation: string) => `${operation}:stable-key`,
@@ -3547,10 +3548,26 @@ describe("Control thread runtime", () => {
     runtime.close();
   });
 
+  it("does not retry an unclassified programming TypeError as a network outcome", async () => {
+    const client = fakeClient({ messages: [], runs: [] });
+    const error = new TypeError("invalid mutation implementation");
+    client.renameThread.mockRejectedValueOnce(error);
+    const runtime = new ControlThreadRuntime(
+      { client, eventStream: idleRunEventStream },
+      callbacks(),
+    );
+    try {
+      await expect(runtime.renameThread("thread-1", "new name")).rejects.toBe(error);
+      expect(client.renameThread).toHaveBeenCalledOnce();
+    } finally {
+      runtime.close();
+    }
+  });
+
   it("retries an unknown mutation outcome once with the frozen command and key", async () => {
     const client = fakeClient({ messages: [], runs: [] });
     vi.mocked(client.renameThread).mockRejectedValueOnce(
-      new TypeError("connection reset after write"),
+      new ControlApiTransportError(new TypeError("connection reset after write")),
     );
     const idempotencyKey = vi.fn(
       (operation: string) => `${operation}:stable-key`,

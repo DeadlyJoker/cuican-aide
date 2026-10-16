@@ -20,7 +20,10 @@ it("unknown retries preserve original body/key and revisions while current Threa
     },
   );
   const owner = new ControlProjectMediaInputStageTurn(api(fetch), key);
-  await expect(owner.start(selected)).rejects.toThrow("lost ACK");
+  await expect(owner.start(selected)).rejects.toMatchObject({
+    name: "ControlApiTransportError",
+    cause: { message: "lost ACK" },
+  });
   await expect(
     owner.start({
       ...selected,
@@ -62,7 +65,10 @@ it("unknown original input cannot move to another package, binding, project or a
       throw new TypeError("unknown");
     }),
     owner = new ControlProjectMediaInputStageTurn(api(fetch), () => "key");
-  await expect(owner.start(input)).rejects.toThrow("unknown");
+  await expect(owner.start(input)).rejects.toMatchObject({
+    name: "ControlApiTransportError",
+    cause: { message: "unknown" },
+  });
   for (const changed of [
     { ...binding, projectId: "other" },
     { ...binding, bindingId: "other" },
@@ -186,7 +192,10 @@ it("a later binding CAS conflict cannot prove an earlier unknown intent uncommit
     }),
     key,
   );
-  await expect(owner.start(input)).rejects.toThrow("lost ACK");
+  await expect(owner.start(input)).rejects.toMatchObject({
+    name: "ControlApiTransportError",
+    cause: { message: "lost ACK" },
+  });
   await expect(
     owner.start({
       ...input,
@@ -242,7 +251,10 @@ it("known stale source/configuration rejections are refreshable, but unknown ACK
     await expect(owner.start(input)).rejects.toBeDefined();
     expect(owner.retainedSelection("thread")).toBeNull();
     lost = true;
-    await expect(owner.start(input)).rejects.toThrow("lost ACK");
+    await expect(owner.start(input)).rejects.toMatchObject({
+      name: "ControlApiTransportError",
+      cause: { message: "lost ACK" },
+    });
     lost = false;
     await expect(owner.start(input)).rejects.toBeDefined();
     expect(owner.retainedSelection("thread")).toEqual(selection);
