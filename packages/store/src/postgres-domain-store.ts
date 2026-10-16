@@ -490,7 +490,9 @@ export class PostgresDomainStore
       this.schema,
       {
         assertOpen: () => this.assertOpen(),
-        loadRoot: (client, input) => this.loadRunWithin(client, input, true),
+        // Child terminal wake insertion checks the parent's FK. Preserve that KEY SHARE access.
+        loadRoot: (client, input) =>
+          this.loadRunWithin(client, input, { mode: "noKeyUpdate" }),
         loadChild: (client, input) => this.loadRunWithin(client, input),
         commitChildThread: (client, input) =>
           this.commitThreadWithin(client, input),

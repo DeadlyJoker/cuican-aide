@@ -51,6 +51,7 @@ import {
 } from "./postgres-workflow-children.ts";
 import { workflowNodeValue } from "./workflow-node-value.ts";
 import { beginPostgresRunAttempt } from "./postgres-execution-authority.ts";
+import { reconcilePostgresWorkflowChildren } from "./postgres-workflow-child-reconciliation.ts";
 
 type AdmitInput = Parameters<
   WorkflowRunCompositionStore["admitWorkflowNodes"]
@@ -234,7 +235,7 @@ export class ExperimentalPostgresWorkflowRunCompositionStore
         current.contentDigest !== input.binding.contentDigest
       )
         throw new RunStoreError("workflow_execution_binding_mismatch");
-      const rows = await readPostgresWorkflowNodes(
+      let rows = await readPostgresWorkflowNodes(
         client,
         this.#sql,
         current,
@@ -250,19 +251,47 @@ export class ExperimentalPostgresWorkflowRunCompositionStore
         context,
         this.#d,
       );
+      const existingAdmissions = new Map<
+        string,
+        WorkflowNodeAttemptAdmission
+      >();
       for (const row of rows.values()) {
-        await postgresWorkflowNodeAdmission(
-          client,
-          this.#sql,
-          current,
-          context.workflow,
-          row,
+        existingAdmissions.set(
+          row.node_id,
+          await postgresWorkflowNodeAdmission(
+            client,
+            this.#sql,
+            current,
+            context.workflow,
+            row,
+          ),
         );
         const node = current.nodes.find((n) => n.nodeId === row.node_id)!;
         if (node.kind === "humanGate")
           throw new RunStoreError("workflow_gate_unavailable");
         if (!children.has(row.claim_id))
           throw new RunStoreError("workflow_child_handoff_missing");
+      }
+      if (children.size) {
+        const reconciled = await reconcilePostgresWorkflowChildren(
+          client,
+          this.#sql,
+          {
+            state: current,
+            rows,
+            admissions: existingAdmissions,
+            children,
+            now: new Date(time.now).toISOString(),
+          },
+        );
+        if (reconciled !== current)
+          rows = await readPostgresWorkflowNodes(
+            client,
+            this.#sql,
+            reconciled,
+            context.workflow,
+          );
+        current = reconciled;
       }
       const fingerprint = canonicalJson({
         kind: "workflow.node-admission.v1",

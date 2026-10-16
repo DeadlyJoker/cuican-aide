@@ -101,7 +101,7 @@ pgTest(
       }),
       [],
     );
-    // Until reconciliation is implemented the coordinator must retain the original delegation.
+    // Replaying the admission retains its child identity; a successor requires a new wake operation.
     await f.composition.admitWorkflowNodes(f.input);
     assert.deepEqual(await f.children(), [child]);
     assert.equal(calls, 1);

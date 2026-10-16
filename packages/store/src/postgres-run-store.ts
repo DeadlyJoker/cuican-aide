@@ -1501,8 +1501,15 @@ export class PostgresRunStore extends PostgresThreadStore implements RunStore {
   protected async loadRunWithin(
     connection: typeof this.pool | PoolClient,
     locator: RunLocator,
-    lock = false,
+    lock: boolean | Readonly<{ mode: "noKeyUpdate" }> = false,
   ): Promise<RunState | null> {
+    let locking = "";
+    if (lock === true) locking = " FOR UPDATE OF snapshots";
+    else if (lock !== false) {
+      if (lock.mode !== "noKeyUpdate")
+        throw new RunStoreError("run_lock_mode_invalid");
+      locking = " FOR NO KEY UPDATE OF snapshots";
+    }
     const result = await connection.query<PostgresRunRow>(
       `SELECT snapshots.tenant_id, snapshots.space_id, snapshots.run_id,
               snapshots.revision, snapshots.last_sequence, snapshots.state_json,
@@ -1510,7 +1517,7 @@ export class PostgresRunStore extends PostgresThreadStore implements RunStore {
        FROM ${this.schemaSql()}.run_snapshots AS snapshots
        LEFT JOIN ${this.schemaSql()}.run_thread_bindings AS bindings
          ON bindings.tenant_id=snapshots.tenant_id AND bindings.run_id=snapshots.run_id
-       WHERE snapshots.tenant_id=$1 AND snapshots.run_id=$2${lock ? " FOR UPDATE OF snapshots" : ""}`,
+       WHERE snapshots.tenant_id=$1 AND snapshots.run_id=$2${locking}`,
       [locator.tenantId, locator.runId],
     );
     const row = result.rows[0];

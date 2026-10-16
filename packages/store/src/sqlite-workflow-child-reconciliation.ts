@@ -17,7 +17,7 @@ import {
   sqliteWorkflowNodeAdmission,
 } from "./sqlite-workflow-node-authority.ts";
 import { writeSqliteWorkflowExecution } from "./sqlite-workflow-execution-authority.ts";
-import { workflowNodeValue } from "./workflow-node-value.ts";
+import { workflowChildOutcome } from "./workflow-child-outcome.ts";
 import { readSqliteWorkflowRunOutput } from "./sqlite-workflow-run-output.ts";
 import { hasSqliteWorkflowFailureCancellation } from "./sqlite-workflow-failure-cancellation.ts";
 
@@ -62,7 +62,6 @@ export function reconcileSqliteWorkflowChildren(
         input.context.workflow,
         row,
       );
-    let value: ReturnType<typeof workflowNodeValue> | null = null;
     const canceled =
       child.status === "canceled" &&
       (current.cancelRequested ||
@@ -74,38 +73,22 @@ export function reconcileSqliteWorkflowChildren(
           current,
           rows,
         ));
-    let failureCode: string | null =
-      child.status === "completed" || canceled
-        ? null
-        : child.status === "canceled"
-          ? "workflow_child_canceled"
-          : "workflow_child_failed";
+    let output: string | null = null,
+      outputError: unknown;
     if (child.status === "completed") {
-      // A known model response violating the frozen schema is terminal, never a sampling retry.
       try {
-        value = workflowNodeValue(
-          JSON.parse(readSqliteWorkflowRunOutput(db, child)),
-          admission.claim.node.outputSchema,
-        );
+        output = readSqliteWorkflowRunOutput(db, child);
       } catch (error) {
-        if (
-          error instanceof SyntaxError ||
-          (error instanceof Error &&
-            "code" in error &&
-            (error.code === "workflow_value_schema_mismatch" ||
-              error.code === "workflow_node_value_limit" ||
-              error.code === "workflow_child_output_limit" ||
-              error.code === "command_non_json_value"))
-        )
-          failureCode = "workflow_child_output_invalid";
-        else throw error;
+        outputError = error;
       }
     }
-    const status = canceled
-      ? ("canceled" as const)
-      : failureCode === null
-        ? ("completed" as const)
-        : ("failed" as const);
+    const { status, failureCode, value } = workflowChildOutcome({
+      child,
+      canceledByParent: canceled,
+      output,
+      outputError,
+      schema: admission.claim.node.outputSchema,
+    });
     finishSqliteRunAttempt(db, {
       tenantId: current.tenantId,
       runId: current.runId,

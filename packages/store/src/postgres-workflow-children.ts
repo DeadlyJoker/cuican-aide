@@ -36,7 +36,7 @@ export type PostgresWorkflowChildRoute = (input: {
   parent: RunState;
   node: WorkflowNodeDefinition;
 }) => RunRoute | Promise<RunRoute>;
-type ChildRow = {
+export type PostgresWorkflowChildRow = {
   node_id: string;
   claim_id: string;
   child_thread_id: string;
@@ -53,13 +53,17 @@ export async function readPostgresWorkflowChildren(
   context: Awaited<ReturnType<typeof readPostgresWorkflowCompositionContext>>,
   ops: PostgresWorkflowChildOperations,
 ) {
-  const rows = await client.query<ChildRow>(
+  const rows = await client.query<PostgresWorkflowChildRow>(
     `SELECT node_id,claim_id,child_thread_id,child_run_id,input_digest,wake_work_item_id,
     CASE WHEN octet_length(wake_json::text)<=65536 THEN wake_json::text ELSE NULL END AS wake_json
     FROM ${sql}.workflow_node_children WHERE tenant_id=$1 AND run_id=$2 LIMIT 65`,
     [state.tenantId, state.runId],
   );
   if (rows.rows.length > 64) corrupt();
+  const children = new Map<
+    string,
+    PostgresWorkflowChildRow & { run: RunState }
+  >();
   for (const row of rows.rows) {
     const node = state.nodes.find((value) => value.nodeId === row.node_id);
     if (
@@ -115,8 +119,9 @@ export async function readPostgresWorkflowChildren(
         })
     )
       corrupt();
+    children.set(row.claim_id, { ...row, run: child });
   }
-  return new Map(rows.rows.map((row) => [row.claim_id, row]));
+  return children;
 }
 
 export async function dispatchPostgresWorkflowChildren(
