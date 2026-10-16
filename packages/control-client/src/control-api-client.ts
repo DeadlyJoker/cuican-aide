@@ -1,4 +1,9 @@
 import {
+  parseThreadTranscriptSnapshotResponse,
+  MAX_THREAD_TRANSCRIPT_SNAPSHOT_RESPONSE_BYTES,
+  type GetThreadTranscriptSnapshotResponse,
+} from "@crewon/contracts";
+import {
   ControlApiClientError,
   ControlApiProtocolError,
   ControlApiTransportError,
@@ -992,6 +997,29 @@ export class ControlApiClient {
       throw new ControlApiProtocolError(
         "control_client_message_window_invalid",
       );
+    }
+  }
+
+  async getThreadTranscriptSnapshot(
+    threadId: string,
+    query: { cursor?: string | null; limit?: number } = {},
+    options: ControlApiRequestOptions = {},
+  ): Promise<GetThreadTranscriptSnapshotResponse> {
+    const parsedQuery = parseThreadMessageWindowQuery(query, threadId);
+    const response = await this.#json<unknown>(
+      "GET",
+      withQuery(`/api/v1/threads/${resourceId(threadId)}/transcript-snapshot`, query),
+      null,
+      {
+        ...options,
+        expectedStatuses: [200],
+        maximumResponseBytes: MAX_THREAD_TRANSCRIPT_SNAPSHOT_RESPONSE_BYTES,
+      },
+    );
+    try {
+      return parseThreadTranscriptSnapshotResponse(response, threadId, parsedQuery);
+    } catch {
+      throw new ControlApiProtocolError("control_client_transcript_snapshot_invalid");
     }
   }
 

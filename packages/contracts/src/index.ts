@@ -56,3 +56,6 @@ export * from "./thread-active-run-contract.ts";
 export * from "./runtime-bootstrap-inputs.ts";
 export * from "./runtime-bootstrap-replay.ts";
 export * from "./plugin-credit-read-contract.ts";
+
+export { parseRunView, RunViewValidationError } from "./run-view.ts";
+export * from "./thread-transcript-snapshot-contract.ts";

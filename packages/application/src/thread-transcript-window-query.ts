@@ -1,3 +1,4 @@
+import { parseRunView } from "@crewon/contracts";
 import { ApplicationError } from "./application-error.ts";
 import type { ActorContext, AuthorizationPort } from "./authorization-port.ts";
 import type { ThreadStore } from "./thread-store-port.ts";
@@ -21,11 +22,13 @@ export async function readThreadTranscriptWindow(
     position: ThreadMessageWindowPosition | null;
     limit: number;
   },
+  view: "transcript" | "transcriptSnapshot" = "transcript",
 ): Promise<
   ThreadMessageWindow & { runBindings: readonly ThreadMessageRunBinding[] }
 > {
   const query = validateThreadMessageWindowQuery(input);
   await dependencies.authorizeThread(query.threadId);
+  if (view === "transcriptSnapshot") await authorizeRun(null);
   if (!dependencies.store.messageWindows)
     throw new ApplicationError("internal", "message_window_store_unavailable");
   let window: ThreadMessageWindow;
@@ -34,7 +37,7 @@ export async function readThreadTranscriptWindow(
       ...query,
       tenantId: actor.tenantId,
       spaceId: actor.spaceId,
-      view: "transcript",
+      view,
     });
   } catch (error) {
     if (error instanceof RunStoreError && error.code === "thread_not_found")
@@ -88,7 +91,43 @@ export async function readThreadTranscriptWindow(
       );
     if (binding.runId !== null) runIds.add(binding.runId);
   }
-  for (const runId of runIds) {
+  if (view === "transcriptSnapshot") {
+    const snapshot = window.runSnapshot;
+    if (
+      !snapshot ||
+      !Array.isArray(snapshot.runs) ||
+      snapshot.runs.length > query.limit + 1
+    )
+      throw new ApplicationError(
+        "internal",
+        "thread_transcript_snapshot_invalid",
+      );
+    const expected = new Set(runIds);
+    if (snapshot.activeRunId !== null) expected.add(snapshot.activeRunId);
+    const actual = new Set<string>();
+    for (const raw of snapshot.runs) {
+      const run = parseRunView(raw, query.threadId);
+      if (
+        actual.has(run.runId) ||
+        !expected.has(run.runId) ||
+        (run.runId === snapshot.activeRunId &&
+          ["completed", "failed", "canceled"].includes(run.status))
+      )
+        throw new ApplicationError(
+          "internal",
+          "thread_transcript_snapshot_invalid",
+        );
+      actual.add(run.runId);
+      runIds.add(run.runId);
+    }
+    if (expected.size !== actual.size)
+      throw new ApplicationError(
+        "internal",
+        "thread_transcript_snapshot_invalid",
+      );
+  }
+  for (const runId of runIds) await authorizeRun(runId);
+  async function authorizeRun(runId: string | null) {
     try {
       const decision = await dependencies.authorization.authorize({
         actor,

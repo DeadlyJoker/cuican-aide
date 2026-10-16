@@ -1,3 +1,4 @@
+import { registerThreadTranscriptSnapshotRoute } from "./thread-transcript-snapshot-route.ts";
 import { registerProjectMediaResultRoutes } from "./project-media-result-route.ts";
 import type { InstalledProjectMediaResultRuntime } from "./installed-project-media-result-runtime.ts";
 import { registerProjectMediaResultCatalogRoutes } from "./project-media-result-catalog-route.ts";
@@ -1460,6 +1461,7 @@ export function buildControlApi(
 
   registerThreadMessageWindowRoute(app, dependencies);
   registerThreadTranscriptWindowRoute(app, dependencies);
+  registerThreadTranscriptSnapshotRoute(app, dependencies);
   registerThreadCatalogRoute(app, dependencies);
   if (dependencies.officeThreads) {
     registerOfficeThreadRoutes(app, {

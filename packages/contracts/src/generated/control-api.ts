@@ -843,6 +843,23 @@ export interface paths {
     patch?: never;
     trace?: never;
   };
+  "/api/v1/threads/{threadId}/transcript-snapshot": {
+    parameters: {
+      query?: never;
+      header?: never;
+      path?: never;
+      cookie?: never;
+    };
+    /** @description Read a bounded message window, durable Run bindings, referenced Run summaries and the authoritative active Run from one storage snapshot. Requires thread:read, thread-scoped run:read and run:read for every returned Run. Existing transcript-window and active-run endpoints remain compatible. */
+    get: operations["getThreadTranscriptSnapshot"];
+    put?: never;
+    post?: never;
+    delete?: never;
+    options?: never;
+    head?: never;
+    patch?: never;
+    trace?: never;
+  };
   "/api/v1/threads/{threadId}/transcript-window": {
     parameters: {
       query?: never;
@@ -2846,6 +2863,13 @@ export interface components {
       schemaVersion: "crewon.thread-active-run.v0";
       threadId: string;
       run: components["schemas"]["RunView"] | null;
+    };
+    GetThreadTranscriptSnapshotResponse: {
+      /** @constant */
+      schemaVersion: "crewon.transcript-snapshot.v0";
+      transcriptWindow: components["schemas"]["GetThreadTranscriptWindowResponse"];
+      runs: components["schemas"]["RunView"][];
+      activeRunId: string | null;
     };
     GetThreadTranscriptWindowResponse: {
       /** @constant */
@@ -6024,6 +6048,37 @@ export interface operations {
       401: components["responses"]["Error"];
       403: components["responses"]["Error"];
       404: components["responses"]["Error"];
+      500: components["responses"]["Error"];
+    };
+  };
+  getThreadTranscriptSnapshot: {
+    parameters: {
+      query?: {
+        cursor?: string;
+        limit?: number;
+      };
+      header?: never;
+      path: {
+        threadId: components["parameters"]["ThreadId"];
+      };
+      cookie?: never;
+    };
+    requestBody?: never;
+    responses: {
+      /** @description One consistent message window; body size may reduce the requested number of rows. */
+      200: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          "application/json": components["schemas"]["GetThreadTranscriptSnapshotResponse"];
+        };
+      };
+      400: components["responses"]["Error"];
+      401: components["responses"]["Error"];
+      403: components["responses"]["Error"];
+      404: components["responses"]["Error"];
+      409: components["responses"]["Error"];
       500: components["responses"]["Error"];
     };
   };

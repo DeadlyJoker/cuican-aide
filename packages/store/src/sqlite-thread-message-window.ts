@@ -1,3 +1,4 @@
+import { readSqliteTranscriptRuns } from "./thread-transcript-run-snapshot.ts";
 import type { DatabaseSync, SQLOutputValue } from "node:sqlite";
 import type {
   MessageRecord,
@@ -83,12 +84,25 @@ export class SqliteThreadMessageWindowStore
         WHERE m.tenant_id=? AND m.thread_id=? AND m.sequence ${direction} ? AND ${VISIBLE} ORDER BY m.sequence ${direction === "<" ? "DESC" : "ASC"} LIMIT 1`,
           )
           .get(query.tenantId, query.threadId, sequence) !== undefined;
+      const runBindings =
+        query.view === "transcript" || query.view === "transcriptSnapshot"
+          ? readSqliteMessageRunBindings(this.#database, query, messages)
+          : undefined;
       const result = {
         thread,
         messages,
         hasOlder: first !== undefined && exists(first.sequence, "<"),
         hasNewer: last !== undefined && exists(last.sequence, ">"),
-        ...(query.view === "transcript" ? { runBindings: readSqliteMessageRunBindings(this.#database, query, messages) } : {}),
+        ...(runBindings === undefined ? {} : { runBindings }),
+        ...(query.view === "transcriptSnapshot"
+          ? {
+              runSnapshot: readSqliteTranscriptRuns(
+                this.#database,
+                query,
+                runBindings!,
+              ),
+            }
+          : {}),
       };
       this.#database.exec("COMMIT");
       return result;

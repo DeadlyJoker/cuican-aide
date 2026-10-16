@@ -6,6 +6,7 @@ import type {
   ThreadMessageWindowStore,
   ThreadScopedLocator,
   ThreadMessageRunBinding,
+  ThreadTranscriptRunSnapshot,
 } from "@crewon/application";
 import type { ThreadState } from "@crewon/domain";
 import {
@@ -18,6 +19,9 @@ type Source = Readonly<{
   thread: ThreadState;
   messages: readonly MessageRecord[];
   invalidations: ReadonlyMap<number, unknown> | undefined;
+  runSnapshot(
+    bindings: readonly ThreadMessageRunBinding[],
+  ): ThreadTranscriptRunSnapshot;
   runBindings: (
     messages: readonly MessageRecord[],
   ) => readonly ThreadMessageRunBinding[];
@@ -83,6 +87,10 @@ export class InMemoryThreadMessageWindowStore
         if (visible(index)) return true;
       return false;
     };
+    const runBindings =
+      query.view === "transcript" || query.view === "transcriptSnapshot"
+        ? source!.runBindings(page)
+        : undefined;
     return structuredClone({
       thread,
       messages: page,
@@ -91,8 +99,9 @@ export class InMemoryThreadMessageWindowStore
       hasNewer:
         page.at(-1) !== undefined &&
         exists(lowerBound(page.at(-1)!.sequence + 1), 1),
-      ...(query.view === "transcript"
-        ? { runBindings: source!.runBindings(page) }
+      ...(runBindings === undefined ? {} : { runBindings }),
+      ...(query.view === "transcriptSnapshot"
+        ? { runSnapshot: source!.runSnapshot(runBindings!) }
         : {}),
     });
   }

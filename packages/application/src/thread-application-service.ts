@@ -682,6 +682,27 @@ export class ThreadApplicationService {
     }
   }
 
+  async readTranscriptSnapshot(
+    actor: ActorContext,
+    query: {
+      threadId: string;
+      position: ThreadMessageWindowPosition | null;
+      limit: number;
+    },
+  ) {
+    validateActor(actor);
+    return readThreadTranscriptWindow(
+      {
+        store: this.#store,
+        authorization: this.#authorization,
+        authorizeThread: (threadId) => this.getThread(actor, threadId),
+      },
+      actor,
+      query,
+      "transcriptSnapshot",
+    );
+  }
+
   async readTranscriptWindow(
     actor: ActorContext,
     query: {

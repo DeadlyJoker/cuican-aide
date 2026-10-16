@@ -73,6 +73,11 @@ for (const backend of ["sqlite", "postgres", "memory"] as const) {
         (await store.messageWindows!.readWindow(query)).runBindings,
         expected,
       );
+      const snapshot = await store.messageWindows!.readWindow({ ...query, view: "transcriptSnapshot" });
+      assert.deepEqual(snapshot.runBindings, expected);
+      assert.equal(snapshot.runSnapshot?.activeRunId, committed.runState.runId);
+      assert.deepEqual(snapshot.runSnapshot?.runs.map((run) => [run.runId, run.status, run.cancelRequested]), [[committed.runState.runId, "queued", false]]);
+      assert.equal(Object.hasOwn(snapshot.runSnapshot!.runs[0]!, "toolExecutions"), false);
       await store.commitTurnStart(input);
       assert.deepEqual(
         (await store.messageWindows!.readWindow(query)).runBindings,

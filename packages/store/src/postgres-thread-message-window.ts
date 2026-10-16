@@ -1,3 +1,4 @@
+import { readPostgresTranscriptRuns } from "./thread-transcript-run-snapshot.ts";
 import type { Pool } from "pg";
 import { readPostgresMessageRunBindings } from "./postgres-message-run-evidence.ts";
 import type {
@@ -97,7 +98,7 @@ export class PostgresThreadMessageWindowStore
         first !== undefined && (await exists(first.sequence, "<"));
       const hasNewer = last !== undefined && (await exists(last.sequence, ">"));
       const bindings =
-        query.view === "transcript"
+        query.view === "transcript" || query.view === "transcriptSnapshot"
           ? {
               runBindings: await readPostgresMessageRunBindings(
                 client,
@@ -107,8 +108,24 @@ export class PostgresThreadMessageWindowStore
               ),
             }
           : {};
+      const runSnapshot =
+        query.view === "transcriptSnapshot"
+          ? await readPostgresTranscriptRuns(
+              client,
+              this.#schemaSql,
+              query,
+              bindings.runBindings!,
+            )
+          : undefined;
       await client.query("COMMIT");
-      return { thread, messages, hasOlder, hasNewer, ...bindings };
+      return {
+        thread,
+        messages,
+        hasOlder,
+        hasNewer,
+        ...bindings,
+        ...(runSnapshot === undefined ? {} : { runSnapshot }),
+      };
     } catch (error) {
       await client.query("ROLLBACK");
       throw error;

@@ -1,3 +1,4 @@
+import { readInMemoryTranscriptRuns } from "./thread-transcript-run-snapshot.ts";
 import { copyQueueClaim } from "./queue-execution-scope.ts";
 import { InMemoryModelPricingStore } from "./in-memory-model-pricing-store.ts";
 import { InMemoryModelSpendingStore } from "./in-memory-model-spending-store.ts";
@@ -537,6 +538,13 @@ export class InMemoryRunStore implements DomainStore {
         thread,
         messages: this.#messages.get(locator.threadId) ?? [],
         invalidations: this.#messageInvalidations.get(locator.threadId),
+        runSnapshot: (bindings) =>
+          readInMemoryTranscriptRuns(
+            locator,
+            bindings,
+            this.#runs.activeInThread(locator).slice(0, 2),
+            (id) => this.#runs.get(id),
+          ),
         runBindings: (messages) =>
           this.#messageRunEvidence.read(locator, messages),
       };

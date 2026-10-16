@@ -3061,6 +3061,68 @@
         }
       }
     },
+    "/api/v1/threads/{threadId}/transcript-snapshot": {
+      "get": {
+        "operationId": "getThreadTranscriptSnapshot",
+        "description": "Read a bounded message window, durable Run bindings, referenced Run summaries and the authoritative active Run from one storage snapshot. Requires thread:read, thread-scoped run:read and run:read for every returned Run. Existing transcript-window and active-run endpoints remain compatible.",
+        "parameters": [
+          {
+            "$ref": "#/components/parameters/ThreadId"
+          },
+          {
+            "name": "cursor",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "type": "string",
+              "maxLength": 2048,
+              "pattern": "^[A-Za-z0-9_-]+$"
+            }
+          },
+          {
+            "name": "limit",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "type": "integer",
+              "minimum": 1,
+              "maximum": 100,
+              "default": 100
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "One consistent message window; body size may reduce the requested number of rows.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/GetThreadTranscriptSnapshotResponse"
+                }
+              }
+            }
+          },
+          "400": {
+            "$ref": "#/components/responses/Error"
+          },
+          "401": {
+            "$ref": "#/components/responses/Error"
+          },
+          "403": {
+            "$ref": "#/components/responses/Error"
+          },
+          "404": {
+            "$ref": "#/components/responses/Error"
+          },
+          "409": {
+            "$ref": "#/components/responses/Error"
+          },
+          "500": {
+            "$ref": "#/components/responses/Error"
+          }
+        }
+      }
+    },
     "/api/v1/threads/{threadId}/transcript-window": {
       "get": {
         "operationId": "getThreadTranscriptWindow",
@@ -11239,6 +11301,40 @@
                 "type": "null"
               }
             ]
+          }
+        }
+      },
+      "GetThreadTranscriptSnapshotResponse": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": [
+          "schemaVersion",
+          "transcriptWindow",
+          "runs",
+          "activeRunId"
+        ],
+        "properties": {
+          "schemaVersion": {
+            "type": "string",
+            "const": "crewon.transcript-snapshot.v0"
+          },
+          "transcriptWindow": {
+            "$ref": "#/components/schemas/GetThreadTranscriptWindowResponse"
+          },
+          "runs": {
+            "type": "array",
+            "maxItems": 101,
+            "items": {
+              "$ref": "#/components/schemas/RunView"
+            }
+          },
+          "activeRunId": {
+            "type": [
+              "string",
+              "null"
+            ],
+            "minLength": 1,
+            "maxLength": 128
           }
         }
       },

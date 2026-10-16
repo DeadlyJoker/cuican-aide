@@ -1,3 +1,6 @@
+import { ControlApiClient } from "@crewon/control-client";
+import { registerThreadTranscriptSnapshotRoute } from "./thread-transcript-snapshot-route.ts";
+import { parseThreadTranscriptSnapshotResponse } from "@crewon/contracts";
 import assert from "node:assert/strict";
 import { mkdtempSync, rmSync } from "node:fs";
 import { tmpdir } from "node:os";
@@ -40,6 +43,7 @@ test("transcript HTTP uses durable associations, authorizes each Run and rejects
   };
   let identifier = 0;
   let denyRunRead = false;
+  let denySpecificRun: string | null = null;
   const checked: string[] = [];
   const authorization = new StandaloneAuthorization(actor);
   const deps = {
@@ -52,7 +56,13 @@ test("transcript HTTP uses durable associations, authorizes each Run and rejects
         input: Parameters<typeof authorization.authorize>[0],
       ) => {
         checked.push(input.action);
-        if (denyRunRead && input.action === "run:read")
+        if (
+          input.action === "run:read" &&
+          (denyRunRead ||
+            (input.resource.kind === "run" &&
+              denySpecificRun !== null &&
+              input.resource.runId === denySpecificRun))
+        )
           return { outcome: "deny" as const, reasonCode: "fixture-denied" };
         return authorization.authorize(input);
       },
@@ -102,6 +112,7 @@ test("transcript HTTP uses durable associations, authorizes each Run and rejects
     return reply.code(result.statusCode).send(result.body);
   });
   registerThreadTranscriptWindowRoute(app, { threads, identity });
+  registerThreadTranscriptSnapshotRoute(app, { threads, identity });
   registerThreadMessageWindowRoute(app, { threads, identity });
   const url = `/api/v1/threads/${threadId}/transcript-window`;
   const headers = { authorization: `Bearer ${token}`, origin };
@@ -125,6 +136,49 @@ test("transcript HTTP uses durable associations, authorizes each Run and rejects
     },
   ]);
   assert.ok(checked.includes("thread:read") && checked.includes("run:read"));
+  const snapshotUrl = `/api/v1/threads/${threadId}/transcript-snapshot?limit=1`;
+  const snapshotResponse = await app.inject({
+    method: "GET",
+    url: snapshotUrl,
+    headers,
+  });
+  assert.equal(snapshotResponse.statusCode, 200, snapshotResponse.body);
+  const baseUrl = await app.listen({ host: "127.0.0.1", port: 0 });
+  let snapshotRequests = 0;
+  const client = new ControlApiClient({
+    baseUrl,
+    accessToken: token,
+    origin,
+    fetch: async (url, init) => {
+      snapshotRequests++;
+      return fetch(url, init);
+    },
+  });
+  const snapshot = await client.getThreadTranscriptSnapshot(threadId, {
+    limit: 1,
+  });
+  assert.equal(snapshotRequests, 1);
+  assert.deepEqual(
+    snapshot,
+    parseThreadTranscriptSnapshotResponse(snapshotResponse.json(), threadId, {
+      position: null,
+      limit: 1,
+    }),
+  );
+  assert.deepEqual(snapshot.transcriptWindow, latest);
+  assert.equal(snapshot.activeRunId, started.runState.runId);
+  assert.deepEqual(
+    snapshot.runs.map((run) => [run.runId, run.cancelRequested]),
+    [[started.runState.runId, false]],
+  );
+  const oldSnapshot = await app.inject({
+    method: "GET",
+    url: snapshotUrl + `&cursor=${latest.messageWindow.olderCursor}`,
+    headers,
+  });
+  assert.equal(oldSnapshot.statusCode, 200, oldSnapshot.body);
+  assert.equal(oldSnapshot.json().activeRunId, started.runState.runId);
+  assert.equal(oldSnapshot.json().transcriptWindow.runBindings[0].runId, null);
   const older = await get(
     `?limit=1&cursor=${latest.messageWindow.olderCursor}`,
   );
@@ -135,7 +189,29 @@ test("transcript HTTP uses durable associations, authorizes each Run and rejects
       .runBindings.map(({ runId, source }) => ({ runId, source })),
     [{ runId: null, source: "unassociated" }],
   );
+  denySpecificRun = started.runState.runId;
+  assert.equal(
+    (
+      await app.inject({
+        method: "GET",
+        url: snapshotUrl + `&cursor=${latest.messageWindow.olderCursor}`,
+        headers,
+      })
+    ).statusCode,
+    403,
+  );
+  // The old window contains only an unassociated legacy message; it exposes no Run.
+  assert.equal(
+    (await get(`?limit=1&cursor=${latest.messageWindow.olderCursor}`))
+      .statusCode,
+    200,
+  );
+  denySpecificRun = null;
   denyRunRead = true;
+  assert.equal(
+    (await app.inject({ method: "GET", url: snapshotUrl, headers })).statusCode,
+    403,
+  );
   assert.equal((await get("?limit=1")).statusCode, 403);
   assert.equal(
     (
@@ -149,8 +225,22 @@ test("transcript HTTP uses durable associations, authorizes each Run and rejects
   );
   denyRunRead = false;
   assert.equal((await app.inject({ method: "GET", url })).statusCode, 401);
+  assert.equal(
+    (await app.inject({ method: "GET", url: snapshotUrl })).statusCode,
+    401,
+  );
   for (const suffix of ["?limit=101", "?view=audit", "?cursor=invalid"])
     assert.equal((await get(suffix)).statusCode, 400);
+  assert.equal(
+    (
+      await app.inject({
+        method: "GET",
+        url: snapshotUrl + "&limit=101",
+        headers,
+      })
+    ).statusCode,
+    400,
+  );
   await threads.renameThread(actor, {
     kind: "thread.rename",
     threadId,
@@ -158,6 +248,16 @@ test("transcript HTTP uses durable associations, authorizes each Run and rejects
     expectedRevision: 3,
     title: "Renamed",
   });
+  assert.equal(
+    (
+      await app.inject({
+        method: "GET",
+        url: snapshotUrl + `&cursor=${latest.messageWindow.olderCursor}`,
+        headers,
+      })
+    ).statusCode,
+    409,
+  );
   assert.equal(
     (await get(`?cursor=${latest.messageWindow.olderCursor}`)).statusCode,
     409,

@@ -14,7 +14,8 @@ export function validateMessageWindowQuery(
   if (
     query.view !== undefined &&
     query.view !== "messages" &&
-    query.view !== "transcript"
+    query.view !== "transcript" &&
+    query.view !== "transcriptSnapshot"
   )
     throw new RunStoreError("message_window_view_invalid");
   if (

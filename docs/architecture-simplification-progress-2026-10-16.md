@@ -68,3 +68,21 @@ Node 24 独立子进程各导入三次，交替测试顺序、关闭 Node 编译
 完成上一批定位的五类基础失败修复。将 Vite 代理移出 Renderer 源目录、测试夹具明确标名、物理数据库迁移归入 Store；四处 Application Node 哈希改为现有摘要端口，保持原工作空间 ID 和回执证明。其余已存在的配置存储、Host 组合发布与装配逐项核实后登记精确入口。补充 Renderer 不能相对导入源目录之外模块的反向检查，避免移动开发文件后出现检查盲区。
 
 架构扫描与实际生产类型图检查现为 37 项全部通过；行为和代理、独立打包工具测试共 68 项通过、26 项因原有环境条件跳过。Control / Worker / Application / Store 完整类型检查及 UI/Electron 检查通过。详细归属、兼容性和验证范围见 `docs/package-boundary-adapter-registry.md`。尚未证明 PostgreSQL 真实迁移或安装版 App 行为。下一阶段进入有界、一致的会话读取模型和前端请求收敛。
+
+## 第五批：有界会话快照读取（后端与客户端能力）
+
+新增 `GET /api/v1/threads/:threadId/transcript-snapshot`，由显式客户端方法 `getThreadTranscriptSnapshot` 访问。它在原消息窗口短事务内捕获消息、持久 Run 归属、本页涉及的 Run 摘要以及唯一活跃 Run。SQLite 使用原读事务，PostgreSQL 使用原 repeatable-read 只读事务；内存实现同步捕获后克隆。旧 transcript-window、active-run、逐 Run 接口不变，原客户端 Run 验证模块保留兼容重导出；验证实现移入无 Node 依赖的 Contracts 供服务端复用。
+
+读取范围为至多 100 条消息关联的不同 Run，加 1 个可能位于页面之外的活跃 Run。只读取公开摘要字段，不将完整 Run、工具输入输出或模型历史解码到响应。单摘要上限 64 KiB、整页摘要预算 2 MiB，HTTP 客户端响应上限 8 MiB。消息仍使用原有字节预算与版本绑定游标。缺失、重复、越界、身份错误或摘要超限均失败关闭。
+
+权限保留 thread:read、线程范围 run:read 与每一个返回 Run 的 run:read；线程范围 Run 权限在查询前检查。真实 HTTP 测试还确认，读取仅含旧未关联消息的页面时，新接口也会检查页面外活跃 Run 的单独权限。历史接口的原返回形状与权限行为保持兼容。
+
+验证结果：
+
+- Contracts 全量 742 项、Control Client 全量 267 项通过，包括生成类型一致性、畸形响应、取消和字节预算。
+- 本机隔离临时 PostgreSQL（仅 Unix Socket、不监听网络）实际运行，消息证据、活跃 Run 和窗口导航及新解析器/客户端共 46 项通过、无跳过；其中 42 项为存储测试。
+- 新存储快照测试 12 项全部通过，覆盖 SQLite、PostgreSQL、内存；100 个历史 Run 加 1 个活跃 Run 均仅使用 2 次摘要查询。独立写入连接在读取期间提交取消状态时，本次 SQLite WAL / PostgreSQL 快照均保持旧状态，下次读取才看到新状态。2 MiB 非公开 Run 字段不会出现在摘要中；跨空间身份和过大摘要会被拒绝。
+- HTTP、架构与实际生产类型图共 24 项通过。HTTP 测试使用真实监听地址和正式 Control Client，确认一次请求得到窗口和 Run 集合，并覆盖权限拒绝、旧接口兼容、过期游标与输入校验。
+- Store、Control API、Application、Contracts、Control Client 完整类型检查通过。临时 PostgreSQL 已关闭；未访问用户数据库。
+
+当前生产前端仍使用原读取方法，本批不宣称页面端 N+1 已消除，也不以 SQL 查询数量推断端到端延迟收益。下一批切换 `readControlTranscript`，保留消息顺序、游标与 Thread / Run 版本收敛，并验证刷新、切换、SSE 续传与可见最终结果。新接口应先于使用它的前端部署。

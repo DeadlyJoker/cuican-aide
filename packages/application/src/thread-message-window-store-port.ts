@@ -1,3 +1,4 @@
+import type { RunView } from "@crewon/contracts";
 import type { ThreadState } from "@crewon/domain";
 import type {
   MessageRecord,
@@ -16,7 +17,7 @@ export type ThreadMessageWindowQuery = ThreadScopedLocator &
     position: ThreadMessageWindowPosition | null;
     limit: number;
     /** Transcript reads resolve immutable message/Run evidence in the same snapshot. */
-    view?: "messages" | "transcript";
+    view?: "messages" | "transcript" | "transcriptSnapshot";
   }>;
 
 export type ThreadMessageWindow = Readonly<{
@@ -26,6 +27,7 @@ export type ThreadMessageWindow = Readonly<{
   hasOlder: boolean;
   hasNewer: boolean;
   runBindings?: readonly ThreadMessageRunBinding[];
+  runSnapshot?: ThreadTranscriptRunSnapshot;
 }>;
 
 export type ThreadMessageRunBinding = Readonly<{
@@ -38,3 +40,9 @@ export interface ThreadMessageWindowStore {
   /** Scope, revision, message visibility and navigation share one short snapshot. */
   readWindow(query: ThreadMessageWindowQuery): Promise<ThreadMessageWindow>;
 }
+
+/** Public summaries only, captured with the messages in one storage snapshot. */
+export type ThreadTranscriptRunSnapshot = Readonly<{
+  runs: readonly RunView[];
+  activeRunId: string | null;
+}>;
