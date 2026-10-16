@@ -2,7 +2,7 @@ import {
   watchSqliteAvailability,
   type SqliteAvailabilityHintPort,
   type SqliteAvailabilityWatchFactory,
-} from "@crewon/store";
+} from "@crewon/store/sqlite-availability";
 
 export type OutboxAvailabilityHintPort = SqliteAvailabilityHintPort;
 export type SqliteOutboxWatchFactory = SqliteAvailabilityWatchFactory;

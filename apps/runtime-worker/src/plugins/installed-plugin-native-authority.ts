@@ -31,7 +31,7 @@ import {
   type ExtensionExecutionTarget,
   type PluginProfileScope,
 } from "@crewon/domain";
-import { SqliteRunStore } from "@crewon/store";
+import { SqliteRunStore } from "@crewon/store/sqlite-run-store";
 import type { PluginToolRuntimeContext } from "@crewon/plugin-sdk/node";
 import {
   assertInstalledPluginNativeWorkerConfig,

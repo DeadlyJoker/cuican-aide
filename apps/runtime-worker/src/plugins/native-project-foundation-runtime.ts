@@ -6,7 +6,7 @@ import {
 import type { DesktopNativePluginPackageIdentity } from "@crewon/contracts/plugins";
 import type { DesktopProjectFoundationToolsConfiguration } from "@crewon/contracts/plugins";
 import type { PluginProfileScope, PluginTaskAdmission } from "@crewon/domain";
-import { SqliteRunStore } from "@crewon/store";
+import { SqliteRunStore } from "@crewon/store/sqlite-run-store";
 import {
   NodeSha256ContentDigester,
   SystemApplicationClock,

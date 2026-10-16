@@ -13,7 +13,7 @@ import {
   type InstalledPluginPackage,
   type PluginSelection,
 } from "@crewon/domain";
-import { SqliteRunStore } from "@crewon/store";
+import { SqliteRunStore } from "@crewon/store/sqlite-run-store";
 import {
   loadInstalledPluginBusinessRegistration,
   revalidateInstalledPluginBusinessRegistration,

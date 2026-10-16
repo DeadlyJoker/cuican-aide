@@ -7,7 +7,10 @@
     ".": "./src/index.ts",
     "./extension-recovery": "./src/extension-recovery-reader.ts",
     "./host-project-workspaces": "./src/native-project-workspace-state-reader.ts",
-    "./host-workspace-management": "./src/host-workspace-management.ts"
+    "./host-workspace-management": "./src/host-workspace-management.ts",
+    "./sqlite-run-store": "./src/sqlite-run-store.ts",
+    "./sqlite-availability": "./src/sqlite-availability.ts",
+    "./filesystem-storage-admission": "./src/filesystem-storage-admission.ts"
   },
   "scripts": {
     "test": "node --experimental-strip-types --test src/*.test.ts",

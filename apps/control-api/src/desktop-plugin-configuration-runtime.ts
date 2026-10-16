@@ -11,7 +11,7 @@ import {
   type PluginInstallationHostProfilePort,
 } from "@crewon/application";
 import { extensionCanonicalJson } from "@crewon/domain";
-import { SqliteRunStore } from "@crewon/store";
+import { SqliteRunStore } from "@crewon/store/sqlite-run-store";
 import { DesktopPluginAuthority } from "./desktop-plugin-authority.ts";
 import {
   assertDesktopPluginInstallationRuntime,

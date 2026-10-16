@@ -24,7 +24,7 @@ import {
   type ExtensionRunBinding,
 } from "@crewon/domain";
 import type { PluginCompositionLock } from "@crewon/contracts/plugins";
-import { SqliteRunStore } from "@crewon/store";
+import { SqliteRunStore } from "@crewon/store/sqlite-run-store";
 import { DesktopPluginTaskServiceBinding } from "./desktop-plugin-task-service-binding.ts";
 import { pluginSecurityActor } from "./plugin-security-validation.ts";
 

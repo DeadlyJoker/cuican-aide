@@ -7,7 +7,7 @@ import {
   type ModelProviderSetting,
   type ModelProviderSettingsStore,
 } from "@crewon/application";
-import { SqliteRunStore } from "@crewon/store";
+import { SqliteRunStore } from "@crewon/store/sqlite-run-store";
 
 import {
   NodeSha256ContentDigester,

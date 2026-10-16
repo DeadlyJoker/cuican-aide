@@ -16,7 +16,7 @@ import {
   parsePluginProfileScope,
   pluginInstallationDigest,
 } from "@crewon/domain";
-import { SqliteRunStore } from "@crewon/store";
+import { SqliteRunStore } from "@crewon/store/sqlite-run-store";
 import { DesktopPluginAuthority } from "./desktop-plugin-authority.ts";
 import {
   assertDesktopPluginConfigurationFileCurrent,

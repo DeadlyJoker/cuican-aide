@@ -22,7 +22,7 @@ import {
   validateInstalledPluginConfiguration,
   type PluginUiHostServiceAvailabilityPort,
 } from "@crewon/plugin-host";
-import { SqliteRunStore } from "@crewon/store";
+import { SqliteRunStore } from "@crewon/store/sqlite-run-store";
 import {
   parsePluginUiJsonValue,
   type DesktopInstalledPluginActivationConfiguration,

@@ -17,7 +17,7 @@ import {
   type PluginNodeLease,
   type PluginProjectExecutionBorrower,
 } from "@crewon/plugin-host";
-import { SqliteRunStore } from "@crewon/store";
+import { SqliteRunStore } from "@crewon/store/sqlite-run-store";
 import { DesktopPluginAuthority } from "./desktop-plugin-authority.ts";
 import type { DesktopPluginConfiguration } from "./desktop-plugin-configuration.ts";
 import { canonicalDesktopPluginConfiguration } from "./desktop-plugin-configuration-canonical.ts";

@@ -8,7 +8,7 @@ import { productionPluginUiOwnerConfiguration } from "./production-plugin-ui-own
 import { type ProductionProjectFoundationPluginRuntime } from "./production-project-foundation-plugin-runtime.ts";
 import { createProductionProjectConversationRuntime } from "./production-project-conversation-runtime.ts";
 import { closeResources } from "./production-control-resource-cleanup.ts";
-import { createLocalStorageAdmissionOwner } from "@crewon/store";
+import { createLocalStorageAdmissionOwner } from "@crewon/store/filesystem-storage-admission";
 import {
   ModelPricingApplicationService,
   ModelSpendingApplicationService,

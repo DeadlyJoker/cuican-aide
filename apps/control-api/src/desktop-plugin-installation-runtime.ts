@@ -18,7 +18,7 @@ import {
   pluginInstallationDigest,
   parsePluginProfileScope,
 } from "@crewon/domain";
-import { SqliteRunStore } from "@crewon/store";
+import { SqliteRunStore } from "@crewon/store/sqlite-run-store";
 import {
   pluginSecurityActor,
   pluginSecurityRecord,

@@ -18,7 +18,7 @@ import {
   type ExtensionHostActor,
 } from "@crewon/contracts";
 import { extensionCanonicalJson } from "@crewon/domain";
-import { SqliteRunStore } from "@crewon/store";
+import { SqliteRunStore } from "@crewon/store/sqlite-run-store";
 import {
   compileRuntimeAgentVersion,
   verifyRuntimeAgentVersionRelease,

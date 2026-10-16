@@ -20,7 +20,7 @@ import {
   createDeferredPluginUiHostServiceAvailability,
   type PluginUiHostServiceAvailabilityPort,
 } from "@crewon/plugin-host";
-import { SqliteRunStore } from "@crewon/store";
+import { SqliteRunStore } from "@crewon/store/sqlite-run-store";
 import { extensionCanonicalJson } from "@crewon/domain";
 import { assertDesktopProjectPublications } from "./desktop-project-publication-check.ts";
 import {

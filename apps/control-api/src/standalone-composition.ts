@@ -3,7 +3,7 @@ import { ModelSpendingApplicationService } from "@crewon/application";
 import { OfficeThreadApplicationService } from "@crewon/application";
 import type { StorageAdmissionPort } from "@crewon/application";
 import { createDesktopWorkspaceAdmission } from "./desktop-workspace-admission.ts";
-import { createLocalStorageAdmissionOwner } from "@crewon/store";
+import { createLocalStorageAdmissionOwner } from "@crewon/store/filesystem-storage-admission";
 import type { OutboxRetentionPolicy } from "@crewon/application";
 import {
   AgentVersionApplicationService,

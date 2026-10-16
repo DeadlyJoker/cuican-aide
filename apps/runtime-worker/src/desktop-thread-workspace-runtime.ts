@@ -7,7 +7,7 @@ import {
   statSync,
 } from "node:fs";
 import { isAbsolute, resolve } from "node:path";
-import { SqliteRunStore } from "@crewon/store";
+import { SqliteRunStore } from "@crewon/store/sqlite-run-store";
 import type { RunState, ThreadState } from "@crewon/domain";
 import {
   ToolBrokerError,

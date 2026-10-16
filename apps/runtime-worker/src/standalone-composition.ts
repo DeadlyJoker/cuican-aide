@@ -7,8 +7,8 @@ import {
   type RuntimeCleanupHandle,
 } from "./runtime-composition-lifetime.ts";
 import type { StorageAdmissionPort } from "@crewon/application";
-import { watchSqliteAvailability } from "@crewon/store";
-import { createLocalStorageAdmissionOwner } from "@crewon/store";
+import { watchSqliteAvailability } from "@crewon/store/sqlite-availability";
+import { createLocalStorageAdmissionOwner } from "@crewon/store/filesystem-storage-admission";
 import {
   CrewONAgentKernel,
   type ModelTransportPort,
