@@ -1,4 +1,4 @@
-import { createHash } from "node:crypto";
+import type { ContentDigester } from "./application-runtime-ports.ts";
 import type { PluginCompositionStore } from "./plugin-composition-store-port.ts";
 import {
   parsePluginCompositionLock,
@@ -11,13 +11,10 @@ import {
   type PluginQueryTaskAdmission,
 } from "@crewon/domain";
 
-const digester = {
-  sha256: (body: string) =>
-    `sha256:${createHash("sha256").update(body).digest("hex")}`,
-};
 /** Original persisted metadata only. Package bytes and provider execution authority remain separate gates. */
 export async function readPluginTaskRunComposition(
   input: Readonly<{
+    digester: ContentDigester;
     binding: ExtensionRunBinding;
     admission: PluginTaskAdmission;
     query?: PluginQueryTaskAdmission | null;
@@ -26,7 +23,7 @@ export async function readPluginTaskRunComposition(
     fail(code: string): never;
   }>,
 ): Promise<PluginCompositionLock | null> {
-  const { binding, admission, signal, fail } = input;
+  const { binding, admission, signal, fail, digester } = input;
   if (binding.schemaVersion === "crewon.extension-run-binding.v0") return null;
   if (!input.compositions)
     return fail("installed_plugin_composition_execution_unavailable");

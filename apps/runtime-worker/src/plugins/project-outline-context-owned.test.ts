@@ -4,7 +4,7 @@ import {
   captureProjectOutlineRunReadAuthority,
   issuePluginProjectOutlineRunReadScope,
 } from "@crewon/application/host-project-workspaces";
-import { projectRunOwnedFixture } from "../../../../packages/store/src/project-run-owned-fixture.ts";
+import { projectRunOwnedFixture } from "../../../../packages/store/src/project-run-owned.test-support.ts";
 import { outlineToolsOwnerFixture } from "./project-outline-tools-service-owner.test-support.ts";
 
 for (const backend of ["sqlite", "postgres"] as const) {

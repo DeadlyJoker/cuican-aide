@@ -429,6 +429,7 @@ export class InstalledPluginRunContext {
     )
       fail("installed_plugin_target_mismatch");
     const composition = await readInstalledPluginRunComposition({
+      digester,
       binding,
       admission,
       query,
@@ -494,7 +495,7 @@ export class InstalledPluginRunContext {
       admission,
       receipt,
       query,
-      fail,
+      { fail, digester },
     );
     assertRun(run, binding, original, fail);
     const projectMediaInputStage =

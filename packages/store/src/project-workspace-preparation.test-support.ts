@@ -237,6 +237,10 @@ export async function workspacePreparationUiFixture(
             },
           };
           const preparation = await preparePluginProjectWorkspace({
+            digester: {
+              sha256: (value) =>
+                `sha256:${createHash("sha256").update(value).digest("hex")}`,
+            },
             context,
             authority,
             projects,

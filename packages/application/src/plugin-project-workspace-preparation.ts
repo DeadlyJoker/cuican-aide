@@ -1,7 +1,6 @@
-import { createHash } from "node:crypto";
+import { pluginProjectWorkspaceId } from "./plugin-project-workspace-identity.ts";
 import {
   parsePluginProjectWorkspaceOwner,
-  pluginProjectWorkspaceIdentityInput,
   type PluginProjectWorkspaceOwner,
 } from "@crewon/domain";
 import { PROJECT_CONVERSATIONS_METHOD_ACTIONS } from "@crewon/contracts/project-conversations";
@@ -34,6 +33,7 @@ const sources = new WeakMap<object, Qualified>();
 /** Private issuer; no caller ownership, root, workspace ID, adoption or Run grant. */
 export async function preparePluginProjectWorkspace(
   input: Readonly<{
+    digester: ProjectConversationApplicationDependencies["digester"];
     context: PluginUiActionContext;
     authority: ProjectConversationCommitAuthority;
     projects: ProjectConversationApplicationDependencies["projects"];
@@ -56,7 +56,7 @@ export async function preparePluginProjectWorkspace(
     ...source.scope,
     projectId: request.projectId,
   });
-  const expectedWorkspaceId = `workspace-project-${createHash("sha256").update(pluginProjectWorkspaceIdentityInput(owner)).digest("hex")}`;
+  const expectedWorkspaceId = pluginProjectWorkspaceId(owner, input.digester);
   if (
     request.workspaceId !== null &&
     request.workspaceId !== expectedWorkspaceId

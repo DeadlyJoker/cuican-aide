@@ -1,8 +1,5 @@
-import { createHash } from "node:crypto";
-import {
-  parsePluginProjectWorkspaceOwner,
-  pluginProjectWorkspaceIdentityInput,
-} from "@crewon/domain";
+import { pluginProjectWorkspaceId } from "./plugin-project-workspace-identity.ts";
+import { parsePluginProjectWorkspaceOwner } from "@crewon/domain";
 import {
   PROJECT_WORKSPACE_TARGET_ACTION,
   parseProjectWorkspaceTargetRequest,
@@ -25,6 +22,7 @@ import type { ProjectConversationApplicationDependencies } from "./project-conve
 /** Identification through the same original Store. No namespace, directory, Thread or execution is created. */
 export async function resolvePluginProjectWorkspaceTarget(
   input: Readonly<{
+    digester: ProjectConversationApplicationDependencies["digester"];
     context: PluginUiActionContext;
     authority: ProjectConversationCommitAuthority;
     projects: ProjectConversationApplicationDependencies["projects"];
@@ -71,7 +69,7 @@ export async function resolvePluginProjectWorkspaceTarget(
   return parseProjectWorkspaceTargetResponse(
     {
       projectId: request.projectId,
-      workspaceId: `workspace-project-${createHash("sha256").update(pluginProjectWorkspaceIdentityInput(owner)).digest("hex")}`,
+      workspaceId: pluginProjectWorkspaceId(owner, input.digester),
     },
     request,
   );

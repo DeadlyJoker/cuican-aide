@@ -45,6 +45,18 @@ export function isTestSource(file: string): boolean {
   );
 }
 
+/** Renderer code uses public package entrypoints; sibling host/dev source stays outside its relative graph. */
+export function rendererImportEscapesSource(
+  sourceDirectory: string,
+  file: string,
+  specifier: string,
+): boolean {
+  if (!specifier.startsWith(".")) return false;
+  const target = path.resolve(path.dirname(file), specifier);
+  const root = path.resolve(sourceDirectory);
+  return target !== root && !target.startsWith(root + path.sep);
+}
+
 export function isForbiddenRendererImport(specifier: string): boolean {
   return [
     "node:",

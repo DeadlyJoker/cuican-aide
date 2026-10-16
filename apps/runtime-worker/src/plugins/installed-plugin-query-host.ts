@@ -252,6 +252,7 @@ export class InstalledPluginQueryHost implements PluginQueryHostPort {
     if (!same(actual, input.source))
       throw new Error("installed_plugin_query_source_changed");
     const composition = await readInstalledPluginRunComposition({
+      digester,
       binding: actual.binding,
       admission: actual.admission,
       compositions: d.compositions,

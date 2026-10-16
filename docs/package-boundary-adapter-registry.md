@@ -75,3 +75,15 @@ Worker 原先通过跨应用相对路径直接加载 Control 的 `pim-sandbox-cl
 `node:path` 仅许可给 `device-dispatch/src/pim-sandbox-client.ts`，移除 Control 旧文件的对应例外。Control 登记对 Device Dispatch 的运行时依赖。既有沙箱测试继续覆盖响应体上限、取消、未知执行结果、写入串行及清理失败；不放开 Renderer 权限。
 
 两个服务增加 `typecheck:production`，用于隔离生产代码的本地检查。原 `typecheck` 与 CI 完整检查仍包含全部测试。新增解析 TypeScript 实际依赖图的边界测试，防止 `exclude` 下的测试辅助或其他应用通过传递导入重新进入生产检查。
+
+## 架构扫描欠账修复（2026-10-16）
+
+本批按职责修复基础提交上已复现的五类失败，没有移除或放宽原失败断言：
+
+- Vite 账号代理从 Renderer `src/lib/dev` 移至 `dev/`，只由 Vite 配置和代理测试引用。新增源目录逃逸检查，Renderer 相对导入不能跨入 dev、Electron、其他应用或名字相近的兄弟目录；公开包入口仍按原规则使用。
+- `project-run-owned-fixture.ts` 改为明确的 `.test-support.ts`，三个既有测试同步引用；没有把生产能力改名藏入测试。
+- SQLite 到 PostgreSQL 的物理快照迁移迁至 Store 的明确子入口，Control 旧路径保留兼容重导出。实现逐字节保留。文件读取、SQLite 与 PostgreSQL 能力归属 Store，不为整个 Control 开放这些能力。
+- 四个 Application 身份与回执证明模块改用已有 `ContentDigester` 端口，复用宿主已捕获的摘要实现。工作空间 ID 集中推导，保持原八字段顺序、SHA-256 与持久标识；拒绝错误摘要格式。私有包内调用签名同步更新，无 HTTP、事件或持久形状变化。未新增 Application Node 权限。
+- 登记已存在的独立 `plugin-tools` 工具，仅 CLI 能访问原 Host 的 package-snapshot 子入口，仅 scaffold 能写新目录。Store 的配置写入、注册表、分配日志和 SQLite 提示各自登记精确 fs/path 权限；Plugin Host 的组合发布与受限租借，以及 Control / Worker 的组合装配文件逐项登记现有 Host 入口。类型投影不会因此获得任意文件装载权；邻近文件、嵌套路径和未登记子入口继续由原反向测试拒绝。
+
+验证：架构与实际生产类型图 37 项通过；身份、原回执、Run 上下文、SQLite 项目注册与发现 38 项通过；组合 Run、查询宿主及重命名夹具的真实调用 12 项通过；代理 16 项通过；打包后的独立 CLI 校验及 init/升级/回滚/冷恢复 2 项通过。PostgreSQL 等前置条件不足的测试共 26 项保持跳过，不视为验收。类型检查覆盖 Control、Worker、Application、Store、Test Contracts 及 UI/Electron。完整迁移到真实 PostgreSQL 与安装版 App 验收仍未进行。

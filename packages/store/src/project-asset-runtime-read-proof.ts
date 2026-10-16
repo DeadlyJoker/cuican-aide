@@ -211,7 +211,7 @@ function records(
     s.admission,
     s.receipt,
     null,
-    denied,
+    { fail: denied, digester: creativeStoreDigester },
   );
   assertPluginTaskRunSnapshot(run, binding, created, denied);
   return receipt;

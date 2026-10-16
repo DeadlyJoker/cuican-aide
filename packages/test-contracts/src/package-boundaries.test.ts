@@ -22,6 +22,7 @@ import {
   isForbiddenRendererImport,
   isTestSource,
   rendererTestSourceDependencies,
+  rendererImportEscapesSource,
 } from "./package-boundary-imports.ts";
 
 test("every architecture package has an explicit dependency boundary", () => {
@@ -530,19 +531,54 @@ test("default Direct Responses path remains removable from OpenAI SDK packages",
 });
 
 test("React renderer cannot import server, store or Node runtime modules", () => {
-  const violations = sourceFiles(
-    path.join(repositoryRoot, "apps", "crewon-ui", "src"),
-  ).flatMap((file) => {
+  const rendererDirectory = path.join(
+    repositoryRoot,
+    "apps",
+    "crewon-ui",
+    "src",
+  );
+  const violations = sourceFiles(rendererDirectory).flatMap((file) => {
     if (isTestSource(file)) {
       return [];
     }
     return importSpecifiers(readFileSync(file, "utf8"))
-      .filter(isForbiddenRendererImport)
+      .filter(
+        (specifier) =>
+          isForbiddenRendererImport(specifier) ||
+          rendererImportEscapesSource(rendererDirectory, file, specifier),
+      )
       .map(
         (specifier) => `${path.relative(repositoryRoot, file)} -> ${specifier}`,
       );
   });
   assert.deepEqual(violations, []);
+});
+
+test("renderer source cannot reach sibling dev/host modules through relative imports", () => {
+  const source = path.join(repositoryRoot, "apps", "crewon-ui", "src");
+  const file = path.join(source, "lib", "entry.ts");
+  for (const specifier of [
+    "../../dev/proxy.ts",
+    "../../electron/main.ts",
+    "../../src-other/hidden.ts",
+    "../../../../control-api/src/main.ts",
+  ])
+    assert.equal(
+      rendererImportEscapesSource(source, file, specifier),
+      true,
+      specifier,
+    );
+  for (const specifier of [
+    "../components/Panel.tsx",
+    "./local",
+    "@crewon/contracts",
+    "../styles.css",
+  ])
+    assert.equal(
+      rendererImportEscapesSource(source, file, specifier),
+      false,
+      specifier,
+    );
 });
 
 test("production renderer entrypoint cannot reach Node-enabled test fixtures", () => {

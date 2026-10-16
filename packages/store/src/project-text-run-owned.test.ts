@@ -2,7 +2,7 @@ import assert from "node:assert/strict";
 import test from "node:test";
 import { issuePluginProjectTextRunMutationReadScope } from "@crewon/application/host-project-workspaces";
 import { outlineToolFixture } from "./project-outline-run-commit.test-support.ts";
-import { projectRunOwnedFixture } from "./project-run-owned-fixture.ts";
+import { projectRunOwnedFixture } from "./project-run-owned.test-support.ts";
 
 for (const backend of ["sqlite", "postgres"] as const) {
   const options = {

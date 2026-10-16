@@ -18,7 +18,7 @@ import {
   type Server as TcpServer,
   type Socket,
 } from "node:net";
-import { createAgentPlatformDevProxy } from "../src/lib/dev/agentPlatformDevProxy.ts";
+import { createAgentPlatformDevProxy } from "../dev/agentPlatformDevProxy.ts";
 import {
   PROXY_TLS_CERT,
   PROXY_TLS_KEY,

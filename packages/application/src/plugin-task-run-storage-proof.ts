@@ -1,4 +1,4 @@
-import { createHash } from "node:crypto";
+import type { ContentDigester } from "./application-runtime-ports.ts";
 import type { CommitExtensionTurnResult } from "./extension-store-port.ts";
 import {
   assertPluginTaskFunding,
@@ -11,19 +11,18 @@ import {
   type RunState,
 } from "@crewon/domain";
 
-const digester = {
-  sha256: (input: string) =>
-    `sha256:${createHash("sha256").update(input).digest("hex")}`,
-};
-
 export function assertPluginTaskRunReceipt(
   input: CommitExtensionTurnResult,
   binding: ExtensionRunBinding,
   admission: PluginTaskAdmission,
   receipt: { actorId: string; idempotencyKey: string; requestDigest: string },
   query: PluginQueryTaskAdmission | null,
-  fail: (code: string) => never,
+  verification: Readonly<{
+    digester: ContentDigester;
+    fail(code: string): never;
+  }>,
 ): RunState {
+  const { digester, fail } = verification;
   // The same bounded, accessor-free Domain JSON capture used by v0 config/binding parsing.
   const saved = JSON.parse(
     extensionCanonicalJson(input),

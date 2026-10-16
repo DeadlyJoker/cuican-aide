@@ -10,7 +10,8 @@
     "./host-workspace-management": "./src/host-workspace-management.ts",
     "./sqlite-run-store": "./src/sqlite-run-store.ts",
     "./sqlite-availability": "./src/sqlite-availability.ts",
-    "./filesystem-storage-admission": "./src/filesystem-storage-admission.ts"
+    "./filesystem-storage-admission": "./src/filesystem-storage-admission.ts",
+    "./control-snapshot-postgres-migration": "./src/control-snapshot-postgres-migration.ts"
   },
   "scripts": {
     "test": "node --experimental-strip-types --test src/*.test.ts",

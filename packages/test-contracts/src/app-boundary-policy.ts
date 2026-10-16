@@ -92,6 +92,18 @@ export const deviceGatewayBoundary = {
 } as const;
 
 const controlAdapterImports = {
+  "production-project-workspace-provisioning.ts": ["node:fs", "node:path"],
+  "desktop-plugin-composition-metadata-owner.ts": ["@crewon/plugin-host"],
+  "desktop-plugin-composition-status-capture.ts": ["@crewon/plugin-host"],
+  "desktop-plugin-composition-status-owner.ts": ["@crewon/plugin-host"],
+  "desktop-plugin-execution-service-owner.ts": ["@crewon/plugin-host"],
+  "desktop-plugin-installation-host-policy.ts": ["@crewon/plugin-host"],
+  "desktop-plugin-instance-composition-owner.ts": ["@crewon/plugin-host"],
+  "desktop-plugin-node-composition-projection.ts": ["@crewon/plugin-host"],
+  "desktop-plugin-profile-recovery.ts": ["@crewon/plugin-host"],
+  "desktop-plugin-task-service-binding.ts": ["@crewon/plugin-host"],
+  "desktop-plugin-ui-package-port.ts": ["@crewon/plugin-host"],
+  "installed-plugin-task-runtime-core-contract.ts": ["@crewon/plugin-host"],
   "creative-project-plugin-ui-composition.ts": ["@crewon/plugin-host"],
   "desktop-installed-plugin-activation-environment.ts": [
     "node:fs",
@@ -274,6 +286,14 @@ const controlAdapterImports = {
 } as const;
 
 const workerAdapterImports = {
+  "plugins/installed-plugin-composition-runtime-owner.ts": [
+    "@crewon/plugin-host",
+  ],
+  "plugins/installed-plugin-runtime-host-services.ts": ["@crewon/plugin-host"],
+  "plugins/installed-plugin-runtime-resolver-dependencies.ts": [
+    "@crewon/plugin-host",
+  ],
+  "plugins/installed-plugin-runtime-resolver-state.ts": ["@crewon/plugin-host"],
   "comfyui-material-upload.ts": [
     "@crewon/media-runtime/comfyui-material-upload",
   ],
@@ -299,6 +319,7 @@ const workerAdapterImports = {
   "plugins/installed-plugin-native-authority.ts": ["@crewon/plugin-sdk/node"],
   "plugins/installed-plugin-native-candidate-state.ts": ["@crewon/plugin-host"],
   "plugins/installed-plugin-native-worker-composition.ts": [
+    "@crewon/plugin-host",
     "@crewon/media-runtime/desktop-project-material-archive",
     "@crewon/media-runtime/desktop-native-network-dns",
     "@crewon/plugin-sdk/node",

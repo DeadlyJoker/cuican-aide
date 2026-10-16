@@ -3,7 +3,7 @@ import test from "node:test";
 import type { ProjectStageRunAdmission } from "@crewon/domain";
 import { projectToolsOwnerFixture } from "./project-tools-service-owner.test-support.ts";
 import { conversationFixture } from "../../../packages/store/src/project-conversation-store.test-support.ts";
-import { projectRunOwnedFixture } from "../../../packages/store/src/project-run-owned-fixture.ts";
+import { projectRunOwnedFixture } from "../../../packages/store/src/project-run-owned.test-support.ts";
 import { projectToolBoundReadServices } from "./plugins/project-tool-bound-read-services.ts";
 
 for (const backend of ["sqlite", "postgres"] as const) {

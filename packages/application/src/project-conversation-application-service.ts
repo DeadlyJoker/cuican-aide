@@ -116,6 +116,7 @@ export class ProjectConversationApplicationService {
   ) {
     return projectConversationCall(() =>
       resolvePluginProjectWorkspaceTarget({
+        digester: this.#d.digester,
         context,
         authority,
         projects: this.#d.projects,
@@ -130,6 +131,7 @@ export class ProjectConversationApplicationService {
   ) {
     return projectConversationCall(() =>
       preparePluginProjectWorkspace({
+        digester: this.#d.digester,
         context,
         authority,
         projects: this.#d.projects,

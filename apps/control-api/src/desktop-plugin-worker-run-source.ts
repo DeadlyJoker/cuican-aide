@@ -244,13 +244,14 @@ export class DesktopPluginWorkerRunSource {
       admission,
       receipt,
       query,
-      unavailable,
+      { fail: unavailable, digester: this.#digester },
     );
     const run = await this.#store.loadRunInSpace(locator);
     check();
     if (!run) unavailable("desktop_worker_run_missing");
     assertPluginTaskRunSnapshot(run, binding, initial, unavailable);
     const composition = await readPluginTaskRunComposition({
+      digester: this.#digester,
       binding,
       admission,
       query,

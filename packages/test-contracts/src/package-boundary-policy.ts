@@ -215,6 +215,16 @@ const packageBoundaries: readonly Boundary[] = [
     // Storage owns protocol validation, bounded disk probes and physical codecs.
     allowedFileImports: {
       "assistant-sample-continuation.ts": ["node:util"],
+      "control-snapshot-postgres-migration.ts": [
+        "node:fs",
+        "node:fs/promises",
+        "node:path",
+      ],
+      "host-config-file.ts": ["node:fs", "node:path"],
+      "host-workspace-project-allocation-journal.ts": ["node:fs", "node:path"],
+      "host-workspace-project-allocator.ts": ["node:fs", "node:path"],
+      "host-workspace-registry.ts": ["node:fs", "node:path"],
+      "sqlite-availability.ts": ["node:fs", "node:path"],
       "filesystem-storage-admission.ts": ["node:fs/promises", "node:path"],
       "extension-recovery-reader.ts": ["node:fs", "node:path"],
       "in-memory-thread-message-window.ts": ["node:buffer"],
@@ -228,6 +238,15 @@ const packageBoundaries: readonly Boundary[] = [
     packageName: "tool-broker",
     allowedBareImports: ["node:crypto", "@crewon/contracts"],
     allowedRuntimeDependencies: ["@crewon/contracts"],
+  },
+  {
+    packageName: "plugin-tools",
+    allowedBareImports: [],
+    allowedRuntimeDependencies: [],
+    allowedFileImports: {
+      "cli.ts": ["@crewon/plugin-host/package-snapshot"],
+      "scaffold.ts": ["node:fs/promises", "node:path"],
+    },
   },
   {
     packageName: "test-contracts",
@@ -306,6 +325,14 @@ const approvedAdapterImports: Readonly<
     "project-text-plan-authority.ts": ["node:crypto"],
   },
   "plugin-host": {
+    "installed-plugin-composition-publisher.ts": [
+      "@crewon/application",
+      "@crewon/domain",
+    ],
+    "plugin-project-execution-borrower.ts": [
+      "@crewon/application",
+      "@crewon/domain",
+    ],
     "installed-plugin-business-registration.ts": [
       "@crewon/application",
       "@crewon/domain",

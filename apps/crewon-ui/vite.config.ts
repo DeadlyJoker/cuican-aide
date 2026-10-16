@@ -2,7 +2,7 @@ import { defineConfig, loadEnv, type Plugin } from "vite";
 import react from "@vitejs/plugin-react";
 import tailwindcss from "@tailwindcss/vite";
 import { normalizePluginUiViteImportPath } from "./src/lib/plugins/pluginUiViteImportPath";
-import { createAgentPlatformDevProxy } from "./src/lib/dev/agentPlatformDevProxy";
+import { createAgentPlatformDevProxy } from "./dev/agentPlatformDevProxy";
 // @ts-expect-error Vite runs this file in Node while the browser tsconfig excludes Node globals.
 import { writeFile } from "node:fs/promises";
 
