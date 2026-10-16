@@ -12,6 +12,52 @@ import {
   ControlApiProtocolError,
 } from "./control-api-client.ts";
 
+test("Workflow capability uses authenticated bounded reads and rejects corrupt or canceled responses without starting work", async () => {
+  let calls = 0;
+  const controller = new AbortController();
+  let body: unknown = {
+    version: "v1",
+    admission: false,
+    snapshots: true,
+    humanGates: false,
+  };
+  const client = new ControlApiClient({
+    baseUrl: "https://control.example",
+    accessToken: "token",
+    fetch: async (url, init) => {
+      calls++;
+      assert.equal(
+        String(url),
+        "https://control.example/api/v1/capabilities/workflow-execution-v1",
+      );
+      assert.equal(init!.method, "GET");
+      assert.equal(
+        new Headers(init!.headers).get("authorization"),
+        "Bearer token",
+      );
+      return Response.json(body);
+    },
+  });
+  assert.deepEqual(await client.getWorkflowExecutionCapability(), body);
+  body = {
+    version: "v2",
+    admission: true,
+    snapshots: false,
+    humanGates: false,
+  };
+  await assert.rejects(
+    client.getWorkflowExecutionCapability(),
+    ControlApiProtocolError,
+  );
+  body = { padding: "x".repeat(2048) };
+  await assert.rejects(client.getWorkflowExecutionCapability());
+  controller.abort();
+  await assert.rejects(
+    client.getWorkflowExecutionCapability({ signal: controller.signal }),
+  );
+  assert.equal(calls, 3);
+});
+
 test("Workflow client binds snapshot and gate requests, credentials, CSRF and cancellation without an invented retry key", async () => {
   const calls: { url: string; init: RequestInit }[] = [];
   const controller = new AbortController();

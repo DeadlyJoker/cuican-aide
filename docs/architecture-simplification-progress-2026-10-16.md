@@ -275,3 +275,17 @@ PG 实验调度已具备入库、交接、结果结算、停放、人工审批�
 本批最终验证：相关 PostgreSQL/SQLite/Worker/HTTP/发布/队列与迁移回归同一次运行 617 项通过、无跳过；最终源码的部署策略、正式工厂、启动清理和活动 Store 重开专项 18 项通过；既有项目、插件实例和 Extension 装配 34 项通过。架构边界及实际生产类型图 37 项通过，Application、Store、Runtime Worker、Control API 原完整类型检查通过。新增测试最初使用了超过项目 ES2022 类型库的 Promise API，已改为普通 Promise 屏障并完成 Control 完整类型检查和最终专项，没有提高编译目标。
 
 仓库 TypeScript 边界、格式和 diff 检查通过。独立测试库的业务 schema 与其他客户端归零后，已关闭本批启动的 PostgreSQL 并确认无运行服务；没有访问用户数据库。重开锁修复单独提交为 `be01885ed`，部署接线提交承接该修复，均保留在 `codex/runtime-concurrency-result-streaming`，未推送。
+
+## 第十六批：真实 Main 配置入口与 Workflow 能力发现
+
+上一批接线提交为 `25b6d1abd`。本批将同一份 `CREWON_WORKFLOW_DEPLOYMENT_CONFIG_PATH` 接入原 Control/Worker Main 的 standalone PostgreSQL 路径。共用现有 AgentVersion 包的显式 Node 子入口读取有界私有配置，Application 继续负责策略校验；保持默认关闭，不增加运行时、依赖包或通用配置框架。配置在资源启动前捕获并冻结；拒绝公开文件、软/硬链接、非法 UTF-8、过大输入和非规范路径。production 的请求级身份无法用静态 issuer 替代，因此该模式与 SQLite 均在文件读取和资源分配前拒绝声明的配置，不静默降级。
+
+新增经过原身份认证的只读能力查询及 SDK 方法，分别声明本实例已装配的 admission、snapshots、humanGates，返回 no-store；响应严格验证且限制 1 KiB。这个提示不宣称 Worker 在线、请求获准或整个集群已升级，也不允许在未知写入结果后回退到 renderer 重发。OpenAPI 与生成类型同步，原请求形状、错误、SSE 和回执行为保持。
+
+已实测原 Release CLI、多 Agent 发布、原 Control Main 和原 Worker Main 的完整独立进程链路：两个会话入库后关闭 Control，两槽模型调用重叠并推进到各自人工门；关闭并重启 Worker、重开 Control，相同键恢复原任务，批准后各执行一次独立 Verifier，唯一回复回到正确会话，终态 SSE 可续读。模型是明确的本机 HTTP SSE fixture；没有替换工厂、调度器、Store、鉴权或发布应用服务，也没有使用真实供应商和用户数据库。初始夹具误用同一 Agent 作为 Verifier，被现有独立性校验拒绝后改为原 CLI 的多 Agent 发布，没有放宽校验。
+
+前端执行权仍未切换。下一步围绕新能力查询迁移 Workflow 提交、状态订阅及审批，保留旧记录和未知写入结果恢复；桌面 SQLite 与生产请求级授权须分别提供对应接线，不能宣称当前入口已覆盖这两个部署面。Team、工具资源作用域、生命周期、自主子 Agent 和安装式插件专项继续保留在原目标内。
+
+本批最终源码专项 19 项通过，包含真实 CLI/Control/Worker 重启、发布/审批/取消边界、共享配置及 SDK 校验，无跳过；既有生产 Main 前置校验、Extension 装配及 Worker 环境 27 项通过。Contracts 全量 755、Control Client 全量 273、AgentVersion 全量 146 项通过，生成类型与许可证检查通过；OpenAPI 和架构/生产类型图检查 56 项通过，其中架构部分 37 项。Contracts、AgentVersion、Control Client、Runtime Worker、Control API 完整类型检查通过；最终新增进程夹具和 Client 委托整理后再次完成 Control/Client 完整类型检查。没有改 UI 或启用用户部署，不宣称安装版可见 UI 验收。
+
+仓库 TypeScript 入口、格式和 diff 检查通过。测试子进程均已退出，独立库 schema 与其他客户端归零后，已关闭本批 PostgreSQL 并确认无运行服务。改动提交在原 `codex/runtime-concurrency-result-streaming` 分支，未推送。

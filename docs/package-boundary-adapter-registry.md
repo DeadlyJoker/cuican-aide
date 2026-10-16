@@ -2,6 +2,10 @@
 
 2026-10-08。本次登记补齐现有实现与架构边界检查之间的缺口，不新增运行时、授权来源或产品入口。登记以明确的源文件和完整 import specifier 为单位；包默认限制、公开 SDK 和 React 渲染端限制继续保留。登记不能代替业务权限、安装选择、Run 资格、实际字节核验或真实外部服务验收。
 
+## 2026-10-16 Workflow 部署文件入口
+
+`@crewon/agent-version/workflow-deployment-config` 是显式 Node 子入口，供 Control 与 Worker Main 共用同一份部署数据捕获逻辑；配置的语义校验仍在 Application。只给 `workflow-deployment-config.ts` 登记 `node:fs` 和 `node:path`，用于有界私有文件快照，不向整个包开放 Node，也不从编译器根入口重导出该适配器。不增加包依赖、跨应用生产导入或第二套配置框架。该文件不安装 Agent、不生成执行授权，也不能替代实际发布物、当前身份和事务检查。
+
 ## 共享媒体包
 
 [共享媒体生成命令的模块边界决定](./shared-project-media-commands.md#模块边界决定)已经明确：Control 与 Worker 复用私有 `@crewon/media-runtime`，不能让一个 app 生产依赖另一个 app。包使用现有 TypeScript/Node 工具链，依赖 Application、Artifacts、Domain 和 Store。素材协调归共享包，原模型、Tool、Run 调度和恢复仍归 Worker。[Worker 组合协议](./project-media-worker-composition-protocol.md)保留旧模块重导出与共享实现的身份。

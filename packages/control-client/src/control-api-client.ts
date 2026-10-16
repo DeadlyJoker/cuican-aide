@@ -5,6 +5,7 @@ import type {
   WorkflowHumanGateResponse,
   WorkflowHumanGateMutationResponse,
   DecideWorkflowHumanGateRequest,
+  WorkflowExecutionCapability,
 } from "@crewon/contracts";
 import {
   parseThreadTranscriptSnapshotResponse,
@@ -1320,6 +1321,12 @@ export class ControlApiClient {
       idempotencyKey,
       expectedStatuses: [200, 201],
     });
+  }
+
+  getWorkflowExecutionCapability(
+    options: ControlApiRequestOptions = {},
+  ): Promise<WorkflowExecutionCapability> {
+    return this.#workflowClient().getWorkflowExecutionCapability(options);
   }
 
   getWorkflowRunSnapshot(

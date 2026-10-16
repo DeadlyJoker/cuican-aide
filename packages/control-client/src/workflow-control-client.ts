@@ -7,6 +7,8 @@ import {
   MAX_WORKFLOW_RUN_SNAPSHOT_BYTES,
   MAX_WORKFLOW_GATE_RESPONSE_BYTES,
   parseRunId,
+  parseWorkflowExecutionCapability,
+  type WorkflowExecutionCapability,
   type WorkflowGateLocator,
   type WorkflowRunSnapshotResponse,
   type WorkflowHumanGateResponse,
@@ -32,6 +34,25 @@ export class WorkflowControlClient {
   readonly #request: WorkflowJsonRequest;
   constructor(request: WorkflowJsonRequest) {
     this.#request = request;
+  }
+  async getWorkflowExecutionCapability(
+    options: ControlApiRequestOptions = {},
+  ): Promise<WorkflowExecutionCapability> {
+    options.signal?.throwIfAborted();
+    const value = await this.#request(
+      "GET",
+      "/api/v1/capabilities/workflow-execution-v1",
+      null,
+      { ...options, expectedStatuses: [200], maximumResponseBytes: 1024 },
+    );
+    options.signal?.throwIfAborted();
+    try {
+      return parseWorkflowExecutionCapability(value);
+    } catch {
+      throw new ControlApiProtocolError(
+        "control_client_workflow_capability_invalid",
+      );
+    }
   }
   async getWorkflowRunSnapshot(
     runId: string,

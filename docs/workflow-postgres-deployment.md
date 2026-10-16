@@ -1,6 +1,32 @@
 # PostgreSQL Workflow 部署接线
 
-当前能力位于 `createPostgresControlApi` 和 `createPostgresRuntimeWorker` 工厂。可信宿主可以通过 `workflow` 配置显式装配既有持久调度器；默认不装配。命令行环境变量入口和前端 Workflow/Team 迁移尚未完成，不能将这份工厂接线说明视为产品已上线。
+当前能力位于 `createPostgresControlApi` 和 `createPostgresRuntimeWorker` 工厂，并已接入两端的 standalone PostgreSQL Main。可信宿主可以通过 `workflow` 配置显式装配既有持久调度器；默认不装配。生产模式的请求级身份接线和前端 Workflow/Team 迁移尚未完成，不能据此宣称整套产品已经上线。
+
+## Main 入口
+
+先通过原 Release CLI 发布真实 AgentVersion/部署物并激活 Release，再把上文所述配置保存为 JSON。Control 和 Worker 均使用同一个环境变量：
+
+```bash
+export CREWON_WORKFLOW_DEPLOYMENT_CONFIG_PATH=/absolute/path/workflow.json
+```
+
+JSON 的形状与下方 `workflow` 对象一致，不包含 TypeScript 的 `satisfies`。保留各进程原有数据库、模型、身份和 Artifact 配置。该入口只接受 `CREWON_CONTROL_SECURITY_MODE=standalone` 且配置 PostgreSQL URL 的模式；production 和 SQLite 在读取文件及分配资源前拒绝，不会默默忽略声明的配置。
+
+文件必须是当前用户拥有的私有普通文件，路径为规范绝对路径，不能使用软/硬链接；文件权限不能开放给组或其他用户，推荐 `0600`。读取使用同一文件描述符，并核对读取前后的身份、尺寸及时间元数据，最多 256 KiB，严格解码 UTF-8。这个私有文件入口目前支持 POSIX，Windows 显式配置会拒绝。两个进程各自在启动时捕获一次并冻结，不热重载；策略变更应协调重启两端。
+
+生产模式原本使用请求级身份及外部授权，当前静态 issuer 不能代替它。后续需要按生产身份和审批授权边界接入，不通过 ambient 配置降级成 standalone。
+
+## 客户端能力发现
+
+`GET /api/v1/capabilities/workflow-execution-v1` 要求原有身份认证并返回 `Cache-Control: no-store`。正式 SDK 为 `getWorkflowExecutionCapability()`：
+
+```json
+{ "version": "v1", "admission": true, "snapshots": true, "humanGates": true }
+```
+
+三个标记分别表示本实例是否装配入库、快照和人工门服务。未启用执行的 PostgreSQL 实例仍可能提供快照，因此不能只看一个接口是否存在。标记不包含配置、身份或授权信息，也不证明 Worker 在线、发布就绪、请求获准或集群所有节点已升级。实际启动仍执行原鉴权、发布策略和幂等校验。
+
+客户端按具体操作检查所需能力；查询失败或响应未知版本不能当成执行许可。请求一旦可能已被后台受理，就应按原键和回执恢复，不能切换到前端重新执行。SDK 验证响应形状、1 KiB 字节预算和取消，不自动重试或选择执行引擎。
 
 ## 配置与已有运行时的关系
 
@@ -59,4 +85,6 @@ const worker = await createPostgresRuntimeWorker({
 
 集成测试使用本机独立 PostgreSQL、正式 Control/Worker 工厂、实际 AgentVersion 编译器与 Release 激活、真实 HTTP/SDK/SSE 和现有授权实现。覆盖单槽跨人工审批与重启恢复、双会话模型调用重叠与各自结果回流、发布切换互斥、入库拒绝原子回滚、审批身份变更和撤权后取消。
 
-模型传输为显式合成流，未调用真实供应商，也未验收安装版账号和可见 UI。后续需要补齐产品配置入口、Workflow 前端接管及旧执行链退役，再让 Team 复用同一父子任务机制。资源隔离、生命周期收敛和自主子 Agent 限额仍是后续阶段。
+另有真实进程验证：原 Release CLI 发布生产者和独立 Verifier，原 Control Main 通过 HTTP 入库后关闭，原 Worker Main 的两个槽继续执行到人工门；重启 Control/Worker 后，以相同键恢复入库、审批、完成，并从各自 transcript 与终态 SSE 读取最终结果。所有进程只注入命名 fixture 环境，不继承调用者凭据。
+
+模型响应来自明确的本机 HTTP SSE fixture，未调用真实供应商，也未验收安装版账号和可见 UI。后续需要 Workflow 前端接管及旧执行链退役，再让 Team 复用同一父子任务机制；生产请求级授权、SQLite/桌面策略入口、资源隔离、生命周期收敛和自主子 Agent 限额仍是后续阶段。

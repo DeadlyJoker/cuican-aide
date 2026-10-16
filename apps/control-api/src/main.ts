@@ -1,3 +1,4 @@
+import { loadWorkflowDeploymentEnvironment } from "@crewon/agent-version/workflow-deployment-config";
 import { DEFAULT_OUTBOX_RETENTION } from "./outbox-retention-maintenance.ts";
 import { desktopProjectMaterialStorageFromEnvironment } from "@crewon/media-runtime/desktop-project-material-archive";
 import { installProcessShutdown } from "@crewon/process-lifecycle";
@@ -59,6 +60,7 @@ import { watchSqliteOutboxAvailability } from "./sqlite-outbox-wakeup.ts";
 const securityMode = parseSecurityMode(
   process.env.CREWON_CONTROL_SECURITY_MODE ?? "standalone",
 );
+const workflow = loadWorkflowDeploymentEnvironment(process.env, securityMode);
 const desktopTaskEnvironment = snapshotDesktopInstalledPluginTaskEnvironment(
   process.env,
 );
@@ -407,6 +409,7 @@ try {
     if (connectionString !== undefined && connectionString.length > 0) {
       runtime = await createPostgresControlApi({
         ...standaloneConfig,
+        workflow,
         connectionString,
         ...(extensionEnvironment === undefined
           ? {}

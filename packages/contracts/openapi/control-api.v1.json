@@ -18,6 +18,33 @@
     }
   ],
   "paths": {
+    "/api/v1/capabilities/workflow-execution-v1": {
+      "get": {
+        "operationId": "getWorkflowExecutionCapabilityV1",
+        "responses": {
+          "200": {
+            "description": "Authenticated Workflow API capabilities",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/WorkflowExecutionCapability"
+                }
+              }
+            }
+          },
+          "401": {
+            "$ref": "#/components/responses/Error"
+          },
+          "403": {
+            "$ref": "#/components/responses/Error"
+          },
+          "500": {
+            "$ref": "#/components/responses/Error"
+          }
+        },
+        "description": "Read-only instance support hint. This does not prove Worker liveness, deployment readiness, permission or fleet-wide support. Clients must not fall back to renderer execution after a possibly accepted write."
+      }
+    },
     "/api/v1/capabilities/execution-intent-v1": {
       "get": {
         "operationId": "getExecutionIntentCapabilityV1",
@@ -6974,6 +7001,34 @@
       }
     },
     "schemas": {
+      "WorkflowExecutionCapability": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": [
+          "version",
+          "admission",
+          "snapshots",
+          "humanGates"
+        ],
+        "properties": {
+          "version": {
+            "type": "string",
+            "enum": [
+              "v1"
+            ]
+          },
+          "admission": {
+            "type": "boolean",
+            "description": "Durable admission API is composed; not Worker liveness or an execution grant."
+          },
+          "snapshots": {
+            "type": "boolean"
+          },
+          "humanGates": {
+            "type": "boolean"
+          }
+        }
+      },
       "OfficeMember": {
         "type": "object",
         "additionalProperties": false,

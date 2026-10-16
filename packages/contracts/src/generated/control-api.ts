@@ -1,5 +1,22 @@
 // This file is generated from openapi/control-api.v1.json. Do not edit.
 export interface paths {
+  "/api/v1/capabilities/workflow-execution-v1": {
+    parameters: {
+      query?: never;
+      header?: never;
+      path?: never;
+      cookie?: never;
+    };
+    /** @description Read-only instance support hint. This does not prove Worker liveness, deployment readiness, permission or fleet-wide support. Clients must not fall back to renderer execution after a possibly accepted write. */
+    get: operations["getWorkflowExecutionCapabilityV1"];
+    put?: never;
+    post?: never;
+    delete?: never;
+    options?: never;
+    head?: never;
+    patch?: never;
+    trace?: never;
+  };
   "/api/v1/capabilities/execution-intent-v1": {
     parameters: {
       query?: never;
@@ -1653,6 +1670,14 @@ export interface paths {
 export type webhooks = Record<string, never>;
 export interface components {
   schemas: {
+    WorkflowExecutionCapability: {
+      /** @enum {string} */
+      version: "v1";
+      /** @description Durable admission API is composed; not Worker liveness or an execution grant. */
+      admission: boolean;
+      snapshots: boolean;
+      humanGates: boolean;
+    };
     OfficeMember: {
       memberId: string;
       displayName: string;
@@ -4152,6 +4177,29 @@ export interface components {
 }
 export type $defs = Record<string, never>;
 export interface operations {
+  getWorkflowExecutionCapabilityV1: {
+    parameters: {
+      query?: never;
+      header?: never;
+      path?: never;
+      cookie?: never;
+    };
+    requestBody?: never;
+    responses: {
+      /** @description Authenticated Workflow API capabilities */
+      200: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          "application/json": components["schemas"]["WorkflowExecutionCapability"];
+        };
+      };
+      401: components["responses"]["Error"];
+      403: components["responses"]["Error"];
+      500: components["responses"]["Error"];
+    };
+  };
   getExecutionIntentCapabilityV1: {
     parameters: {
       query?: never;

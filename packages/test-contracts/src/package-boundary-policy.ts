@@ -50,6 +50,7 @@ const packageBoundaries: readonly Boundary[] = [
     allowedBareImports: ["@crewon/application", "@crewon/tool-broker"],
     // Build retention and recovery are explicit Node subpaths, not compiler dependencies.
     allowedFileImports: {
+      "workflow-deployment-config.ts": ["node:fs", "node:path"],
       "extension-build.ts": ["node:crypto", "node:fs", "node:path", "node:url"],
       "extension-build-archive.ts": [
         "node:crypto",

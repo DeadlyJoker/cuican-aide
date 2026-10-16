@@ -3,6 +3,7 @@ import { ApplicationError } from "@crewon/application";
 import type {
   WorkflowHumanGateApplicationService,
   WorkflowRunQueryService,
+  WorkflowRunApplicationService,
 } from "@crewon/application";
 import {
   parseRunId,
@@ -11,6 +12,7 @@ import {
   parseWorkflowRunSnapshotResponse,
   parseWorkflowHumanGateResponse,
   parseWorkflowHumanGateMutationResponse,
+  parseWorkflowExecutionCapability,
 } from "@crewon/contracts";
 import type { ControlApiIdentityPort } from "./control-api-ports.ts";
 import { WorkspaceControlUnavailableError } from "./control-api-errors.ts";
@@ -28,6 +30,7 @@ export type WorkflowControlServices = {
 };
 type WorkflowControlRouteDependencies = WorkflowControlServices & {
   identity: ControlApiIdentityPort;
+  workflowRuns?: Pick<WorkflowRunApplicationService, "startWorkflowRun"> | null;
   workflowGateCommitted?: () => void;
 };
 
@@ -36,6 +39,21 @@ export function registerWorkflowControlRoutes(
   app: FastifyInstance,
   dependencies: WorkflowControlRouteDependencies,
 ): void {
+  app.get(
+    "/api/v1/capabilities/workflow-execution-v1",
+    async (request, reply) => {
+      reply.header("cache-control", "no-store");
+      await dependencies.identity.resolveActor(requestContext(request));
+      const snapshots = dependencies.workflowQueries != null;
+      const humanGates = dependencies.workflowHumanGates != null;
+      return parseWorkflowExecutionCapability({
+        version: "v1",
+        admission: dependencies.workflowRuns != null,
+        snapshots,
+        humanGates,
+      });
+    },
+  );
   app.get<{ Params: { runId: string } }>(
     "/api/v1/workflow-runs/:runId",
     async (request, reply) => {

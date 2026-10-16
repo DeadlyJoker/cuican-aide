@@ -1,3 +1,4 @@
+import { loadWorkflowDeploymentEnvironment } from "@crewon/agent-version/workflow-deployment-config";
 import { RuntimeCompositionLifetime } from "./runtime-composition-lifetime.ts";
 import { installRuntimeProcessShutdown } from "./runtime-process-shutdown.ts";
 import {
@@ -81,6 +82,7 @@ const initialized = await (async () => {
     const securityMode = parseRuntimeWorkerSecurityMode(
       environment.CREWON_CONTROL_SECURITY_MODE ?? "standalone",
     );
+    const workflow = loadWorkflowDeploymentEnvironment(environment, securityMode);
     const pluginCreditSettlementConfiguration =
       loadPluginCreditSettlementWorkerConfigFromEnvironment(environment);
     const installedPluginConfigPath =
@@ -304,6 +306,7 @@ const initialized = await (async () => {
       route,
       runtimeTenantId,
       securityMode,
+      workflow,
       toolRuntime,
       transport,
     };
@@ -340,6 +343,7 @@ const {
   runtimeTenantId,
   toolRuntime,
   transport,
+  workflow,
 } = initialized;
 
 let runtime: StandaloneRuntimeWorker;
@@ -356,6 +360,7 @@ try {
           route,
         });
   const config = {
+    workflow,
     localStoragePaths:
       artifactAuthority === undefined
         ? []

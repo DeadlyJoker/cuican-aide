@@ -8,7 +8,8 @@
     "./extension-build": "./src/extension-build.ts",
     "./extension-recovery": "./src/extension-recovery.ts",
     "./runtime-bindings": "./src/runtime-binding-schema.ts",
-    "./extension-recovery-inputs": "./src/extension-recovery-inputs.ts"
+    "./extension-recovery-inputs": "./src/extension-recovery-inputs.ts",
+    "./workflow-deployment-config": "./src/workflow-deployment-config.ts"
   },
   "scripts": {
     "test": "node --experimental-strip-types --test src/*.test.ts",

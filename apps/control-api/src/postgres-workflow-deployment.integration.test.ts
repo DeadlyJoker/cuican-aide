@@ -37,6 +37,25 @@ pgTest(
   async (t) => {
     const f = await workflowDeploymentFixture(t);
     let server = await f.control();
+    assert.deepEqual(await server.client.getWorkflowExecutionCapability(), {
+      version: "v1",
+      admission: true,
+      snapshots: true,
+      humanGates: true,
+    });
+    const capability = await fetch(
+      `${server.baseUrl}/api/v1/capabilities/workflow-execution-v1`,
+      { headers: { authorization: `Bearer ${f.token}`, origin: f.origin } },
+    );
+    assert.equal(capability.headers.get("cache-control"), "no-store");
+    assert.equal(
+      (
+        await fetch(
+          `${server.baseUrl}/api/v1/capabilities/workflow-execution-v1`,
+        )
+      ).status,
+      401,
+    );
     const published = await server.client.publishWorkflowVersion(
       deploymentWorkflowSource(),
     );
@@ -548,6 +567,12 @@ pgTest(
       null,
     );
     const server = await f.control(null);
+    assert.deepEqual(await server.client.getWorkflowExecutionCapability(), {
+      version: "v1",
+      admission: false,
+      snapshots: true,
+      humanGates: false,
+    });
     const version = await server.client.publishWorkflowVersion(
       deploymentWorkflowSource(false),
     );
