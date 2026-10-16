@@ -1,3 +1,13 @@
+import {
+  prepareWorkflowControl,
+  type PreparedWorkflowControl,
+} from "./workflow-deployment-composition.ts";
+import {
+  captureWorkflowDeploymentConfiguration,
+  WorkflowRunApplicationService,
+  WorkflowHumanGateApplicationService,
+  type WorkflowDeploymentConfiguration,
+} from "@crewon/application";
 import type { WorkflowControlServices } from "./workflow-control-routes.ts";
 import { WorkflowRunQueryService } from "@crewon/application";
 import { ModelPricingApplicationService } from "@crewon/application";
@@ -129,6 +139,7 @@ type PreparedControlPlugins = {
 };
 
 type ControlApiCompositionConfig = Readonly<{
+  workflow?: WorkflowDeploymentConfiguration;
   /** Borrowed service; its owner must supply the current frozen gate policy and retain its Store. */
   workflowHumanGates?: WorkflowControlServices["workflowHumanGates"];
   desktopWorkspaceRegistryPath?: string;
@@ -215,7 +226,7 @@ export async function createStandaloneControlApiWithCreativeProjects(
   return composeStandaloneCreativeProjects({
     config: pinned,
     compose: ({ store, config: composed, projects }) =>
-      composeControlApi(store, composed, undefined, undefined, projects),
+      composeControlApi(store, composed, { projects }),
   });
 }
 
@@ -394,13 +405,15 @@ export async function createStandaloneControlApiWithPlugins(
       ],
     };
     if (pinned.extensionWorker === undefined)
-      return composeControlApi(store, composed, undefined, prepared, projects);
+      return composeControlApi(store, composed, {
+        plugins: prepared,
+        projects,
+      });
     return await composeExtensionControlApi(
       store,
       composed,
       pinned.extensionWorker,
-      prepared,
-      projects,
+      { plugins: prepared, projects },
     );
   } catch (error) {
     await closeOwners(
@@ -433,12 +446,31 @@ export async function createPostgresControlApi(
     maxPoolSize: pinned.maxPoolSize,
     statementTimeoutMs: pinned.statementTimeoutMs,
   });
+  let workflow: PreparedWorkflowControl | undefined;
+  try {
+    if (pinned.workflow !== undefined && pinned.workflowHumanGates != null)
+      throw new Error("workflow_gate_configuration_conflict");
+    workflow = await prepareWorkflowControl({
+      store,
+      configuration: pinned.workflow,
+      actor: pinned.actor,
+      defaultAgentVersionId: pinned.defaultAgentVersionId,
+    });
+  } catch (error) {
+    await closeOwners([
+      () => store.close(),
+      () => pinned.artifactStore.close(),
+    ]);
+    throw error;
+  }
   if (pinned.extensionWorker !== undefined)
-    return composeExtensionControlApi(store, pinned, pinned.extensionWorker);
+    return composeExtensionControlApi(store, pinned, pinned.extensionWorker, {
+      workflow,
+    });
   let projects: PreparedCreativeProjects | undefined;
   try {
     projects = await prepareCreativeProjects(store, pinned.creativeProjects);
-    return composeControlApi(store, pinned, undefined, undefined, projects);
+    return composeControlApi(store, pinned, { projects, workflow });
   } catch (error) {
     await closeOwners(
       [
@@ -468,6 +500,9 @@ function pinExtensionCompositionConfig<
   return Object.freeze({
     ...config,
     actor: structuredClone(config.actor),
+    ...(config.workflow === undefined
+      ? {}
+      : { workflow: captureWorkflowDeploymentConfiguration(config.workflow) }),
     allowedOrigins: [...config.allowedOrigins],
     localStoragePaths:
       config.localStoragePaths === undefined
@@ -504,13 +539,24 @@ function capturePluginQueryHost(
   });
 }
 
+type PreparedControlCapabilities = Readonly<{
+  extensions?: PreparedControlExtensions;
+  plugins?: PreparedControlPlugins;
+  projects?: PreparedCreativeProjects;
+  workflow?: PreparedWorkflowControl;
+}>;
+
 async function composeExtensionControlApi(
   store: SqliteRunStore | PostgresDomainStore,
   config: ControlApiCompositionConfig,
   worker: ExtensionWorkerConfig,
-  preparedPlugins?: PreparedControlPlugins,
-  preparedProjects?: PreparedCreativeProjects,
+  capabilities: Omit<PreparedControlCapabilities, "extensions"> = {},
 ): Promise<StandaloneControlApiRuntime> {
+  const {
+    plugins: preparedPlugins,
+    projects: preparedProjects,
+    workflow,
+  } = capabilities;
   let client: ExtensionHostRouter | null = null;
   let prepared: PreparedControlExtensions | undefined;
   try {
@@ -532,14 +578,14 @@ async function composeExtensionControlApi(
     const operations = store.externalOperationStore();
     await operations.migrate();
     prepared = { client, catalog, extensions, operations };
-    return composeControlApi(
-      store,
-      config,
-      prepared,
-      preparedPlugins,
-      preparedProjects ??
+    return composeControlApi(store, config, {
+      extensions: prepared,
+      plugins: preparedPlugins,
+      projects:
+        preparedProjects ??
         (await prepareCreativeProjects(store, config.creativeProjects)),
-    );
+      workflow,
+    });
   } catch (error) {
     const ownedCleanup =
       prepared?.failureCleanup ?? prepared?.earlyFailureCleanup?.();
@@ -563,10 +609,14 @@ async function composeExtensionControlApi(
 function composeControlApi(
   store: SqliteRunStore | PostgresDomainStore,
   config: ControlApiCompositionConfig,
-  preparedExtensions?: PreparedControlExtensions,
-  preparedPlugins?: PreparedControlPlugins,
-  preparedProjects?: PreparedCreativeProjects,
+  capabilities: PreparedControlCapabilities = {},
 ): StandaloneControlApiRuntime {
+  const {
+    extensions: preparedExtensions,
+    plugins: preparedPlugins,
+    projects: preparedProjects,
+    workflow,
+  } = capabilities;
   const storageCapacity = createLocalStorageAdmissionOwner({
     configured: config.storageAdmission,
     paths: config.localStoragePaths ?? [],
@@ -606,6 +656,8 @@ function composeControlApi(
       store,
       config.artifactRetention,
     );
+    if (config.workflow !== undefined && workflow === undefined)
+      throw new Error("workflow_deployment_requires_postgres");
     const authorization = new StandaloneAuthorization(config.actor);
     const clock = new SystemApplicationClock();
     const digester = new NodeSha256ContentDigester();
@@ -834,7 +886,20 @@ function composeControlApi(
       approvals,
       agentVersions,
       workflowVersions,
-      workflowHumanGates: config.workflowHumanGates,
+      workflowRuns:
+        workflow === undefined
+          ? undefined
+          : new WorkflowRunApplicationService({
+              store: workflow.admission,
+              authorization,
+              clock,
+              ids,
+              workflowDigester: digester,
+            }),
+      workflowHumanGates:
+        workflow === undefined
+          ? config.workflowHumanGates
+          : new WorkflowHumanGateApplicationService(workflow.composition),
       workflowQueries:
         store instanceof PostgresDomainStore
           ? new WorkflowRunQueryService({

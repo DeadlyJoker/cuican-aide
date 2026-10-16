@@ -384,3 +384,5 @@ export {
 } from "./plugin-project-foundation-scope.ts";
 
 export * from "./workflow-run-query-service.ts";
+
+export * from "./workflow-deployment-policy.ts";

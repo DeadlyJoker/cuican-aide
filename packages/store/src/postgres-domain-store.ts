@@ -1,3 +1,8 @@
+import { createPostgresWorkflowDeployment } from "./postgres-workflow-deployment.ts";
+import type {
+  WorkflowDeploymentConfiguration,
+  WorkflowAgentVersionDecoder,
+} from "@crewon/application";
 import { PostgresWorkflowRunQueryStore } from "./postgres-workflow-run-query.ts";
 import { PostgresProjectAssetV2RecoveryStore } from "./project-asset-vtwo-recovery-store.ts";
 import {
@@ -7,6 +12,7 @@ import {
 import {
   ExperimentalPostgresWorkflowRunAdmissionStore,
   type PostgresWorkflowRouteResolver,
+  type PostgresWorkflowAdmissionPolicy,
 } from "./postgres-workflow-run-admission.ts";
 import { PostgresProjectMediaInputStageStore } from "./project-media-input-stage-store.ts";
 import { PostgresProjectAssetUiIntentJournalStore } from "./project-asset-ui-intent-postgres-store.ts";
@@ -463,6 +469,44 @@ export class PostgresDomainStore
     return new PostgresWorkflowVersionStore(this.pool, this.schema, digester);
   }
 
+  /** Explicit server-owned Workflow policy; the caller must migrate before enabling HTTP or dispatch. */
+  workflowDeployment(
+    configuration: WorkflowDeploymentConfiguration,
+    decodeAgentVersion: WorkflowAgentVersionDecoder,
+    digester: WorkflowContentDigester,
+  ) {
+    this.assertOpen();
+    return createPostgresWorkflowDeployment({
+      configuration,
+      decodeAgentVersion,
+      digester,
+      migrateDefinition: () => this.workflowVersionStore(digester).migrate(),
+      reader: (client) => ({
+        loadActiveRelease: (tenantId) =>
+          loadPostgresActiveAgentVersionRelease(
+            client,
+            this.schemaSql(),
+            tenantId,
+          ),
+        loadAgentVersion: (tenantId, agentVersionId) =>
+          loadPostgresAgentVersion(client, this.schemaSql(), {
+            tenantId,
+            agentVersionId,
+          }),
+        loadDeployment: (tenantId, agentVersionId) =>
+          loadPostgresAgentVersionDeployment(client, this.schemaSql(), {
+            tenantId,
+            agentVersionId,
+          }),
+      }),
+      loadRoot: (client, authority) => this.loadRunWithin(client, authority),
+      admission: (resolver, policy) =>
+        this.experimentalWorkflowRunAdmissionStore(resolver, policy),
+      composition: (options) =>
+        this.experimentalWorkflowRunCompositionStore(options),
+    });
+  }
+
   /** Bounded read-only capability. Construction does not migrate or enable Workflow execution. */
   workflowRunReadStore(): PostgresWorkflowRunQueryStore {
     this.assertOpen();
@@ -475,6 +519,7 @@ export class PostgresDomainStore
   /** Admission foundation only. Neither construction nor migration enables a scheduler. */
   experimentalWorkflowRunAdmissionStore(
     resolveRouteWithinTransaction: PostgresWorkflowRouteResolver,
+    policy: PostgresWorkflowAdmissionPolicy = {},
   ): ExperimentalPostgresWorkflowRunAdmissionStore {
     this.assertOpen();
     return new ExperimentalPostgresWorkflowRunAdmissionStore(
@@ -485,9 +530,12 @@ export class PostgresDomainStore
         loadThread: (client, locator) =>
           this.loadThreadWithin(client, locator, true),
         commitRun: (client, input) =>
-          this.commitRunWithin(client, input, { workflowSchedulerAdmission: true }),
+          this.commitRunWithin(client, input, {
+            workflowSchedulerAdmission: true,
+          }),
         resolveRouteWithinTransaction,
       },
+      policy,
     );
   }
   /** Explicit lease-fenced child handoff; construction does not migrate or enable production routing. */
@@ -509,7 +557,12 @@ export class PostgresDomainStore
         commitRootThread: (client, input) =>
           this.commitThreadWithin(client, input),
         settleRootWork: (client, input) =>
-          this.completeWorkItemWithin(client, input.tenantId, input.runId, input.lease),
+          this.completeWorkItemWithin(
+            client,
+            input.tenantId,
+            input.runId,
+            input.lease,
+          ),
         commitChildThread: (client, input) =>
           this.commitThreadWithin(client, input),
         commitChildRun: (client, input) => this.commitRunWithin(client, input),
@@ -1734,7 +1787,7 @@ async function loadPostgresAgentVersion(
   input: { tenantId: string; agentVersionId: string },
 ): Promise<AgentVersionAsset | null> {
   const result = await queryable.query<PostgresAgentVersionRow>(
-    `SELECT tenant_id, agent_version_id, content_digest, asset_json,
+    `SELECT tenant_id, agent_version_id, content_digest, CASE WHEN octet_length(asset_json::text)<=8388608 THEN asset_json ELSE NULL END AS asset_json,
             created_at
      FROM ${schema}.agent_versions
      WHERE tenant_id=$1 AND agent_version_id=$2`,
@@ -1788,7 +1841,7 @@ async function loadPostgresAgentVersionDeployment(
 ): Promise<AgentVersionDeployment | null> {
   const result = await queryable.query<PostgresAgentVersionDeploymentRow>(
     `SELECT tenant_id, agent_version_id, content_digest,
-            materialization_digest, deployment_json, deployed_at
+            materialization_digest, CASE WHEN octet_length(deployment_json::text)<=16384 THEN deployment_json ELSE NULL END AS deployment_json, deployed_at
      FROM ${schema}.agent_version_deployments
      WHERE tenant_id=$1 AND agent_version_id=$2`,
     [input.tenantId, input.agentVersionId],
@@ -1845,7 +1898,7 @@ async function loadPostgresAgentVersionReleaseBundle(
 ): Promise<AgentVersionReleaseBundle | null> {
   const result = await queryable.query<PostgresAgentVersionReleaseBundleRow>(
     `SELECT tenant_id, release_id, manifest_digest,
-            default_agent_version_id, bundle_json
+            default_agent_version_id, CASE WHEN octet_length(bundle_json::text)<=8388608 THEN bundle_json ELSE NULL END AS bundle_json
      FROM ${schema}.agent_version_release_bundles
      WHERE tenant_id=$1 AND release_id=$2`,
     [input.tenantId, input.releaseId],
@@ -1899,7 +1952,7 @@ async function loadPostgresAgentVersionReleaseActivation(
     await queryable.query<PostgresAgentVersionReleaseActivationRow>(
       `SELECT tenant_id, activation_id, release_id, previous_release_id,
               operator_principal_id, operator_actor_id, operator_space_id,
-              activation_json, activated_at
+              CASE WHEN octet_length(activation_json::text)<=16384 THEN activation_json ELSE NULL END AS activation_json, activated_at
        FROM ${schema}.agent_version_release_activations
        WHERE tenant_id=$1 AND activation_id=$2`,
       [input.tenantId, input.activationId],
@@ -1967,10 +2020,10 @@ async function loadPostgresActiveAgentVersionRelease(
       PostgresAgentVersionReleaseActivationRow
   >(
     `SELECT b.tenant_id, b.release_id, b.manifest_digest,
-            b.default_agent_version_id, b.bundle_json,
+            b.default_agent_version_id, CASE WHEN octet_length(b.bundle_json::text)<=8388608 THEN b.bundle_json ELSE NULL END AS bundle_json,
             a.activation_id, a.previous_release_id,
             a.operator_principal_id, a.operator_actor_id,
-            a.operator_space_id, a.activation_json, a.activated_at
+            a.operator_space_id, CASE WHEN octet_length(a.activation_json::text)<=16384 THEN a.activation_json ELSE NULL END AS activation_json, a.activated_at
      FROM ${schema}.active_agent_version_releases p
      JOIN ${schema}.agent_version_release_bundles b
        ON b.tenant_id=p.tenant_id AND b.release_id=p.release_id

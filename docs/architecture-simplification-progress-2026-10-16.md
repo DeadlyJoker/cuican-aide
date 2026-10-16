@@ -257,3 +257,21 @@ PG 实验调度已具备入库、交接、结果结算、停放、人工审批�
 本批验证：相关回归同一次运行 552 项全部通过、无跳过；最终源码的 HTTP/SDK/PG 快照、取消、拒绝审批、Worker 恢复与异常响应专项另 33 项全部通过。Contracts 全量 754 项、最终 Control Client 全量 272 项通过；架构边界与实际生产类型图 37 项通过。Contracts、Application、Control Client、Store、Control API、Runtime Worker 完整类型检查通过，客户端最后增加的取消后迟到响应保护已再次完成类型检查和全量测试。仓库 TypeScript 入口、格式及 diff 检查通过。仅使用独立 Unix Socket 测试库，schema 和其他客户端归零后关闭临时 PostgreSQL；没有访问用户数据库或启用生产调度。
 
 后续仍须接入 Control/Worker 共用的真实部署策略与生产执行装配，再迁移 Workflow/Team 前端并退役隐藏 Thread/Message 推进。迁移还须保留现有审批意见及 Verifier 判定语义；自主子 Agent、资源生命周期收敛与安装式插件专项仍待完成。
+
+## 第十五批：Workflow 可信部署接线与活动任务期间重新打开 Store
+
+在正式 PostgreSQL Control/Worker 工厂增加显式 `workflow` 配置，两端共用 Application 部署策略并复用既有持久 DAG 和普通 Run/Tool 执行器。配置在异步操作前复制冻结；校验宿主 issuer、根路由、节点允许列表、实际 AgentVersion 资产/摘要、部署物、当前 Release 和审批人 principal。入库校验与实际发布切换通过同一现有事务锁协调；新 Run 的 issuer 校验失败时，Run、队列、输入和回执一并回滚。
+
+已入库任务按冻结定义、输入及保留部署恢复，不因默认 Release 切换重写任务或重发模型请求；当前宿主策略仍约束新的节点执行与审批。同键重试继续优先恢复原回执。审批身份改变会拒绝旧身份；执行授权撤销后，获准的根取消仍能收敛任务。默认入口不启用调度；SQLite 显式传入该配置会拒绝并清理已接管资源。部署配置只接入工厂，尚未接入命令行环境或产品 UI，不宣称前端执行权迁移完成。
+
+实际工厂测试还发现既有 PostgreSQL 定义 API 未初始化自己的表，发布会失败。现在独立初始化定义能力，即使未配置执行策略也能发布定义；启动仍返回能力不可用，不安装执行表或启动调度器。Control 内部组合参数改成具名能力对象，避免为 Workflow 再增加一串容易错位的可选位置参数。
+
+双会话跨 HTTP 服务关闭/重开测试复现真实 PostgreSQL `40P01`：Store 启动重复安装已有 DDL，与普通 Worker 的 Outbox/Run 写事务形成表锁循环。通过独立连接持有 ROW EXCLUSIVE 锁进一步定位已有索引、约束、生成列和触发器仍申请 DDL 锁。现在先检查 catalog，健康结构不重复安装，缺失结构及原有触发器修复仍执行。没有提高超时、增加全局重试、绕开正在工作的 Worker 或重写用户数据。复现证据见 `docs/evidence/postgres-live-reopen-2026-10-16.json`。
+
+已完成的定向回归包括：真实工厂的单槽审批与重启恢复、激活 Release 切换后的旧任务恢复和新任务拒绝、双槽模型流重叠与各自唯一回复、发布事务实际等待入库提交、另一 issuer 入库原子回滚、审批 principal 改变与撤权后取消；另验证持锁期间重开、健康触发器 OID 不变、禁用触发器修复后的 Outbox 去重和终态进度删除、旧进度及 compaction 并发迁移。本批使用独立本机 PostgreSQL 和实际资产编译器/发布/授权/HTTP/SDK/SSE；模型传输为显式合成流，不作为真实供应商或安装版可见 UI 验收。
+
+配置、恢复和关闭边界见 `docs/workflow-postgres-deployment.md`。下一步补齐产品入口的部署能力发现与配置，再迁移 Workflow 前端、保留旧记录/审批意见/Verifier 语义并退役隐藏 Thread/Message 推进；随后让 Team 复用同一持久父子任务底座。生命周期、资源隔离、自主子 Agent 和安装式插件专项继续保留在原目标内。
+
+本批最终验证：相关 PostgreSQL/SQLite/Worker/HTTP/发布/队列与迁移回归同一次运行 617 项通过、无跳过；最终源码的部署策略、正式工厂、启动清理和活动 Store 重开专项 18 项通过；既有项目、插件实例和 Extension 装配 34 项通过。架构边界及实际生产类型图 37 项通过，Application、Store、Runtime Worker、Control API 原完整类型检查通过。新增测试最初使用了超过项目 ES2022 类型库的 Promise API，已改为普通 Promise 屏障并完成 Control 完整类型检查和最终专项，没有提高编译目标。
+
+仓库 TypeScript 边界、格式和 diff 检查通过。独立测试库的业务 schema 与其他客户端归零后，已关闭本批启动的 PostgreSQL 并确认无运行服务；没有访问用户数据库。重开锁修复单独提交为 `be01885ed`，部署接线提交承接该修复，均保留在 `codex/runtime-concurrency-result-streaming`，未推送。

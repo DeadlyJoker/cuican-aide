@@ -6,7 +6,7 @@ import type {
 } from "@crewon/application";
 import type { RuntimeWorkerOutcome } from "./runtime-worker.ts";
 
-/** Explicit internal injection only; the production bootstrap intentionally does not construct this. */
+/** Internal scheduler shared by experiments and explicitly configured PostgreSQL deployments; never enabled by default. */
 export class ExperimentalWorkflowScheduler {
   readonly #store: DomainStore;
   readonly #workflow: WorkflowRunSchedulerStore;

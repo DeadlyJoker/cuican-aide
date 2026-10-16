@@ -16,6 +16,7 @@ import {
 import {
   MAX_WORKFLOW_DEFINITION_BYTES,
   type ThreadState,
+  type RunState,
 } from "@crewon/domain";
 import { validatePostgresSchemaName as validatePostgresSchemaIdentifier } from "./postgres-queue-schema.ts";
 import { advisoryLock, threadLockKey } from "./postgres-thread-lock.ts";
@@ -49,6 +50,12 @@ export type PostgresWorkflowRouteResolver = (
     workflowVersion: WorkflowVersionAsset;
   }>,
 ) => RunRoute | Promise<RunRoute>;
+export type PostgresWorkflowAdmissionPolicy = Readonly<{
+  authorizeCreatedRun?(input: {
+    client: PoolClient;
+    run: RunState;
+  }): Promise<void>;
+}>;
 type Dependencies = Readonly<{
   assertOpen(): void;
   loadThread(
@@ -70,13 +77,20 @@ export class ExperimentalPostgresWorkflowRunAdmissionStore
   readonly #schema: string;
   readonly #sql: string;
   readonly #d: Dependencies;
-  constructor(pool: Pool, schema: string, dependencies: Dependencies) {
+  readonly #policy: PostgresWorkflowAdmissionPolicy;
+  constructor(
+    pool: Pool,
+    schema: string,
+    dependencies: Dependencies,
+    policy: PostgresWorkflowAdmissionPolicy = {},
+  ) {
     validatePostgresSchemaIdentifier(schema);
     dependencies.assertOpen();
     this.#pool = pool;
     this.#schema = schema;
     this.#sql = `"${schema}"`;
     this.#d = dependencies;
+    this.#policy = policy;
   }
   async migrate(): Promise<void> {
     this.#d.assertOpen();
@@ -196,6 +210,10 @@ export class ExperimentalPostgresWorkflowRunAdmissionStore
       const run = await this.#d.commitRun(client, prepared.commit);
       if (run.disposition !== "committed")
         throw new RunStoreError("workflow_run_admission_receipt_invalid");
+      await this.#policy.authorizeCreatedRun?.({
+        client,
+        run: structuredClone(run.state),
+      });
       const value = prepared.workflowInputValue;
       await client.query(
         `INSERT INTO ${this.#sql}.workflow_run_inputs (tenant_id,run_id,value_id,value_digest,value_json)

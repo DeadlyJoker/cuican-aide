@@ -1,3 +1,8 @@
+import { composeWorkflowScheduler } from "./workflow-runtime-composition.ts";
+import {
+  captureWorkflowDeploymentConfiguration,
+  type WorkflowDeploymentConfiguration,
+} from "@crewon/application";
 import { prepareInstalledPluginProjectMediaInputStores } from "./plugins/installed-plugin-project-media-input-tools.ts";
 import { prepareInstalledPluginProjectAssetToolsStores } from "./plugins/installed-plugin-project-asset-tools.ts";
 import { isDeepStrictEqual } from "node:util";
@@ -141,6 +146,7 @@ import {
 
 /** Supplied closable resources transfer to this composition, including failed startup. */
 export type RuntimeWorkerCompositionConfig = Readonly<{
+  workflow?: WorkflowDeploymentConfiguration;
   storageAdmission?: StorageAdmissionPort;
   localStoragePaths?: readonly string[];
   runtimeTenantId: string;
@@ -331,6 +337,9 @@ function prepareComposition(
   const config = Object.freeze({
     ...input,
     workerConcurrency: runtimeWorkerConcurrency(input.workerConcurrency),
+    ...(input.workflow === undefined
+      ? {}
+      : { workflow: captureWorkflowDeploymentConfiguration(input.workflow) }),
     route: Object.freeze({ ...input.route }),
     ...(input.projectPlanning === undefined
       ? {}
@@ -711,6 +720,13 @@ async function composeRuntimeWorker(
         });
   if (pluginCreditSettlement !== undefined)
     lifetime.own(pluginCreditSettlement, { phase: "stop" });
+  const workflowScheduler = await composeWorkflowScheduler({
+    store,
+    configuration: config.workflow,
+    runtimeTenantId: config.runtimeTenantId,
+    route: config.route,
+    digester,
+  });
   const pool = createRuntimeWorkerPool({
     concurrency: config.workerConcurrency ?? 1,
     own: (worker) => {
@@ -732,6 +748,7 @@ async function composeRuntimeWorker(
       installedPluginRuntimeResolver,
       pluginCreditSettlement,
       projectPlanning: config.projectPlanning,
+      experimentalWorkflowScheduler: workflowScheduler,
       policy,
     },
     config: (index) => ({
@@ -758,10 +775,13 @@ async function composeRuntimeWorker(
     }),
   });
   if (sqliteDatabasePath !== undefined && config.scanIntervalMs !== null) {
-    lifetime.own(watchSqliteAvailability({
-      databasePath: sqliteDatabasePath,
-      receiver: pool,
-    }), { phase: "stop" });
+    lifetime.own(
+      watchSqliteAvailability({
+        databasePath: sqliteDatabasePath,
+        receiver: pool,
+      }),
+      { phase: "stop" },
+    );
   }
   let providerProbeServer: RuntimeProviderProbeServer | null = null;
   let workspacePrivateServer: RuntimeWorkspacePrivateServer | null = null;
