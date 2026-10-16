@@ -26,6 +26,7 @@ export async function finishPostgresWorkflowSchedulerPass(
     now: string;
     nextId(): string;
     alreadySettled: boolean;
+    humanGatesEnabled: boolean;
   },
 ): Promise<WorkflowSchedulerPassResult> {
   const { execution, children } = await readPostgresWorkflowSchedulerAuthority(
@@ -35,6 +36,7 @@ export async function finishPostgresWorkflowSchedulerPass(
     run,
     context,
     ops,
+    options,
   );
   if (run.cancelRequested || execution.cancelRequested)
     throw new RunStoreError("workflow_cancellation_recovery_required");
@@ -62,6 +64,9 @@ export async function finishPostgresWorkflowSchedulerPass(
       else liveChildren++;
     }
   }
+  const humanGates = execution.nodes.filter(
+    (node) => node.status === "waitingHuman",
+  ).length;
   if (
     terminal(run.status) ||
     (!ready && terminal(execution.status) && liveChildren === 0)
@@ -91,7 +96,7 @@ export async function finishPostgresWorkflowSchedulerPass(
         (value) => value.nodeId === node.nodeId,
       )!;
       if (definition.dependsOn.every((id) => completed.has(id))) {
-        if (node.kind === "humanGate")
+        if (node.kind === "humanGate" && !options.humanGatesEnabled)
           throw new RunStoreError("workflow_gate_unavailable");
         ready = true;
       }
@@ -114,7 +119,7 @@ export async function finishPostgresWorkflowSchedulerPass(
       () => false,
     );
     await writePostgresWorkItems(client, sql, [wake]);
-  } else if (liveChildren === 0)
+  } else if (liveChildren === 0 && humanGates === 0)
     throw new RunStoreError("workflow_scheduler_wake_source_missing");
   await ops.settleRootWork(client, input);
   return ready
@@ -123,7 +128,7 @@ export async function finishPostgresWorkflowSchedulerPass(
         kind: "waiting",
         runId: run.runId,
         children: liveChildren,
-        humanGates: 0,
+        humanGates,
       };
 }
 function terminal(status: string): boolean {

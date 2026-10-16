@@ -24,6 +24,10 @@ export async function postgresParentWorker(
   options: {
     output?: Parameters<typeof postgresWorkflowChildWorker>[2];
     afterAdmit?: () => Promise<void>;
+    child?: Omit<
+      NonNullable<Parameters<typeof postgresWorkflowChildWorker>[3]>,
+      "experimentalScheduler"
+    >;
   } = {},
 ) {
   const queue = (
@@ -53,6 +57,7 @@ export async function postgresParentWorker(
     },
   });
   return postgresWorkflowChildWorker(f, t, options.output, {
+    ...options.child,
     experimentalScheduler: scheduler,
   });
 }

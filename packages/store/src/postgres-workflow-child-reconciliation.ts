@@ -1,3 +1,5 @@
+import type { RunState } from "@crewon/domain";
+import { hasPostgresWorkflowFailureCancellation } from "./postgres-workflow-failure-cancellation.ts";
 import type { PoolClient } from "pg";
 import {
   canonicalJson,
@@ -19,6 +21,7 @@ export async function reconcilePostgresWorkflowChildren(
   sql: string,
   input: {
     state: WorkflowExecutionState;
+    parent: RunState;
     rows: ReadonlyMap<string, WorkflowNodeRow>;
     admissions: ReadonlyMap<string, WorkflowNodeAttemptAdmission>;
     children: Awaited<ReturnType<typeof readPostgresWorkflowChildren>>;
@@ -53,7 +56,18 @@ export async function reconcilePostgresWorkflowChildren(
     }
     const outcome = workflowChildOutcome({
       child,
-      canceledByParent: current.cancelRequested,
+      canceledByParent:
+        current.cancelRequested ||
+        (child.status === "canceled" &&
+          (await hasPostgresWorkflowFailureCancellation(
+            client,
+            sql,
+            input.parent,
+            child,
+            childRow,
+            current,
+            input.rows,
+          ))),
       output,
       outputError,
       schema: admission.claim.node.outputSchema,

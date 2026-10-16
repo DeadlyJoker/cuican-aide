@@ -33,7 +33,12 @@ export async function finalizePostgresWorkflowRoot(
   run: RunState,
   context: Context,
   ops: PostgresWorkflowCompositionDependencies,
-  options: { now: string; nextId(): string; alreadySettled: boolean },
+  options: {
+    now: string;
+    nextId(): string;
+    alreadySettled: boolean;
+    humanGatesEnabled: boolean;
+  },
 ): Promise<{ disposition: "committed" | "replayed"; run: RunState }> {
   const authority = await readPostgresWorkflowSchedulerAuthority(
     client,
@@ -42,6 +47,7 @@ export async function finalizePostgresWorkflowRoot(
     run,
     context,
     ops,
+    options,
   );
   const { execution, rows, children } = authority;
   if (run.cancelRequested || execution.cancelRequested)

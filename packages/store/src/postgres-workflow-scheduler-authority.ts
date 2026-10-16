@@ -1,3 +1,4 @@
+import { readPostgresWorkflowHumanGates } from "./postgres-workflow-human-gate-authority.ts";
 import type { PoolClient } from "pg";
 import {
   RunStoreError,
@@ -19,10 +20,11 @@ import type { readPostgresWorkflowCompositionContext } from "./postgres-workflow
 export async function readPostgresWorkflowSchedulerAuthority(
   client: PoolClient,
   sql: string,
-  input: WorkflowSchedulerInput,
+  input: Pick<WorkflowSchedulerInput, "tenantId" | "runId" | "binding">,
   run: RunState,
   context: Awaited<ReturnType<typeof readPostgresWorkflowCompositionContext>>,
   ops: PostgresWorkflowChildOperations,
+  options: { humanGatesEnabled: boolean },
 ) {
   if (run.goalBinding !== null || run.goalAccounting !== null)
     throw new RunStoreError("workflow_root_goal_unsupported");
@@ -60,11 +62,18 @@ export async function readPostgresWorkflowSchedulerAuthority(
   );
   for (const node of execution.nodes) {
     if (node.claimId === null) continue;
-    if (node.kind === "humanGate")
-      throw new RunStoreError("workflow_gate_unavailable");
+    if (node.kind === "humanGate") continue;
     if (!children.has(node.claimId))
       throw new RunStoreError("workflow_child_handoff_missing");
   }
+  const gates = await readPostgresWorkflowHumanGates(
+    client,
+    sql,
+    execution,
+    run,
+    context,
+    options.humanGatesEnabled,
+  );
   const steps = await client.query<{ step_id: string }>(
     `SELECT step_id FROM ${sql}.run_steps WHERE tenant_id=$1 AND run_id=$2 LIMIT 65`,
     [run.tenantId, run.runId],
@@ -75,5 +84,5 @@ export async function readPostgresWorkflowSchedulerAuthority(
     steps.rows.some((row) => !ids.has(row.step_id))
   )
     throw new RunStoreError("workflow_root_step_authority_conflict");
-  return { execution, rows, children };
+  return { execution, rows, children, gates };
 }

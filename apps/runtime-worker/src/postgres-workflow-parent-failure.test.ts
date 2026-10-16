@@ -69,17 +69,21 @@ pgTest(
       humanGates: 0,
     });
     assert.equal((await f.store.loadRun(f.root))!.status, "running");
-    await f.admin.query(
-      `UPDATE ${f.sql}.work_items SET available_at=clock_timestamp() WHERE run_id=$1`,
-      [second.child_run_id],
+    // Failure propagation wakes the delayed original queue; the ordinary Worker honors cancellation.
+    assert.equal(
+      (await f.store.loadRun({
+        tenantId: f.root.tenantId,
+        runId: second.child_run_id,
+      }))!.cancelRequested,
+      true,
     );
-    assert.equal((await runtime.worker.wake()).kind, "completed");
+    assert.equal((await runtime.worker.wake()).kind, "canceled");
     assert.deepEqual(await runtime.worker.wake(), {
       kind: "failed",
       runId: f.root.runId,
       code: "workflow_node_failed",
     });
-    assert.equal(runtime.requests.length, 2);
+    assert.equal(runtime.requests.length, 1);
   },
 );
 

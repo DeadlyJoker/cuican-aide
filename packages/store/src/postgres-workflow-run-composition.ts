@@ -1,3 +1,12 @@
+import {
+  PostgresWorkflowHumanGates,
+  insertPostgresWorkflowGate,
+  publishPostgresWorkflowGates,
+  type PostgresWorkflowHumanGateAuthorization,
+} from "./postgres-workflow-human-gates.ts";
+import { migratePostgresWorkflowHumanGates } from "./postgres-workflow-human-gate-schema.ts";
+import { readPostgresWorkflowHumanGates } from "./postgres-workflow-human-gate-authority.ts";
+import { stopPostgresWorkflowFailedSiblings } from "./postgres-workflow-failure-cancellation.ts";
 import { randomUUID } from "node:crypto";
 import type { Pool, PoolClient } from "pg";
 import {
@@ -15,6 +24,7 @@ import {
   type CommitThreadResult,
   type WorkflowRunCompositionStore,
   type WorkflowRunFinalizationStore,
+  type WorkflowHumanGateStore,
   type WorkflowSchedulerPassResult,
   type WorkflowSchedulerInput,
   type WorkflowNodeAttemptAdmission,
@@ -74,6 +84,7 @@ export type PostgresWorkflowCompositionOptions = Readonly<{
     workItem: WorkItem;
   }): AuthorizationDecision | Promise<AuthorizationDecision>;
   resolveChildRoute: PostgresWorkflowChildRoute;
+  humanGates?: Readonly<{ authorize: PostgresWorkflowHumanGateAuthorization }>;
 }>;
 export type PostgresWorkflowCompositionDependencies =
   PostgresWorkflowChildOperations &
@@ -103,9 +114,12 @@ export type PostgresWorkflowCompositionDependencies =
       ): Promise<CommitRunResult>;
     }>;
 
-/** Experimental persistent execution. Human decisions, cancellation and production routing remain separate capabilities. */
+/** Experimental persistent execution. Human decisions require explicit policy; root cancellation and production routing remain separate capabilities. */
 export class ExperimentalPostgresWorkflowRunCompositionStore
-  implements WorkflowRunCompositionStore, WorkflowRunFinalizationStore
+  implements
+    WorkflowRunCompositionStore,
+    WorkflowRunFinalizationStore,
+    WorkflowHumanGateStore
 {
   readonly #pool: Pool;
   readonly #schema: string;
@@ -114,6 +128,7 @@ export class ExperimentalPostgresWorkflowRunCompositionStore
   readonly #options: PostgresWorkflowCompositionOptions;
   readonly #maximum: number;
   readonly #id: () => string;
+  readonly #gates: PostgresWorkflowHumanGates | null;
   constructor(
     pool: Pool,
     schema: string,
@@ -125,6 +140,8 @@ export class ExperimentalPostgresWorkflowRunCompositionStore
       !options ||
       typeof options.authorize !== "function" ||
       typeof options.resolveChildRoute !== "function" ||
+      (options.humanGates !== undefined &&
+        typeof options.humanGates?.authorize !== "function") ||
       (options.nextId !== undefined && typeof options.nextId !== "function")
     )
       throw new RunStoreError("workflow_scheduler_configuration_invalid");
@@ -143,6 +160,15 @@ export class ExperimentalPostgresWorkflowRunCompositionStore
         (options.nextId ?? randomUUID)(),
         "workflow_generated_id_invalid",
       );
+    this.#gates = options.humanGates
+      ? new PostgresWorkflowHumanGates(
+          pool,
+          this.#sql,
+          dependencies,
+          options.humanGates.authorize,
+          this.#id,
+        )
+      : null;
   }
   async migrate(): Promise<void> {
     this.#d.assertOpen();
@@ -150,6 +176,8 @@ export class ExperimentalPostgresWorkflowRunCompositionStore
     try {
       await client.query("BEGIN");
       await migratePostgresWorkflowComposition(client, this.#schema);
+      if (this.#gates)
+        await migratePostgresWorkflowHumanGates(client, this.#schema);
       await client.query("COMMIT");
     } catch (error) {
       await rollbackPostgres(client);
@@ -287,16 +315,28 @@ export class ExperimentalPostgresWorkflowRunCompositionStore
           ),
         );
         const node = current.nodes.find((n) => n.nodeId === row.node_id)!;
-        if (node.kind === "humanGate")
-          throw new RunStoreError("workflow_gate_unavailable");
+        if (node.kind === "humanGate") {
+          if (!this.#gates)
+            throw new RunStoreError("workflow_gate_unavailable");
+          continue;
+        }
         if (!children.has(row.claim_id))
           throw new RunStoreError("workflow_child_handoff_missing");
       }
+      await readPostgresWorkflowHumanGates(
+        client,
+        this.#sql,
+        current,
+        run,
+        context,
+        this.#gates !== null,
+      );
       if (children.size) {
         const reconciled = await reconcilePostgresWorkflowChildren(
           client,
           this.#sql,
           {
+            parent: run,
             state: current,
             rows,
             admissions: existingAdmissions,
@@ -313,6 +353,27 @@ export class ExperimentalPostgresWorkflowRunCompositionStore
           );
         current = reconciled;
       }
+      const stopped = await stopPostgresWorkflowFailedSiblings(
+        client,
+        this.#sql,
+        {
+          parent: run,
+          state: current,
+          workflow: context.workflow,
+          children,
+          now: new Date(time.now).toISOString(),
+          nextId: this.#id,
+        },
+        this.#d,
+      );
+      if (stopped !== current)
+        rows = await readPostgresWorkflowNodes(
+          client,
+          this.#sql,
+          stopped,
+          context.workflow,
+        );
+      current = stopped;
       const fingerprint = canonicalJson({
         kind: "workflow.node-admission.v1",
         tenantId: input.tenantId,
@@ -386,7 +447,10 @@ export class ExperimentalPostgresWorkflowRunCompositionStore
           return value.digest;
         },
       });
-      if (plan.claims.some((claim) => claim.node.kind === "humanGate"))
+      if (
+        !this.#gates &&
+        plan.claims.some((claim) => claim.node.kind === "humanGate")
+      )
         throw new RunStoreError("workflow_gate_unavailable");
       if (plan.next !== current)
         await writePostgresWorkflowExecution(
@@ -399,16 +463,27 @@ export class ExperimentalPostgresWorkflowRunCompositionStore
       const now = new Date(time.now).toISOString();
       for (const claim of plan.claims) {
         const value = values.get(claim.node.nodeId)!;
-        const execution = await beginPostgresRunAttempt(client, this.#sql, {
-          ...input,
-          stepId: this.#id(),
-          attemptId: this.#id(),
-          kind:
-            claim.node.kind === "verification"
-              ? "verification"
-              : "workflowNode",
-          startedAt: now,
-        });
+        const stepId = this.#id();
+        const execution =
+          claim.node.kind === "humanGate"
+            ? {
+                step: await insertPostgresWorkflowGate(client, this.#sql, {
+                  ...input,
+                  stepId,
+                  now,
+                }),
+                attempt: null,
+              }
+            : await beginPostgresRunAttempt(client, this.#sql, {
+                ...input,
+                stepId,
+                attemptId: this.#id(),
+                kind:
+                  claim.node.kind === "verification"
+                    ? "verification"
+                    : "workflowNode",
+                startedAt: now,
+              });
         await client.query(
           `INSERT INTO ${this.#sql}.workflow_node_admissions
           (tenant_id,run_id,node_id,claim_id,step_id,attempt_id,work_item_id,lease_epoch,operation_id,input_digest,input_json)
@@ -419,7 +494,7 @@ export class ExperimentalPostgresWorkflowRunCompositionStore
             claim.node.nodeId,
             claim.claimId,
             execution.step.stepId,
-            execution.attempt.attemptId,
+            execution.attempt?.attemptId ?? null,
             input.lease.workItemId,
             input.lease.leaseEpoch,
             input.schedulerOperationId,
@@ -454,7 +529,9 @@ export class ExperimentalPostgresWorkflowRunCompositionStore
         await dispatchPostgresWorkflowChildren(client, this.#sql, {
           parent: run,
           context,
-          admissions,
+          admissions: admissions.filter(
+            ({ claim }) => claim.node.kind !== "humanGate",
+          ),
           rows: admitted,
           now,
           nextId: this.#id,
@@ -462,6 +539,13 @@ export class ExperimentalPostgresWorkflowRunCompositionStore
           operations: this.#d,
         });
       }
+      if (this.#gates)
+        await publishPostgresWorkflowGates(client, this.#sql, {
+          parent: run,
+          state: plan.next,
+          context,
+          admissions,
+        });
       // Routing may await policy reads. Recheck current authority before publishing any handoff.
       await this.#authorize(client, run, context.workItem);
       // Canonical child queues own execution. A replay never returns another dispatch permission.
@@ -505,6 +589,7 @@ export class ExperimentalPostgresWorkflowRunCompositionStore
             now: new Date(time.now).toISOString(),
             nextId: this.#id,
             alreadySettled: time.alreadySettled,
+            humanGatesEnabled: this.#gates !== null,
           },
         );
         if (!terminal(run.status))
@@ -534,6 +619,7 @@ export class ExperimentalPostgresWorkflowRunCompositionStore
             now: new Date(time.now).toISOString(),
             nextId: this.#id,
             alreadySettled: time.alreadySettled,
+            humanGatesEnabled: this.#gates !== null,
           },
         );
         if (!terminal(run.status))
@@ -542,6 +628,18 @@ export class ExperimentalPostgresWorkflowRunCompositionStore
       },
       { lease: "settling" },
     );
+  }
+  async loadWorkflowHumanGate(
+    input: Parameters<WorkflowHumanGateStore["loadWorkflowHumanGate"]>[0],
+  ) {
+    if (!this.#gates) throw new RunStoreError("workflow_gate_unavailable");
+    return this.#gates.loadWorkflowHumanGate(input);
+  }
+  async decideWorkflowHumanGate(
+    input: Parameters<WorkflowHumanGateStore["decideWorkflowHumanGate"]>[0],
+  ) {
+    if (!this.#gates) throw new RunStoreError("workflow_gate_unavailable");
+    return this.#gates.decideWorkflowHumanGate(input);
   }
   #settlingOperations(time: {
     expiresAt: number;

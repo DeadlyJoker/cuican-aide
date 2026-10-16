@@ -12,6 +12,7 @@ import { compositionInput } from "../../../packages/store/src/workflow-run-compo
 import { PinnedRunExecutionPolicy } from "./standalone-adapters.ts";
 import { RuntimeWorker } from "./runtime-worker.ts";
 import type { ExperimentalWorkflowScheduler } from "./workflow-scheduler.ts";
+import type { ToolRuntimePort } from "@crewon/tool-broker";
 
 type Fixture = Awaited<ReturnType<typeof postgresCompositionFixture>>;
 type Request = Parameters<ModelTransportPort["stream"]>[0];
@@ -24,6 +25,8 @@ export async function postgresWorkflowChildWorker(
   output: (request: Request) => string = () => '{"topic":"child-result"}',
   options: Readonly<{
     experimentalScheduler?: ExperimentalWorkflowScheduler;
+    transport?: ModelTransportPort;
+    toolRuntime?: ToolRuntimePort;
   }> = {},
 ) {
   const store = await f.open();
@@ -46,6 +49,7 @@ export async function postgresWorkflowChildWorker(
   const worker = new RuntimeWorker(
     {
       store,
+      toolRuntime: options.toolRuntime,
       ...(options.experimentalScheduler
         ? { experimentalWorkflowScheduler: options.experimentalScheduler }
         : {}),
@@ -72,7 +76,7 @@ export async function postgresWorkflowChildWorker(
         },
       },
       kernel: new CrewONAgentKernel({
-        transport: {
+        transport: options.transport ?? {
           adapterName: "synthetic-pg-result",
           adapterVersion: "1",
           modelId: "synthetic",

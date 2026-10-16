@@ -1,3 +1,4 @@
+import { prepareWorkflowChildCancellation } from "./workflow-child-cancellation.ts";
 import type { DatabaseSync } from "node:sqlite";
 import {
   canonicalJson,
@@ -5,7 +6,7 @@ import {
   type CommitRunInput,
   type WorkItem,
 } from "@crewon/application";
-import type { RunState, RunLifecycleEvent } from "@crewon/domain";
+import type { RunState } from "@crewon/domain";
 import type {
   WorkflowChildOperations,
   WorkflowChildRow,
@@ -27,38 +28,13 @@ export function commitSqliteWorkflowChildCancellation(
   ops: WorkflowChildCancellationOperations,
   nextId: () => string,
 ): void {
-  const { child } = input;
-  const now = new Date(ops.now()).toISOString();
-  const event: RunLifecycleEvent = {
-    schemaVersion: "crewon.run-event.v0",
-    identity: { runId: child.runId },
-    eventId: nextId(),
-    sequence: child.lastSequence + 1,
-    occurredAt: now,
-    type: "run.cancel.requested",
-    data: { actorId: input.actorId },
-  };
-  const result = ops.commitChildRun({
-    tenantId: child.tenantId,
-    expectedRevision: child.revision,
-    idempotency: input.idempotency,
-    events: [event],
-    workItems: [],
-    outbox: [
-      {
-        messageId: nextId(),
-        tenantId: child.tenantId,
-        runId: child.runId,
-        topic: "run.updated",
-        payload: {
-          eventId: event.eventId,
-          eventType: event.type,
-          throughSequence: event.sequence,
-        },
-        createdAt: now,
-      },
-    ],
-  });
+  const result = ops.commitChildRun(
+    prepareWorkflowChildCancellation(
+      input,
+      new Date(ops.now()).toISOString(),
+      nextId,
+    ),
+  );
   if (result.disposition !== "committed")
     throw new RunStoreError("workflow_child_cancel_authority_conflict");
 }
