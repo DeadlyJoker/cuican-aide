@@ -1,0 +1,57 @@
+{
+  "baselineCommit": "24d7a6343100bc98f53594765fec923a4bf53271",
+  "scope": "source audit, Vite build, static type graph and isolated call/import measurements; no business code modifications",
+  "uiBuild": {
+    "modulesTransformed": 5330,
+    "viteBuildSeconds": 35.7,
+    "workspaceChunkBytesApprox": 2631220,
+    "workspaceGzipBytesApprox": 759430,
+    "loginEagerBytes": 326435,
+    "startupBudgetBytes": 524288
+  },
+  "typeGraphs": {
+    "control": {
+      "repositoryFiles": 2420,
+      "testSupportFixtureFiles": 424,
+      "runtimeWorkerFiles": 233,
+      "uiFiles": 60,
+      "uiElectronFiles": 59
+    },
+    "worker": {
+      "repositoryFiles": 2497,
+      "testSupportFixtureFiles": 467,
+      "controlApiFiles": 248,
+      "uiFiles": 58,
+      "uiElectronFiles": 57
+    }
+  },
+  "commandWorkspaceAST": {
+    "propsMembers": 84,
+    "useStateCalls": 47,
+    "useEffectCalls": 23,
+    "useMemoCalls": 13,
+    "useRefCalls": 12
+  },
+  "transcriptReaderCallCount": {
+    "fixtureDistinctHistoricalRuns": 10,
+    "clientCalls": 12,
+    "perRunCalls": 10,
+    "realNetworkLatencyMeasured": false
+  },
+  "freshProcessImports": {
+    "nodeVersion": "24.18.1",
+    "storeRootMs": [
+      1587.690625,
+      1672.45125,
+      1485.482625
+    ],
+    "sqliteSourceLeafMs": [
+      1110.709459,
+      1062.313417,
+      1439.586709
+    ],
+    "databaseOpened": false,
+    "randomizedTrials": false,
+    "rssReductionEstablished": false
+  }
+}
