@@ -1,4 +1,7 @@
-import { WorkflowControlClient } from "./workflow-control-client.ts";
+import {
+  WorkflowControlClient,
+  captureWorkflowMutationOptions,
+} from "./workflow-control-client.ts";
 import type {
   WorkflowVersionCatalogResponse,
   WorkflowRunListRequest,
@@ -13,6 +16,11 @@ import type {
   WorkflowHumanGateMutationResponse,
   DecideWorkflowHumanGateRequest,
   WorkflowExecutionCapability,
+  WorkflowRecoveryContextResponse,
+} from "@crewon/contracts";
+import {
+  WORKFLOW_RECOVERY_CONTEXT_HEADER,
+  parseWorkflowRecoveryContextId,
 } from "@crewon/contracts";
 import {
   parseThreadTranscriptSnapshotResponse,
@@ -191,6 +199,8 @@ export type ControlApiClientConfig = Readonly<{
 export type ControlApiRequestOptions = Readonly<{
   signal?: AbortSignal;
 }>;
+export type WorkflowMutationRequestOptions = ControlApiRequestOptions &
+  Readonly<{ workflowRecoveryContext?: string }>;
 
 export type ArtifactDownload = Readonly<{
   mediaType: string;
@@ -1318,16 +1328,24 @@ export class ControlApiClient {
     );
   }
 
-  startWorkflowRun(
+  async startWorkflowRun(
     body: StartWorkflowRunRequest,
     idempotencyKey: string,
-    options: ControlApiRequestOptions = {},
+    options: WorkflowMutationRequestOptions = {},
   ): Promise<RunMutationResponse> {
-    return this.#json("POST", "/api/v1/workflow-runs", body, {
-      ...options,
-      idempotencyKey,
-      expectedStatuses: [200, 201],
-    });
+    const captured = captureWorkflowMutationOptions(options);
+    return this.#json(
+      "POST",
+      captured.workflowRecoveryContext === undefined
+        ? "/api/v1/workflow-runs"
+        : "/api/v1/workflow-runs:admit-v1",
+      body,
+      {
+        ...captured,
+        idempotencyKey,
+        expectedStatuses: [200, 201],
+      },
+    );
   }
 
   listWorkflowRuns(
@@ -1355,7 +1373,7 @@ export class ControlApiClient {
   reviewWorkflowHumanGate(
     locator: WorkflowGateLocator,
     body: ReviewWorkflowHumanGateRequest,
-    options: ControlApiRequestOptions = {},
+    options: WorkflowMutationRequestOptions = {},
   ): Promise<WorkflowHumanGateReviewMutationResponse> {
     return this.#workflowClient().reviewWorkflowHumanGate(
       locator,
@@ -1367,6 +1385,11 @@ export class ControlApiClient {
     options: ControlApiRequestOptions = {},
   ): Promise<WorkflowExecutionCapability> {
     return this.#workflowClient().getWorkflowExecutionCapability(options);
+  }
+  getWorkflowRecoveryContext(
+    options: ControlApiRequestOptions = {},
+  ): Promise<WorkflowRecoveryContextResponse> {
+    return this.#workflowClient().getWorkflowRecoveryContext(options);
   }
 
   getWorkflowRunSnapshot(
@@ -1386,9 +1409,13 @@ export class ControlApiClient {
   decideWorkflowHumanGate(
     locator: WorkflowGateLocator,
     body: DecideWorkflowHumanGateRequest,
-    options: ControlApiRequestOptions = {},
+    options: WorkflowMutationRequestOptions = {},
   ): Promise<WorkflowHumanGateMutationResponse> {
-    return this.#workflowClient().decideWorkflowHumanGate(locator, body, options);
+    return this.#workflowClient().decideWorkflowHumanGate(
+      locator,
+      body,
+      options,
+    );
   }
 
   getRun(
@@ -1443,17 +1470,18 @@ export class ControlApiClient {
     }
   }
 
-  cancelRun(
+  async cancelRun(
     runId: string,
     body: CancelRunRequest,
     idempotencyKey: string,
-    options: ControlApiRequestOptions = {},
+    options: WorkflowMutationRequestOptions = {},
   ): Promise<RunMutationResponse> {
+    const captured = captureWorkflowMutationOptions(options);
     return this.#json(
       "POST",
-      `/api/v1/runs/${resourceId(runId)}:cancel`,
+      `/api/v1/runs/${resourceId(runId)}:${captured.workflowRecoveryContext === undefined ? "cancel" : "cancel-guarded-v1"}`,
       body,
-      { ...options, idempotencyKey, expectedStatuses: [200] },
+      { ...captured, idempotencyKey, expectedStatuses: [200] },
     );
   }
 
@@ -1883,6 +1911,7 @@ export class ControlApiClient {
     path: string,
     body: unknown,
     options: ControlApiRequestOptions & {
+      workflowRecoveryContext?: string;
       idempotencyKey?: string;
       requireCsrf?: boolean;
       requireIdempotency?: boolean;
@@ -1895,6 +1924,11 @@ export class ControlApiClient {
     const headers = this.#authenticatedHeaders(
       options.accept ?? "application/json",
     );
+    if (options.workflowRecoveryContext !== undefined)
+      headers.set(
+        WORKFLOW_RECOVERY_CONTEXT_HEADER,
+        parseWorkflowRecoveryContextId(options.workflowRecoveryContext),
+      );
     if (method !== "GET") {
       headers.set("content-type", "application/json");
       if (options.requireCsrf === true && this.#csrfToken === null) {

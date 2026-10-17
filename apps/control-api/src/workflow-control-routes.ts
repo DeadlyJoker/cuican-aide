@@ -22,12 +22,20 @@ import {
   parseWorkflowHumanGateResponse,
   parseWorkflowHumanGateMutationResponse,
   parseWorkflowExecutionCapability,
+  parseWorkflowRecoveryContextResponse,
+  WORKFLOW_RECOVERY_CONTEXT_HEADER,
 } from "@crewon/contracts";
+import {
+  assertWorkflowRecoveryContext,
+  requireWorkflowRecoveryContext,
+  type WorkflowRecoveryContext,
+} from "./workflow-recovery-context.ts";
 import type { ControlApiIdentityPort } from "./control-api-ports.ts";
 import { WorkspaceControlUnavailableError } from "./control-api-errors.ts";
 import { requestContext } from "./request-context.ts";
 
 export type WorkflowControlServices = {
+  workflowRecoveryContext?: WorkflowRecoveryContext | null;
   workflowRootRuns?: Pick<WorkflowRunListApplicationService, "listRuns"> | null;
   workflowHumanGateReviews?: Pick<
     WorkflowHumanGateReviewApplicationService,
@@ -53,6 +61,19 @@ export function registerWorkflowControlRoutes(
   app: FastifyInstance,
   dependencies: WorkflowControlRouteDependencies,
 ): void {
+  app.get(
+    "/api/v1/capabilities/workflow-recovery-context-v1",
+    async (request, reply) => {
+      reply.header("cache-control", "no-store");
+      const actor = await dependencies.identity.resolveActor(
+        requestContext(request),
+      );
+      return parseWorkflowRecoveryContextResponse({
+        version: "v1",
+        contextId: dependencies.workflowRecoveryContext?.read(actor) ?? null,
+      });
+    },
+  );
   app.get(
     "/api/v1/capabilities/workflow-execution-v1",
     async (request, reply) => {
@@ -132,35 +153,50 @@ export function registerWorkflowControlRoutes(
       ),
     );
   });
-  app.post<{ Params: GateParams; Body: unknown }>(
-    `${gatePath}/decisions`,
-    { bodyLimit: 4096 },
-    async (request, reply) => {
-      reply.header("cache-control", "no-store");
-      const actor = await dependencies.identity.resolveActor(
-        requestContext(request),
-      );
-      const locator = parseWorkflowGateLocator({
-        runId: request.params.runId,
-        nodeId: request.params.nodeId,
-        gateRequestId: request.params.gateRequestId,
-      });
-      const body = parseDecideWorkflowHumanGateRequest(request.body);
-      if (!dependencies.workflowHumanGates)
-        throw new WorkspaceControlUnavailableError();
-      const result = await dependencies.workflowHumanGates.decideGate(actor, {
-        kind: "workflowHumanGate.decide",
-        ...locator,
-        ...body,
-      });
-      const response = project(() =>
-        parseWorkflowHumanGateMutationResponse(result, locator, body),
-      );
-      if (response.disposition === "committed")
-        dependencies.workflowGateCommitted?.();
-      return response;
+  for (const { path, checkContext } of [
+    {
+      path: `${gatePath}/decisions`,
+      checkContext: assertWorkflowRecoveryContext,
     },
-  );
+    {
+      path: `${gatePath}/decisions-guarded-v1`,
+      checkContext: requireWorkflowRecoveryContext,
+    },
+  ])
+    app.post<{ Params: GateParams; Body: unknown }>(
+      path,
+      { bodyLimit: 4096 },
+      async (request, reply) => {
+        reply.header("cache-control", "no-store");
+        const actor = await dependencies.identity.resolveActor(
+          requestContext(request),
+        );
+        checkContext({
+          context: dependencies.workflowRecoveryContext,
+          actor,
+          expected: request.headers[WORKFLOW_RECOVERY_CONTEXT_HEADER],
+        });
+        const locator = parseWorkflowGateLocator({
+          runId: request.params.runId,
+          nodeId: request.params.nodeId,
+          gateRequestId: request.params.gateRequestId,
+        });
+        const body = parseDecideWorkflowHumanGateRequest(request.body);
+        if (!dependencies.workflowHumanGates)
+          throw new WorkspaceControlUnavailableError();
+        const result = await dependencies.workflowHumanGates.decideGate(actor, {
+          kind: "workflowHumanGate.decide",
+          ...locator,
+          ...body,
+        });
+        const response = project(() =>
+          parseWorkflowHumanGateMutationResponse(result, locator, body),
+        );
+        if (response.disposition === "committed")
+          dependencies.workflowGateCommitted?.();
+        return response;
+      },
+    );
   app.get<{ Params: GateParams }>(
     `${gatePath}/review-v1`,
     async (request, reply) => {
@@ -187,34 +223,49 @@ export function registerWorkflowControlRoutes(
       );
     },
   );
-  app.post<{ Params: GateParams; Body: unknown }>(
-    `${gatePath}/review-v1`,
-    { bodyLimit: MAX_WORKFLOW_GATE_REVIEW_REQUEST_BYTES },
-    async (request, reply) => {
-      reply.header("cache-control", "no-store");
-      const actor = await dependencies.identity.resolveActor(
-        requestContext(request),
-      );
-      const locator = parseWorkflowGateLocator({
-        runId: request.params.runId,
-        nodeId: request.params.nodeId,
-        gateRequestId: request.params.gateRequestId,
-      });
-      const body = parseReviewWorkflowHumanGateRequest(request.body);
-      if (!dependencies.workflowHumanGateReviews)
-        throw new WorkspaceControlUnavailableError();
-      const result = await dependencies.workflowHumanGateReviews.reviewGate(
-        actor,
-        { kind: "workflowHumanGate.review", ...locator, ...body },
-      );
-      const response = project(() =>
-        parseWorkflowHumanGateReviewMutationResponse(result, locator, body),
-      );
-      if (response.disposition === "committed")
-        dependencies.workflowGateCommitted?.();
-      return response;
+  for (const { path, checkContext } of [
+    {
+      path: `${gatePath}/review-v1`,
+      checkContext: assertWorkflowRecoveryContext,
     },
-  );
+    {
+      path: `${gatePath}/review-guarded-v1`,
+      checkContext: requireWorkflowRecoveryContext,
+    },
+  ])
+    app.post<{ Params: GateParams; Body: unknown }>(
+      path,
+      { bodyLimit: MAX_WORKFLOW_GATE_REVIEW_REQUEST_BYTES },
+      async (request, reply) => {
+        reply.header("cache-control", "no-store");
+        const actor = await dependencies.identity.resolveActor(
+          requestContext(request),
+        );
+        checkContext({
+          context: dependencies.workflowRecoveryContext,
+          actor,
+          expected: request.headers[WORKFLOW_RECOVERY_CONTEXT_HEADER],
+        });
+        const locator = parseWorkflowGateLocator({
+          runId: request.params.runId,
+          nodeId: request.params.nodeId,
+          gateRequestId: request.params.gateRequestId,
+        });
+        const body = parseReviewWorkflowHumanGateRequest(request.body);
+        if (!dependencies.workflowHumanGateReviews)
+          throw new WorkspaceControlUnavailableError();
+        const result = await dependencies.workflowHumanGateReviews.reviewGate(
+          actor,
+          { kind: "workflowHumanGate.review", ...locator, ...body },
+        );
+        const response = project(() =>
+          parseWorkflowHumanGateReviewMutationResponse(result, locator, body),
+        );
+        if (response.disposition === "committed")
+          dependencies.workflowGateCommitted?.();
+        return response;
+      },
+    );
 }
 
 function project<T>(operation: () => T): T {

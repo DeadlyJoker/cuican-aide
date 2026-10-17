@@ -50,6 +50,7 @@ const REQUEST_HEADER_ALLOWLIST = [
   "accept",
   "content-type",
   "idempotency-key",
+  "x-crewon-workflow-context",
   "if-none-match",
   "last-event-id",
   "range",
@@ -171,7 +172,6 @@ export function createWebBff(config: {
             response.headers.set(
               PLUGIN_UI_CODE_CACHE_HEADER,
               PLUGIN_UI_CODE_CACHE_MODE,
-              PLUGIN_UI_CODE_CACHE_REVALIDATION_MODE,
             );
             return response;
           } catch (error) {
@@ -206,7 +206,6 @@ export function createWebBff(config: {
         response.headers.set(
           PLUGIN_UI_CODE_CACHE_HEADER,
           PLUGIN_UI_CODE_CACHE_MODE,
-          PLUGIN_UI_CODE_CACHE_REVALIDATION_MODE,
         );
         return response;
       }

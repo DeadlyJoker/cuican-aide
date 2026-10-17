@@ -27,6 +27,9 @@ import {
   parseRunId,
   parseWorkflowExecutionCapability,
   type WorkflowExecutionCapability,
+  parseWorkflowRecoveryContextResponse,
+  type WorkflowRecoveryContextResponse,
+  parseWorkflowRecoveryContextId,
   type WorkflowGateLocator,
   type WorkflowRunSnapshotResponse,
   type WorkflowHumanGateResponse,
@@ -34,13 +37,17 @@ import {
   type DecideWorkflowHumanGateRequest,
 } from "@crewon/contracts";
 import { ControlApiProtocolError } from "./control-api-errors.ts";
-import type { ControlApiRequestOptions } from "./control-api-client.ts";
+import type {
+  ControlApiRequestOptions,
+  WorkflowMutationRequestOptions,
+} from "./control-api-client.ts";
 
 type WorkflowJsonRequest = (
   method: "GET" | "POST",
   path: string,
   body: unknown,
   options: ControlApiRequestOptions & {
+    workflowRecoveryContext?: string;
     requireCsrf?: boolean;
     expectedStatuses: readonly number[];
     maximumResponseBytes: number;
@@ -144,6 +151,29 @@ export class WorkflowControlClient {
       );
     }
   }
+  async getWorkflowRecoveryContext(
+    options: ControlApiRequestOptions = {},
+  ): Promise<WorkflowRecoveryContextResponse> {
+    options.signal?.throwIfAborted();
+    const value = await this.#request(
+      "GET",
+      "/api/v1/capabilities/workflow-recovery-context-v1",
+      null,
+      {
+        ...options,
+        expectedStatuses: [200],
+        maximumResponseBytes: 1024,
+      },
+    );
+    options.signal?.throwIfAborted();
+    try {
+      return parseWorkflowRecoveryContextResponse(value);
+    } catch {
+      throw new ControlApiProtocolError(
+        "control_client_workflow_recovery_context_invalid",
+      );
+    }
+  }
   async getWorkflowReviewCapability(
     options: ControlApiRequestOptions = {},
   ): Promise<WorkflowReviewCapability> {
@@ -207,23 +237,24 @@ export class WorkflowControlClient {
   async reviewWorkflowHumanGate(
     input: WorkflowGateLocator,
     body: ReviewWorkflowHumanGateRequest,
-    options: ControlApiRequestOptions = {},
+    options: WorkflowMutationRequestOptions = {},
   ): Promise<WorkflowHumanGateReviewMutationResponse> {
-    options.signal?.throwIfAborted();
+    const captured = captureWorkflowMutationOptions(options);
+    captured.signal?.throwIfAborted();
     const locator = parseWorkflowGateLocator(input),
       command = parseReviewWorkflowHumanGateRequest(body);
     const value = await this.#request(
       "POST",
-      `${workflowGatePath(locator)}/review-v1`,
+      `${workflowGatePath(locator)}/${captured.workflowRecoveryContext === undefined ? "review-v1" : "review-guarded-v1"}`,
       command,
       {
-        ...options,
+        ...captured,
         requireCsrf: true,
         expectedStatuses: [200],
         maximumResponseBytes: MAX_WORKFLOW_GATE_RESPONSE_BYTES,
       },
     );
-    options.signal?.throwIfAborted();
+    captured.signal?.throwIfAborted();
     try {
       return parseWorkflowHumanGateReviewMutationResponse(
         value,
@@ -286,18 +317,19 @@ export class WorkflowControlClient {
   async decideWorkflowHumanGate(
     input: WorkflowGateLocator,
     body: DecideWorkflowHumanGateRequest,
-    options: ControlApiRequestOptions = {},
+    options: WorkflowMutationRequestOptions = {},
   ): Promise<WorkflowHumanGateMutationResponse> {
-    const signal = options.signal;
+    const captured = captureWorkflowMutationOptions(options);
+    const signal = captured.signal;
     signal?.throwIfAborted();
     const locator = parseWorkflowGateLocator(input),
       command = parseDecideWorkflowHumanGateRequest(body);
     const value = await this.#request(
       "POST",
-      `${workflowGatePath(locator)}/decisions`,
+      `${workflowGatePath(locator)}/${captured.workflowRecoveryContext === undefined ? "decisions" : "decisions-guarded-v1"}`,
       command,
       {
-        ...options,
+        ...captured,
         requireCsrf: true,
         expectedStatuses: [200],
         maximumResponseBytes: MAX_WORKFLOW_GATE_RESPONSE_BYTES,
@@ -316,4 +348,17 @@ export class WorkflowControlClient {
 
 function workflowGatePath(locator: WorkflowGateLocator): string {
   return `/api/v1/workflow-runs/${encodeURIComponent(locator.runId)}/nodes/${encodeURIComponent(locator.nodeId)}/gates/${encodeURIComponent(locator.gateRequestId)}`;
+}
+
+/** Capture once so route selection and the emitted comparison header cannot diverge. */
+export function captureWorkflowMutationOptions(
+  options: WorkflowMutationRequestOptions,
+): WorkflowMutationRequestOptions {
+  const context = options.workflowRecoveryContext;
+  return {
+    signal: options.signal,
+    ...(context === undefined
+      ? {}
+      : { workflowRecoveryContext: parseWorkflowRecoveryContextId(context) }),
+  };
 }

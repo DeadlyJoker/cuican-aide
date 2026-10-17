@@ -26,6 +26,7 @@ import { StandaloneAuthorization } from "./standalone-adapters.ts";
 export async function workflowDeploymentFixture(
   t: TestContext,
   options: {
+    origin?: string;
     beforeModel?(role: string): Promise<void>;
     output?(
       request: Parameters<
@@ -141,7 +142,7 @@ export async function workflowDeploymentFixture(
   const store = await PostgresDomainStore.open({ connectionString, schema });
   owners.push(() => store.close());
   const token = "workflow-production-composition-token-with-32-bytes",
-    origin = "http://127.0.0.1:5175";
+    origin = options.origin ?? "http://127.0.0.1:5175";
   const control = async (
     configuration: WorkflowDeploymentConfiguration | null = workflow,
   ) => {

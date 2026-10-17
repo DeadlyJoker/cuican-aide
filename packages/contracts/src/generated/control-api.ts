@@ -1736,6 +1736,91 @@ export interface paths {
     patch?: never;
     trace?: never;
   };
+  "/api/v1/capabilities/workflow-recovery-context-v1": {
+    parameters: {
+      query?: never;
+      header?: never;
+      path?: never;
+      cookie?: never;
+    };
+    /** @description Authenticated comparison token for the actual request Actor and captured Workflow deployment policy and storage namespace. Null means no guarded Workflow recovery composition. Not a credential, execution permission, Worker health or completion receipt. Keep original token with immutable mutation payload and idempotency key; supplied tokens are checked again by each mutating request. Distinct logical deployments must not reuse authority identities. Guarded SDK writes use separate versioned mutation paths, so an older node rejects them rather than ignoring an unknown header. Never infer fleet support or downgrade an uncertain write to the legacy path. */
+    get: operations["getWorkflowRecoveryContextV1"];
+    put?: never;
+    post?: never;
+    delete?: never;
+    options?: never;
+    head?: never;
+    patch?: never;
+    trace?: never;
+  };
+  "/api/v1/workflow-runs:admit-v1": {
+    parameters: {
+      query?: never;
+      header?: never;
+      path?: never;
+      cookie?: never;
+    };
+    get?: never;
+    put?: never;
+    /** @description Versioned guarded alias of the original mutation, with unchanged body, authorization, receipt keys and response. Requires the current Workflow recovery context before any mutation/replay. Old servers reject the unknown path; clients must not downgrade after a possibly accepted write. Run cancellation still checks the target Run permission and uses its original cancellation semantics. */
+    post: operations["startGuardedWorkflowRunV1"];
+    delete?: never;
+    options?: never;
+    head?: never;
+    patch?: never;
+    trace?: never;
+  };
+  "/api/v1/runs/{runId}:cancel-guarded-v1": {
+    parameters: {
+      query?: never;
+      header?: never;
+      path?: never;
+      cookie?: never;
+    };
+    get?: never;
+    put?: never;
+    /** @description Versioned guarded alias of the original mutation, with unchanged body, authorization, receipt keys and response. Requires the current Workflow recovery context before any mutation/replay. Old servers reject the unknown path; clients must not downgrade after a possibly accepted write. Run cancellation still checks the target Run permission and uses its original cancellation semantics. */
+    post: operations["cancelGuardedRunV1"];
+    delete?: never;
+    options?: never;
+    head?: never;
+    patch?: never;
+    trace?: never;
+  };
+  "/api/v1/workflow-runs/{runId}/nodes/{nodeId}/gates/{gateRequestId}/decisions-guarded-v1": {
+    parameters: {
+      query?: never;
+      header?: never;
+      path?: never;
+      cookie?: never;
+    };
+    get?: never;
+    put?: never;
+    /** @description Versioned guarded alias of the original mutation, with unchanged body, authorization, receipt keys and response. Requires the current Workflow recovery context before any mutation/replay. Old servers reject the unknown path; clients must not downgrade after a possibly accepted write. Run cancellation still checks the target Run permission and uses its original cancellation semantics. */
+    post: operations["decideGuardedWorkflowHumanGateV1"];
+    delete?: never;
+    options?: never;
+    head?: never;
+    patch?: never;
+    trace?: never;
+  };
+  "/api/v1/workflow-runs/{runId}/nodes/{nodeId}/gates/{gateRequestId}/review-guarded-v1": {
+    parameters: {
+      query?: never;
+      header?: never;
+      path?: never;
+      cookie?: never;
+    };
+    get?: never;
+    put?: never;
+    /** @description Versioned guarded alias of the original mutation, with unchanged body, authorization, receipt keys and response. Requires the current Workflow recovery context before any mutation/replay. Old servers reject the unknown path; clients must not downgrade after a possibly accepted write. Run cancellation still checks the target Run permission and uses its original cancellation semantics. */
+    post: operations["reviewGuardedWorkflowHumanGateV1"];
+    delete?: never;
+    options?: never;
+    head?: never;
+    patch?: never;
+    trace?: never;
+  };
 }
 export type webhooks = Record<string, never>;
 export interface components {
@@ -4240,6 +4325,11 @@ export interface components {
       data: components["schemas"]["RunView"][];
       nextCursor: string | null;
     };
+    WorkflowRecoveryContextResponse: {
+      /** @constant */
+      version: "v1";
+      contextId: string | null;
+    };
   };
   responses: {
     /** @description Stable safe error envelope */
@@ -4284,6 +4374,10 @@ export interface components {
     CreativeProjectIdempotencyKey: string;
     /** @description One non-empty key of at most 128 UTF-16 units, with no surrounding whitespace, control characters or commas. Comma-separated values are rejected because HTTP adapters may merge repeated headers. Same actor/command/key/input replays the original result; the same key with changed input conflicts. */
     ProjectTextIdempotencyKey: string;
+    /** @description Optional comparison on upgraded legacy paths only; not fail-closed on old nodes. Recovery clients must use the dedicated versioned guarded mutation paths. This comparison token grants no authorization. */
+    WorkflowRecoveryContext: string;
+    /** @description Required request Actor and captured Workflow policy comparison token. Validated before any business mutation or replay. Missing/malformed values reject 400, changed context rejects 409, unavailable composition rejects 503. No authorization is granted. */
+    RequiredWorkflowRecoveryContext: string;
   };
   requestBodies: never;
   headers: never;
@@ -5560,6 +5654,8 @@ export interface operations {
         "Idempotency-Key": components["parameters"]["IdempotencyKey"];
         /** @description Required by the identity adapter for cookie-authenticated mutations. */
         "X-CSRF-Token"?: components["parameters"]["CsrfToken"];
+        /** @description Optional comparison on upgraded legacy paths only; not fail-closed on old nodes. Recovery clients must use the dedicated versioned guarded mutation paths. This comparison token grants no authorization. */
+        "x-crewon-workflow-context"?: components["parameters"]["WorkflowRecoveryContext"];
       };
       path?: never;
       cookie?: never;
@@ -5594,6 +5690,7 @@ export interface operations {
       404: components["responses"]["Error"];
       409: components["responses"]["Error"];
       500: components["responses"]["Error"];
+      503: components["responses"]["Error"];
     };
   };
   getRun: {
@@ -5655,6 +5752,8 @@ export interface operations {
         "Idempotency-Key": components["parameters"]["IdempotencyKey"];
         /** @description Required by the identity adapter for cookie-authenticated mutations. */
         "X-CSRF-Token"?: components["parameters"]["CsrfToken"];
+        /** @description Optional comparison on upgraded legacy paths only; not fail-closed on old nodes. Recovery clients must use the dedicated versioned guarded mutation paths. This comparison token grants no authorization. */
+        "x-crewon-workflow-context"?: components["parameters"]["WorkflowRecoveryContext"];
       };
       path: {
         runId: components["parameters"]["RunId"];
@@ -5682,6 +5781,7 @@ export interface operations {
       404: components["responses"]["Error"];
       409: components["responses"]["Error"];
       500: components["responses"]["Error"];
+      503: components["responses"]["Error"];
     };
   };
   streamRunEvents: {
@@ -8266,6 +8366,8 @@ export interface operations {
       header?: {
         /** @description Required by the identity adapter for cookie-authenticated mutations. */
         "X-CSRF-Token"?: components["parameters"]["CsrfToken"];
+        /** @description Optional comparison on upgraded legacy paths only; not fail-closed on old nodes. Recovery clients must use the dedicated versioned guarded mutation paths. This comparison token grants no authorization. */
+        "x-crewon-workflow-context"?: components["parameters"]["WorkflowRecoveryContext"];
       };
       path: {
         runId: components["parameters"]["RunId"];
@@ -8381,6 +8483,8 @@ export interface operations {
       header?: {
         /** @description Required by the identity adapter for cookie-authenticated mutations. */
         "X-CSRF-Token"?: components["parameters"]["CsrfToken"];
+        /** @description Optional comparison on upgraded legacy paths only; not fail-closed on old nodes. Recovery clients must use the dedicated versioned guarded mutation paths. This comparison token grants no authorization. */
+        "x-crewon-workflow-context"?: components["parameters"]["WorkflowRecoveryContext"];
       };
       path: {
         runId: components["parameters"]["RunId"];
@@ -8438,6 +8542,194 @@ export interface operations {
       401: components["responses"]["Error"];
       403: components["responses"]["Error"];
       500: components["responses"]["Error"];
+    };
+  };
+  getWorkflowRecoveryContextV1: {
+    parameters: {
+      query?: never;
+      header?: never;
+      path?: never;
+      cookie?: never;
+    };
+    requestBody?: never;
+    responses: {
+      /** @description Current Workflow recovery context; never cached */
+      200: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          "application/json": components["schemas"]["WorkflowRecoveryContextResponse"];
+        };
+      };
+      401: components["responses"]["Error"];
+      403: components["responses"]["Error"];
+      500: components["responses"]["Error"];
+    };
+  };
+  startGuardedWorkflowRunV1: {
+    parameters: {
+      query?: never;
+      header: {
+        "Idempotency-Key": components["parameters"]["IdempotencyKey"];
+        /** @description Required by the identity adapter for cookie-authenticated mutations. */
+        "X-CSRF-Token"?: components["parameters"]["CsrfToken"];
+        /** @description Required request Actor and captured Workflow policy comparison token. Validated before any business mutation or replay. Missing/malformed values reject 400, changed context rejects 409, unavailable composition rejects 503. No authorization is granted. */
+        "x-crewon-workflow-context": components["parameters"]["RequiredWorkflowRecoveryContext"];
+      };
+      path?: never;
+      cookie?: never;
+    };
+    requestBody: {
+      content: {
+        "application/json": components["schemas"]["StartWorkflowRunRequest"];
+      };
+    };
+    responses: {
+      /** @description The exact idempotently replayed Workflow Run */
+      200: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          "application/json": components["schemas"]["RunMutationResponse"];
+        };
+      };
+      /** @description A Workflow Run admitted with immutable version provenance and durable execution work */
+      201: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          "application/json": components["schemas"]["RunMutationResponse"];
+        };
+      };
+      400: components["responses"]["Error"];
+      401: components["responses"]["Error"];
+      403: components["responses"]["Error"];
+      404: components["responses"]["Error"];
+      409: components["responses"]["Error"];
+      500: components["responses"]["Error"];
+      503: components["responses"]["Error"];
+    };
+  };
+  cancelGuardedRunV1: {
+    parameters: {
+      query?: never;
+      header: {
+        "Idempotency-Key": components["parameters"]["IdempotencyKey"];
+        /** @description Required by the identity adapter for cookie-authenticated mutations. */
+        "X-CSRF-Token"?: components["parameters"]["CsrfToken"];
+        /** @description Required request Actor and captured Workflow policy comparison token. Validated before any business mutation or replay. Missing/malformed values reject 400, changed context rejects 409, unavailable composition rejects 503. No authorization is granted. */
+        "x-crewon-workflow-context": components["parameters"]["RequiredWorkflowRecoveryContext"];
+      };
+      path: {
+        runId: components["parameters"]["RunId"];
+      };
+      cookie?: never;
+    };
+    requestBody: {
+      content: {
+        "application/json": components["schemas"]["CancelRunRequest"];
+      };
+    };
+    responses: {
+      /** @description Committed or replayed cancellation request */
+      200: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          "application/json": components["schemas"]["RunMutationResponse"];
+        };
+      };
+      400: components["responses"]["Error"];
+      401: components["responses"]["Error"];
+      403: components["responses"]["Error"];
+      404: components["responses"]["Error"];
+      409: components["responses"]["Error"];
+      500: components["responses"]["Error"];
+      503: components["responses"]["Error"];
+    };
+  };
+  decideGuardedWorkflowHumanGateV1: {
+    parameters: {
+      query?: never;
+      header: {
+        /** @description Required by the identity adapter for cookie-authenticated mutations. */
+        "X-CSRF-Token"?: components["parameters"]["CsrfToken"];
+        /** @description Required request Actor and captured Workflow policy comparison token. Validated before any business mutation or replay. Missing/malformed values reject 400, changed context rejects 409, unavailable composition rejects 503. No authorization is granted. */
+        "x-crewon-workflow-context": components["parameters"]["RequiredWorkflowRecoveryContext"];
+      };
+      path: {
+        runId: components["parameters"]["RunId"];
+        nodeId: string;
+        gateRequestId: string;
+      };
+      cookie?: never;
+    };
+    requestBody: {
+      content: {
+        "application/json": components["schemas"]["DecideWorkflowHumanGateRequest"];
+      };
+    };
+    responses: {
+      /** @description A bounded, authorized consistent Workflow snapshot */
+      200: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          "application/json": components["schemas"]["WorkflowHumanGateMutationResponse"];
+        };
+      };
+      400: components["responses"]["Error"];
+      401: components["responses"]["Error"];
+      403: components["responses"]["Error"];
+      404: components["responses"]["Error"];
+      409: components["responses"]["Error"];
+      500: components["responses"]["Error"];
+      503: components["responses"]["Error"];
+    };
+  };
+  reviewGuardedWorkflowHumanGateV1: {
+    parameters: {
+      query?: never;
+      header: {
+        /** @description Required by the identity adapter for cookie-authenticated mutations. */
+        "X-CSRF-Token"?: components["parameters"]["CsrfToken"];
+        /** @description Required request Actor and captured Workflow policy comparison token. Validated before any business mutation or replay. Missing/malformed values reject 400, changed context rejects 409, unavailable composition rejects 503. No authorization is granted. */
+        "x-crewon-workflow-context": components["parameters"]["RequiredWorkflowRecoveryContext"];
+      };
+      path: {
+        runId: components["parameters"]["RunId"];
+        nodeId: string;
+        gateRequestId: string;
+      };
+      cookie?: never;
+    };
+    requestBody: {
+      content: {
+        "application/json": components["schemas"]["ReviewWorkflowHumanGateRequest"];
+      };
+    };
+    responses: {
+      /** @description A bounded, authorized consistent Workflow snapshot */
+      200: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          "application/json": components["schemas"]["WorkflowHumanGateReviewMutationResponse"];
+        };
+      };
+      400: components["responses"]["Error"];
+      401: components["responses"]["Error"];
+      403: components["responses"]["Error"];
+      404: components["responses"]["Error"];
+      409: components["responses"]["Error"];
+      500: components["responses"]["Error"];
+      503: components["responses"]["Error"];
     };
   };
 }

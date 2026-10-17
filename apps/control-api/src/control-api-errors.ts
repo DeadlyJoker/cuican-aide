@@ -22,6 +22,13 @@ export class WorkspaceControlUnavailableError extends Error {
     this.name = "WorkspaceControlUnavailableError";
   }
 }
+export class WorkflowRecoveryContextUnavailableError extends Error {
+  readonly code = "workflow_recovery_context_unavailable";
+  constructor() {
+    super("workflow_recovery_context_unavailable");
+    this.name = "WorkflowRecoveryContextUnavailableError";
+  }
+}
 
 export function errorResponse(
   error: unknown,
@@ -66,13 +73,11 @@ export function errorResponse(
       applicationStatusCode(error.category),
     );
   }
-  if (error instanceof WorkspaceControlUnavailableError) {
-    return response(
-      "deviceUnavailable",
-      "workspace_command_factory_unavailable",
-      requestId,
-      503,
-    );
+  if (
+    error instanceof WorkspaceControlUnavailableError ||
+    error instanceof WorkflowRecoveryContextUnavailableError
+  ) {
+    return response("deviceUnavailable", error.code, requestId, 503);
   }
   if (isFastifyBadRequest(error)) {
     return response("validation", "request_body_invalid", requestId, 400);

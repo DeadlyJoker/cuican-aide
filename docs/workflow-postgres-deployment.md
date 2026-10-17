@@ -181,3 +181,24 @@ await client.reviewWorkflowHumanGate(locator, {
 另有真实进程验证：原 Release CLI 发布生产者和独立 Verifier，原 Control Main 通过 HTTP 入库后关闭，原 Worker Main 的两个槽继续执行到人工门；重启 Control/Worker 后，以相同键恢复入库、审批、完成，并从各自 transcript 与终态 SSE 读取最终结果。所有进程只注入命名 fixture 环境，不继承调用者凭据。
 
 模型响应来自明确的本机 HTTP SSE fixture，未调用真实供应商，也未验收安装版账号和可见 UI。后续需要 Workflow 前端接管及旧执行链退役，再让 Team 复用同一父子任务机制；生产请求级授权、SQLite/桌面策略入口、资源隔离、生命周期收敛和自主子 Agent 限额仍是后续阶段。
+
+## 未知提交恢复的请求绑定
+
+`GET /api/v1/capabilities/workflow-recovery-context-v1` 返回严格的 `{ version: "v1", contextId }`，不缓存，SDK 响应上限 1 KiB。`contextId: null` 表示未装配该恢复边界；有效值是 71 字符的 SHA-256 比较标识，绑定实际请求 Actor 的 tenant/space/actor/principal、捕获的完整 Workflow 部署策略和存储 namespace。它不是凭据、授权、Worker 健康检查或提交回执，不进入模型上下文。执行策略和标识在第一次异步迁移前从同一份配置捕获，宿主后来改动原对象不会让两者漂移。
+
+SDK 的 `WorkflowMutationRequestOptions.workflowRecoveryContext` 会同时携带 `x-crewon-workflow-context` 并选择独立版本化写入口：
+
+| SDK 操作                | 带恢复绑定的入口                                                                             |
+| ----------------------- | -------------------------------------------------------------------------------------------- |
+| startWorkflowRun        | POST /api/v1/workflow-runs:admit-v1                                                          |
+| decideWorkflowHumanGate | POST /api/v1/workflow-runs/{runId}/nodes/{nodeId}/gates/{gateRequestId}/decisions-guarded-v1 |
+| reviewWorkflowHumanGate | POST /api/v1/workflow-runs/{runId}/nodes/{nodeId}/gates/{gateRequestId}/review-guarded-v1    |
+| cancelRun               | POST /api/v1/runs/{runId}:cancel-guarded-v1                                                  |
+
+这些入口强制要求比较标识，仍使用原业务服务、权限检查、body、幂等键/门回执和响应。取消仍按目标 Run 的原权限和取消语义处理；比较标识不授予目标访问权。缺失、畸形或重复值返回 400，当前 Actor/配置不匹配返回 409，未装配返回 503，均在本次业务 mutation/replay 之前拒绝。Web BFF 明确转发该标识，浏览器身份、CSRF 与服务凭据替换保持原边界；中间层丢掉标识也会被版本化入口拒绝。
+
+仅增加请求头不能防止旧节点忽略新语义。带绑定的 SDK 因而使用上述专用入口；旧节点返回不支持，不会进入旧 mutation。SDK 在发送前只捕获一次比较值，保证选路和请求头一致。省略新选项的旧调用继续沿原 URL；升级节点也会核对旧 URL 上显式提供的标识，但这不是混合版本下的恢复保证。能力 GET 不证明整个集群升级，不能据它在写失败后降级到 renderer 或旧 URL。
+
+未知写入恢复仍以原业务回执为准。前端集成必须在首次发送前保留原比较标识、完整不可变 body 和原幂等键/门身份，恢复时核验当前上下文并回放同一请求，不换键、不猜最新任务、不因目录没有记录或某次 400/404/409/503 就判定原请求未入库。重启后相同配置的标识稳定；配置变化时保留原意图和未知状态，不能把新标识覆盖到旧意图后自动重发。标识使用可信逻辑 authorityId 与 namespace，不是物理数据库指纹；独立部署须使用独立逻辑权威身份。
+
+当前前端尚未实现这套意图持久化和后台执行权切换。它们仍需接入有界目录、已知根快照、流恢复、任意 DAG/input schema、旧记录边界与子 Thread 归属。该接口没有补齐生产请求级 Workflow 策略或 SQLite/桌面入口；显式意见上下文仍需原有 Control/Worker 协调升级要求。

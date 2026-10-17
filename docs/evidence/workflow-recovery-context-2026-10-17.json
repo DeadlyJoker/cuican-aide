@@ -1,0 +1,222 @@
+{
+  "schemaVersion": "crewon.workflow-recovery-context-evidence.v1",
+  "date": "2026-10-17",
+  "baseCommit": "d93cb8203754a0705d75a1b7b9e115ad46ca5dd6",
+  "scope": "Backend and SDK request Actor/configuration comparison for future durable Workflow submission recovery; formal Control/Worker/CLI and real isolated PostgreSQL, synthetic model, production BFF.handle with fixture browser identity. No frontend authority switch or real browser/TLS/account acceptance.",
+  "suites": {
+    "workflowRelated": {
+      "tests": 37,
+      "pass": 37,
+      "fail": 0,
+      "cancelled": 0,
+      "skipped": 0,
+      "exitCode": 0,
+      "logSha256": "741dde9c0ab1c03bc3456ac366a48f03cecab241550ce5b196a8f128290bbf61"
+    },
+    "contracts": {
+      "tests": 765,
+      "pass": 765,
+      "fail": 0,
+      "cancelled": 0,
+      "skipped": 0,
+      "exitCode": 0,
+      "logSha256": "6ce11dba4df03c506d9d62ef5f089d53e79e17f736f381a6e59266ab36dd92e2"
+    },
+    "controlClient": {
+      "tests": 283,
+      "pass": 283,
+      "fail": 0,
+      "cancelled": 0,
+      "skipped": 0,
+      "exitCode": 0,
+      "logSha256": "cdb8137bcf22c3d3c9f0f0584bf768c9d08980947ab627e22807890ea9034ea3"
+    },
+    "webBff": {
+      "tests": 124,
+      "pass": 124,
+      "fail": 0,
+      "cancelled": 0,
+      "skipped": 0,
+      "exitCode": 0,
+      "logSha256": "d0e771922c0a7ab22185a4ad8f4a42e5ad5c7d8e33afbe07db49783328bb6d36"
+    },
+    "architectureAndProductionTypeGraphs": {
+      "tests": 37,
+      "pass": 37,
+      "fail": 0,
+      "cancelled": 0,
+      "skipped": 0,
+      "exitCode": 0,
+      "logSha256": "64da8984b17db4c5d11edd018ca25aa123b234214cc5966f9705de99a0bad417"
+    }
+  },
+  "typechecks": {
+    "contracts": {
+      "exitCode": 0,
+      "logSha256": "fdb0b11cf32d9ff1561fa073c4dca9e4cab928a27303db9441997677150a0ecf"
+    },
+    "control-client": {
+      "exitCode": 0,
+      "logSha256": "f1f42d2db0056de148cd750e00146644325c5d62e9f7429a72bb35bfdd88fa21"
+    },
+    "control-api": {
+      "exitCode": 0,
+      "logSha256": "4156428d53b3f97d9de611b4b2841dec260918eb4571ed5fa9c63ac97398aea0"
+    },
+    "web-bff": {
+      "exitCode": 0,
+      "logSha256": "6543a24ef8ce78ca219b2928f724aee51bf36db0f61916d05e770a75b17971ed"
+    },
+    "runtime-worker": {
+      "exitCode": 0,
+      "logSha256": "0723f9ec69a95cba4021c8ac79718e054ce8ef53bf58180f15f25974ce2ec6a6"
+    }
+  },
+  "ui": {
+    "sourceChanged": false,
+    "lint": {
+      "exitCode": 0,
+      "logSha256": "81146a96524321a864257d9c4668a0dbd5ebb7f7cd0567ecd1086416bfa5e5de"
+    },
+    "build": {
+      "exitCode": 0,
+      "logSha256": "147bffe383f2f7dc344e47b8dfe74497927086f35d326d19269443e684abbe30"
+    },
+    "eagerBytes": 326427,
+    "fullUiTestsRerun": false,
+    "installedAcceptance": false
+  },
+  "protocol": {
+    "discovery": "GET /api/v1/capabilities/workflow-recovery-context-v1",
+    "responseKeys": ["version", "contextId"],
+    "uncomposedContext": null,
+    "responseBudgetBytes": 1024,
+    "comparisonTokenCharacters": 71,
+    "comparisonHeader": "x-crewon-workflow-context",
+    "guardedMutationAliases": [
+      "POST /api/v1/workflow-runs:admit-v1",
+      "POST /api/v1/runs/{runId}:cancel-guarded-v1",
+      "POST /api/v1/workflow-runs/{runId}/nodes/{nodeId}/gates/{gateRequestId}/decisions-guarded-v1",
+      "POST /api/v1/workflow-runs/{runId}/nodes/{nodeId}/gates/{gateRequestId}/review-guarded-v1"
+    ],
+    "comparisonInputs": [
+      "actual tenantId",
+      "actual spaceId",
+      "actual actorId",
+      "actual principalId",
+      "captured full Workflow deployment configuration",
+      "trusted storage namespace"
+    ],
+    "requiresContextOnGuardedAliases": true,
+    "missingOrMalformedOrRepeated": 400,
+    "changedContext": 409,
+    "uncomposedGuard": 503,
+    "comparisonIsPermissionOrReceipt": false,
+    "legacyOmissionUrlBodyReceiptAndResponse": "unchanged",
+    "sdkCapturesRouteAndHeaderContextOnce": true,
+    "automaticLegacyFallback": false,
+    "newTables": 0,
+    "newIndexes": 0,
+    "schemaMigrations": 0,
+    "workItemOrRunEventShapesChanged": false
+  },
+  "scenarioDiagnostics": [
+    {
+      "case": "preparation-failure-http",
+      "contextual": false,
+      "cancel": false,
+      "rootStatus": "failed",
+      "terminalEvents": 1,
+      "modelSamples": 0
+    },
+    {
+      "case": "preparation-failure-http",
+      "contextual": true,
+      "cancel": false,
+      "rootStatus": "failed",
+      "terminalEvents": 1,
+      "modelSamples": 0
+    },
+    {
+      "case": "preparation-failure-http",
+      "contextual": false,
+      "cancel": true,
+      "rootStatus": "canceled",
+      "terminalEvents": 1,
+      "modelSamples": 0
+    },
+    {
+      "case": "guarded-workflow-unknown-recovery",
+      "roots": 1,
+      "models": ["agent", "verifier"],
+      "assistantReplies": 1,
+      "originalContextRestored": true
+    },
+    {
+      "case": "browser-bff-workflow-context",
+      "guardedMutations": 7,
+      "mismatchWrites": 0,
+      "droppedHeaderWrites": 0,
+      "models": ["agent"],
+      "browserCsrfRejectedBeforeForward": true
+    }
+  ],
+  "mixedVersionProof": {
+    "surface": "Real Node HTTP routing fixture representing new discovery and legacy-only mutation nodes.",
+    "guardedMutationAttempts": 4,
+    "legacyBusinessEntries": 0,
+    "automaticRetryOrDowngrade": false,
+    "droppedBffHeader": "Real guarded Control rejects the missing header before writing, even when a controlled intermediate adapter drops it."
+  },
+  "bffBaseline": {
+    "originalHeaderAllowlistExcludedComparison": true,
+    "baseCommit": "d93cb8203754a0705d75a1b7b9e115ad46ca5dd6",
+    "sourceSha256": "c7cd160f8d3aeeb55a684cccaabebfd938c394bbf1fb27f5953a530c375a99c1",
+    "issue": "Two Headers.set calls pass a third argument at baseline; JS ignored it and the new cross-app HTTP test exposed the TypeScript errors. Removed only those ignored arguments; both advertised header values remain unchanged."
+  },
+  "limitations": [
+    "The comparison token is not a physical database fingerprint; separate logical deployments must not reuse authority identities.",
+    "A rejection or missing directory entry does not prove an earlier uncertain write was not committed. Preserve the original context, body and receipt key; do not overwrite them with a newly discovered context.",
+    "No frontend immutable-intent journal, root submission/snapshot wiring, generic DAG/schema UX, unknown-write recovery UI, legacy read-only migration or child Thread directory attribution is completed.",
+    "No production request-level Workflow strategy or SQLite/desktop deployment composition was added.",
+    "Human descendant review context retains its prior coordinated Control/Worker upgrade requirement.",
+    "No real provider, installed desktop, real browser login/TLS, full UI, performance or power-loss durability acceptance.",
+    "Existing UI/plugin failures were not fixed or reclassified by this change."
+  ],
+  "cleanup": {
+    "dataDirectory": "/tmp/crewon-wf-pg-ai1hte94/data",
+    "listenAddresses": "",
+    "fsync": "off",
+    "serverVersion": "PostgreSQL 18.6 (Homebrew) on aarch64-apple-darwin24.6.0, compiled by Apple clang version 17.0.0 (clang-1700.6.4.2), 64-bit",
+    "startedAt": "2026-10-17T16:17:48.144154+08:00",
+    "checkedAt": "2026-10-17T16:48:36.247544+08:00",
+    "userSchemas": 0,
+    "otherClients": 0,
+    "running": false,
+    "statusExitCode": 3,
+    "stoppedAt": "2026-10-17T08:48:37.231551+00:00"
+  },
+  "sourceSha256": {
+    "apps/control-api/src/control-api-errors.ts": "2c47d5f11a153cc2a32e8bbc0fbd625dd1975e76306837b93c819238ded64d96",
+    "apps/control-api/src/control-api.ts": "4158029c52362438e87e5bf9374f8e4b2c88710e8dfbcc1f8a6153ad667b25cf",
+    "apps/control-api/src/postgres-workflow-recovery-context.integration.test.ts": "74de2e05292ffc8a928fba5746479f09e816e0c71d672bbb81d7f3945b0104c9",
+    "apps/control-api/src/run-cancellation-routes.ts": "5bad9cc98ab270d92bf25daaf4baccafadaec265a6a53cb32fea3078132fd3e0",
+    "apps/control-api/src/standalone-composition.ts": "e9bf72efb3a7b30c781ccf97ef78ada01b9cbf21c6cf23de43e8d42eb8e6ebe3",
+    "apps/control-api/src/workflow-control-routes.ts": "93fa73c298e812261a64090926ab81ba701a10ff9b499720a1de2db82ae1d499",
+    "apps/control-api/src/workflow-deployment-composition.ts": "d985aa96c4327f2cf75a3d6dd404fdb02edd94f5dd134dcc0f03a74dbf98c2d0",
+    "apps/control-api/src/workflow-deployment.test-support.ts": "7cc33669637ad58077cd5a2bec118464a47100dcec0f637c25a140bc94cc0731",
+    "apps/control-api/src/workflow-recovery-context.test.ts": "0dfc40bd843cbab9e163f1f5b4477decbf31c7c11c59999e279a7400ce815e1d",
+    "apps/control-api/src/workflow-recovery-context.ts": "96dbe76c70c956605ab99ba56bbac9c7430fa42d50362130b6b1e1877d0d7bdd",
+    "apps/control-api/src/workflow-start-route.ts": "55bf6826c1b5730479410efe6c3a792320ff4247d4d10edea56527264926e60f",
+    "apps/web-bff/src/web-bff.ts": "79d6da0a54560d6a61b697dceb88c90064a337dbeb899063ae96650a28f51b78",
+    "packages/contracts/openapi/control-api.v1.json": "745306b3bb8575a0ae3ff7ed5c0a600d7a15880c45cd32875b17e194dabfd6c0",
+    "packages/contracts/src/control-api-contract.test.ts": "3fd815ee092776835ddbae42a3a68897b07fba283d665a0cf672b29497444608",
+    "packages/contracts/src/generated/control-api.ts": "0060a3466f62b70db5040cd13c259df297926dc72422a1b243c7ca0359cd8d42",
+    "packages/contracts/src/index.ts": "ff89c24a166cde10121ede373d08d7ce3b57d9c86a699819d0125559c1f69765",
+    "packages/contracts/src/workflow-recovery-context.test.ts": "ad4f35d70982901aac48107784c806f6f271a9935aef06c85b1389e5800e397e",
+    "packages/contracts/src/workflow-recovery-context.ts": "8645725dfdc41138221509a6dde024bc787402e640a42f658bb4f9fc0cb967f3",
+    "packages/control-client/src/control-api-client.ts": "cb64e26884d7edbd38552aa09094759969a7b462f69b7ad441c6671800ec2e77",
+    "packages/control-client/src/workflow-control-client.ts": "d098e935d01aff0ef6127ca08a03f7e5a06309eb9f652f1b5a1d27b3fbadabe8",
+    "packages/control-client/src/workflow-recovery-context-client.test.ts": "78b4ed863b466426b81814fbe32c642feadcf467a121d092f88971582b8943d8"
+  }
+}

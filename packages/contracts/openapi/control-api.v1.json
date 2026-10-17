@@ -1814,6 +1814,9 @@
           },
           {
             "$ref": "#/components/parameters/CsrfToken"
+          },
+          {
+            "$ref": "#/components/parameters/WorkflowRecoveryContext"
           }
         ],
         "requestBody": {
@@ -1863,6 +1866,9 @@
             "$ref": "#/components/responses/Error"
           },
           "500": {
+            "$ref": "#/components/responses/Error"
+          },
+          "503": {
             "$ref": "#/components/responses/Error"
           }
         }
@@ -2017,6 +2023,9 @@
           },
           {
             "$ref": "#/components/parameters/CsrfToken"
+          },
+          {
+            "$ref": "#/components/parameters/WorkflowRecoveryContext"
           }
         ],
         "requestBody": {
@@ -2056,6 +2065,9 @@
             "$ref": "#/components/responses/Error"
           },
           "500": {
+            "$ref": "#/components/responses/Error"
+          },
+          "503": {
             "$ref": "#/components/responses/Error"
           }
         }
@@ -6760,6 +6772,9 @@
           },
           {
             "$ref": "#/components/parameters/CsrfToken"
+          },
+          {
+            "$ref": "#/components/parameters/WorkflowRecoveryContext"
           }
         ],
         "requestBody": {
@@ -6953,6 +6968,9 @@
           },
           {
             "$ref": "#/components/parameters/CsrfToken"
+          },
+          {
+            "$ref": "#/components/parameters/WorkflowRecoveryContext"
           }
         ],
         "requestBody": {
@@ -7042,6 +7060,326 @@
           }
         },
         "description": "Read-only bounded catalog across Workflow identities in the authenticated tenant. Requires list and individual read grants; immutable definitions remain on their existing version endpoint. Maximum 20 summaries per page."
+      }
+    },
+    "/api/v1/capabilities/workflow-recovery-context-v1": {
+      "get": {
+        "operationId": "getWorkflowRecoveryContextV1",
+        "responses": {
+          "200": {
+            "description": "Current Workflow recovery context; never cached",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/WorkflowRecoveryContextResponse"
+                }
+              }
+            }
+          },
+          "401": {
+            "$ref": "#/components/responses/Error"
+          },
+          "403": {
+            "$ref": "#/components/responses/Error"
+          },
+          "500": {
+            "$ref": "#/components/responses/Error"
+          }
+        },
+        "description": "Authenticated comparison token for the actual request Actor and captured Workflow deployment policy and storage namespace. Null means no guarded Workflow recovery composition. Not a credential, execution permission, Worker health or completion receipt. Keep original token with immutable mutation payload and idempotency key; supplied tokens are checked again by each mutating request. Distinct logical deployments must not reuse authority identities. Guarded SDK writes use separate versioned mutation paths, so an older node rejects them rather than ignoring an unknown header. Never infer fleet support or downgrade an uncertain write to the legacy path."
+      }
+    },
+    "/api/v1/workflow-runs:admit-v1": {
+      "post": {
+        "operationId": "startGuardedWorkflowRunV1",
+        "parameters": [
+          {
+            "$ref": "#/components/parameters/IdempotencyKey"
+          },
+          {
+            "$ref": "#/components/parameters/CsrfToken"
+          },
+          {
+            "$ref": "#/components/parameters/RequiredWorkflowRecoveryContext"
+          }
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/StartWorkflowRunRequest"
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "The exact idempotently replayed Workflow Run",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/RunMutationResponse"
+                }
+              }
+            }
+          },
+          "201": {
+            "description": "A Workflow Run admitted with immutable version provenance and durable execution work",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/RunMutationResponse"
+                }
+              }
+            }
+          },
+          "400": {
+            "$ref": "#/components/responses/Error"
+          },
+          "401": {
+            "$ref": "#/components/responses/Error"
+          },
+          "403": {
+            "$ref": "#/components/responses/Error"
+          },
+          "404": {
+            "$ref": "#/components/responses/Error"
+          },
+          "409": {
+            "$ref": "#/components/responses/Error"
+          },
+          "500": {
+            "$ref": "#/components/responses/Error"
+          },
+          "503": {
+            "$ref": "#/components/responses/Error"
+          }
+        },
+        "description": "Versioned guarded alias of the original mutation, with unchanged body, authorization, receipt keys and response. Requires the current Workflow recovery context before any mutation/replay. Old servers reject the unknown path; clients must not downgrade after a possibly accepted write. Run cancellation still checks the target Run permission and uses its original cancellation semantics."
+      }
+    },
+    "/api/v1/runs/{runId}:cancel-guarded-v1": {
+      "post": {
+        "operationId": "cancelGuardedRunV1",
+        "parameters": [
+          {
+            "$ref": "#/components/parameters/RunId"
+          },
+          {
+            "$ref": "#/components/parameters/IdempotencyKey"
+          },
+          {
+            "$ref": "#/components/parameters/CsrfToken"
+          },
+          {
+            "$ref": "#/components/parameters/RequiredWorkflowRecoveryContext"
+          }
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/CancelRunRequest"
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "Committed or replayed cancellation request",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/RunMutationResponse"
+                }
+              }
+            }
+          },
+          "400": {
+            "$ref": "#/components/responses/Error"
+          },
+          "401": {
+            "$ref": "#/components/responses/Error"
+          },
+          "403": {
+            "$ref": "#/components/responses/Error"
+          },
+          "404": {
+            "$ref": "#/components/responses/Error"
+          },
+          "409": {
+            "$ref": "#/components/responses/Error"
+          },
+          "500": {
+            "$ref": "#/components/responses/Error"
+          },
+          "503": {
+            "$ref": "#/components/responses/Error"
+          }
+        },
+        "description": "Versioned guarded alias of the original mutation, with unchanged body, authorization, receipt keys and response. Requires the current Workflow recovery context before any mutation/replay. Old servers reject the unknown path; clients must not downgrade after a possibly accepted write. Run cancellation still checks the target Run permission and uses its original cancellation semantics."
+      }
+    },
+    "/api/v1/workflow-runs/{runId}/nodes/{nodeId}/gates/{gateRequestId}/decisions-guarded-v1": {
+      "post": {
+        "operationId": "decideGuardedWorkflowHumanGateV1",
+        "description": "Versioned guarded alias of the original mutation, with unchanged body, authorization, receipt keys and response. Requires the current Workflow recovery context before any mutation/replay. Old servers reject the unknown path; clients must not downgrade after a possibly accepted write. Run cancellation still checks the target Run permission and uses its original cancellation semantics.",
+        "parameters": [
+          {
+            "$ref": "#/components/parameters/RunId"
+          },
+          {
+            "name": "nodeId",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "minLength": 1,
+              "maxLength": 512
+            }
+          },
+          {
+            "name": "gateRequestId",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "minLength": 1,
+              "maxLength": 512
+            }
+          },
+          {
+            "$ref": "#/components/parameters/CsrfToken"
+          },
+          {
+            "$ref": "#/components/parameters/RequiredWorkflowRecoveryContext"
+          }
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/DecideWorkflowHumanGateRequest"
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "A bounded, authorized consistent Workflow snapshot",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/WorkflowHumanGateMutationResponse"
+                }
+              }
+            }
+          },
+          "400": {
+            "$ref": "#/components/responses/Error"
+          },
+          "401": {
+            "$ref": "#/components/responses/Error"
+          },
+          "403": {
+            "$ref": "#/components/responses/Error"
+          },
+          "404": {
+            "$ref": "#/components/responses/Error"
+          },
+          "409": {
+            "$ref": "#/components/responses/Error"
+          },
+          "500": {
+            "$ref": "#/components/responses/Error"
+          },
+          "503": {
+            "$ref": "#/components/responses/Error"
+          }
+        }
+      }
+    },
+    "/api/v1/workflow-runs/{runId}/nodes/{nodeId}/gates/{gateRequestId}/review-guarded-v1": {
+      "post": {
+        "operationId": "reviewGuardedWorkflowHumanGateV1",
+        "description": "Versioned guarded alias of the original mutation, with unchanged body, authorization, receipt keys and response. Requires the current Workflow recovery context before any mutation/replay. Old servers reject the unknown path; clients must not downgrade after a possibly accepted write. Run cancellation still checks the target Run permission and uses its original cancellation semantics.",
+        "parameters": [
+          {
+            "$ref": "#/components/parameters/RunId"
+          },
+          {
+            "name": "nodeId",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "minLength": 1,
+              "maxLength": 512
+            }
+          },
+          {
+            "name": "gateRequestId",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "minLength": 1,
+              "maxLength": 512
+            }
+          },
+          {
+            "$ref": "#/components/parameters/CsrfToken"
+          },
+          {
+            "$ref": "#/components/parameters/RequiredWorkflowRecoveryContext"
+          }
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/ReviewWorkflowHumanGateRequest"
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "A bounded, authorized consistent Workflow snapshot",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/WorkflowHumanGateReviewMutationResponse"
+                }
+              }
+            }
+          },
+          "400": {
+            "$ref": "#/components/responses/Error"
+          },
+          "401": {
+            "$ref": "#/components/responses/Error"
+          },
+          "403": {
+            "$ref": "#/components/responses/Error"
+          },
+          "404": {
+            "$ref": "#/components/responses/Error"
+          },
+          "409": {
+            "$ref": "#/components/responses/Error"
+          },
+          "500": {
+            "$ref": "#/components/responses/Error"
+          },
+          "503": {
+            "$ref": "#/components/responses/Error"
+          }
+        }
       }
     }
   },
@@ -7292,6 +7630,28 @@
           "minLength": 1,
           "maxLength": 128
         }
+      },
+      "WorkflowRecoveryContext": {
+        "name": "x-crewon-workflow-context",
+        "in": "header",
+        "required": false,
+        "schema": {
+          "type": "string",
+          "pattern": "^sha256:[a-f0-9]{64}$",
+          "maxLength": 71
+        },
+        "description": "Optional comparison on upgraded legacy paths only; not fail-closed on old nodes. Recovery clients must use the dedicated versioned guarded mutation paths. This comparison token grants no authorization."
+      },
+      "RequiredWorkflowRecoveryContext": {
+        "name": "x-crewon-workflow-context",
+        "in": "header",
+        "required": true,
+        "schema": {
+          "type": "string",
+          "pattern": "^sha256:[a-f0-9]{64}$",
+          "maxLength": 71
+        },
+        "description": "Required request Actor and captured Workflow policy comparison token. Validated before any business mutation or replay. Missing/malformed values reject 400, changed context rejects 409, unavailable composition rejects 503. No authorization is granted."
       }
     },
     "responses": {
@@ -16500,6 +16860,28 @@
               "null"
             ],
             "maxLength": 4096
+          }
+        }
+      },
+      "WorkflowRecoveryContextResponse": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": [
+          "version",
+          "contextId"
+        ],
+        "properties": {
+          "version": {
+            "type": "string",
+            "const": "v1"
+          },
+          "contextId": {
+            "type": [
+              "string",
+              "null"
+            ],
+            "pattern": "^sha256:[a-f0-9]{64}$",
+            "maxLength": 71
           }
         }
       }

@@ -457,6 +457,7 @@ export async function createPostgresControlApi(
       configuration: pinned.workflow,
       actor: pinned.actor,
       defaultAgentVersionId: pinned.defaultAgentVersionId,
+      namespace: pinned.schema ?? "crewon",
     });
   } catch (error) {
     await closeOwners([
@@ -888,6 +889,7 @@ function composeControlApi(
       approvals,
       agentVersions,
       workflowVersions,
+      workflowRecoveryContext: workflow?.recovery,
       workflowRuns:
         workflow === undefined
           ? undefined

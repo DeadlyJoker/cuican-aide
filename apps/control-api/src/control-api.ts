@@ -1,4 +1,6 @@
+import { registerRunCancellationRoutes } from "./run-cancellation-routes.ts";
 import { registerWorkflowCatalogRoutes } from "./workflow-catalog-routes.ts";
+import { registerWorkflowStartRoute } from "./workflow-start-route.ts";
 import {
   registerWorkflowControlRoutes,
   type WorkflowControlServices,
@@ -114,12 +116,10 @@ import {
   parseArtifactId,
   parseAutomationId,
   parseAutomationListQuery,
-  parseCancelRunRequest,
   parseCompactThreadRequest,
   parseClearThreadGoalRequest,
   parseCreateRunRequest,
   parseCreateOfficeRequest,
-  parseStartWorkflowRunRequest,
   parseCreateAutomationRequest,
   parseCreateThreadRequest,
   parseDecideToolApprovalRequest,
@@ -1468,6 +1468,8 @@ export function buildControlApi(
   registerThreadTranscriptWindowRoute(app, dependencies);
   registerThreadTranscriptSnapshotRoute(app, dependencies);
   registerWorkflowCatalogRoutes(app, dependencies);
+  registerWorkflowStartRoute(app, dependencies);
+  registerRunCancellationRoutes(app, dependencies);
   registerWorkflowControlRoutes(app, {
     ...dependencies,
     workflowGateCommitted: () => wakeOutbox(dependencies.outboxWakeup),
@@ -1629,34 +1631,6 @@ export function buildControlApi(
             : null,
       };
       return response;
-    },
-  );
-
-  app.post<{ Body: unknown }>(
-    "/api/v1/workflow-runs",
-    async (request, reply) => {
-      const actor = await dependencies.identity.resolveActor(
-        requestContext(request),
-      );
-      const body = parseStartWorkflowRunRequest(request.body);
-      if (dependencies.workflowRuns == null) {
-        throw new WorkspaceControlUnavailableError();
-      }
-      const result = await dependencies.workflowRuns.startWorkflowRun(actor, {
-        kind: "workflowRun.start",
-        idempotencyKey: parseIdempotencyKey(request.headers["idempotency-key"]),
-        workflowVersionId: body.workflowVersionId,
-        threadId: body.threadId,
-        input: body.input as JsonValue,
-      });
-      wakeOutbox(dependencies.outboxWakeup);
-      const response: RunMutationResponse = {
-        disposition: result.run.disposition,
-        run: projectRun(result.run.state),
-      };
-      return reply
-        .code(result.run.disposition === "committed" ? 201 : 200)
-        .send(response);
     },
   );
 
@@ -1900,32 +1874,6 @@ export function buildControlApi(
         .header("etag", `"${artifact.record.contentDigest}"`)
         .type(artifact.record.mediaType)
         .send(Buffer.from(artifact.content));
-    },
-  );
-
-  app.post<{ Params: { runId: string }; Body: unknown }>(
-    "/api/v1/runs/:runId([^:]+)::cancel",
-    async (request, reply) => {
-      const actor = await dependencies.identity.resolveActor(
-        requestContext(request),
-      );
-      const runId = parseRunId(request.params.runId);
-      const body = parseCancelRunRequest(request.body);
-      const idempotencyKey = parseIdempotencyKey(
-        request.headers["idempotency-key"],
-      );
-      const result = await dependencies.application.transitionRun(actor, {
-        kind: "run.requestCancel",
-        runId,
-        expectedRevision: body.expectedRevision,
-        idempotencyKey,
-      });
-      wakeOutbox(dependencies.outboxWakeup);
-      const response: RunMutationResponse = {
-        disposition: result.disposition,
-        run: projectRun(result.state),
-      };
-      return reply.code(200).send(response);
     },
   );
 
