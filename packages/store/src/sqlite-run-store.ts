@@ -969,6 +969,7 @@ export class SqliteRunStore implements DomainStore {
       hasPendingProviderSwitch: (tenantId) =>
         this.#hasPendingProviderSwitch(tenantId),
       resolveRouteWithinTransaction,
+      commitThreadWithinTransaction: (input) => this.#commitThread(input, {withinTransaction: true}),
       commitRunWithinTransaction: (input) =>
         this.#commitRun(input, null, null, {
           withinTransaction: true,

@@ -87,6 +87,28 @@ const review = (snapshot = workflowRunReadFixture()) => ({
 });
 
 describe("durable Workflow user commands", () => {
+  it("refuses to rebind a displayed definition to another recovery context before creating an intent or dispatching", async () => {
+    const f = fixture();
+    await expect(
+      f.reopen().start(body(), { expectedRecoveryContext: changedContext }),
+    ).rejects.toThrow("workflow_recovery_context_changed");
+    expect(f.client.startWorkflowRun).not.toHaveBeenCalled();
+    expect(f.storage.length).toBe(0);
+  });
+  it("captures the displayed context once and keeps the frontend comparison option out of the SDK mutation", async () => {
+    const f = fixture();
+    let reads = 0;
+    const read = vi.fn(() => (++reads === 1 ? contextId : changedContext));
+    const options = Object.defineProperty({}, "expectedRecoveryContext", {
+      enumerable: true,
+      get: read,
+    });
+    await f.reopen().start(body(), options);
+    expect(read).toHaveBeenCalledOnce();
+    expect(f.client.startWorkflowRun.mock.calls[0]?.[2]).toEqual({
+      workflowRecoveryContext: contextId,
+    });
+  });
   it("persists the complete intent before guarded submission and acknowledges only a bound Workflow Run", async () => {
     const f = fixture(),
       source = body();

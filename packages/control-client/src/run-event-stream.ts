@@ -51,7 +51,7 @@ const RUN_EVENT_TYPES = {
 } satisfies Record<RunEventView["type"], true>;
 
 export async function* streamRunEvents(
-  client: ControlApiClient,
+  client: Pick<ControlApiClient, "openRunEventStream">,
   input: {
     runId: string;
     afterSequence?: number;

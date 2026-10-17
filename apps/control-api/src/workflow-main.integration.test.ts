@@ -1,3 +1,4 @@
+import { assertWorkflowRootInput } from "./workflow-root-transcript.test-support.ts";
 import assert from "node:assert/strict";
 import { randomBytes, randomUUID } from "node:crypto";
 import { mkdtemp, realpath, rm, writeFile } from "node:fs/promises";
@@ -394,9 +395,16 @@ test(
         root.threadId,
       );
       const bindings = transcript.transcriptWindow.runBindings.filter(
-        (binding) => binding.runId === root.runId,
+        (binding) =>
+          binding.runId === root.runId &&
+          binding.source === "messageCompletedEvent",
       );
       assert.equal(bindings.length, 1);
+      assertWorkflowRootInput(
+        transcript,
+        root.runId,
+        JSON.stringify({ topic: root.topic }),
+      );
       assert.equal(
         transcript.transcriptWindow.messageWindow.data.find(
           (message) => message.messageId === bindings[0]!.messageId,

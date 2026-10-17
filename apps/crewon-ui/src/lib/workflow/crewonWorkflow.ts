@@ -1,3 +1,5 @@
+import type { RunView } from "@crewon/contracts";
+
 export type CrewonWorkflowAgentNode = {
   nodeId: string;
   type?: "agent" | "verification";
@@ -35,6 +37,22 @@ export type CrewonWorkflowRecord = {
   filePath: string;
   savedAt: string;
   config: CrewonWorkflowConfig;
+  /** Renderer-owned provenance; never inferred from hidden Thread messages. */
+  control?: {
+    source: "durable" | "legacy";
+    workflowVersionId: string;
+    loaded: boolean;
+    readOnlyReason: string | null;
+    inputMode: "prompt" | "json";
+    inputSchema: Record<string, unknown> | null;
+    knownRunId: string | null;
+    root?: RunView;
+    roots?: readonly RunView[];
+    nextRootCursor?: string | null;
+    awaitingSnapshot?: boolean;
+    canStart?: boolean;
+    canReview?: boolean;
+  };
 };
 
 export type CrewonWorkflowNodeInput =

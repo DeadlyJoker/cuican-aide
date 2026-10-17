@@ -1,3 +1,4 @@
+import { assertWorkflowRootInput } from "./workflow-root-transcript.test-support.ts";
 import assert from "node:assert/strict";
 import test from "node:test";
 import {
@@ -130,10 +131,15 @@ for (const { contextual, cancel } of [
         "canceled",
       );
       assert.deepEqual(f.requests, []);
-      assert.deepEqual(
-        await f.store.listModelHistoryItems(locator, 0, 100),
-        prefix,
-      );
+      const history = await f.store.listModelHistoryItems(locator, 0, 100);
+      assert.deepEqual(history.slice(0, prefix.length), prefix);
+      assert.equal(history.length, prefix.length + 1);
+      const originalInput = history.at(-1)!;
+      assert.equal(originalInput.runId, root.runId);
+      if (originalInput.type !== "message")
+        assert.fail("missing original input");
+      assert.equal(originalInput.role, "user");
+      assert.equal(originalInput.content, '{"topic":"safe"}');
       assert.deepEqual(
         await f.store.listModelHistoryItems(
           { ...locator, threadId: failedChild.threadId },
@@ -162,10 +168,15 @@ for (const { contextual, cancel } of [
         thread.threadId,
       );
       assert.equal(transcript.activeRunId, null);
+      const rootInput = assertWorkflowRootInput(
+        transcript,
+        root.runId,
+        '{"topic":"safe"}',
+      );
       assert.deepEqual(
-        transcript.transcriptWindow.messageWindow.data.map(
-          (message) => message.content,
-        ),
+        transcript.transcriptWindow.messageWindow.data
+          .filter((message) => message.messageId !== rootInput.messageId)
+          .map((message) => message.content),
         ["Keep the existing root history unchanged."],
       );
       for (const run of [final.run, child]) {

@@ -431,3 +431,23 @@ SDK 另用真实 HTTP 服务模拟“新节点发现、旧节点处理写入”�
 本批未修改页面、CSS 或原模型历史。独立命令实例及可重开的内存 Storage 接口不是两个真实浏览器窗口，也不是 browser localStorage/浏览器重启验收；模型为明确合成 transport，非真实供应商。临时 PostgreSQL 仅 Unix Socket、fsync 关闭，业务 schema 和其他客户端归零后已关闭并确认退出码 3；没有访问用户数据库，不声明生产性能或断电持久性。证据见 [前端命令恢复](evidence/workflow-frontend-commands-2026-10-18.json)。
 
 `CommandWorkspace` 尚未使用新命令模块，页面仍走旧 `ControlWorkflowRuntime`，本批不代表前端执行权已经迁移。下一批必须接已有目录、选中版本/已知根快照和源绑定状态所有者，将不可变意图恢复入口、通用 schema 输入、审批/取消及结果显示接入真实页面，并退出旧列表读取推进；不再增设后台前置能力。旧记录只读、子 Thread 目录归属、生产身份和 SQLite/桌面部署差异仍需各自验收；Team、工具资源/生命周期、自主子 Agent 与安装式插件继续属于完整目标。
+
+## 第二十六批：Workflow 页面接入后台执行与完整主会话回流（2026-10-18）
+
+上一批命令层已提交为 `5d179a3d7`。本批将 Control 工作台的 Workflow 接入该命令层、已有持久根任务及正式 SDK；移除原 `ControlWorkflowRuntime` 的 fork、普通 createRun、等待、恢复与节点推进，原路径仅保留重导出。历史隐藏 Thread/Message 的解析另存只读 Reader，只有用户明确选择旧记录时才发现和读取，不自动恢复、不重发旧任务。AppServer 模式与 Team 执行尚未迁移，不将本批称为整个产品的前端执行退役。
+
+目录每页只取 20 个版本摘要；打开时才读冻结定义和至多 20 个根任务，后续刷新绑定已知根。版本缓存最多 20 个，运行选择保留有界历史；明确的新运行草稿不取消旧根。实际浏览器发现一次切换会丢掉前一个根的选择项，现已保留访问过的根，明确翻页仍替换本页窗口。源绑定记录 Owner 合并慢读，丢弃旧身份、旧版本、旧根和迟到命令结果；读取失败保留最近已读记录。Root SSE 只触发规范快照收敛，按原 Run/sequence 重连，EOF 不判完成；保留有界轮询作为节点进度和断网兜底。
+
+简单 prompt 定义使用原 prompt 输入；其他 schema 显示 JSON 格式并验证实际 JSON，不擅自构造 prompt 字段。页面支持显式根任务历史、并行人工门选择、原文审批意见、取消中状态、失败验证原文的按需只读读取及显式原请求恢复。意图继续使用已有 localStorage 日志；应答未知显示“请求结果待确认”，阻止同一主 Thread 的新提交，不阻止其他主 Thread 或已知根的审批和取消。显示时的恢复上下文绑定到命令，防止已展示的定义在身份变化后自动改绑。未提供持久能力时明确只读，无 renderer 执行回退；关闭新准入不妨碍已有根的读取和审批。
+
+真实浏览器还发现后台最终回复缺少对应的主会话用户输入，正式 Transcript 将其展示为部分轮次。本批补齐 PostgreSQL 和 SQLite admission 的同事务写入：原输入、主 Thread 用户消息、有界模型历史及现有索引可读的 compound-start 证明随 Run/队列/输入回执一起提交。普通 prompt 保留原文，其他输入使用规范 JSON；每个模型历史片段至多 9999 UTF-8 字节。失败全部回滚，重放不重复追加，旧回执不补写历史。没有改写已有模型历史、增加 SQL schema 或改变 HTTP 响应字段；恢复读继续接受旧回执，拒绝不完整或不匹配的新证明，不将内部证明返回给调用方。发起 Workflow 现在同时要求 `run:create` 和 `thread:message:append`，正式身份启用时必须审查这一权限要求。
+
+浏览器使用真实 Panel、命令层、SDK、Control/Worker/PostgreSQL，以及正式 `ControlThreadRuntime` 和 `Transcript`，模型明确为合成 transport，入口为临时隔离预览。提交已入库后丢失应答，刷新仍保留原意图且不自动 POST；恢复同一根后 Producer/Verifier 各执行一次。最终两条主会话分别保留一条原输入和一条最终回复，绑定各自 Run，无活跃槽残留。验证了通用 JSON 输入与结果；此前同一预览还完成两个不同主会话并存审批、运行切换和取消中至真实 canceled 的操作。最后一轮两根完成、四次模型采样；该轮浏览器 warn/error 为零，早期修改预览入口时的 HMR/createRoot 错误不作为产品缺陷修复或无错误运行证据。
+
+1280×720 下审批等待超过 30 秒，房间 DOM 长度、当前根和 Composer 位置稳定；390×600 无页面横向溢出，步骤条保留自身滚动；900×450 的审批操作可在消息区内滚动到达，Composer 不覆盖按钮。Root 展示读取峰值为 1，此计数不包含命令内部的审批/取消前置读，不代表全页面只有一个 HTTP 请求。截图为 `workflow-durable-desktop.jpg`、`workflow-durable-narrow.jpg`、`workflow-durable-low-height-actions.jpg`、`workflow-main-conversation-result.jpg` 和 `workflow-main-conversation-json-result.jpg`，位于本机可视化目录。正式 `/` 仍显示账号登录页，没有绕过登录；本地企业微信配置代理未运行，不构成账号登录、正式 BFF/TLS、真实供应商或安装版桌面验收。
+
+最终同一次相关前端回归 34 文件 423 项、完整 Workflow 专项 402 项（包括真实 Main 进程重启、两会话并行、SQLite/PostgreSQL admission、回滚和真实 HTTP/SSE）、架构与生产类型图 37 项均通过、无跳过，SDK 流专项另 14 项通过。Control/Worker/Application/Store/Control Client 完整类型检查、UI/Electron lint、正式 build、仓库入口边界与格式检查通过。第一次扩大 Workflow 回归的 13 项失败均为旧“仅最终回复/空主会话”的断言；保留成功、失败、拒绝、取消和恢复断言，并新增精确原输入、Run 归属及原历史前缀不变的检查，最终 402 项全部通过。未运行并声明整个仓库或完整安装式插件全量通过。
+
+验证记录与最终结果见 [页面迁移证据](evidence/workflow-renderer-migration-2026-10-18.json)。原 Panel 与命令工作台快照保留，新恢复控件有独立快照；退役执行器的旧测试由只读历史行为、正式命令和真实后台链路测试接续，没有保留一个测试专用旧执行器。正式 UI build 的登录入口 eager JavaScript 为 326428 字节（上限 524288）；WorkspaceApp 为 2637.48 kB / gzip 762.32 kB。本批增加了恢复和历史界面，不宣称总包体、安装版耗时或内存已经下降。临时预览文件、标签与服务已清理；独立 PostgreSQL 关闭前 schema 与其他客户端归零，已停止并确认状态退出码 3，未访问用户数据库，fsync 关闭不作为断电持久性或生产性能证据。
+
+部署范围仍是显式启用的 standalone PostgreSQL；SQLite admission 的本批原子输入测试不代表已装配 SQLite 调度、桌面入口或正式身份策略。旧 Workflow 执行记录只读，默认未启用持久服务的部署无法继续旧 renderer 执行，本批不能直接作为默认桌面功能完整的发行版。新 Workflow 子 Thread 尚未按后台父子权威从普通会话目录区分，不用伪造 fork 元数据隐藏它们。下一批先收敛部署支持与子 Thread 目录归属，再推进 Team 的持久权威；资源/生命周期、自主子 Agent、安装式插件及完整产品验收仍在完整目标内。

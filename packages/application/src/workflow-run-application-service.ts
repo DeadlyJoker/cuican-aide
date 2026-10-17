@@ -234,6 +234,18 @@ export class WorkflowRunApplicationService {
       });
       if (decision.outcome !== "allow")
         throw new ApplicationError("authorization", "authorization_denied");
+      const append = await this.#authorization.authorize({
+        actor,
+        action: "thread:message:append",
+        resource: {
+          kind: "thread",
+          tenantId: actor.tenantId,
+          spaceId: actor.spaceId,
+          threadId,
+        },
+      });
+      if (append.outcome !== "allow")
+        throw new ApplicationError("authorization", "authorization_denied");
     } catch (error) {
       if (error instanceof ApplicationError) throw error;
       throw new ApplicationError("authorization", "authorization_unavailable", {

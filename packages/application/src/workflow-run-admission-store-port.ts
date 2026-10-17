@@ -43,7 +43,11 @@ export type CommitWorkflowRunStartResult = Readonly<{
  * route, invoke `prepare` exactly once while the transaction remains open,
  * and atomically persist the returned immutable root input value with the
  * receipt, Run event, outbox message, and `run.execute` WorkItem. The Store
- * must verify the scheduler payload's exact `{valueId,valueDigest}` reference
+ * also appends the original input once to the main Thread and its bounded
+ * model history in that same transaction, retaining the existing indexed
+ * compound-start message/Run evidence. Receipt replay must not append again
+ * or backfill inputs for older admissions. The Store must verify the
+ * scheduler payload's exact `{valueId,valueDigest}` reference
  * against that value authority. Implementations must fail closed
  * rather than invoke `prepare` when any scope or authority check fails. The
  * callback parses and digest-verifies `definitionJson` and validates input

@@ -1,3 +1,4 @@
+import { assertWorkflowRootInput } from "./workflow-root-transcript.test-support.ts";
 import assert from "node:assert/strict";
 import test from "node:test";
 import {
@@ -192,9 +193,12 @@ for (const commentContext of [undefined, "descendants-v1"] as const)
           thread.threadId,
         );
         assert.equal(transcript.activeRunId, null);
+        assertWorkflowRootInput(transcript, started.run.runId);
         assert.equal(
           transcript.transcriptWindow.runBindings.filter(
-            (binding) => binding.runId === started.run.runId,
+            (binding) =>
+              binding.runId === started.run.runId &&
+              binding.source === "messageCompletedEvent",
           ).length,
           decision === "approved" ? 1 : 0,
         );

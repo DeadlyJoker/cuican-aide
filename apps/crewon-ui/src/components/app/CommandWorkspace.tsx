@@ -104,10 +104,13 @@ import type {
   ControlToolApprovalRequest,
 } from "../../lib/control-runtime/controlToolApprovalPresentation";
 import {
-  ControlWorkflowRuntime,
-  isInternalControlWorkflowThread,
-  type ControlWorkflowRuntimeClient,
-} from "../../lib/control-runtime/controlWorkflowRuntime";
+  ControlDurableWorkflowRuntime,
+  type ControlDurableWorkflowClient,
+  type WorkflowReadScope,
+} from "../../lib/control-runtime/controlDurableWorkflowRuntime";
+import { isInternalControlWorkflowThread } from "../../lib/control-runtime/controlWorkflowLegacyMarkers";
+import { useControlWorkflowRecords } from "./useControlWorkflowRecords";
+import { CommandWorkflowRecoveryControls } from "./CommandWorkflowRecoveryControls";
 import {
   ControlExpertRuntime,
   isControlExpertOfficeRecord,
@@ -409,7 +412,7 @@ type CommandWorkspaceProps = {
   officeControlClient?: ControlOfficeClient | null;
   controlOfficeRoomAdapter?: CommandOfficeRoomAdapter | null;
   workflowControlClient?:
-    | (ControlWorkflowRuntimeClient & ControlExpertRuntimeClient)
+    | (ControlDurableWorkflowClient & ControlExpertRuntimeClient)
     | null;
   automationRuntime?: ControlAutomationRuntime | null;
   automationControlConfigured?: boolean;
@@ -1214,17 +1217,31 @@ export function CommandWorkspace({
     null,
   );
   const [workflowCreateBusy, setWorkflowCreateBusy] = useState(false);
-  const [workflows, setWorkflows] = useState<CrewonWorkflowRecord[]>([]);
-  const [workflowsStatus, setWorkflowsStatus] = useState<
+  const [legacyWorkflows, setWorkflows] = useState<CrewonWorkflowRecord[]>([]);
+  const [legacyWorkflowsStatus, setWorkflowsStatus] = useState<
     "loading" | "ready" | "unavailable"
   >("loading");
   const controlWorkflowRuntime = useMemo(
     () =>
       workflowControlClient === null
         ? null
-        : new ControlWorkflowRuntime({ client: workflowControlClient }),
+        : new ControlDurableWorkflowRuntime({ client: workflowControlClient }),
     [workflowControlClient],
   );
+  const controlWorkflows = useControlWorkflowRecords({
+    runtime: controlWorkflowRuntime,
+    enabled:
+      workspaceAuthority === "control" && connectionState === "connected",
+    refreshNonce: teamRefreshNonce,
+  });
+  const workflows =
+    workspaceAuthority === "control"
+      ? controlWorkflows.records
+      : legacyWorkflows;
+  const workflowsStatus =
+    workspaceAuthority === "control"
+      ? controlWorkflows.status
+      : legacyWorkflowsStatus;
   const controlExpertRuntime = useMemo(
     () =>
       workflowControlClient === null
@@ -1673,33 +1690,7 @@ export function CommandWorkspace({
 
   useEffect(() => {
     let cancelled = false;
-    if (workspaceAuthority === "control") {
-      if (!controlWorkflowRuntime || connectionState !== "connected") {
-        setWorkflows([]);
-        setWorkflowsStatus(
-          connectionState === "connecting" ? "loading" : "unavailable",
-        );
-        return;
-      }
-      setWorkflowsStatus("loading");
-      void controlWorkflowRuntime.listWorkflows().then(
-        (records) => {
-          if (!cancelled) {
-            setWorkflows([...records]);
-            setWorkflowsStatus("ready");
-          }
-        },
-        () => {
-          if (!cancelled) {
-            setWorkflows([]);
-            setWorkflowsStatus("unavailable");
-          }
-        },
-      );
-      return () => {
-        cancelled = true;
-      };
-    }
+    if (workspaceAuthority === "control") return;
     if (
       connectionState !== "connected" ||
       !cwd ||
@@ -2329,23 +2320,8 @@ export function CommandWorkspace({
     }
   }
 
-  async function reloadWorkflowDefinitions() {
-    if (workspaceAuthority === "control") {
-      if (!controlWorkflowRuntime) {
-        setWorkflows([]);
-        setWorkflowsStatus("unavailable");
-        return;
-      }
-      setWorkflowsStatus("loading");
-      try {
-        setWorkflows([...(await controlWorkflowRuntime.listWorkflows())]);
-        setWorkflowsStatus("ready");
-      } catch {
-        setWorkflows([]);
-        setWorkflowsStatus("unavailable");
-      }
-      return;
-    }
+  async function reloadWorkflowDefinitions(scope?: WorkflowReadScope) {
+    if (workspaceAuthority === "control") return controlWorkflows.reload(scope);
     if (!executionTargetClient?.listWorkflowConfigs || !cwd) {
       setWorkflows([]);
       setWorkflowsStatus("unavailable");
@@ -3051,7 +3027,7 @@ export function CommandWorkspace({
     setWorkflowCreateError(null);
     try {
       if (workspaceAuthority === "control") {
-        await controlWorkflowRuntime!.createWorkflow({
+        await controlWorkflows.create({
           title: input.title,
           description: input.goal,
           nodes: input.nodes.map((node) =>
@@ -3090,7 +3066,7 @@ export function CommandWorkspace({
           ),
         });
       }
-      await reloadWorkflowDefinitions();
+      if (workspaceAuthority !== "control") await reloadWorkflowDefinitions();
       setWorkflowCreateOpen(false);
     } catch (error) {
       setWorkflowCreateError(
@@ -4433,19 +4409,69 @@ export function CommandWorkspace({
                   }
                 : undefined
             }
+            workflowSourceIdentity={
+              workspaceAuthority === "control" ? controlWorkflowRuntime : null
+            }
+            workflowExecutionContext={
+              workspaceAuthority === "control"
+                ? { threadId: selectedThreadId, pending: controlWorkflows.pending }
+                : undefined
+            }
+            onNewWorkflowRun={
+              workspaceAuthority === "control"
+                ? controlWorkflows.draft
+                : undefined
+            }
+            observeWorkflow={
+              workspaceAuthority === "control"
+                ? controlWorkflows.observe
+                : undefined
+            }
+            onInspectWorkflow={
+              workspaceAuthority === "control"
+                ? controlWorkflows.inspect
+                : undefined
+            }
+            workflowControls={
+              workspaceAuthority === "control"
+                ? (room) => (
+                    <CommandWorkflowRecoveryControls
+                      state={controlWorkflows}
+                      room={room}
+                      onOpen={(workflowId) =>
+                        setWorkflowOpenRequest((previous) => ({
+                          workflowId,
+                          revision: (previous?.revision ?? 0) + 1,
+                        }))
+                      }
+                    />
+                  )
+                : undefined
+            }
+            onReadWorkflowEvidence={
+              workspaceAuthority === "control"
+                ? ({ workflow, executionId: runId, nodeId, signal }) =>
+                    controlWorkflows.evidence({
+                      workflowVersionId: workflow.config.workflowId,
+                      runId,
+                      nodeId,
+                      signal,
+                    })
+                : undefined
+            }
             onReloadWorkflows={reloadWorkflowDefinitions}
             onRunWorkflow={async (workflow, input) => {
               if (workspaceAuthority === "control") {
                 if (!controlWorkflowRuntime || !selectedThreadId) {
                   throw new Error("请先选择一个活动任务再运行协作流");
                 }
-                const result = await controlWorkflowRuntime.runWorkflow({
+                if (workflow.control?.source === "legacy")
+                  throw Error("旧版记录仅供查看");
+                return controlWorkflows.run({
                   workflowVersionId: workflow.config.workflowId,
                   threadId: selectedThreadId,
                   prompt: input,
                 });
-                await reloadWorkflowDefinitions();
-                return result;
               }
               if (!cwd || !executionTargetClient?.runWorkflowConfig) {
                 throw new Error("App Server 尚未提供协作流执行能力");
@@ -4461,12 +4487,12 @@ export function CommandWorkspace({
                 if (!controlWorkflowRuntime) {
                   throw new Error("Control 协作流暂不可用");
                 }
-                const result = await controlWorkflowRuntime.cancelWorkflow({
+                if (workflow.control?.source === "legacy")
+                  throw Error("旧版记录仅供查看");
+                return controlWorkflows.cancel({
                   workflowVersionId: workflow.config.workflowId,
                   executionId,
                 });
-                await reloadWorkflowDefinitions();
-                return result;
               }
               if (!cwd || !executionTargetClient?.cancelWorkflowRun) {
                 throw new Error("App Server 尚未提供协作流取消能力");
@@ -4488,15 +4514,15 @@ export function CommandWorkspace({
                 if (!controlWorkflowRuntime) {
                   throw new Error("Control 协作流暂不可用");
                 }
-                const result = await controlWorkflowRuntime.resolveGate({
+                if (workflow.control?.source === "legacy")
+                  throw Error("旧版记录仅供查看");
+                return controlWorkflows.review({
                   workflowVersionId: workflow.config.workflowId,
                   executionId,
                   nodeId,
                   decision,
                   comment,
                 });
-                await reloadWorkflowDefinitions();
-                return result;
               }
               if (!cwd || !executionTargetClient?.resolveWorkflowGate) {
                 throw new Error("App Server 尚未提供 Human Gate 处理能力");

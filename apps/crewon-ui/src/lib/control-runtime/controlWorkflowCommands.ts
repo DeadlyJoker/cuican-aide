@@ -7,6 +7,7 @@ import {
   parseStartWorkflowRunRequest,
   parseWorkflowExecutionCapability,
   parseWorkflowRecoveryContextResponse,
+  parseWorkflowRecoveryContextId,
   parseWorkflowReviewCapability,
   parseWorkflowRunSnapshotResponse,
   parseReviewWorkflowHumanGateRequest,
@@ -34,6 +35,10 @@ export type ControlWorkflowCommandsClient = Pick<
   | "cancelRun"
   | "reviewWorkflowHumanGate"
 >;
+export type WorkflowCommandRequestOptions = ControlApiRequestOptions & {
+  /** Context of the definition and user action currently displayed by the UI. */
+  expectedRecoveryContext?: string;
+};
 type Acknowledgement = Readonly<{
   intent: WorkflowIntent;
   // A validated response is still useful when storage removal fails. Keep the
@@ -72,7 +77,7 @@ export class ControlWorkflowCommands {
     this.#journal = input.journal ?? new ControlWorkflowIntentJournal();
   }
 
-  async readAvailability(options: ControlApiRequestOptions = {}) {
+  async readAvailability(options: WorkflowCommandRequestOptions = {}) {
     options.signal?.throwIfAborted();
     const [executionValue, contextValue] = await Promise.all([
       this.#client.getWorkflowExecutionCapability(options),
@@ -90,7 +95,7 @@ export class ControlWorkflowCommands {
 
   async start(
     body: StartWorkflowRunRequest,
-    options: ControlApiRequestOptions = {},
+    options: WorkflowCommandRequestOptions = {},
   ): Promise<WorkflowCommandResult> {
     const captured = parseStartWorkflowRunRequest(body);
     return this.#create(
@@ -105,7 +110,7 @@ export class ControlWorkflowCommands {
 
   async cancel(
     snapshot: WorkflowRunSnapshotResponse,
-    options: ControlApiRequestOptions = {},
+    options: WorkflowCommandRequestOptions = {},
   ): Promise<WorkflowCommandResult> {
     const captured = parseWorkflowRunSnapshotResponse(
       snapshot,
@@ -137,7 +142,7 @@ export class ControlWorkflowCommands {
       comment: string | null;
       commentContext: "auditOnly" | "descendants-v1";
     },
-    options: ControlApiRequestOptions = {},
+    options: WorkflowCommandRequestOptions = {},
   ): Promise<WorkflowCommandResult> {
     const snapshot = parseWorkflowRunSnapshotResponse(
       input.snapshot,
@@ -186,8 +191,9 @@ export class ControlWorkflowCommands {
   /** Explicit user action only; the stored body, key, Gate and mode never change. */
   async recover(
     intentId: string,
-    options: ControlApiRequestOptions = {},
+    options: WorkflowCommandRequestOptions = {},
   ): Promise<WorkflowCommandResult> {
+    options = { ...options };
     const intent = this.#journal.get(intentId);
     const ready = await this.#ready(intent.command, options);
     if (ready.contextId !== intent.contextId)
@@ -201,8 +207,9 @@ export class ControlWorkflowCommands {
       threadId: string;
       command: WorkflowIntentCommand;
     },
-    options: ControlApiRequestOptions,
+    options: WorkflowCommandRequestOptions,
   ): Promise<WorkflowCommandResult> {
+    options = { ...options };
     const ready = await this.#ready(input.command, options);
     // A second click must not replace a still-unknown intent with a new key.
     if (
@@ -222,9 +229,15 @@ export class ControlWorkflowCommands {
 
   async #ready(
     command: WorkflowIntentCommand,
-    options: ControlApiRequestOptions,
+    options: WorkflowCommandRequestOptions,
   ) {
+    const expected =
+      options.expectedRecoveryContext === undefined
+        ? undefined
+        : parseWorkflowRecoveryContextId(options.expectedRecoveryContext);
     const state = await this.readAvailability(options);
+    if (expected !== undefined && expected !== state.contextId)
+      throw Error("workflow_recovery_context_changed");
     if (
       state.contextId === null ||
       !state.execution.snapshots ||
@@ -252,11 +265,16 @@ export class ControlWorkflowCommands {
 
   async #dispatch(
     intent: WorkflowIntent,
-    options: ControlApiRequestOptions,
+    options: WorkflowCommandRequestOptions,
   ): Promise<WorkflowCommandResult> {
     try {
       options.signal?.throwIfAborted();
-      const guarded = { ...options, workflowRecoveryContext: intent.contextId };
+      const { expectedRecoveryContext: _expected, ...transportOptions } =
+        options;
+      const guarded = {
+        ...transportOptions,
+        workflowRecoveryContext: intent.contextId,
+      };
       const command = intent.command;
       let result:
         | Omit<

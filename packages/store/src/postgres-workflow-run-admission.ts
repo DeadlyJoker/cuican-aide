@@ -5,6 +5,8 @@ import {
   canonicalJson,
   type CommitRunInput,
   type CommitRunResult,
+  type CommitThreadInput,
+  type CommitThreadResult,
   type CommitWorkflowRunStartInput,
   type CommitWorkflowRunStartResult,
   type RunRoute,
@@ -39,6 +41,10 @@ import {
   completeWorkflowAdmissionReplay,
   type WorkflowAdmissionReceiptRow,
 } from "./workflow-run-admission-receipt.ts";
+import {
+  prepareWorkflowRootInput,
+  workflowRootInputReceipt,
+} from "./workflow-root-input.ts";
 
 /** Trusted composition callback: only use this transaction's client for route authority reads. */
 export type PostgresWorkflowRouteResolver = (
@@ -66,6 +72,10 @@ type Dependencies = Readonly<{
     client: PoolClient,
     input: CommitRunInput,
   ): Promise<CommitRunResult>;
+  commitThread(
+    client: PoolClient,
+    input: CommitThreadInput,
+  ): Promise<CommitThreadResult>;
   resolveRouteWithinTransaction: PostgresWorkflowRouteResolver;
 }>;
 
@@ -214,6 +224,22 @@ export class ExperimentalPostgresWorkflowRunAdmissionStore
         client,
         run: structuredClone(run.state),
       });
+      const head = await client.query<{ n: string }>(
+        `SELECT COALESCE(MAX(sequence),0) AS n FROM ${this.#sql}.model_history_items WHERE tenant_id=$1 AND thread_id=$2`,
+        [input.tenantId, input.threadId],
+      );
+      const startedThread = await this.#d.commitThread(
+        client,
+        prepareWorkflowRootInput(input, run, thread, Number(head.rows[0]!.n)),
+      );
+      await client.query(
+        `UPDATE ${this.#sql}.idempotency_receipts SET result_json=$3::jsonb WHERE scope=$1 AND idempotency_key=$2`,
+        [
+          input.idempotency.scope,
+          input.idempotency.key,
+          canonicalJson(workflowRootInputReceipt(run, startedThread)),
+        ],
+      );
       const value = prepared.workflowInputValue;
       await client.query(
         `INSERT INTO ${this.#sql}.workflow_run_inputs (tenant_id,run_id,value_id,value_digest,value_json)

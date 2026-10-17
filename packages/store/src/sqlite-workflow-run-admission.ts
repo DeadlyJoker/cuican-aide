@@ -4,6 +4,8 @@ import {
   canonicalJson as stableJson,
   type CommitRunInput,
   type CommitRunResult,
+  type CommitThreadInput,
+  type CommitThreadResult,
   type CommitWorkflowRunStartInput,
   type CommitWorkflowRunStartResult,
   type RunRoute,
@@ -33,6 +35,10 @@ import {
   decodeWorkflowAdmissionReceipt,
   completeWorkflowAdmissionReplay,
 } from "./workflow-run-admission-receipt.ts";
+import {
+  prepareWorkflowRootInput,
+  workflowRootInputReceipt,
+} from "./workflow-root-input.ts";
 
 /** Server-owned, synchronous admission. Never perform network I/O inside SQLite's write transaction. */
 export type SqliteWorkflowRouteResolver = (
@@ -51,6 +57,7 @@ type Dependencies = Readonly<{
   hasActiveRun(locator: ThreadScopedLocator): boolean;
   hasPendingProviderSwitch(tenantId: string): boolean;
   commitRunWithinTransaction(input: CommitRunInput): CommitRunResult;
+  commitThreadWithinTransaction(input: CommitThreadInput): CommitThreadResult;
   resolveRouteWithinTransaction: SqliteWorkflowRouteResolver;
 }>;
 
@@ -143,6 +150,21 @@ export class ExperimentalSqliteWorkflowRunAdmissionStore
       );
       if (run.disposition !== "committed")
         throw new RunStoreError("workflow_run_admission_receipt_invalid");
+      const head = db
+        .prepare(
+          `SELECT COALESCE(MAX(sequence),0) AS n FROM model_history_items WHERE tenant_id=? AND thread_id=?`,
+        )
+        .get(input.tenantId, input.threadId) as { n: number };
+      const startedThread = this.#dependencies.commitThreadWithinTransaction(
+        prepareWorkflowRootInput(input, run, thread, head.n),
+      );
+      db.prepare(
+        `UPDATE idempotency_receipts SET result_json=? WHERE scope=? AND idempotency_key=?`,
+      ).run(
+        stableJson(workflowRootInputReceipt(run, startedThread)),
+        input.idempotency.scope,
+        input.idempotency.key,
+      );
       const value = prepared.workflowInputValue;
       db.prepare(
         `INSERT INTO workflow_run_inputs (tenant_id,run_id,value_id,value_digest,value_json) VALUES (?,?,?,?,?)`,

@@ -1,7 +1,7 @@
 import type { ThreadView } from "@crewon/contracts";
 
 import { isInternalControlExpertThread } from "./controlExpertRuntime";
-import { isInternalControlWorkflowThread } from "./controlWorkflowRuntime";
+import { isInternalControlWorkflowThread } from "./controlWorkflowLegacyMarkers";
 
 /** Match sidebar visibility before conversation bootstrap/search chooses a Thread. */
 export function isControlConversationThread(thread: ThreadView): boolean {

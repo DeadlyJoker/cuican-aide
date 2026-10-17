@@ -24,6 +24,17 @@ pgTest(
     assert.ok(Object.values(counts).every((n) => n === 1));
     assert.equal(first.run.state.purpose, "workflow");
     assert.deepEqual(first.authority.workflowVersion, f.asset);
+    const snapshot = await f.store.messageWindows.readWindow({
+      tenantId: "tenant-1",
+      spaceId: "space-1",
+      threadId: "thread-1",
+      position: null,
+      limit: 50,
+      view: "transcriptSnapshot",
+    });
+    assert.equal(snapshot.messages[0]!.role, "user");
+    assert.equal(snapshot.messages[0]!.content, '{"topic":"safe"}');
+    assert.equal(snapshot.runBindings![0]!.runId, first.run.state.runId);
     const ref = first.run.workItems[0]!.payload.workflowInput as {
       valueId: string;
       valueDigest: string;
@@ -46,6 +57,16 @@ pgTest(
     });
     assert.deepEqual(await f.counts(), counts);
     assert.equal(f.callbacks().prepareCalls, 1);
+    assert.equal(
+      (
+        await f.store.listMessages(
+          { tenantId: "tenant-1", threadId: "thread-1" },
+          0,
+          10,
+        )
+      ).length,
+      1,
+    );
   },
 );
 
@@ -260,6 +281,16 @@ for (const denied of ["space", "tenant", "version", "archived"] as const) {
         ids: 0,
       });
       assert.ok(Object.values(await f.counts()).every((n) => n === 0));
+      assert.equal(
+        (
+          await f.store.listMessages(
+            { tenantId: "tenant-1", threadId: "thread-1" },
+            0,
+            10,
+          )
+        ).length,
+        0,
+      );
     },
   );
 }

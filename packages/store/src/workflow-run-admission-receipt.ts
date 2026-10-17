@@ -14,7 +14,13 @@ import {
 import {
   validateWorkflowAdmissionAuthority,
   validateWorkflowAdmissionPreparation,
+  workflowAdmissionDigest,
 } from "./workflow-run-admission-validation.ts";
+import { resolveMessageRunEvidence } from "./message-run-evidence.ts";
+import {
+  workflowRootInputContent,
+  workflowRootInputReceipt,
+} from "./workflow-root-input.ts";
 
 export const MAX_WORKFLOW_ADMISSION_RECEIPT_BYTES =
   MAX_WORKFLOW_DEFINITION_BYTES * 2 + 16_384;
@@ -40,7 +46,18 @@ export function decodeWorkflowAdmissionReceipt(
   try {
     if (row.result_json === null || row.authority_json === null)
       throw new Error("missing workflow receipt");
-    const run = JSON.parse(row.result_json) as CommitRunResult;
+    const stored = JSON.parse(row.result_json) as ReturnType<
+      typeof workflowRootInputReceipt
+    >;
+    // Compound-start evidence belongs to the receipt/read model, never the
+    // public command response. Legacy receipts have only these original fields.
+    const run: CommitRunResult = {
+      disposition: stored.disposition,
+      state: stored.state,
+      events: stored.events,
+      workItems: stored.workItems,
+      outbox: stored.outbox,
+    };
     const authority = JSON.parse(
       row.authority_json,
     ) as WorkflowRunAdmissionAuthority;
@@ -56,6 +73,44 @@ export function decodeWorkflowAdmissionReceipt(
         canonicalJson(run.state)
     )
       throw new Error("mismatched workflow receipt");
+    if (
+      ["runState", "threadState", "messages", "runEvents", "threadEvents"].some(
+        (key) => Object.hasOwn(stored, key),
+      )
+    ) {
+      if (
+        !stored.messages ||
+        stored.messages.length !== 1 ||
+        canonicalJson(stored.runState) !== canonicalJson(run.state) ||
+        canonicalJson(stored.runEvents) !== canonicalJson(run.events) ||
+        stored.messages[0]!.content !==
+          workflowRootInputContent(input.workflowInput) ||
+        stored.messages[0]!.contentDigest !==
+          workflowAdmissionDigest.sha256(stored.messages[0]!.content) ||
+        stored.threadState.lastMessageSequence !==
+          stored.messages[0]!.sequence ||
+        stored.threadState.lastEventSequence !==
+          stored.threadEvents[0]?.sequence
+      )
+        throw new Error("mismatched workflow input proof");
+      resolveMessageRunEvidence(
+        {
+          tenantId: input.tenantId,
+          spaceId: input.spaceId,
+          threadId: input.threadId,
+        },
+        stored.messages[0]!,
+        [
+          {
+            tenantId: row.tenant_id,
+            spaceId: input.spaceId,
+            threadId: input.threadId,
+            runId: row.run_id,
+            payload: stored,
+          },
+        ],
+      );
+    }
     const ref = run.workItems[0]?.payload.workflowInput as
       | { valueId: string; valueDigest: string }
       | undefined;

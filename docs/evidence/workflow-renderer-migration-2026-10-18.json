@@ -1,0 +1,678 @@
+{
+  "version": "crewon.workflow-renderer-migration-evidence.v1",
+  "recordedAt": "2026-10-17T20:40:05.694228+00:00",
+  "branch": "codex/runtime-concurrency-result-streaming",
+  "baseCommit": "5d179a3d7f720d644aca61f63c1df392855b5d0c",
+  "goalStatus": "active; this is one migration batch, not full product completion",
+  "implementation": {
+    "controlWorkflowExecution": "existing durable Control/Worker path; removed renderer fork/run/wait/advance",
+    "legacyWorkflowRecords": "explicit read-only discovery; never replayed or advanced",
+    "boundedReads": {
+      "catalogPage": 20,
+      "rootPage": 20,
+      "versionCache": 20,
+      "retainedRootChoices": 20
+    },
+    "commands": "existing immutable intent journal plus displayed recovery-context fence; explicit original-command recovery",
+    "mainInput": "same admission transaction as root Run, queue, immutable input and receipt; one main-Thread user message; existing indexed compound-start evidence",
+    "newHistoryFragmentMaximumUtf8Bytes": 9999
+  },
+  "compatibility": {
+    "httpRequestAndResponseShapeChanged": false,
+    "sqlSchemaChanged": false,
+    "persistedReceiptChanged": "optional compound-start proof fields added; old receipts replay without appending/backfilling input",
+    "freshAdmissionAddsOneUserMessage": true,
+    "authorizationRequired": ["run:create", "thread:message:append"],
+    "previousModelHistory": "no rewrites; append bounded input only for fresh admissions",
+    "defaultUnsupportedDeployment": "read-only; no old renderer execution fallback; not ready for default desktop release"
+  },
+  "verification": {
+    "workflow": {
+      "result": "passed",
+      "tests": 402,
+      "pass": 402,
+      "fail": 0,
+      "skipped": 0,
+      "log": "/tmp/crewon-workflow-phase26-workflow-all-final.log",
+      "sha256": "8e0974a006a251d19a382e691bc1f41c7462dceb5923fb7d167feae12540a0eb"
+    },
+    "architectureAndProductionTypes": {
+      "result": "passed",
+      "tests": 37,
+      "pass": 37,
+      "fail": 0,
+      "skipped": 0,
+      "log": "/tmp/crewon-workflow-phase26-boundary-final.log",
+      "sha256": "78c0c7ebfb15a165d96bf0cef0ed0ffa97e3bb55b1c706758f28268632eb911e"
+    },
+    "sdkSse": {
+      "result": "passed",
+      "tests": 14,
+      "pass": 14,
+      "fail": 0,
+      "skipped": 0,
+      "log": "/tmp/crewon-workflow-phase26-sdk.log",
+      "sha256": "57ade629cfe8fdfd79454e64f5af6bef48c22c94a24e18c0c3519649fbb59381"
+    },
+    "realMainRestartAndHttp": {
+      "result": "passed",
+      "tests": 23,
+      "pass": 23,
+      "fail": 0,
+      "skipped": 0,
+      "log": "/tmp/crewon-workflow-phase26-backend-acceptance-final.log",
+      "sha256": "a1572ab02394e106de749ce6c85db49fe62abe7b67cb0360cd7441da8f0f3177"
+    },
+    "applicationAuthorization": {
+      "result": "passed",
+      "tests": 9,
+      "pass": 9,
+      "fail": 0,
+      "skipped": 0,
+      "log": "/tmp/crewon-workflow-phase26-app-final.log",
+      "sha256": "1e5ea5be845b058f754ae07ba8797f6aa9304d7e1836b514cd9d207380e4f8f7"
+    },
+    "ui": {
+      "result": "passed",
+      "tests": 423,
+      "files": 34,
+      "log": "/tmp/crewon-workflow-phase26-ui-complete.log",
+      "sha256": "816c5a74a93f5a10c95e045bf41c6526915e9c93ce42d07ca546b3ce72cc29b1",
+      "scope": "targeted Workflow, CommandWorkspace, transcript, command, recovery and runtime regression; not full UI suite"
+    },
+    "sharedTypesAndUiLint": {
+      "log": "/tmp/crewon-workflow-phase26-types-shared-final.log",
+      "sha256": "03075ecfec28f43de55434a84b8fda03c9676c98e2d9831b71b5b422a7a95a39",
+      "result": "passed: Application, Store, Control Client, UI renderer and Electron host"
+    },
+    "apiAndWorkerTypes": {
+      "log": "/tmp/crewon-workflow-phase26-types-closure.log",
+      "sha256": "025d2365279685a74926d6628b2552efbb73f7027838263e182e35a9c7c59cdf",
+      "result": "Control API and Runtime Worker passed; subsequent Application typecheck failed on the new denial fixture, fixed and passed in sharedTypesAndUiLint",
+      "scope": "only the first two sequential commands in this log"
+    },
+    "uiBuild": {
+      "log": "/tmp/crewon-workflow-phase26-build.log",
+      "sha256": "6d0d66c07398a29c2179924a4cb4e0e8371674b193ed33010baf0626f14cf624",
+      "result": "passed",
+      "viteSeconds": 21.48,
+      "workspaceKilobytes": 2637.48,
+      "workspaceGzipKilobytes": 762.32,
+      "eagerJavascriptBytes": 326428,
+      "eagerLimitBytes": 524288,
+      "warning": "large chunks remain; no bundle-size or end-to-end latency reduction claimed"
+    },
+    "entryBoundary": {
+      "log": "/tmp/crewon-workflow-phase26-entry-boundary.log",
+      "sha256": "bc758e5932a9f2268662d8f0b3ea26cd6c729eac0eb2bc610fd806b55f7bbc6c",
+      "result": "passed"
+    },
+    "format": {
+      "log": "/tmp/crewon-workflow-phase26-format-check.log",
+      "sha256": "9a2087ae12e6c8e06db131d1a71ef265a99f59c07e6dc1be48db2a0c00371a20",
+      "result": "passed"
+    }
+  },
+  "browser": {
+    "scope": "one temporary private browser preview with real product components, SDK, local Control/Worker/PostgreSQL; synthetic model and test actor via existing Vite development proxy",
+    "afterMainInputFix": {
+      "roots": [
+        {
+          "runId": "01a14b88-b583-7282-a4df-c1cd0155c2eb",
+          "threadId": "01a14b87-cc66-762f-9fbe-330e8aae0f7c",
+          "status": "completed"
+        },
+        {
+          "runId": "01a14b8b-70e2-7746-a12e-76f08a69e7f7",
+          "threadId": "01a14b87-cc6f-75c8-a634-87214aa47797",
+          "status": "completed"
+        }
+      ],
+      "modelSamples": 4,
+      "modelDetails": [
+        {
+          "role": "agent",
+          "structured": false
+        },
+        {
+          "role": "verifier",
+          "structured": false
+        },
+        {
+          "role": "agent",
+          "structured": true
+        },
+        {
+          "role": "verifier",
+          "structured": true
+        }
+      ],
+      "mainThreads": [
+        {
+          "threadId": "01a14b87-cc66-762f-9fbe-330e8aae0f7c",
+          "runId": "01a14b88-b583-7282-a4df-c1cd0155c2eb",
+          "activeRunId": null,
+          "messages": [
+            {
+              "messageId": "5e73d0ddaa3ac7820381d36ebaa8f735f90943059223b3c06d97bd962dffd98a",
+              "sequence": 1,
+              "role": "user",
+              "content": "核对完整会话证据，确认后独立验证。"
+            },
+            {
+              "messageId": "0792d727-4784-43e9-b5b9-4a7b1c290ae4",
+              "sequence": 2,
+              "role": "assistant",
+              "content": "{\"result\":\"VERDICT: PASS\\n独立核验完成\"}"
+            }
+          ],
+          "bindings": [
+            {
+              "messageId": "5e73d0ddaa3ac7820381d36ebaa8f735f90943059223b3c06d97bd962dffd98a",
+              "runId": "01a14b88-b583-7282-a4df-c1cd0155c2eb",
+              "source": "turnStartReceipt"
+            },
+            {
+              "messageId": "0792d727-4784-43e9-b5b9-4a7b1c290ae4",
+              "runId": "01a14b88-b583-7282-a4df-c1cd0155c2eb",
+              "source": "messageCompletedEvent"
+            }
+          ]
+        },
+        {
+          "threadId": "01a14b87-cc6f-75c8-a634-87214aa47797",
+          "runId": "01a14b8b-70e2-7746-a12e-76f08a69e7f7",
+          "activeRunId": null,
+          "messages": [
+            {
+              "messageId": "d4208f6de65d1aeed93c6b9c172d2f4605dc1381469509b30346cc42c8b27f69",
+              "sequence": 1,
+              "role": "user",
+              "content": "{\"topic\":\"structured-main-B\"}"
+            },
+            {
+              "messageId": "56935f5b-e097-4e2b-81bb-ba8eae74fe34",
+              "sequence": 2,
+              "role": "assistant",
+              "content": "{\"topic\":\"结构化审阅完成\"}"
+            }
+          ],
+          "bindings": [
+            {
+              "messageId": "d4208f6de65d1aeed93c6b9c172d2f4605dc1381469509b30346cc42c8b27f69",
+              "runId": "01a14b8b-70e2-7746-a12e-76f08a69e7f7",
+              "source": "turnStartReceipt"
+            },
+            {
+              "messageId": "56935f5b-e097-4e2b-81bb-ba8eae74fe34",
+              "runId": "01a14b8b-70e2-7746-a12e-76f08a69e7f7",
+              "source": "messageCompletedEvent"
+            }
+          ]
+        }
+      ],
+      "unknownSubmission": "response lost after real COMMIT; page reload retained original intent and did zero automatic POST; explicit original-key recovery returned the same root",
+      "repeatedStart": "same-main-Thread start disabled while original result unknown; original journal entry acknowledged on validated recovery",
+      "readCountersAtEnd": {
+        "rootViewReads": 20,
+        "peakRootViewReads": 1,
+        "postsSinceReload": 4,
+        "streamOpensSinceReload": 4
+      },
+      "counterBoundary": "only runtime.read display reads, excludes command preflight reads and capability/directory calls"
+    },
+    "beforeMainInputFix": {
+      "roots": [
+        {
+          "runId": "01a14b7e-70d4-71a5-901f-2dfbca996274",
+          "threadId": "01a14b75-8984-7493-b125-2b85eff5b1bb",
+          "status": "canceled"
+        },
+        {
+          "runId": "01a14b78-fa6d-70cc-9c44-31e6b4244660",
+          "threadId": "01a14b75-897e-7612-9776-7ac136da4f3e",
+          "status": "completed"
+        },
+        {
+          "runId": "01a14b81-6e49-757f-9aff-4a3d0acde8aa",
+          "threadId": "01a14b75-897e-7612-9776-7ac136da4f3e",
+          "status": "completed"
+        }
+      ],
+      "modelSamples": 5,
+      "verified": "two separate main Threads waiting at Gate together; root selection; cancellation requested then actual canceled; root-history choice loss found and repaired"
+    },
+    "layout": {
+      "stability": [
+        {
+          "at": "2026-10-17T20:24:13.042Z",
+          "dom": {
+            "bodyWidth": 1280,
+            "composer": {
+              "bottom": 700,
+              "height": 146,
+              "left": 280,
+              "right": 1000,
+              "top": 554,
+              "width": 720,
+              "x": 280,
+              "y": 554
+            },
+            "room": 6003,
+            "selected": "01a14b88-b583-7282-a4df-c1cd0155c2eb",
+            "title": "发布审阅流程",
+            "viewport": 1280
+          }
+        },
+        {
+          "at": "2026-10-17T20:24:48.026Z",
+          "dom": {
+            "bodyWidth": 1280,
+            "composer": {
+              "bottom": 700,
+              "height": 146,
+              "left": 280,
+              "right": 1000,
+              "top": 554,
+              "width": 720,
+              "x": 280,
+              "y": 554
+            },
+            "room": 6003,
+            "selected": "01a14b88-b583-7282-a4df-c1cd0155c2eb",
+            "title": "发布审阅流程",
+            "viewport": 1280
+          }
+        }
+      ],
+      "layouts": [
+        {
+          "size": "390x600",
+          "dom": {
+            "bodyWidth": 390,
+            "composer": {
+              "bottom": 588,
+              "height": 136.3984375,
+              "left": 23,
+              "right": 367,
+              "top": 451.6015625,
+              "width": 344,
+              "x": 23,
+              "y": 451.6015625
+            },
+            "select": {
+              "bottom": 323.890625,
+              "height": 16,
+              "left": 47,
+              "right": 343,
+              "top": 307.890625,
+              "width": 296,
+              "x": 47,
+              "y": 307.890625
+            },
+            "thread": {
+              "bottom": 443.6015625,
+              "height": 187.3046875,
+              "left": 11,
+              "right": 379,
+              "top": 256.296875,
+              "width": 368,
+              "x": 11,
+              "y": 256.296875
+            },
+            "viewport": 390
+          }
+        },
+        {
+          "size": "900x450",
+          "dom": {
+            "bodyWidth": 900,
+            "composer": {
+              "bottom": 430,
+              "height": 146,
+              "left": 90,
+              "right": 810,
+              "top": 284,
+              "width": 720,
+              "x": 90,
+              "y": 284
+            },
+            "select": {
+              "bottom": -375.609375,
+              "height": 16,
+              "left": 114,
+              "right": 786,
+              "top": -391.609375,
+              "width": 672,
+              "x": 114,
+              "y": -391.609375
+            },
+            "thread": {
+              "bottom": 274,
+              "height": 89.203125,
+              "left": 11,
+              "right": 889,
+              "top": 184.796875,
+              "width": 878,
+              "x": 11,
+              "y": 184.796875
+            },
+            "viewport": 900
+          }
+        }
+      ],
+      "finalFlowConsole": [],
+      "actualEntry": "login-screen-without-bypass"
+    },
+    "scopeLimits": [
+      "not a real account login or production BFF/TLS test",
+      "not installed Electron desktop acceptance",
+      "not two simultaneous physical browser windows",
+      "main Runtime/Transcript read acceptance and Root SSE replay tested; not claiming the full product navigation or main conversation live-stream E2E",
+      "DOM stability is two samples more than 30 seconds apart, not continuous frame sampling",
+      "earlier temporary preview HMR/createRoot diagnostics excluded from final-flow no-error claim",
+      "no real-provider performance, production durability or memory claims"
+    ]
+  },
+  "artifacts": [
+    {
+      "path": "/Users/cheneywang/.codex/visualizations/2026/10/16/01a1429d-e9a8-7db0-9e97-e51e1ee04cf0/workflow-durable-desktop.jpg",
+      "sha256": "d2f2c2a4b493e886895c5508042e85df007a4da564041359dc6062274ce2bf69"
+    },
+    {
+      "path": "/Users/cheneywang/.codex/visualizations/2026/10/16/01a1429d-e9a8-7db0-9e97-e51e1ee04cf0/workflow-durable-gate-desktop.jpg",
+      "sha256": "fbef7e19211cc2ded89d06e8f4a7777a928a1154eaa1bbefc6bf906e8589dc09"
+    },
+    {
+      "path": "/Users/cheneywang/.codex/visualizations/2026/10/16/01a1429d-e9a8-7db0-9e97-e51e1ee04cf0/workflow-durable-narrow.jpg",
+      "sha256": "b805bfbf3578f4678e2af84ad458785b6139e2e481d1570e83f11297d8719fc2"
+    },
+    {
+      "path": "/Users/cheneywang/.codex/visualizations/2026/10/16/01a1429d-e9a8-7db0-9e97-e51e1ee04cf0/workflow-durable-low-height-actions.jpg",
+      "sha256": "83c912215f88811e76da3fe3a1184282aac97d606f2a5ba4e45e47176374c6f3"
+    },
+    {
+      "path": "/Users/cheneywang/.codex/visualizations/2026/10/16/01a1429d-e9a8-7db0-9e97-e51e1ee04cf0/workflow-main-conversation-result.jpg",
+      "sha256": "24622114b059815cee8b26bc369a4dc796aa8e592f926ed6f5378d1f481d081f"
+    },
+    {
+      "path": "/Users/cheneywang/.codex/visualizations/2026/10/16/01a1429d-e9a8-7db0-9e97-e51e1ee04cf0/workflow-main-conversation-json-result.jpg",
+      "sha256": "9259b3b5cbdd5f9b05063b02991bd9b86ebd436e104ae2edb9d01f43fab23bd1"
+    }
+  ],
+  "cleanup": {
+    "preStop": {
+      "dataDirectory": "/tmp/crewon-wf-pg-ai1hte94/data",
+      "listenAddresses": "",
+      "userSchemas": [],
+      "otherClientBackends": 0
+    },
+    "stopRequestedAt": "2026-10-17T20:38:33.793978+00:00",
+    "stoppedAt": "2026-10-17T20:38:39.582170+00:00",
+    "stopExitCode": 0,
+    "statusExitCode": 3,
+    "fixtureProcessesStopped": true,
+    "temporaryPreviewFilesRemoved": true
+  },
+  "temporaryFilesRemoved": [
+    "apps/crewon-ui/workflow-acceptance-preview.html",
+    "apps/crewon-ui/src/workflow-acceptance-preview.test-support.tsx",
+    "apps/crewon-ui/public/workflow-acceptance-fixture.json"
+  ],
+  "verificationCorrections": [
+    "initial broad Workflow run: 389 passed and 13 old empty/assistant-only-history expectations failed; retained outcome/identity checks and added exact input/Run binding/prefix preservation; final full run 402 passed",
+    "new denial test corrected to satisfy AuthorizationDecision.reasonCode; subsequent Application typecheck passed",
+    "legacy executor tests replaced with legacy read-only, durable commands, component behavior, and real backend integration coverage; existing visual snapshots retained"
+  ],
+  "remaining": [
+    "production request-level Workflow identity/policy composition",
+    "SQLite scheduler and default desktop deployment support",
+    "Workflow child Thread catalog attribution using real durable parent-child authority",
+    "Team durable orchestration",
+    "tool resource isolation and shared invocation lifetime",
+    "bounded autonomous subagents and result return",
+    "installed plugin and full real-account/desktop product acceptance"
+  ],
+  "sources": [
+    {
+      "path": "apps/control-api/src/postgres-workflow-cancellation.integration.test.ts",
+      "state": "present",
+      "sha256": "c7591be239ba13bf6d142b0cd0dc2a7a864a583f511b8b7032cd539bf609e770"
+    },
+    {
+      "path": "apps/control-api/src/postgres-workflow-control.integration.test.ts",
+      "state": "present",
+      "sha256": "df85bd827c254b61287e8259d3ec2cbeac66d4a82b9d9e5d1f3e3611ee3b7bf0"
+    },
+    {
+      "path": "apps/control-api/src/postgres-workflow-deployment.integration.test.ts",
+      "state": "present",
+      "sha256": "892fc7f74699e348f26f9d600ae85b349322340aa8172363fba2ec67c796c605"
+    },
+    {
+      "path": "apps/control-api/src/postgres-workflow-preparation-failure.integration.test.ts",
+      "state": "present",
+      "sha256": "b11c5b5106983197b3385c0554865303bd5620e9267ab41945b90d5dce52a675"
+    },
+    {
+      "path": "apps/control-api/src/postgres-workflow-renderer-runtime.integration.test.ts",
+      "state": "present",
+      "sha256": "52d22d150f11e444659d8c81b456e0f6ff0eaca96b4248bbc54cfcd59f127342"
+    },
+    {
+      "path": "apps/control-api/src/postgres-workflow-review.integration.test.ts",
+      "state": "present",
+      "sha256": "6450f6e1ac2b6b4146cc2c4903e02df1bbcff68c298987c52adb21c2b8e133d1"
+    },
+    {
+      "path": "apps/control-api/src/workflow-main.integration.test.ts",
+      "state": "present",
+      "sha256": "09199cbfc7569255d1c33e93561ccf49116db724aed950ebb52c623da7ecc306"
+    },
+    {
+      "path": "apps/control-api/src/workflow-root-transcript.test-support.ts",
+      "state": "present",
+      "sha256": "b88489d940270c0f57ed8ec8aeec3166c59a792f2fb69fd590af8dc9965f94c9"
+    },
+    {
+      "path": "apps/crewon-ui/src/components/app/CommandWorkflowPanel.control.test.tsx",
+      "state": "present",
+      "sha256": "aca2811827046e59c3c4dcaeda5344db92949d2e81e068715c1a9f8e5f7c8c9c"
+    },
+    {
+      "path": "apps/crewon-ui/src/components/app/CommandWorkflowPanel.tsx",
+      "state": "present",
+      "sha256": "e6246a3e38682efc94c96812d10d99994f42989c0048afd0ae96f10c929c69d1"
+    },
+    {
+      "path": "apps/crewon-ui/src/components/app/CommandWorkflowPresentation.tsx",
+      "state": "present",
+      "sha256": "80bb197a17718f06fa25ef9eae8ff5bfa949fc647e84d3aa454fbb99f601ce0b"
+    },
+    {
+      "path": "apps/crewon-ui/src/components/app/CommandWorkflowRecoveryControls.test.tsx",
+      "state": "present",
+      "sha256": "ccf393506997f4e57a3d61117733d1f52b79a8925fee5806223c83502773d5dc"
+    },
+    {
+      "path": "apps/crewon-ui/src/components/app/CommandWorkflowRecoveryControls.tsx",
+      "state": "present",
+      "sha256": "8686c4aeb279b44866aedb346f52a2abede9de070caa4ca6639e269b244b485f"
+    },
+    {
+      "path": "apps/crewon-ui/src/components/app/CommandWorkflowRunHistory.tsx",
+      "state": "present",
+      "sha256": "21420e4bf541db2f9e5c353a860d5fa3cba11e357612dcb32679978cc3d74e54"
+    },
+    {
+      "path": "apps/crewon-ui/src/components/app/CommandWorkflowVerificationEvidence.tsx",
+      "state": "present",
+      "sha256": "6ce1ca040d60027714ce702a3832b78be8cb140050e98e8c5f1b5ce9a405cb08"
+    },
+    {
+      "path": "apps/crewon-ui/src/components/app/CommandWorkspace.tsx",
+      "state": "present",
+      "sha256": "2ef1b0092753675c222c1bffc02709f3d69af79eeb03ae0441cfdbd2d184ea13"
+    },
+    {
+      "path": "apps/crewon-ui/src/components/app/CommandWorkspaceViews.tsx",
+      "state": "present",
+      "sha256": "674d0020fa2361692cb30e9997bbcbef14cd0588a9ba0a0e51e3184d2cf7c413"
+    },
+    {
+      "path": "apps/crewon-ui/src/components/app/__snapshots__/CommandWorkflowRecoveryControls.test.tsx.snap",
+      "state": "present",
+      "sha256": "1d097679c1c1414c97f0b41987a4a4a5c84dacb901f871b31cfe18afbd27061b"
+    },
+    {
+      "path": "apps/crewon-ui/src/components/app/useControlWorkflowRecords.test.tsx",
+      "state": "present",
+      "sha256": "da9e5d2230dbbb593d911eec08debf2c5a934cb30334e0480e49c16c561ed9d7"
+    },
+    {
+      "path": "apps/crewon-ui/src/components/app/useControlWorkflowRecords.ts",
+      "state": "present",
+      "sha256": "fdb5cb7723c71eba535c335243d35a5aebae6b644a33f080e028c8d5f758b245"
+    },
+    {
+      "path": "apps/crewon-ui/src/components/app/useWorkflowRootEvents.test.tsx",
+      "state": "present",
+      "sha256": "85e8785ab47b0918689b1716a05824642d3e71068908c01fe4d634d7d5313812"
+    },
+    {
+      "path": "apps/crewon-ui/src/components/app/useWorkflowRootEvents.ts",
+      "state": "present",
+      "sha256": "985c20ce56f810fa2653961b7bd1ddc6c56c12db88c16ba573e58029d1b5d8fb"
+    },
+    {
+      "path": "apps/crewon-ui/src/lib/control-runtime/controlConversationThreads.ts",
+      "state": "present",
+      "sha256": "47c29109dd8f313d2bd1e99efdefdef1cd81fe8da39517ae147954e0803e939e"
+    },
+    {
+      "path": "apps/crewon-ui/src/lib/control-runtime/controlDurableWorkflowRuntime.test.ts",
+      "state": "present",
+      "sha256": "b55447c9db8d38a84d6e7755dbdbce5ca0e2a5a7274eefb8b92b210d8a18bd8b"
+    },
+    {
+      "path": "apps/crewon-ui/src/lib/control-runtime/controlDurableWorkflowRuntime.ts",
+      "state": "present",
+      "sha256": "1df4405ccd133a970625650897e05096aef3e3dd8e49ad817d56f5567262b497"
+    },
+    {
+      "path": "apps/crewon-ui/src/lib/control-runtime/controlWorkflowCommands.test.ts",
+      "state": "present",
+      "sha256": "cb89d60d8e6369b1f6b393fc43a25fcd9a730df0d5da63791d7f45f218e3ee08"
+    },
+    {
+      "path": "apps/crewon-ui/src/lib/control-runtime/controlWorkflowCommands.ts",
+      "state": "present",
+      "sha256": "ee35deb1e22259ba0a5bd1e5ed7fd46711bfbb44e6eda4f4e65211ebe96fe207"
+    },
+    {
+      "path": "apps/crewon-ui/src/lib/control-runtime/controlWorkflowDefinition.ts",
+      "state": "present",
+      "sha256": "abde01937f55ef309bce083dce601394317d831121dff1758c0f5193fec7e722"
+    },
+    {
+      "path": "apps/crewon-ui/src/lib/control-runtime/controlWorkflowLegacyMarkers.ts",
+      "state": "present",
+      "sha256": "6ce768658ed47ed15bb0e8c8e2c728fb31a2bedba33d1714dc7e1acc6ea9cbec"
+    },
+    {
+      "path": "apps/crewon-ui/src/lib/control-runtime/controlWorkflowLegacyReader.test.ts",
+      "state": "present",
+      "sha256": "b4137b00df2cf2b81cb9379ff335dd68a370ea19ce26e14a22ae5f6c17763630"
+    },
+    {
+      "path": "apps/crewon-ui/src/lib/control-runtime/controlWorkflowLegacyReader.ts",
+      "state": "present",
+      "sha256": "d8ba5e248407f2c4b793cfaddf46f712d7e73ae809d53da39a2e768f614c643f"
+    },
+    {
+      "path": "apps/crewon-ui/src/lib/control-runtime/controlWorkflowRuntime.test.ts",
+      "state": "removed",
+      "sha256": null
+    },
+    {
+      "path": "apps/crewon-ui/src/lib/control-runtime/controlWorkflowRuntime.ts",
+      "state": "present",
+      "sha256": "d00ee9ffbae9a7cdc7001e5d7abfb61dfe65b3c528d8ed98241e7902e2e8de44"
+    },
+    {
+      "path": "apps/crewon-ui/src/lib/control-runtime/controlWorkflowVersionProjection.ts",
+      "state": "present",
+      "sha256": "d1de35a8af0df612b7e244a6e5061ef1f3d8da0cc5a35c4317acc65648bf10c5"
+    },
+    {
+      "path": "apps/crewon-ui/src/lib/workflow/crewonWorkflow.ts",
+      "state": "present",
+      "sha256": "8df6fee7e9fa6612257834a47a21736097d6600fa100d0364fd78f64ac3f2376"
+    },
+    {
+      "path": "apps/crewon-ui/src/styles/app.css",
+      "state": "present",
+      "sha256": "e80149dbad928ba3aeb7dab3c4ee088427fb895ee1a01c4f253d9c2a02b13dcd"
+    },
+    {
+      "path": "packages/application/src/workflow-run-admission-store-port.ts",
+      "state": "present",
+      "sha256": "331dae5b996b52465fd8d54092f563537eedb5de2146f84f56ed4086de648d5b"
+    },
+    {
+      "path": "packages/application/src/workflow-run-application-service.test.ts",
+      "state": "present",
+      "sha256": "f2bb9707210193b4d3b5f9b179ddc3225acacb726f5919b11670b785906c73bc"
+    },
+    {
+      "path": "packages/application/src/workflow-run-application-service.ts",
+      "state": "present",
+      "sha256": "77ecd604a3e36af183751ce51d763cee8e33b5bcd6cc666e0e36fa896054da0c"
+    },
+    {
+      "path": "packages/control-client/src/run-event-stream.ts",
+      "state": "present",
+      "sha256": "a65757516af53804cc30c2c94642952b4a0f3cd19faa5ba28e80e88fccd9d265"
+    },
+    {
+      "path": "packages/store/src/postgres-domain-store.ts",
+      "state": "present",
+      "sha256": "a705e1102222fc48c4bd599e050eb7085830f33280ed8766d082445db1705e52"
+    },
+    {
+      "path": "packages/store/src/postgres-workflow-run-admission.test.ts",
+      "state": "present",
+      "sha256": "871d7ce113f5b20283b6ad2b083998d2943fda8a4612a04b75429366bce62a34"
+    },
+    {
+      "path": "packages/store/src/postgres-workflow-run-admission.ts",
+      "state": "present",
+      "sha256": "eece4e19116f7c6d1f735523149486a2307c77454d14e0823b609e95a26974cc"
+    },
+    {
+      "path": "packages/store/src/sqlite-run-store.ts",
+      "state": "present",
+      "sha256": "fc7f6bc03dd9159b3d5256c73afcf6e7973b302e514d58f09544302c7ac4382d"
+    },
+    {
+      "path": "packages/store/src/sqlite-workflow-run-admission.test.ts",
+      "state": "present",
+      "sha256": "ca0684e8497435e093296aed198b8dd90e79b84135a30e85bd65146ba1c528dd"
+    },
+    {
+      "path": "packages/store/src/sqlite-workflow-run-admission.ts",
+      "state": "present",
+      "sha256": "356991c60a11a70fe89de77b717afe63a3983d65aba30d60f2993569f6087deb"
+    },
+    {
+      "path": "packages/store/src/workflow-root-input.ts",
+      "state": "present",
+      "sha256": "50ff9ba32197cd3089e0f36e950897daa43397571abaf8322b1e4290a34650d6"
+    },
+    {
+      "path": "packages/store/src/workflow-run-admission-receipt.ts",
+      "state": "present",
+      "sha256": "339b69087eb86c3aee0fbe9f1197039303fe14c629d47bd72eabee45e1268a46"
+    }
+  ]
+}

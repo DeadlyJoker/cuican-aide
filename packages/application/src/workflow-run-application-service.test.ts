@@ -56,6 +56,25 @@ test("atomically freezes WorkflowVersion provenance and enqueues bounded input w
   });
 });
 
+test("Workflow admission requires permission to append its main-Thread input before any storage or ID allocation", async () => {
+  const store = new RecordingStore();
+  const actions: string[] = [];
+  const app = service(store, {
+    authorize: async (request) => {
+      actions.push(request.action);
+      return request.action === "thread:message:append"
+        ? { outcome: "deny", reasonCode: "fixture-denied" }
+        : { outcome: "allow" };
+    },
+  });
+  await assert.rejects(
+    app.startWorkflowRun(actor(), command()),
+    hasError("authorization", "authorization_denied"),
+  );
+  assert.deepEqual(actions, ["run:create", "thread:message:append"]);
+  assert.equal(store.inputs.length, 0);
+});
+
 test("canonicalizes prototype-like input keys into one digest-bound scheduler authority", async () => {
   const store = new RecordingStore();
   store.authority = workflowAuthority(prototypeSchema());

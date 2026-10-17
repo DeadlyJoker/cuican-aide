@@ -191,9 +191,32 @@ test("SQLite commits a frozen workflow, root input and exactly one queue item at
         100,
       )
     ).length,
-    0,
+    1,
   );
   assert.deepEqual(f.callbacks(), { prepareCalls: 1, routeCalls: 1, ids: 6 });
+  const snapshot = await f.store.messageWindows.readWindow({
+    tenantId: "tenant-1",
+    spaceId: "space-1",
+    threadId: "thread-1",
+    position: null,
+    limit: 50,
+    view: "transcriptSnapshot",
+  });
+  assert.equal(snapshot.messages[0]!.role, "user");
+  assert.equal(snapshot.messages[0]!.content, '{"topic":"safe"}');
+  assert.equal(snapshot.runBindings![0]!.runId, result.run.state.runId);
+  const replay = await f.start();
+  assert.equal(replay.run.disposition, "replayed");
+  assert.equal(
+    (
+      await f.store.listMessages(
+        { tenantId: "tenant-1", threadId: "thread-1" },
+        0,
+        10,
+      )
+    ).length,
+    1,
+  );
 });
 
 test("SQLite receipt replay survives reopen and ignores changed live workflow, thread and route", async (t) => {
@@ -350,6 +373,26 @@ test("SQLite rejects altered callback authority, root input, digest and schedule
     f.modify(modify);
     await assert.rejects(f.start());
     assert.ok(Object.values(f.counts()).every((n) => n === 0));
+    assert.equal(
+      (
+        await f.store.listMessages(
+          { tenantId: "tenant-1", threadId: "thread-1" },
+          0,
+          10,
+        )
+      ).length,
+      0,
+    );
+    assert.equal(
+      (
+        await f.store.listModelHistoryItems(
+          { tenantId: "tenant-1", threadId: "thread-1" },
+          0,
+          10,
+        )
+      ).length,
+      0,
+    );
   }
   f.modify((p) => p);
   await f.start();
@@ -368,6 +411,148 @@ test("SQLite rolls back every durable component when a late input or receipt wri
   }
   await f.start();
   assert.equal(f.counts().work_items, 1);
+});
+
+test("SQLite preserves prompt whitespace, binds its user message to the root and never re-appends during replay", async (t) => {
+  const f = await sqliteAdmissionFixture(t, {
+    type: "object",
+    properties: { prompt: { type: "string", maxLength: 8192, enum: null } },
+    required: ["prompt"],
+    additionalProperties: false,
+  });
+  const prompt = "  原始任务\n保留空白  ";
+  const command = { ...admissionCommand, input: { prompt } };
+  const first = await f.start(command);
+  const messages = await f.store.listMessages(
+    { tenantId: "tenant-1", threadId: "thread-1" },
+    0,
+    10,
+  );
+  assert.equal(messages.length, 1);
+  assert.equal(messages[0]!.content, prompt);
+  assert.deepEqual(await f.start(command), {
+    ...first,
+    run: { ...first.run, disposition: "replayed" },
+  });
+  assert.deepEqual(
+    await f.store.listMessages(
+      { tenantId: "tenant-1", threadId: "thread-1" },
+      0,
+      10,
+    ),
+    messages,
+  );
+});
+
+test("SQLite rejects corrupt compound-start proofs and accepts old receipts without changing history", async (t) => {
+  const f = await sqliteAdmissionFixture(t);
+  const first = await f.start();
+  const row = f.database
+    .prepare(
+      "SELECT scope,idempotency_key,result_json FROM idempotency_receipts",
+    )
+    .get() as { scope: string; idempotency_key: string; result_json: string };
+  const original = JSON.parse(row.result_json);
+  for (const corrupt of [
+    (value: typeof original) => {
+      value.messages[0].content = "changed";
+    },
+    (value: typeof original) => {
+      value.messages[0].contentDigest = workflowAdmissionDigest.sha256("wrong");
+    },
+    (value: typeof original) => {
+      value.runState.runId = "other-root";
+    },
+    (value: typeof original) => {
+      delete value.threadEvents;
+    },
+  ]) {
+    const value = structuredClone(original);
+    corrupt(value);
+    f.database
+      .prepare(
+        "UPDATE idempotency_receipts SET result_json=? WHERE scope=? AND idempotency_key=?",
+      )
+      .run(JSON.stringify(value), row.scope, row.idempotency_key);
+    await assert.rejects(
+      f.start(),
+      (error) =>
+        error instanceof ApplicationError &&
+        error.code === "workflow_run_admission_failed" &&
+        error.cause instanceof RunStoreError &&
+        error.cause.code === "workflow_run_admission_receipt_invalid",
+    );
+  }
+  const legacy = structuredClone(original);
+  for (const key of [
+    "runState",
+    "threadState",
+    "messages",
+    "runEvents",
+    "threadEvents",
+  ])
+    delete legacy[key];
+  f.database
+    .prepare(
+      "UPDATE idempotency_receipts SET result_json=? WHERE scope=? AND idempotency_key=?",
+    )
+    .run(JSON.stringify(legacy), row.scope, row.idempotency_key);
+  assert.deepEqual(await f.start(), {
+    ...first,
+    run: { ...first.run, disposition: "replayed" },
+  });
+  assert.equal(
+    (
+      await f.store.listMessages(
+        { tenantId: "tenant-1", threadId: "thread-1" },
+        0,
+        10,
+      )
+    ).length,
+    1,
+  );
+  assert.equal(f.callbacks().prepareCalls, 1);
+});
+
+test("SQLite appends a large structured input once while bounding each new model-history fragment", async (t) => {
+  const f = await sqliteAdmissionFixture(t, {
+    type: "object",
+    properties: {
+      a: { type: "string", maxLength: 8192, enum: null },
+      b: { type: "string", maxLength: 8192, enum: null },
+    },
+    required: ["a", "b"],
+    additionalProperties: false,
+  });
+  const input = { a: "国".repeat(2700), b: "界".repeat(2700) };
+  const first = await f.start({ ...admissionCommand, input });
+  const messages = await f.store.listMessages(
+    { tenantId: "tenant-1", threadId: "thread-1" },
+    0,
+    10,
+  );
+  assert.equal(messages.length, 1);
+  assert.equal(messages[0]!.content, canonicalJson(input));
+  const history = await f.store.listModelHistoryItems(
+    { tenantId: "tenant-1", threadId: "thread-1" },
+    0,
+    10,
+  );
+  assert.ok(history.length > 1);
+  assert.equal(
+    history
+      .map((item) => (item.type === "message" ? item.content : ""))
+      .join(""),
+    canonicalJson(input),
+  );
+  assert.ok(
+    history.every(
+      (item) =>
+        item.type === "message" &&
+        item.runId === first.run.state.runId &&
+        Buffer.byteLength(item.content) <= 9999,
+    ),
+  );
 });
 
 test("SQLite root values preserve prototype-like keys and reject cross-run, cross-tenant and corrupt reads", async (t) => {

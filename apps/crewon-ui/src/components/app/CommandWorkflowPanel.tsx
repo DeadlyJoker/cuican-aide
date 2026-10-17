@@ -1,8 +1,31 @@
+import { CommandWorkflowRunHistory } from "./CommandWorkflowRunHistory";
+import {
+  WorkflowListItem,
+  WorkflowExecutionStrip,
+  workflowStages,
+  workflowExecutionFromLatestRun,
+  matchesActiveWorkflowStatus,
+  workflowControlPresentation,
+  isWaitingForApprovalStatus,
+  workflowRoomSummary,
+  workflowStatusClassName,
+  workflowStatusLabel,
+  executionResultText,
+  workflowGateResolutionErrorText,
+  workflowErrorTitle,
+  workflowGateInstruction,
+} from "./CommandWorkflowPresentation";
+export { workflowControlPresentation } from "./CommandWorkflowPresentation";
 import { ArrowLeft, RotateCw, Square, Workflow } from "lucide-react";
-import { useEffect, useMemo, useRef, useState } from "react";
+import { useEffect, useMemo, useRef, useState, type ReactNode } from "react";
+import type { WorkflowReadScope } from "../../lib/control-runtime/controlDurableWorkflowRuntime";
 
 import { renderMarkdown } from "../TranscriptMarkdown";
 import { CommandWorkflowNodeOutputs } from "./CommandWorkflowNodeOutputs";
+import {
+  CommandWorkflowVerificationEvidence,
+  type WorkflowEvidenceRequest,
+} from "./CommandWorkflowVerificationEvidence";
 import { CommandComposer } from "../composer/CommandComposer";
 
 import type {
@@ -18,7 +41,13 @@ import { projectWorkflowWorkbench } from "../../lib/workbench/taskWorkbenchProje
 import { MessageActions } from "../messages/MessageActions";
 import { currentWorkflowExecution } from "../../lib/workflow/currentWorkflowExecution";
 import { useWorkflowProgressRefresh } from "./useWorkflowProgressRefresh";
+import { useWorkflowRootEvents } from "./useWorkflowRootEvents";
+import type { WorkflowRunObserver } from "../../lib/control-runtime/controlDurableWorkflowRuntime";
 
+export type WorkflowExecutionContext = Readonly<{
+  threadId: string | null;
+  pending: readonly import("../../lib/control-runtime/controlWorkflowIntentJournal").WorkflowIntent[];
+}>;
 export function CommandWorkflowPanel({
   active = true,
   openRequest,
@@ -31,6 +60,13 @@ export function CommandWorkflowPanel({
   onCreate,
   onRoomOpenChange,
   defaultOpenWorkflowId = null,
+  onInspect,
+  controls,
+  sourceIdentity,
+  onReadEvidence,
+  observe,
+  onNewRun,
+  executionContext,
 }: {
   active?: boolean;
   openRequest?: Readonly<{ workflowId: string; revision: number }> | null;
@@ -51,7 +87,14 @@ export function CommandWorkflowPanel({
     decision: "approve" | "reject",
     comment: string | null,
   ) => Promise<CrewonWorkflowExecution>;
-  onReload: () => Promise<void>;
+  onReload: (scope?: WorkflowReadScope) => Promise<void>;
+  onInspect?: (scope: WorkflowReadScope) => Promise<void>;
+  controls?: (room: boolean) => ReactNode;
+  sourceIdentity?: object | null;
+  executionContext?: WorkflowExecutionContext;
+  observe?: WorkflowRunObserver;
+  onNewRun?: (workflowVersionId: string) => void;
+  onReadEvidence?: (input: WorkflowEvidenceRequest) => Promise<string>;
   onCreate?: () => void;
   onRoomOpenChange?: (open: boolean) => void;
   defaultOpenWorkflowId?: string | null;
@@ -77,16 +120,64 @@ export function CommandWorkflowPanel({
   const selected = available.find(
     (workflow) => workflow.config.workflowId === openedId,
   );
+  const viewIdentity = useRef({ workflowId: openedId, sourceIdentity });
+  if (
+    viewIdentity.current.workflowId !== openedId ||
+    viewIdentity.current.sourceIdentity !== sourceIdentity
+  )
+    viewIdentity.current = { workflowId: openedId, sourceIdentity };
+  const control = selected?.control;
+  const pendingSubmission =
+    Boolean(control) &&
+    (executionContext?.pending.some(
+      (intent) =>
+        intent.command.kind === "start" &&
+        intent.threadId === executionContext.threadId,
+    ) ??
+      false);
+  const readOnly = Boolean(
+    control &&
+      (control.source === "legacy" ||
+        !control.loaded ||
+        control.readOnlyReason),
+  );
+  const reloadSelected = () =>
+    onReload(
+      selected?.control?.source === "durable"
+        ? {
+            workflowVersionId: selected.control.workflowVersionId,
+            runId: selected.control.knownRunId,
+          }
+        : undefined,
+    );
+  useEffect(() => {
+    if (selected?.control?.source === "durable" && !selected.control.loaded)
+      void onInspect?.({
+        workflowVersionId: selected.control.workflowVersionId,
+        runId: null,
+      });
+  }, [selected?.config.workflowId, selected?.control?.loaded, onInspect]);
+  useEffect(() => {
+    setBusy(false);
+    setGateBusy(false);
+    setCancelBusy(false);
+    setExecution(null);
+    setError(null);
+  }, [openedId, sourceIdentity]);
   const persistedExecution = useMemo(
     () => (selected ? workflowExecutionFromLatestRun(selected) : null),
     [selected],
   );
   const latestRun = selected?.config.runs?.[0] ?? null;
-  const projectedExecution = currentWorkflowExecution({
-    persisted: persistedExecution,
-    local: execution,
-    excludedExecutionId,
-  });
+  const projectedExecution = selected?.control
+    ? persistedExecution?.executionId === excludedExecutionId
+      ? null
+      : persistedExecution
+    : currentWorkflowExecution({
+        persisted: persistedExecution,
+        local: execution,
+        excludedExecutionId,
+      });
   const workbench = useMemo(
     () =>
       !selected
@@ -101,11 +192,14 @@ export function CommandWorkflowPanel({
             },
     [projectedExecution, selected],
   );
-  const pendingGate = isWaitingForApprovalStatus(projectedExecution?.status)
-    ? projectedExecution?.executedNodes.find(
+  const [gateNodeId, setGateNodeId] = useState<string | null>(null);
+  const pendingGates = isWaitingForApprovalStatus(projectedExecution?.status)
+    ? (projectedExecution?.executedNodes.filter(
         (node) => node.status === "waitingForApproval",
-      )
-    : undefined;
+      ) ?? [])
+    : [];
+  const pendingGate =
+    pendingGates.find((node) => node.nodeId === gateNodeId) ?? pendingGates[0];
   // Only a persisted or accepted execution identity can be canceled.
   const cancelExecutionId = projectedExecution?.executionId;
   const runActive =
@@ -116,12 +210,30 @@ export function CommandWorkflowPanel({
   });
 
   useWorkflowProgressRefresh({
-    enabled: active && (runActive || gateBusy || cancelBusy),
+    enabled:
+      active &&
+      control?.source !== "legacy" &&
+      (runActive || gateBusy || cancelBusy),
     workflowId: selected?.config.workflowId ?? null,
     executionId: projectedExecution?.executionId ?? null,
     cadence:
-      pendingGate && !gateBusy && !cancelBusy ? "waitingForApproval" : "active",
-    reload: onReload,
+      pendingGate && !gateBusy && !cancelBusy && !control?.awaitingSnapshot
+        ? "waitingForApproval"
+        : "active",
+    reload: reloadSelected,
+  });
+  useWorkflowRootEvents({
+    enabled:
+      active &&
+      control?.source === "durable" &&
+      matchesActiveWorkflowStatus(projectedExecution?.status) &&
+      Boolean(control.root),
+    workflowVersionId: control?.workflowVersionId ?? null,
+    runId: control?.knownRunId ?? null,
+    afterSequence: control?.root?.lastSequence ?? 0,
+    sourceIdentity,
+    observe,
+    reload: reloadSelected,
   });
 
   useEffect(() => {
@@ -142,9 +254,15 @@ export function CommandWorkflowPanel({
     )
       return;
     consumedOpenRequest.current = openRequest;
-    if (runActive) {
+    if (runActive && !selected?.control) {
       setError("当前协作流正在执行，请完成或取消后再切换。");
       return;
+    }
+    if (selected?.control) {
+      viewIdentity.current = { ...viewIdentity.current };
+      setBusy(false);
+      setGateBusy(false);
+      setCancelBusy(false);
     }
     setOpenedId(openRequest.workflowId);
     setExecution(null);
@@ -154,9 +272,30 @@ export function CommandWorkflowPanel({
     onRoomOpenChange?.(true);
   }, [active, available, openRequest, onRoomOpenChange, runActive]);
 
+  function inspectSelected(scope: WorkflowReadScope) {
+    viewIdentity.current = { ...viewIdentity.current };
+    setBusy(false);
+    setGateBusy(false);
+    setCancelBusy(false);
+    setExecution(null);
+    setError(null);
+    setSubmittedInput(null);
+    setExcludedExecutionId(null);
+    setGateComment("");
+    return onInspect?.(scope);
+  }
+
   async function submit(value: string) {
     const prompt = value.trim();
-    if (!selected || !prompt || busy || runActive) {
+    if (
+      !selected ||
+      !prompt ||
+      busy ||
+      runActive ||
+      readOnly ||
+      control?.canStart === false ||
+      pendingSubmission
+    ) {
       return;
     }
     setBusy(true);
@@ -164,18 +303,24 @@ export function CommandWorkflowPanel({
     setError(null);
     setExecution(null);
     setSubmittedInput(prompt);
+    const identity = viewIdentity.current;
     try {
       const result = await onRun(selected, prompt);
+      if (viewIdentity.current !== identity) return;
       setExecution(result);
       setInput("");
     } catch (runError) {
+      if (viewIdentity.current !== identity) return;
       setError(
-        runError instanceof Error ? runError.message : "这次协作没有完成",
+        runError instanceof Error
+          ? workflowGateResolutionErrorText(runError.message)
+          : "这次协作没有完成",
       );
     } finally {
-      setBusy(false);
-      // Final reload to pick up the settled state.
-      void onReload();
+      if (viewIdentity.current === identity) {
+        setBusy(false);
+        if (!selected.control) void reloadSelected();
+      }
     }
   }
 
@@ -185,56 +330,76 @@ export function CommandWorkflowPanel({
       !cancelExecutionId ||
       !pendingGate ||
       gateBusy ||
-      cancelBusy
+      cancelBusy ||
+      readOnly ||
+      control?.awaitingSnapshot ||
+      control?.canReview === false
     ) {
       return;
     }
     setGateBusy(true);
     setError(null);
+    const identity = viewIdentity.current;
     try {
       const resolved = await onResolveGate(
         selected,
         cancelExecutionId,
         pendingGate.nodeId,
         decision,
-        gateComment.trim() || null,
+        control?.source === "durable"
+          ? gateComment === ""
+            ? null
+            : gateComment
+          : gateComment.trim() || null,
       );
+      if (viewIdentity.current !== identity) return;
       setExecution((current) =>
         current?.status === "canceled" ? current : resolved,
       );
       setGateComment("");
-      await onReload();
+      await reloadSelected();
     } catch (gateError) {
+      if (viewIdentity.current !== identity) return;
       setError(
         gateError instanceof Error
           ? workflowGateResolutionErrorText(gateError.message)
           : "确认没有生效，请重试",
       );
     } finally {
-      setGateBusy(false);
+      if (viewIdentity.current === identity) setGateBusy(false);
     }
   }
 
   async function cancelRun() {
-    if (!selected || !cancelExecutionId || !runActive || cancelBusy) {
+    if (
+      !selected ||
+      !cancelExecutionId ||
+      !runActive ||
+      cancelBusy ||
+      readOnly
+    ) {
       return;
     }
     setCancelBusy(true);
     setError(null);
+    const identity = viewIdentity.current;
     try {
-      setExecution(await onCancel(selected, cancelExecutionId));
-      await onReload();
+      const result = await onCancel(selected, cancelExecutionId);
+      if (viewIdentity.current !== identity) return;
+      setExecution(result);
+      await reloadSelected();
     } catch (cancelError) {
+      if (viewIdentity.current !== identity) return;
       setError(
         cancelError instanceof Error ? cancelError.message : "协作流取消失败",
       );
     } finally {
-      setCancelBusy(false);
+      if (viewIdentity.current === identity) setCancelBusy(false);
     }
   }
 
   if (status !== "ready" && !(status === "loading" && available.length > 0)) {
-    return (
+    const empty = (
       <CommandTeamEmptyState
         action={
           status === "unavailable"
@@ -253,10 +418,18 @@ export function CommandWorkflowPanel({
         title={status === "loading" ? "正在读取协作流" : "暂时无法打开协作流"}
       />
     );
+    return controls ? (
+      <>
+        {controls(false)}
+        {empty}
+      </>
+    ) : (
+      empty
+    );
   }
 
   if (available.length === 0) {
-    return (
+    const empty = (
       <CommandTeamEmptyState
         action={
           onCreate
@@ -269,6 +442,14 @@ export function CommandWorkflowPanel({
         title="还没有协作流"
       />
     );
+    return controls ? (
+      <>
+        {controls(false)}
+        {empty}
+      </>
+    ) : (
+      empty
+    );
   }
 
   if (!selected) {
@@ -278,6 +459,7 @@ export function CommandWorkflowPanel({
         data-workflow-list=""
         aria-label="协作流列表"
       >
+        {controls?.(false)}
         {available.map((workflow) => (
           <WorkflowListItem
             key={workflow.config.workflowId}
@@ -347,21 +529,26 @@ export function CommandWorkflowPanel({
               aria-label="同步协作流"
               className="button compact"
               type="button"
-              onClick={() => void onReload()}
+              onClick={() => void reloadSelected()}
             >
               <RotateCw aria-hidden="true" />
               同步
             </button>
-            {runActive && cancelExecutionId ? (
+            {runActive && cancelExecutionId && !readOnly ? (
               <button
                 aria-label="取消当前协作流运行"
                 className="button compact workflow-cancel-button"
                 type="button"
-                disabled={controlPresentation.cancelDisabled}
+                disabled={
+                  controlPresentation.cancelDisabled ||
+                  control?.root?.cancelRequested
+                }
                 onClick={() => void cancelRun()}
               >
                 <Square aria-hidden="true" />
-                {controlPresentation.cancelLabel}
+                {control?.root?.cancelRequested
+                  ? "取消中…"
+                  : controlPresentation.cancelLabel}
               </button>
             ) : null}
           </div>
@@ -374,6 +561,27 @@ export function CommandWorkflowPanel({
               role="log"
               aria-label="协作流群聊"
             >
+              {controls?.(true)}
+              <CommandWorkflowRunHistory
+                record={selected}
+                onInspect={inspectSelected}
+                onNewRun={
+                  onNewRun
+                    ? (versionId) => {
+                        viewIdentity.current = { ...viewIdentity.current };
+                        setBusy(false);
+                        setGateBusy(false);
+                        setCancelBusy(false);
+                        setExecution(null);
+                        setError(null);
+                        setSubmittedInput(null);
+                        setExcludedExecutionId(null);
+                        setInput("");
+                        onNewRun(versionId);
+                      }
+                    : undefined
+                }
+              />
               {!submittedInput && !visibleExecution && !error ? (
                 <div className="workflow-thread-empty">
                   <strong>从一个明确目标开始</strong>
@@ -408,15 +616,47 @@ export function CommandWorkflowPanel({
                       />
                     </WorkbenchSourceAnchor>
                     <CommandWorkflowNodeOutputs execution={visibleExecution} />
+                    {control?.source === "durable" && onReadEvidence ? (
+                      <CommandWorkflowVerificationEvidence
+                        key={visibleExecution.executionId}
+                        execution={visibleExecution}
+                        read={(request) =>
+                          onReadEvidence({
+                            ...request,
+                            workflow: selected,
+                            executionId: visibleExecution.executionId,
+                          })
+                        }
+                      />
+                    ) : null}
                     <small>
                       本次协作 · {workflowStatusLabel(visibleExecution.status)}
                     </small>
                   </div>
                 </article>
               ) : null}
-              {pendingGate ? (
+              {pendingGate && !readOnly ? (
                 <section className="workflow-gate-card" aria-label="确认环节">
                   <div className="workflow-gate-card-copy">
+                    {pendingGates.length > 1 ? (
+                      <label>
+                        选择确认环节
+                        <select
+                          aria-label="选择确认环节"
+                          value={pendingGate.nodeId}
+                          onChange={(event) => {
+                            setGateNodeId(event.target.value);
+                            setGateComment("");
+                          }}
+                        >
+                          {pendingGates.map((node) => (
+                            <option key={node.nodeId} value={node.nodeId}>
+                              {node.title}
+                            </option>
+                          ))}
+                        </select>
+                      </label>
+                    ) : null}
                     <span>等待你确认</span>
                     <strong>{pendingGate.title}</strong>
                     <p>
@@ -426,7 +666,7 @@ export function CommandWorkflowPanel({
                   <label className="form-field">
                     <span>审批说明（可选）</span>
                     <textarea
-                      maxLength={2_000}
+                      maxLength={control?.source === "durable" ? 4096 : 2000}
                       placeholder="补充批准依据或驳回原因"
                       value={gateComment}
                       onChange={(event) => setGateComment(event.target.value)}
@@ -436,7 +676,11 @@ export function CommandWorkflowPanel({
                     <button
                       className="approval-deny"
                       type="button"
-                      disabled={controlPresentation.gateDisabled}
+                      disabled={
+                        controlPresentation.gateDisabled ||
+                        control?.canReview === false ||
+                        control?.awaitingSnapshot
+                      }
                       onClick={() => void resolveGate("reject")}
                     >
                       驳回并结束
@@ -444,7 +688,11 @@ export function CommandWorkflowPanel({
                     <button
                       className="approval-approve"
                       type="button"
-                      disabled={controlPresentation.gateDisabled}
+                      disabled={
+                        controlPresentation.gateDisabled ||
+                        control?.canReview === false ||
+                        control?.awaitingSnapshot
+                      }
                       onClick={() => void resolveGate("approve")}
                     >
                       批准并继续
@@ -472,7 +720,7 @@ export function CommandWorkflowPanel({
                 <article className="office-room-message is-error" role="alert">
                   <span className="team-avatar">!</span>
                   <div>
-                    <strong>执行失败</strong>
+                    <strong>{workflowErrorTitle(error)}</strong>
                     <p>{error}</p>
                   </div>
                 </article>
@@ -489,26 +737,46 @@ export function CommandWorkflowPanel({
                   <b>/</b> 添加能力
                 </span>
               }
-              disabled={busy || runActive || gateBusy || cancelBusy}
+              disabled={
+                busy ||
+                runActive ||
+                gateBusy ||
+                cancelBusy ||
+                readOnly ||
+                control?.canStart === false ||
+                pendingSubmission
+              }
               // Allow cancel even during the blocking onRun call.
               // The button is hidden below when runActive is false.
               // runActive now includes busy state, so the button shows during
               // the entire run lifecycle.
               id="workflow-message-input"
-              placeholder="继续推进这个协作流…"
+              placeholder={
+                control?.inputMode === "json"
+                  ? "按输入格式填写 JSON…"
+                  : "继续推进这个协作流…"
+              }
               sendLabel="运行协作流"
               slashEnabled
               state={
                 <span className="composer-state" role="status">
-                  {pendingGate
-                    ? "等待你确认"
-                    : busy || runActive
-                      ? "团队正在推进"
-                      : "可以继续沟通"}
+                  {pendingSubmission
+                    ? "请恢复原请求"
+                    : pendingGate
+                      ? "等待你确认"
+                      : busy || runActive
+                        ? "团队正在推进"
+                        : "可以继续沟通"}
                 </span>
               }
               submitBehavior="enter"
-              submitBlocked={!input.trim() || runActive}
+              submitBlocked={
+                !input.trim() ||
+                runActive ||
+                readOnly ||
+                control?.canStart === false ||
+                pendingSubmission
+              }
               submitting={busy}
               value={input}
               onChange={setInput}
@@ -519,487 +787,4 @@ export function CommandWorkflowPanel({
       </section>
     </TaskWorkbenchScope>
   );
-}
-
-function WorkflowListItem({
-  workflow,
-  onOpen,
-}: {
-  workflow: CrewonWorkflowRecord;
-  onOpen: () => void;
-}) {
-  const stages = workflowStages(
-    workflow,
-    workflowExecutionFromLatestRun(workflow),
-  );
-  const members = workflowMembers(workflow);
-  const description =
-    workflow.config.description.trim() || "按节点推进并保留每一步执行结果";
-  return (
-    <button
-      className="workflow-list-item"
-      data-workflow-open=""
-      type="button"
-      onClick={onOpen}
-    >
-      <span className="workflow-list-index" aria-hidden="true">
-        <b>{stages.length}</b>
-        <small>步骤</small>
-      </span>
-      <span className="workflow-list-main">
-        <span className="workflow-list-title">
-          <strong>{workflow.config.name}</strong>
-          <small title={description}>{description}</small>
-        </span>
-        <em className={workflowStatusClassName(workflow.config.status)}>
-          {workflowStatusLabel(workflow.config.status)}
-        </em>
-      </span>
-      <span className="workflow-list-meta">
-        <span
-          className="workflow-list-copy"
-          title={workflowListSummary(workflow, stages)}
-        >
-          {workflowListSummary(workflow, stages)}
-        </span>
-        <span className="workflow-member-strip" aria-label="协作流来源">
-          {members.length > 0 ? (
-            <>
-              {members.slice(0, 4).map((member) => (
-                <small key={member}>{memberInitial(member)}</small>
-              ))}
-              <em>{members.length} 成员</em>
-            </>
-          ) : (
-            <>
-              <small>流</small>
-              <em>CrewON</em>
-            </>
-          )}
-        </span>
-      </span>
-      <span className="workflow-list-foot">
-        {stages.length > 0 ? (
-          <span className="workflow-list-progress" aria-hidden="true">
-            {stages.slice(0, 4).map((stage) => (
-              <i
-                className={stageProgressClassName(stage.status)}
-                key={stage.id}
-              />
-            ))}
-          </span>
-        ) : null}
-        <b>进入群聊</b>
-      </span>
-    </button>
-  );
-}
-
-type WorkflowStage = {
-  id: string;
-  nodeType: "agent" | "humanGate";
-  name: string;
-  owner: string | null;
-  status:
-    | "canceled"
-    | "done"
-    | "failed"
-    | "idle"
-    | "rejected"
-    | "running"
-    | "waiting";
-};
-
-function WorkflowExecutionStrip({ stages }: { stages: WorkflowStage[] }) {
-  if (stages.length === 0) {
-    return (
-      <section
-        className="workflow-execution-strip is-empty"
-        aria-label="执行步骤"
-      >
-        <div className="workflow-stage-empty">
-          <strong>步骤将在开始后显示</strong>
-          <p>现在还没有可展示的步骤信息。</p>
-        </div>
-      </section>
-    );
-  }
-  return (
-    <section className="workflow-execution-strip" aria-label="执行步骤">
-      {stages.map((stage, index) => (
-        <article
-          className={[
-            "workflow-step-node",
-            stage.status === "done" && "is-done",
-            stage.status === "running" && "is-running",
-            stage.status === "waiting" && "is-waiting",
-            ["canceled", "failed", "rejected"].includes(stage.status) &&
-              "is-error",
-          ]
-            .filter(Boolean)
-            .join(" ")}
-          aria-current={
-            stage.status === "running" || stage.status === "waiting"
-              ? "step"
-              : undefined
-          }
-          key={stage.id}
-        >
-          <span>{String(index + 1).padStart(2, "0")}</span>
-          <div>
-            <strong>{stage.name}</strong>
-            <p>
-              {stage.nodeType === "humanGate"
-                ? "由你确认"
-                : workflowOwnerDisplayName(stage.owner)}
-            </p>
-          </div>
-          <em className={workflowStageStatusClassName(stage.status)}>
-            {workflowStageStatusLabel(stage.status)}
-          </em>
-        </article>
-      ))}
-    </section>
-  );
-}
-
-function workflowStages(
-  workflow: CrewonWorkflowRecord,
-  execution: CrewonWorkflowExecution | null,
-): WorkflowStage[] {
-  const configured = workflow.config.nodes;
-  const executed = new Map(
-    (execution?.executedNodes ?? []).map((node) => [node.nodeId, node]),
-  );
-  const executionCanceled = ["canceled", "interrupted"].includes(
-    execution?.status.trim().toLowerCase() ?? "",
-  );
-  return configured.slice(0, 8).map((node, index) => {
-    const record = asRecord(node);
-    const id = workflowNodeId(node) || String(index + 1);
-    const executedNode = executed.get(id);
-    const statusValue = String(
-      executedNode?.status ?? record?.status ?? "",
-    ).toLowerCase();
-    const projectedStatus = workflowStageStatus(statusValue);
-    return {
-      id,
-      nodeType:
-        record?.type === "humanGate" || executedNode?.nodeType === "humanGate"
-          ? "humanGate"
-          : "agent",
-      name: workflowNodeName(record, index),
-      owner: workflowNodeOwner(record),
-      status:
-        executionCanceled &&
-        (projectedStatus === "running" || projectedStatus === "waiting")
-          ? "canceled"
-          : projectedStatus,
-    };
-  });
-}
-
-function workflowExecutionFromLatestRun(
-  workflow: CrewonWorkflowRecord,
-): CrewonWorkflowExecution | null {
-  const run = workflow.config.runs?.[0];
-  if (!run) {
-    return null;
-  }
-  return {
-    executionId: run.executionId,
-    workflowId: workflow.config.workflowId,
-    status: run.status,
-    output: run.output,
-    executedNodes: run.executedNodes,
-    error: run.error,
-  };
-}
-
-function matchesActiveWorkflowStatus(
-  status: string | null | undefined,
-): boolean {
-  return ["canceling", "queued", "running", "waitingForApproval"].includes(
-    status || "",
-  );
-}
-
-export function workflowControlPresentation(input: {
-  cancelBusy: boolean;
-  gateBusy: boolean;
-}): Readonly<{
-  cancelDisabled: boolean;
-  cancelLabel: string;
-  gateDisabled: boolean;
-}> {
-  return {
-    cancelDisabled: input.cancelBusy,
-    cancelLabel: input.cancelBusy ? "取消中…" : "取消运行",
-    gateDisabled: input.gateBusy || input.cancelBusy,
-  };
-}
-
-function isWaitingForApprovalStatus(
-  status: string | null | undefined,
-): boolean {
-  return status?.trim().toLowerCase() === "waitingforapproval";
-}
-
-function workflowMembers(workflow: CrewonWorkflowRecord): string[] {
-  return workflowStages(workflow, null)
-    .map((stage) => stage.owner)
-    .filter((owner): owner is string => Boolean(owner))
-    .filter((owner, index, owners) => owners.indexOf(owner) === index);
-}
-
-function workflowOwnerDisplayName(owner: string | null): string {
-  const name = owner?.trim() || "";
-  if (!name) {
-    return "协作成员";
-  }
-  if (
-    /^(?:local|desktop|web)[-_:]/i.test(name) ||
-    (name.length > 24 && /^[\x00-\x7F]+$/.test(name))
-  ) {
-    return "协作成员";
-  }
-  return name.replaceAll("智能体", "成员").replace(/\bAgent\b/gi, "成员");
-}
-
-function workflowNodeId(node: unknown): string {
-  const record = asRecord(node);
-  return String(record?.id ?? record?.node_id ?? record?.nodeId ?? "");
-}
-
-function workflowNodeName(
-  record: Record<string, unknown> | null,
-  index: number,
-): string {
-  return String(
-    record?.name ??
-      record?.label ??
-      record?.title ??
-      record?.type ??
-      `节点 ${index + 1}`,
-  );
-}
-
-function workflowNodeOwner(
-  record: Record<string, unknown> | null,
-): string | null {
-  const config = asRecord(record?.config);
-  const data = asRecord(record?.data);
-  if (record?.type === "humanGate") {
-    return "人工确认";
-  }
-  const owner =
-    record?.agent_name ??
-    record?.agentName ??
-    record?.owner ??
-    config?.agent_name ??
-    config?.agentName ??
-    data?.agent_name ??
-    data?.agentName;
-  return typeof owner === "string" && owner.trim() ? owner.trim() : null;
-}
-
-function asRecord(value: unknown): Record<string, unknown> | null {
-  return value && typeof value === "object" && !Array.isArray(value)
-    ? (value as Record<string, unknown>)
-    : null;
-}
-
-function workflowListSummary(
-  workflow: CrewonWorkflowRecord,
-  stages: WorkflowStage[],
-): string {
-  if (stages.length > 0 && stages.every((stage) => stage.status === "done")) {
-    return "全部步骤已完成";
-  }
-  const running =
-    stages.find((stage) => ["running", "waiting"].includes(stage.status)) ??
-    stages.find((stage) =>
-      ["canceled", "failed", "rejected"].includes(stage.status),
-    ) ??
-    stages[0];
-  if (running) {
-    return `当前阶段：${running.name}${running.owner ? ` · ${running.owner}` : ""}`;
-  }
-  return workflow.config.description.trim() || "等待首次执行";
-}
-
-function workflowRoomSummary(
-  _workflow: CrewonWorkflowRecord,
-  stages: WorkflowStage[],
-): string {
-  if (stages.length > 0 && stages.every((stage) => stage.status === "done")) {
-    return "全部步骤已完成";
-  }
-  const running =
-    stages.find((stage) => stage.status === "running") ?? stages[0];
-  const current =
-    stages.find((stage) => ["running", "waiting"].includes(stage.status)) ??
-    stages.find((stage) =>
-      ["canceled", "failed", "rejected"].includes(stage.status),
-    ) ??
-    running;
-  if (current) {
-    return `当前阶段：${current.name}${current.owner ? ` · ${current.owner}` : ""}`;
-  }
-  return "等待首次执行 · CrewON 编排";
-}
-
-function memberInitial(member: string): string {
-  return Array.from(workflowOwnerDisplayName(member))[0] || "员";
-}
-
-function stageProgressClassName(status: WorkflowStage["status"]): string {
-  return status === "done"
-    ? "is-done"
-    : status === "running" || status === "waiting"
-      ? "is-running"
-      : "";
-}
-
-function workflowStageStatus(status: string): WorkflowStage["status"] {
-  if (["complete", "completed", "done", "success"].includes(status)) {
-    return "done";
-  }
-  if (["active", "processing", "queued", "running"].includes(status)) {
-    return "running";
-  }
-  if (status === "waitingforapproval") {
-    return "waiting";
-  }
-  if (status === "rejected") {
-    return "rejected";
-  }
-  if (status === "canceled" || status === "interrupted") {
-    return "canceled";
-  }
-  if (status === "failed") {
-    return "failed";
-  }
-  return "idle";
-}
-
-function workflowStageStatusLabel(status: WorkflowStage["status"]): string {
-  const labels: Record<WorkflowStage["status"], string> = {
-    canceled: "已取消",
-    done: "完成",
-    failed: "失败",
-    idle: "未开始",
-    rejected: "已驳回",
-    running: "运行中",
-    waiting: "等你确认",
-  };
-  return labels[status];
-}
-
-function workflowStageStatusClassName(status: WorkflowStage["status"]): string {
-  if (status === "done") {
-    return "status success";
-  }
-  if (status === "running" || status === "waiting") {
-    return "status warn";
-  }
-  if (["canceled", "failed", "rejected"].includes(status)) {
-    return "status danger";
-  }
-  return "status";
-}
-
-function workflowStatusClassName(status: string | null | undefined): string {
-  const normalized = status?.trim().toLowerCase() || "";
-  if (
-    ["complete", "completed", "done", "success", "active"].includes(normalized)
-  ) {
-    return "status success";
-  }
-  if (["running", "processing", "in_progress"].includes(normalized)) {
-    return "status warn";
-  }
-  if (normalized === "waitingforapproval") {
-    return "status warn";
-  }
-  if (["canceled", "failed", "interrupted", "rejected"].includes(normalized)) {
-    return "status danger";
-  }
-  return "status";
-}
-
-function workflowStatusLabel(status: string | null | undefined): string {
-  const normalized = status?.trim().toLowerCase() || "";
-  const labels: Record<string, string> = {
-    active: "已启用",
-    canceled: "已取消",
-    canceling: "取消中",
-    complete: "已完成",
-    completed: "已完成",
-    done: "已完成",
-    draft: "草稿",
-    failed: "失败",
-    in_progress: "运行中",
-    interrupted: "已中断",
-    pending: "待启动",
-    processing: "运行中",
-    ready: "待启动",
-    rejected: "已驳回",
-    running: "运行中",
-    success: "已完成",
-    waitingforapproval: "等待你确认",
-  };
-  return labels[normalized] || status?.trim() || "已启用";
-}
-
-function executionResultText(execution: CrewonWorkflowExecution): string {
-  if (execution.error) {
-    const summary = workflowExecutionErrorText(execution.error);
-    return execution.output.trim()
-      ? `**${summary}**\n\n${execution.output}`
-      : summary;
-  }
-  if (execution.output.trim()) {
-    return execution.output;
-  }
-  return execution.status === "completed"
-    ? "协作已经完成，没有更多结果需要展示。"
-    : execution.status === "waitingForApproval"
-      ? "已到达确认环节，等待你批准或驳回。"
-      : execution.status === "canceled"
-        ? "协作已取消，后续步骤不会继续。"
-        : "任务已经交给团队，正在等待继续处理。";
-}
-
-function workflowExecutionErrorText(error: string): string {
-  if (error === "workflow_gate_rejected") {
-    return "人工确认已驳回，协作流已结束。";
-  }
-  if (error === "control_workflow_verification_failed") {
-    return "独立验证未通过，协作流已停止。请根据验证详情修复后重试。";
-  }
-  if (error === "control_workflow_verification_invalid") {
-    return "独立验证没有返回唯一且合法的结论，协作流已安全停止。请检查验证详情后重试。";
-  }
-  return `协作流执行失败：${error}`;
-}
-
-function workflowGateResolutionErrorText(error: string): string {
-  if (error === "control_workflow_execution_canceled") {
-    return "协作流已经取消，不能再批准或驳回。请同步最新状态。";
-  }
-  if (error === "control_workflow_gate_not_pending") {
-    return "这个确认环节已经处理或结束，请同步最新状态。";
-  }
-  return error;
-}
-
-function workflowGateInstruction(
-  workflow: CrewonWorkflowRecord,
-  nodeId: string,
-): string {
-  const node = workflow.config.nodes.find(
-    (candidate) => candidate.nodeId === nodeId,
-  );
-  return node?.instruction || "确认当前结果是否可以继续进入下一步。";
 }

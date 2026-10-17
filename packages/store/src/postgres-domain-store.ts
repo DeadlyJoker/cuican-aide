@@ -533,6 +533,7 @@ export class PostgresDomainStore
           this.commitRunWithin(client, input, {
             workflowSchedulerAdmission: true,
           }),
+        commitThread: (client, input) => this.commitThreadWithin(client, input),
         resolveRouteWithinTransaction,
       },
       policy,

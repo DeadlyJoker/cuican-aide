@@ -1,3 +1,4 @@
+import { assertWorkflowRootInput } from "./workflow-root-transcript.test-support.ts";
 import assert from "node:assert/strict";
 import test from "node:test";
 import { InMemoryArtifactStore } from "@crewon/artifacts";
@@ -165,9 +166,12 @@ pgTest(
       f.root.threadId,
     );
     assert.equal(transcript.activeRunId, null);
+    assertWorkflowRootInput(transcript, f.root.runId);
     assert.equal(
       transcript.transcriptWindow.runBindings.filter(
-        (binding) => binding.runId === f.root.runId,
+        (binding) =>
+          binding.runId === f.root.runId &&
+          binding.source === "messageCompletedEvent",
       ).length,
       1,
     );
@@ -315,7 +319,13 @@ pgTest(
       f.root.threadId,
     );
     assert.equal(transcript.activeRunId, null);
-    assert.deepEqual(transcript.transcriptWindow.messageWindow.data, []);
+    assertWorkflowRootInput(transcript, f.root.runId);
+    assert.deepEqual(
+      transcript.transcriptWindow.messageWindow.data.map(
+        (message) => message.role,
+      ),
+      ["user"],
+    );
     assert.equal(worker.requests.length, 0);
   },
 );

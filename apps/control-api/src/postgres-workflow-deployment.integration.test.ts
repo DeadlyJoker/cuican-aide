@@ -1,3 +1,4 @@
+import { assertWorkflowRootInput } from "./workflow-root-transcript.test-support.ts";
 import {
   activateRuntimeAgentVersionRelease,
   compileRuntimeAgentVersionRelease,
@@ -145,9 +146,16 @@ pgTest(
       thread.threadId,
     );
     assert.equal(transcript.activeRunId, null);
+    assertWorkflowRootInput(
+      transcript,
+      started.run.runId,
+      JSON.stringify(command.input),
+    );
     assert.equal(
       transcript.transcriptWindow.runBindings.filter(
-        (binding) => binding.runId === started.run.runId,
+        (binding) =>
+          binding.runId === started.run.runId &&
+          binding.source === "messageCompletedEvent",
       ).length,
       1,
     );
@@ -438,9 +446,16 @@ pgTest(
           root.threadId,
         );
         const bindings = transcript.transcriptWindow.runBindings.filter(
-          (binding) => binding.runId === root.runId,
+          (binding) =>
+            binding.runId === root.runId &&
+            binding.source === "messageCompletedEvent",
         );
         assert.equal(bindings.length, 1);
+        assertWorkflowRootInput(
+          transcript,
+          root.runId,
+          JSON.stringify({ topic: root.topic }),
+        );
         assert.equal(
           transcript.transcriptWindow.messageWindow.data.find(
             (message) => message.messageId === bindings[0]!.messageId,

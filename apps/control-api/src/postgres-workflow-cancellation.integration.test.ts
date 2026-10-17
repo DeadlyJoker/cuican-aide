@@ -1,3 +1,4 @@
+import { assertWorkflowRootInput } from "./workflow-root-transcript.test-support.ts";
 import assert from "node:assert/strict";
 import test from "node:test";
 import { InMemoryArtifactStore } from "@crewon/artifacts";
@@ -85,10 +86,11 @@ pgTest(
         { limit: 50 },
       );
       assert.equal(snapshot.activeRunId, null);
-      // This Run has no associated root message. The bounded snapshot omits it after it leaves the active slot.
+      assertWorkflowRootInput(snapshot, current.runId);
+      // Its original input retains the canceled root in the bounded transcript snapshot.
       assert.equal(
         snapshot.runs.some((run) => run.runId === current.runId),
-        false,
+        true,
       );
       assert.equal((await client.getRun(current.runId)).run.status, "canceled");
       const execution = await client.getWorkflowRunSnapshot(current.runId);

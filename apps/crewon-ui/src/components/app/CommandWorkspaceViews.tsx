@@ -1280,6 +1280,13 @@ export function TeamView({
   onRunWorkflow,
   onCancelWorkflow,
   onResolveWorkflowGate,
+  onInspectWorkflow,
+  workflowControls,
+  workflowSourceIdentity,
+  onReadWorkflowEvidence,
+  observeWorkflow,
+  onNewWorkflowRun,
+  workflowExecutionContext,
   onSelectExpert,
   onTeamModeChange,
 }: {
@@ -1299,7 +1306,20 @@ export function TeamView({
   onCreateWorkflow?: () => void;
   onCreateExpertTeam?: () => void;
   onRefresh?: () => void;
-  onReloadWorkflows: () => Promise<void>;
+  onReloadWorkflows: (
+    scope?: import("../../lib/control-runtime/controlDurableWorkflowRuntime").WorkflowReadScope,
+  ) => Promise<void>;
+  onInspectWorkflow?: (
+    scope: import("../../lib/control-runtime/controlDurableWorkflowRuntime").WorkflowReadScope,
+  ) => Promise<void>;
+  workflowControls?: (room: boolean) => import("react").ReactNode;
+  workflowSourceIdentity?: object | null;
+  workflowExecutionContext?: import("./CommandWorkflowPanel").WorkflowExecutionContext;
+  observeWorkflow?: import("../../lib/control-runtime/controlDurableWorkflowRuntime").WorkflowRunObserver;
+  onNewWorkflowRun?: (workflowVersionId: string) => void;
+  onReadWorkflowEvidence?: (
+    input: import("./CommandWorkflowVerificationEvidence").WorkflowEvidenceRequest,
+  ) => Promise<string>;
   onRunWorkflow: (
     workflow: CrewonWorkflowRecord,
     input: string,
@@ -1501,6 +1521,13 @@ export function TeamView({
             workflows={workflows}
             onCancel={onCancelWorkflow}
             onReload={onReloadWorkflows}
+            onInspect={onInspectWorkflow}
+            controls={workflowControls}
+            sourceIdentity={workflowSourceIdentity}
+            onReadEvidence={onReadWorkflowEvidence}
+            observe={observeWorkflow}
+            onNewRun={onNewWorkflowRun}
+            executionContext={workflowExecutionContext}
             onCreate={onCreateWorkflow}
             onResolveGate={onResolveWorkflowGate}
             onRun={onRunWorkflow}
