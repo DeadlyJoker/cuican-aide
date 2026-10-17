@@ -41,6 +41,97 @@ export function workflowReviewConformance(
     run: (t: TestContext) => Promise<void>,
   ) => unknown = test,
 ) {
+  register(
+    `${engine} explicit descendant context survives reopen and cannot change semantic mode on replay`,
+    async (t) => {
+      for (const contextual of [false, true]) {
+        const f = await fixture(t),
+          command = {
+            ...reviewCommand(f.command),
+            ...(contextual
+              ? { commentContext: "descendants-v1" as const }
+              : {}),
+          };
+        const committed = await f.composition.reviewWorkflowHumanGate({
+          actor: gateActor,
+          command,
+        });
+        const reopened = await f.reopen(),
+          before = await f.snapshot();
+        assert.deepEqual(
+          await reopened.reviewWorkflowHumanGate({ actor: gateActor, command }),
+          { disposition: "replayed", review: committed.review },
+        );
+        const opposite = contextual
+          ? reviewCommand(f.command)
+          : { ...command, commentContext: "descendants-v1" as const };
+        await assert.rejects(
+          reopened.reviewWorkflowHumanGate({
+            actor: gateActor,
+            command: opposite,
+          }),
+          { code: "workflow_gate_review_context_conflict" },
+        );
+        assert.deepEqual(await f.snapshot(), before);
+      }
+    },
+  );
+  register(
+    `${engine} contextual review write failure rolls back its decision, receipt and v2 wake together`,
+    async (t) => {
+      const f = await fixture(t),
+        before = await f.snapshot();
+      const command = {
+        ...reviewCommand(f.command),
+        commentContext: "descendants-v1" as const,
+      };
+      await f.failReceiptWrites();
+      await assert.rejects(
+        f.composition.reviewWorkflowHumanGate({ actor: gateActor, command }),
+      );
+      assert.deepEqual(await f.snapshot(), before);
+      await f.restoreReceiptWrites();
+      assert.equal(
+        (
+          await f.composition.reviewWorkflowHumanGate({
+            actor: gateActor,
+            command,
+          })
+        ).disposition,
+        "committed",
+      );
+    },
+  );
+  for (const kind of [
+    "delete",
+    "fingerprint",
+    "decision",
+    "oversize",
+    "comment",
+  ] as const)
+    register(
+      `${engine} contextual wake refuses ${kind} review evidence instead of downgrading to legacy metadata`,
+      async (t) => {
+        const f = await fixture(t);
+        await f.composition.reviewWorkflowHumanGate({
+          actor: gateActor,
+          command: {
+            ...reviewCommand(f.command),
+            commentContext: "descendants-v1",
+          },
+        });
+        await f.corruptReceipt(kind);
+        const before = await f.snapshot(),
+          reopened = await f.reopen();
+        await assert.rejects(
+          reopened.loadWorkflowHumanGate({
+            actor: gateActor,
+            locator: reviewLocator(f.command),
+          }),
+        );
+        assert.deepEqual(await f.snapshot(), before);
+      },
+    );
   for (const outcome of ["approved", "rejected"] as const)
     register(
       `${engine} review ${outcome} persists exact comment and decision atomically across reopen; v0 remains exact`,

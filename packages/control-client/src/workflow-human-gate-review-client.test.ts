@@ -14,6 +14,41 @@ const body = {
   decision: "approved" as const,
   comment: workflowGateReviewFixture().review!.comment,
 };
+test("SDK discovers explicit context independently and preserves opt-in in one non-retrying review request", async () => {
+  const calls: { url: string; init: RequestInit }[] = [];
+  const client = new ControlApiClient({
+    baseUrl: "https://control.example",
+    accessToken: "token",
+    csrfToken: "csrf",
+    fetch: async (url, init) => {
+      calls.push({ url: String(url), init: init! });
+      return Response.json(
+        String(url).includes("/capabilities/")
+          ? { version: "v1", available: true }
+          : {
+              disposition: "committed",
+              review: workflowGateReviewFixture().review,
+            },
+      );
+    },
+  });
+  assert.deepEqual(await client.getWorkflowReviewContextCapability(), {
+    version: "v1",
+    available: true,
+  });
+  const command = { ...body, commentContext: "descendants-v1" as const };
+  await client.reviewWorkflowHumanGate(workflowReadLocator, command);
+  assert.ok(calls[0]!.url.endsWith("/capabilities/workflow-review-context-v1"));
+  assert.deepEqual(JSON.parse(String(calls[1]!.init.body)), command);
+  assert.equal(calls.length, 2);
+  await assert.rejects(
+    client.reviewWorkflowHumanGate(workflowReadLocator, {
+      ...body,
+      commentContext: "all",
+    } as any),
+  );
+  assert.equal(calls.length, 2);
+});
 test("review SDK reuses credentials, Origin, CSRF, limits and captured request without write retries or extra keys", async () => {
   const calls: { url: string; init: RequestInit }[] = [];
   const client = new ControlApiClient({

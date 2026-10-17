@@ -6834,6 +6834,33 @@
         "description": "Read-only instance support hint. This does not prove Worker liveness, deployment readiness, permission or fleet-wide support. Clients must not fall back to renderer execution after a possibly accepted write."
       }
     },
+    "/api/v1/capabilities/workflow-review-context-v1": {
+      "get": {
+        "operationId": "getWorkflowReviewContextCapabilityV1",
+        "description": "Authenticated instance support for explicit descendants-v1 review context. Not an execution or approval grant; coordinate Control and Worker upgrades before using v2 scheduler wakes.",
+        "responses": {
+          "200": {
+            "description": "Explicit review context support",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/WorkflowReviewCapability"
+                }
+              }
+            }
+          },
+          "401": {
+            "$ref": "#/components/responses/Error"
+          },
+          "403": {
+            "$ref": "#/components/responses/Error"
+          },
+          "500": {
+            "$ref": "#/components/responses/Error"
+          }
+        }
+      }
+    },
     "/api/v1/workflow-runs/{runId}/nodes/{nodeId}/gates/{gateRequestId}/review-v1": {
       "get": {
         "operationId": "getWorkflowHumanGateReviewV1",
@@ -16406,6 +16433,11 @@
           },
           "comment": {
             "$ref": "#/components/schemas/WorkflowReviewComment"
+          },
+          "commentContext": {
+            "type": "string",
+            "const": "descendants-v1",
+            "description": "Explicitly freeze this review as bounded context for future descendant child Runs. Omission retains metadata-only semantics; an existing decision cannot switch modes. Does not change node input/output or grant tool authority."
           }
         }
       },

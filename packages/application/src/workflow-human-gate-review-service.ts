@@ -21,7 +21,11 @@ export function validateWorkflowHumanGateReviewComment(
   }
 }
 
-function captureRecord<T extends object>(value: T, keys: string): T {
+function captureRecord<T extends object>(
+  value: T,
+  keys: string,
+  optional: readonly string[] = [],
+): T {
   if (
     !value ||
     typeof value !== "object" ||
@@ -31,7 +35,10 @@ function captureRecord<T extends object>(value: T, keys: string): T {
   const descriptors = Object.getOwnPropertyDescriptors(value);
   if (
     Reflect.ownKeys(descriptors).some((key) => typeof key !== "string") ||
-    Object.keys(descriptors).sort().join() !== keys ||
+    Object.keys(descriptors)
+      .filter((key) => !optional.includes(key))
+      .sort()
+      .join() !== keys ||
     Object.values(descriptors).some((d) => !("value" in d) || !d.enumerable)
   )
     throw new ApplicationError("validation", "workflow_gate_request_invalid");
@@ -64,13 +71,16 @@ export function captureWorkflowHumanGateReviewRequest(input: {
   const command = captureRecord(
     input.command,
     "comment,decision,gateRequestId,inputDigest,kind,nodeId,runId",
+    ["commentContext"],
   );
   validateWorkflowHumanGateRequest(actor, command);
   if (
     command.kind !== "workflowHumanGate.review" ||
     typeof command.inputDigest !== "string" ||
     !/^sha256:[a-f0-9]{64}$/u.test(command.inputDigest) ||
-    !["approved", "rejected"].includes(command.decision)
+    !["approved", "rejected"].includes(command.decision) ||
+    (Object.hasOwn(command, "commentContext") &&
+      command.commentContext !== "descendants-v1")
   )
     throw new ApplicationError("validation", "workflow_gate_command_invalid");
   validateWorkflowHumanGateReviewComment(command.comment);

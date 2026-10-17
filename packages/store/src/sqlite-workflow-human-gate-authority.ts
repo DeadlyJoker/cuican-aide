@@ -1,4 +1,5 @@
 import type { DatabaseSync } from "node:sqlite";
+import { readSqliteWorkflowReviewContexts } from "./workflow-gate-review-context.ts";
 import {
   canonicalJson,
   RunStoreError,
@@ -61,6 +62,7 @@ export function readSqliteWorkflowHumanGates(
     )
       corrupt();
   }
+  readSqliteWorkflowReviewContexts(db, result);
   return result;
 }
 function corrupt(): never {

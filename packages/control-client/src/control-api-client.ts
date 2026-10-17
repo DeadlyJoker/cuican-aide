@@ -1341,6 +1341,11 @@ export class ControlApiClient {
   ): Promise<WorkflowReviewCapability> {
     return this.#workflowClient().getWorkflowReviewCapability(options);
   }
+  getWorkflowReviewContextCapability(
+    options: ControlApiRequestOptions = {},
+  ): Promise<WorkflowReviewCapability> {
+    return this.#workflowClient().getWorkflowReviewContextCapability(options);
+  }
   getWorkflowHumanGateReview(
     locator: WorkflowGateLocator,
     options: ControlApiRequestOptions = {},

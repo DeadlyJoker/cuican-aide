@@ -71,6 +71,15 @@ test("review requests reject getters and extra fields before Store access", asyn
     { ...command, decision: "yes" },
     { ...command, inputDigest: "bad" },
     { ...command, comment: undefined },
+    { ...command, commentContext: undefined },
+    { ...command, commentContext: "all" },
+    {
+      ...command,
+      get commentContext() {
+        getters++;
+        return "descendants-v1";
+      },
+    },
     { ...command, [Symbol("hidden")]: "x" },
   ])
     await assert.rejects(service.reviewGate(actor, value as any), {

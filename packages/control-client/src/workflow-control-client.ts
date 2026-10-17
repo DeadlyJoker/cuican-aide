@@ -147,13 +147,29 @@ export class WorkflowControlClient {
   async getWorkflowReviewCapability(
     options: ControlApiRequestOptions = {},
   ): Promise<WorkflowReviewCapability> {
-    options.signal?.throwIfAborted();
-    const value = await this.#request(
-      "GET",
+    return this.#reviewCapability(
       "/api/v1/capabilities/workflow-reviews-v1",
-      null,
-      { ...options, expectedStatuses: [200], maximumResponseBytes: 1024 },
+      options,
     );
+  }
+  async getWorkflowReviewContextCapability(
+    options: ControlApiRequestOptions = {},
+  ): Promise<WorkflowReviewCapability> {
+    return this.#reviewCapability(
+      "/api/v1/capabilities/workflow-review-context-v1",
+      options,
+    );
+  }
+  async #reviewCapability(
+    path: string,
+    options: ControlApiRequestOptions,
+  ): Promise<WorkflowReviewCapability> {
+    options.signal?.throwIfAborted();
+    const value = await this.#request("GET", path, null, {
+      ...options,
+      expectedStatuses: [200],
+      maximumResponseBytes: 1024,
+    });
     options.signal?.throwIfAborted();
     try {
       return parseWorkflowReviewCapability(value);

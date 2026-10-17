@@ -211,7 +211,7 @@ export class ExperimentalSqliteWorkflowRunCompositionStore
       );
       if (this.#children && hasGates && !this.#gates)
         throw new RunStoreError("workflow_gate_unavailable");
-      readSqliteWorkflowHumanGates(db, current, run, context, {
+      const gates = readSqliteWorkflowHumanGates(db, current, run, context, {
         requirePublishedGates: this.#gates !== null,
       });
       if (this.#children && children.size > 0)
@@ -420,6 +420,7 @@ export class ExperimentalSqliteWorkflowRunCompositionStore
         this.#children.dispatch({
           parent: run,
           context,
+          gates,
           state: next,
           admissions: admissions.filter(
             (admission) => admission.claim.node.kind !== "humanGate",

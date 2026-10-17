@@ -5,6 +5,8 @@ import {
   compositionFixture,
   parallelVersion,
   compositionNow,
+  compositionInput,
+  claimCompositionWork,
 } from "./workflow-run-composition.test-support.ts";
 import { gateActor, gateCommand } from "./workflow-human-gate.test-support.ts";
 import {
@@ -12,7 +14,10 @@ import {
   reviewCommand,
   reviewLocator,
 } from "./workflow-human-gate-review.test-support.ts";
-import { WORKFLOW_GATE_REVIEW_SCOPE } from "./workflow-human-gate-review-receipt.ts";
+import {
+  WORKFLOW_GATE_REVIEW_SCOPE,
+  workflowGateReviewReceipt,
+} from "./workflow-human-gate-review-receipt.ts";
 import { cancellationChildDispatch } from "./workflow-cancellation.test-support.ts";
 import type { SqliteWorkflowCompositionOptions } from "./sqlite-workflow-run-composition.ts";
 
@@ -48,6 +53,7 @@ async function fixture(t: TestContext) {
   return {
     ...f,
     command,
+    execution: admitted.execution,
     snapshot,
     async reopen() {
       return f.open().experimentalWorkflowRunCompositionStore(options);
@@ -93,6 +99,84 @@ async function fixture(t: TestContext) {
   };
 }
 workflowReviewConformance("SQLite", fixture);
+test("SQLite contextual wake rejects a rewritten receipt even when its replacement fingerprint is valid", async (t) => {
+  const f = await fixture(t);
+  const result = await f.composition.reviewWorkflowHumanGate({
+    actor: gateActor,
+    command: { ...reviewCommand(f.command), commentContext: "descendants-v1" },
+  });
+  const changed = workflowGateReviewReceipt({
+    ...result.review,
+    comment: "coherent replacement",
+  });
+  f.database
+    .prepare(
+      "UPDATE idempotency_receipts SET fingerprint=?,result_json=? WHERE scope=?",
+    )
+    .run(changed.fingerprint, changed.json, WORKFLOW_GATE_REVIEW_SCOPE);
+  const before = await f.snapshot();
+  await assert.rejects(
+    f.composition.loadWorkflowHumanGate({
+      actor: gateActor,
+      locator: reviewLocator(f.command),
+    }),
+    { code: "workflow_gate_review_context_corrupt" },
+  );
+  assert.deepEqual(await f.snapshot(), before);
+});
+test("SQLite descendant child history freezes contextual approvals once across reopen and scheduler replay", async (t) => {
+  const f = await fixture(t);
+  await f.store.completeWorkItem(f.input.lease);
+  const commands = [f.command, gateCommand(f.execution, "root-1")];
+  for (const [i, command] of commands.entries())
+    await f.composition.reviewWorkflowHumanGate({
+      actor: gateActor,
+      command: {
+        ...reviewCommand(command, `  审批 ${i}\n😀  `),
+        commentContext: "descendants-v1",
+      },
+    });
+  const reopened = f.open().experimentalWorkflowRunCompositionStore(options);
+  const input = compositionInput(
+    f.input.binding,
+    await claimCompositionWork(f.store, "context-child"),
+  );
+  await reopened.admitWorkflowNodes(input);
+  const children = f.database
+    .prepare("SELECT child_thread_id FROM workflow_node_children")
+    .all();
+  assert.equal(children.length, 1);
+  const locator = {
+    tenantId: f.input.tenantId,
+    threadId: String(children[0]!.child_thread_id),
+  };
+  const history = await f.store.listModelHistoryItems(locator, 0, 100);
+  const context = history.flatMap((item) =>
+    item.type === "message" &&
+    item.content.startsWith("Approved human review comments")
+      ? [item.content]
+      : [],
+  );
+  assert.equal(context.length, 1);
+  assert.deepEqual(
+    JSON.parse(context[0]!.slice(context[0]!.indexOf("\n") + 1)),
+    [
+      { title: "Root 0", comment: "  审批 0\n😀  " },
+      { title: "Root 1", comment: "  审批 1\n😀  " },
+    ],
+  );
+  await reopened.admitWorkflowNodes(input);
+  assert.deepEqual(
+    await f.store.listModelHistoryItems(locator, 0, 100),
+    history,
+  );
+  assert.equal(
+    f.database
+      .prepare("SELECT count(*) AS n FROM workflow_node_children")
+      .get()!.n,
+    1,
+  );
+});
 test("SQLite validates the actual durable decision after review receipt side effects before committing", async (t) => {
   const f = await fixture(t),
     before = await f.snapshot();

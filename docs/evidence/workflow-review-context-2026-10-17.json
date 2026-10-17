@@ -1,0 +1,125 @@
+{
+  "schemaVersion": "crewon.workflow-review-context-evidence.v1",
+  "date": "2026-10-17",
+  "baseCommit": "4230eeef44e28b3de4de098321d9e7fad27f1746",
+  "scope": "Explicit opt-in human review context through real local PostgreSQL/SQLite and formal Control, SDK, Worker, history and SSE; model responses are synthetic, not real-provider or installed-UI acceptance.",
+  "suites": {
+    "workflowRelated": {
+      "tests": 168,
+      "pass": 168,
+      "fail": 0,
+      "cancelled": 0,
+      "skipped": 0
+    },
+    "contracts": {
+      "tests": 763,
+      "pass": 763,
+      "fail": 0,
+      "cancelled": 0,
+      "skipped": 0
+    },
+    "controlClient": {
+      "tests": 278,
+      "pass": 278,
+      "fail": 0,
+      "cancelled": 0,
+      "skipped": 0
+    },
+    "adapterAndProductionTypeBoundaries": {
+      "tests": 16,
+      "pass": 16,
+      "fail": 0,
+      "cancelled": 0,
+      "skipped": 0
+    },
+    "packageBoundaries": {
+      "tests": 21,
+      "pass": 21,
+      "fail": 0,
+      "cancelled": 0,
+      "skipped": 0
+    }
+  },
+  "typechecks": {
+    "contracts": {
+      "exitCode": 0
+    },
+    "application": {
+      "exitCode": 0
+    },
+    "client": {
+      "exitCode": 0
+    },
+    "store": {
+      "exitCode": 0
+    },
+    "control": {
+      "exitCode": 0
+    },
+    "worker": {
+      "exitCode": 0
+    }
+  },
+  "ui": {
+    "sourceChanged": false,
+    "lintExitCode": 0,
+    "buildExitCode": 0,
+    "eagerBytes": 326427,
+    "fullTestSuiteRerun": false,
+    "installedAcceptance": false
+  },
+  "scenarioProofs": [
+    "✔ a legacy review after an explicit contextual gate stays metadata-only instead of inheriting the earlier wake mode (863.043208ms)",
+    "✔ real branching Workflow isolates human comments by DAG ancestry, persists exact child context and rejoins after restart (1028.05725ms)",
+    "✔ aggregate review context overflow rejects the approval atomically, then accepts shorter context without duplicate sampling (881.388625ms)",
+    "✔ SQLite descendant child history freezes contextual approvals once across reopen and scheduler replay (35.0095ms)"
+  ],
+  "bounds": {
+    "individualCommentUtf8Bytes": 4096,
+    "reviewContextUtf8BytesIncludingEnvelope": 16384,
+    "childTotalPromptUtf8Bytes": 65536,
+    "fragmentUtf8Bytes": 9999,
+    "maximumGatesPerDag": 64,
+    "maximumReviewReceiptBytes": 65536,
+    "contextReceiptBatchQueriesPerDagRead": 1
+  },
+  "compatibility": {
+    "optInRequestField": "commentContext: descendants-v1",
+    "omittedField": "metadata-only, unchanged",
+    "publicResponseAndReviewReceiptJson": "unchanged",
+    "newExplicitModeWake": "crewon.workflow-scheduler-work-item.v2",
+    "newTables": 0,
+    "newIndexes": 0,
+    "schemaMigrations": 0,
+    "oldTaskHistoryRewritten": false,
+    "requiresCoordinatedControlAndWorkerUpgrade": true
+  },
+  "limitations": [
+    "No frontend execution-authority switch, real model provider, installed desktop or full UI acceptance.",
+    "Production request-level Workflow identity and SQLite/desktop deployment policy remain unconfigured.",
+    "Review context overflow is checked during approval; complete prompt overflow from arbitrary schema/input requires separate deterministic-failure acceptance before general DAG UI enablement.",
+    "Previous UI style and plugin fixture failures are not fixed or reclassified by this backend change.",
+    "Test PostgreSQL uses fsync off; no power-loss durability or production performance claim."
+  ],
+  "cleanup": {
+    "userSchemas": 0,
+    "otherClients": 0,
+    "startedAt": "2026-10-17T12:24:14.083087+08:00",
+    "serverVersion": "18.6 (Homebrew)",
+    "listenAddresses": "",
+    "fsync": "off",
+    "running": false,
+    "statusExitCode": 3,
+    "stoppedAt": "2026-10-17T06:57:56.060723+00:00"
+  },
+  "sourceSha256": {
+    "packages/application/src/workflow-child-run-preparation.ts": "67313d86b77b013b163fb3bb927ea05a08fd44972db6c1903007f0097bcc141c",
+    "packages/application/src/workflow-human-gate-review-service.ts": "02c45ebf73633a18bf621c53cbcb0bd3be6afa72eda55695d2ef790cc82b91e2",
+    "packages/store/src/workflow-gate-review-context.ts": "2d48c3feb2c16c80b4f57be7b6cdd3096e445ecf243b94c583cc1876d0b656d2",
+    "packages/store/src/postgres-workflow-human-gates.ts": "5b40a3b610d3f14e7e8814b48f265988b7c8b8201019167aff8751af01aa81c8",
+    "packages/store/src/sqlite-workflow-human-gates.ts": "45eb2aacac12ba1c78bb4fe69ce8528df413b7cbe2e2df0863be7fca8be9349d",
+    "packages/store/src/workflow-run-admission-validation.ts": "29c297da082e663734787545bcd4546f8deb55b275016adb7def168354a0a3f5",
+    "apps/control-api/src/postgres-workflow-review-context.integration.test.ts": "913a468eb897f48f2f190279a818f8d98234ba4b4347993758f2f8b04f54447c",
+    "apps/control-api/src/postgres-workflow-review.integration.test.ts": "53e7688f3a64b405735656f0d0f2aa1b016d8f4fd30dc7ca8b7f1af652de673f"
+  }
+}

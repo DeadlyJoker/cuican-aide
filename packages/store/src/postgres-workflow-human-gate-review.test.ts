@@ -9,8 +9,41 @@ import {
   reviewCommand,
   reviewLocator,
 } from "./workflow-human-gate-review.test-support.ts";
-import { WORKFLOW_GATE_REVIEW_SCOPE } from "./workflow-human-gate-review-receipt.ts";
+import {
+  WORKFLOW_GATE_REVIEW_SCOPE,
+  workflowGateReviewReceipt,
+} from "./workflow-human-gate-review-receipt.ts";
 const pgTest = process.env.CREWON_TEST_POSTGRES_URL ? test : test.skip;
+pgTest(
+  "PostgreSQL contextual wake rejects a rewritten receipt even when its replacement fingerprint is valid",
+  async (t) => {
+    const f = await fixture(t);
+    const result = await f.composition.reviewWorkflowHumanGate({
+      actor: gateActor,
+      command: {
+        ...reviewCommand(f.command),
+        commentContext: "descendants-v1",
+      },
+    });
+    const changed = workflowGateReviewReceipt({
+      ...result.review,
+      comment: "coherent replacement",
+    });
+    await f.admin.query(
+      `UPDATE ${f.sql}.idempotency_receipts SET fingerprint=$1,result_json=$2::jsonb WHERE scope=$3`,
+      [changed.fingerprint, changed.json, WORKFLOW_GATE_REVIEW_SCOPE],
+    );
+    const before = await f.snapshot();
+    await assert.rejects(
+      f.composition.loadWorkflowHumanGate({
+        actor: gateActor,
+        locator: reviewLocator(f.command),
+      }),
+      { code: "workflow_gate_review_context_corrupt" },
+    );
+    assert.deepEqual(await f.snapshot(), before);
+  },
+);
 async function fixture(t: TestContext) {
   const f = await parkedPostgresGates(t);
   return {

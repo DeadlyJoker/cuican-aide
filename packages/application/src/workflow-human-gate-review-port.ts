@@ -21,6 +21,8 @@ export type ReviewWorkflowHumanGateCommand = WorkflowHumanGateLocator &
     inputDigest: string;
     decision: "approved" | "rejected";
     comment: string | null;
+    /** Explicit opt-in; omitted requests retain metadata-only review semantics. */
+    commentContext?: "descendants-v1";
   }>;
 export interface WorkflowHumanGateReviewStore {
   loadWorkflowHumanGateReview(input: {

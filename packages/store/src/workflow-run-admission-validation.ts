@@ -162,13 +162,32 @@ export function validateWorkflowSchedulerWorkItems(
 ): void {
   for (const item of items) {
     const payload = item.payload;
+    const withReview =
+      payload.schemaVersion === "crewon.workflow-scheduler-work-item.v2";
     if (
       Object.keys(payload).sort().join(",") !==
-        "binding,schedulerOperationId,schemaVersion,trigger,workflowInput" ||
-      payload.schemaVersion !== "crewon.workflow-scheduler-work-item.v1" ||
+        (withReview
+          ? "binding,reviewContext,schedulerOperationId,schemaVersion,trigger,workflowInput"
+          : "binding,schedulerOperationId,schemaVersion,trigger,workflowInput") ||
+      (!withReview &&
+        payload.schemaVersion !== "crewon.workflow-scheduler-work-item.v1") ||
       payload.trigger !== "workflowScheduler"
     )
       throw new RunStoreError("workflow_scheduler_payload_invalid");
+    if (withReview) {
+      const review = payload.reviewContext as Record<string, unknown> | null;
+      if (
+        !review ||
+        Array.isArray(review) ||
+        Object.keys(review).sort().join() !==
+          "gateRequestId,nodeId,receiptFingerprint" ||
+        typeof review.receiptFingerprint !== "string" ||
+        !/^sha256:[0-9a-f]{64}$/u.test(review.receiptFingerprint)
+      )
+        throw new RunStoreError("workflow_scheduler_payload_invalid");
+      boundedIdentity(review.nodeId);
+      boundedIdentity(review.gateRequestId);
+    }
     boundedIdentity(payload.schedulerOperationId);
     const binding = payload.binding as Record<string, unknown> | null;
     const ref = payload.workflowInput as Record<string, unknown> | null;

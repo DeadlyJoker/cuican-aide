@@ -1,5 +1,10 @@
 import type { Pool, PoolClient } from "pg";
 import {
+  assertWorkflowReviewContextReplay,
+  assertWorkflowReviewContextFits,
+  workflowReviewContextPayload,
+} from "./workflow-gate-review-context.ts";
+import {
   canonicalJson,
   projectWorkflowExecution,
   RunStoreError,
@@ -181,20 +186,23 @@ export class PostgresWorkflowHumanGates
     >[0],
   ) {
     const captured = captureWorkflowHumanGateReviewRequest(input);
-    const { comment, ...command } = captured.command;
+    const { comment, commentContext, ...command } = captured.command;
     const result = await this.#decide(
       {
         actor: captured.actor,
         command: { ...command, kind: "workflowHumanGate.decide" },
       },
-      { comment },
+      { comment, ...(commentContext ? { commentContext } : {}) },
     );
     if (!result.review) throw new RunStoreError("workflow_gate_review_corrupt");
     return { disposition: result.disposition, review: result.review };
   }
   async #decide(
     input: Parameters<WorkflowHumanGateStore["decideWorkflowHumanGate"]>[0],
-    intent?: Readonly<{ comment: string | null }>,
+    intent?: Readonly<{
+      comment: string | null;
+      commentContext?: "descendants-v1";
+    }>,
   ) {
     validateWorkflowHumanGateRequest(input.actor, input.command);
     const actor = structuredClone(input.actor),
@@ -223,6 +231,8 @@ export class PostgresWorkflowHumanGates
           throw new RunStoreError("workflow_gate_decision_conflict");
         if (intent && previousReview?.comment !== intent.comment)
           throw new RunStoreError("workflow_gate_review_comment_conflict");
+        if (intent)
+          assertWorkflowReviewContextReplay(gate, intent.commentContext);
         await this.#checkAuthorization(client, actor, "decide", gate.authority);
         return {
           disposition: "replayed" as const,
@@ -308,13 +318,26 @@ export class PostgresWorkflowHumanGates
         outcome: command.decision,
         decidedAt: now,
       };
+      const review = intent ? { decision, comment: intent.comment } : null;
+      if (review && intent?.commentContext)
+        assertWorkflowReviewContextFits(
+          context.workflow,
+          current.gates,
+          review,
+        );
       const wake: WorkItem = {
         ...context.workItem,
         workItemId: this.#nextId(),
         createdAt: now,
         payload: {
-          ...context.workItem.payload,
+          schemaVersion: "crewon.workflow-scheduler-work-item.v1",
+          trigger: "workflowScheduler",
+          binding: context.workItem.payload.binding!,
+          workflowInput: context.workItem.payload.workflowInput!,
           schedulerOperationId: this.#nextId(),
+          ...(review && intent?.commentContext
+            ? workflowReviewContextPayload(review)
+            : {}),
         },
       };
       const json = canonicalJson(decision);
@@ -350,7 +373,6 @@ export class PostgresWorkflowHumanGates
           },
           this.#ops,
         );
-      const review = intent ? { decision, comment: intent.comment } : null;
       if (review) await this.#writeReview(client, review);
       const persistedGates = await readPostgresWorkflowHumanGates(
         client,

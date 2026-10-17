@@ -1684,6 +1684,23 @@ export interface paths {
     patch?: never;
     trace?: never;
   };
+  "/api/v1/capabilities/workflow-review-context-v1": {
+    parameters: {
+      query?: never;
+      header?: never;
+      path?: never;
+      cookie?: never;
+    };
+    /** @description Authenticated instance support for explicit descendants-v1 review context. Not an execution or approval grant; coordinate Control and Worker upgrades before using v2 scheduler wakes. */
+    get: operations["getWorkflowReviewContextCapabilityV1"];
+    put?: never;
+    post?: never;
+    delete?: never;
+    options?: never;
+    head?: never;
+    patch?: never;
+    trace?: never;
+  };
   "/api/v1/workflow-runs/{runId}/nodes/{nodeId}/gates/{gateRequestId}/review-v1": {
     parameters: {
       query?: never;
@@ -4202,6 +4219,11 @@ export interface components {
       /** @enum {string} */
       decision: "approved" | "rejected";
       comment: components["schemas"]["WorkflowReviewComment"];
+      /**
+       * @description Explicitly freeze this review as bounded context for future descendant child Runs. Omission retains metadata-only semantics; an existing decision cannot switch modes. Does not change node input/output or grant tool authority.
+       * @constant
+       */
+      commentContext?: "descendants-v1";
     };
     WorkflowHumanGateReviewMutationResponse: {
       /** @enum {string} */
@@ -8286,6 +8308,29 @@ export interface operations {
     requestBody?: never;
     responses: {
       /** @description Authenticated Workflow API capabilities */
+      200: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          "application/json": components["schemas"]["WorkflowReviewCapability"];
+        };
+      };
+      401: components["responses"]["Error"];
+      403: components["responses"]["Error"];
+      500: components["responses"]["Error"];
+    };
+  };
+  getWorkflowReviewContextCapabilityV1: {
+    parameters: {
+      query?: never;
+      header?: never;
+      path?: never;
+      cookie?: never;
+    };
+    requestBody?: never;
+    responses: {
+      /** @description Explicit review context support */
       200: {
         headers: {
           [name: string]: unknown;

@@ -4,6 +4,7 @@ import {
   type WorkflowExecutionState,
   type WorkflowHumanGateAuthority,
   type WorkflowHumanGateDecision,
+  type WorkflowHumanGateReview,
   type WorkItem,
 } from "@crewon/application";
 import type { RunState } from "@crewon/domain";
@@ -15,6 +16,8 @@ export type WorkflowHumanGateRow = {
   authority: WorkflowHumanGateAuthority;
   decision: WorkflowHumanGateDecision | null;
   wake: WorkItem | null;
+  /** Present only after a v2 wake and its exact review receipt have both been validated. */
+  contextReview?: WorkflowHumanGateReview;
 };
 export type WorkflowHumanGateStoredRow = {
   node_id: string;

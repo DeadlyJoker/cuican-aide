@@ -1,4 +1,6 @@
 import type { DatabaseSync } from "node:sqlite";
+import { workflowNodeReviewContext } from "./workflow-gate-review-context.ts";
+import type { WorkflowHumanGateRow } from "./workflow-human-gate-authority.ts";
 import {
   canonicalJson,
   prepareWorkflowChildRun,
@@ -154,6 +156,7 @@ export class SqliteWorkflowChildDispatcher {
     context: ReturnType<typeof readSqliteWorkflowCompositionContext>;
     state: WorkflowExecutionState;
     admissions: readonly WorkflowNodeAttemptAdmission[];
+    gates: ReadonlyMap<string, WorkflowHumanGateRow>;
     now: string;
     nextId(): string;
   }): void {
@@ -184,6 +187,11 @@ export class SqliteWorkflowChildDispatcher {
         now: input.now,
         nextId: input.nextId,
         digester: workflowAdmissionDigest,
+        reviewContext: workflowNodeReviewContext(
+          input.context.workflow,
+          node.nodeId,
+          input.gates,
+        ),
       });
       this.#operations.commitChildThread(prepared.thread);
       this.#operations.commitChildRun(prepared.run);

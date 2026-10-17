@@ -64,16 +64,28 @@ export function parseWorkflowReviewCapability(
 export function parseReviewWorkflowHumanGateRequest(
   value: unknown,
 ): ReviewWorkflowHumanGateRequest {
-  const row = fields(
-    captureWorkflowControlJson(value, MAX_WORKFLOW_GATE_REVIEW_REQUEST_BYTES),
-    ["inputDigest", "decision", "comment"],
+  const captured = captureWorkflowControlJson(
+    value,
+    MAX_WORKFLOW_GATE_REVIEW_REQUEST_BYTES,
   );
+  const context =
+    captured !== null &&
+    typeof captured === "object" &&
+    Object.hasOwn(captured, "commentContext");
+  const row = fields(captured, [
+    "inputDigest",
+    "decision",
+    "comment",
+    ...(context ? ["commentContext"] : []),
+  ]);
+  if (context && row.commentContext !== "descendants-v1") invalid();
   return {
     ...parseDecideWorkflowHumanGateRequest({
       inputDigest: row.inputDigest,
       decision: row.decision,
     }),
     comment: parseWorkflowHumanGateReviewComment(row.comment),
+    ...(context ? { commentContext: "descendants-v1" as const } : {}),
   };
 }
 export function parseWorkflowHumanGateReviewResponse(

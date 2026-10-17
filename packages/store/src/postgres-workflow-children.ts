@@ -1,4 +1,6 @@
 import type { PoolClient } from "pg";
+import { workflowNodeReviewContext } from "./workflow-gate-review-context.ts";
+import type { WorkflowHumanGateRow } from "./workflow-human-gate-authority.ts";
 import {
   RunStoreError,
   canonicalJson,
@@ -131,6 +133,7 @@ export async function dispatchPostgresWorkflowChildren(
     parent: RunState;
     context: Awaited<ReturnType<typeof readPostgresWorkflowCompositionContext>>;
     admissions: readonly WorkflowNodeAttemptAdmission[];
+    gates: ReadonlyMap<string, WorkflowHumanGateRow>;
     rows: ReadonlyMap<string, WorkflowNodeRow>;
     now: string;
     nextId(): string;
@@ -156,6 +159,11 @@ export async function dispatchPostgresWorkflowChildren(
       now: input.now,
       nextId: input.nextId,
       digester: workflowAdmissionDigest,
+      reviewContext: workflowNodeReviewContext(
+        input.context.workflow,
+        node.nodeId,
+        input.gates,
+      ),
     });
     // Never wait on another aggregate or receipt while holding the parent Run.
     for (const key of [

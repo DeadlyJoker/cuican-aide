@@ -68,17 +68,18 @@ export function registerWorkflowControlRoutes(
       });
     },
   );
-  app.get(
+  for (const path of [
     "/api/v1/capabilities/workflow-reviews-v1",
-    async (request, reply) => {
+    "/api/v1/capabilities/workflow-review-context-v1",
+  ])
+    app.get(path, async (request, reply) => {
       reply.header("cache-control", "no-store");
       await dependencies.identity.resolveActor(requestContext(request));
       return parseWorkflowReviewCapability({
         version: "v1",
         available: dependencies.workflowHumanGateReviews != null,
       });
-    },
-  );
+    });
   app.get<{ Querystring: Record<string, unknown> }>(
     "/api/v1/workflow-runs",
     async (request, reply) => {

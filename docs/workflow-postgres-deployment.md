@@ -139,7 +139,7 @@ await client.reviewWorkflowHumanGate(locator, {
 });
 ```
 
-意见必须明确提供 string 或 null，最多 4096 UTF-8 字节；拒绝不完整 Unicode 和 PostgreSQL JSONB 无法保存的 NUL。保留空白、换行和原文，null 与空字符串不同；正文预算为 32 KiB，包含 JSON 转义开销，响应仍为 128 KiB。意见作为审批元数据保存，不替换冻结节点输入或输出，也尚未作为下游模型上下文注入。
+意见必须明确提供 string 或 null，最多 4096 UTF-8 字节；拒绝不完整 Unicode 和 PostgreSQL JSONB 无法保存的 NUL。保留空白、换行和原文，null 与空字符串不同；正文预算为 32 KiB，包含 JSON 转义开销，响应仍为 128 KiB。默认仅保存审批元数据，不替换冻结节点输入或输出。向下游模型传递意见必须按下一节显式选择；旧请求和旧记录不自动改变语义。
 
 决定、意见、Gate Step、节点输出、执行状态、拒绝后的兄弟取消及唤醒使用原审批事务提交。意见复用 `idempotency_receipts`，scope 为 `workflow-human-gate-review.v1`，键摘要绑定 tenant/Run/节点/门请求；回执包含原四字段决定与意见并校验指纹。读取先限制数据库传回的 JSON 字节，再校验其与规范决定一致。不新增表、不改变原决定 JSON 或 schema 版本。
 
@@ -148,6 +148,31 @@ await client.reviewWorkflowHumanGate(locator, {
 原无意见接口及旧决定仍保持原格式。若旧决定没有意见回执，新接口返回 `workflow_gate_review_not_recorded_conflict`，不虚构“无意见”，也不事后添加意见；丢失回执同样不能悄悄恢复。历史决定仍可通过原门读取接口查看；旧 renderer 的审批意见仍从原消息记录读取。旧接口对已经提交的新决定进行相等重放时不会改动意见。
 
 SQLite Store 同样实现原子保存与恢复，但 SQLite/桌面部署入口尚未接线。前端执行权仍未迁移，旧 renderer 消息不被重写；后续适配须明确历史读取和新任务写入边界，并验证意见展示及原有业务语义，不能先写普通消息再批准或默默丢弃意见。
+
+## 显式向后代节点传递审批意见
+
+`GET /api/v1/capabilities/workflow-review-context-v1` 和 SDK `getWorkflowReviewContextCapability()` 使用原认证及 `no-store`，返回同样的 `{ "version": "v1", "available": true }` 形状。这个独立标记表示本 Control 支持意见上下文，不能从旧 reviews 能力推断，也不证明 Worker 或整个集群已升级。未装配意见服务时返回 false。客户端应先查能力，再显式提交：
+
+```typescript
+await client.reviewWorkflowHumanGate(locator, {
+  inputDigest: gate.authority.inputDigest,
+  decision: "approved",
+  comment: "保留已核对的数据，草稿中注明适用条件。",
+  commentContext: "descendants-v1",
+});
+```
+
+`commentContext` 是新增的可选请求字段，唯一值为 `descendants-v1`。省略时，旧请求体、响应和 metadata-only 行为保持原状；意见及决定的现有回执 JSON 不增加字段。显式模式在同一事务的新 v2 scheduler wake 中绑定节点、门请求及意见回执指纹，不增加表、索引、迁移或另一个意见注册表。相同决定、意见与模式重放原结果；同一门已决定后换模式返回 409，不能把历史元数据事后升级成模型上下文。原无意见决定接口的相等重放不会更改已选模式。
+
+必须先协调升级 Control 和所有执行该队列的 Worker，再让客户端使用此字段；旧 Worker 拒绝 v2 wake，不会按旧语义忽略意见。已有 v1 队列及旧任务保持原格式，不批量重写。意见查询仍返回原决定和原文，不能仅凭相同的 GET 响应推断某次未知写入选了哪种模式；应按原门身份重放包含原模式的完整请求，或读取已完成的规范子任务历史，不换模式、换意见或转到 renderer 重新执行。
+
+调度器只将已批准且显式选择上下文的 DAG 祖先门传给新建后代 Agent/Verifier，顺序来自冻结的 executionOrder。兄弟分支、尚未决定或被拒绝的门、旧 metadata-only 记录均不贡献模型意见；汇合节点可以收到多个祖先门的意见。注入内容只有冻结门标题和意见原文，作为有界任务数据，不发送审批身份/时钟，不替换 input/output schema、节点值或执行权限。已开始或完成的子任务不改写历史、不补发模型请求。
+
+每个后代子任务的意见上下文合计上限为 16 KiB，包含 JSON 转义、标题及说明开销；仍计入原 64 KiB 子任务提示总预算，并沿用每个分片最多 9999 UTF-8 字节的切分。批准事务先检查新增意见对后代的总预算；超限返回 400 `workflow_review_context_limit`，决定、输出、回执和唤醒全部回滚，门保持可审批，用户可缩短意见重试。子任务创建时将上下文、消息摘要、初始模型历史与调用指纹一同冻结；重启和 scheduler 重放不重新注入。
+
+上述批准预检针对意见部分；实际 instruction/schema/input 组成的完整提示仍在子任务创建时检查。任意大 schema/输入导致整体提示超限时的确定性失败收敛仍需单独验收，不能用意见预算用例证明所有定义可执行；这是前端启用通用 DAG 前的剩余检查项。
+
+读取意见上下文时，每个 DAG 至多一批查询原意见回执，数据库传回前限制每份 JSON 字节，最多 64 门。v2 wake 必须与原门身份及精确回执指纹一致；丢失、损坏，或替换为自身 hash 正确的另一份意见仍拒绝，不降级成“无意见”、不自动修复。当前端迁移后采用此模式，才能保留旧 renderer 审批意见参与后续模型任务的业务语义；本批没有切换 UI。
 
 ## 验证范围
 

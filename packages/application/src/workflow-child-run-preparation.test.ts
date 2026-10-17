@@ -115,6 +115,66 @@ test("workflow child aggregate prompt overflow fails before allocating execution
   assert.equal(ids, 0);
 });
 
+test("review context is exact bounded task data frozen in initial history and the child receipt fingerprint", () => {
+  const comment = "  核对原文\n😀 确认后保留  ";
+  let ids = 0;
+  const input = {
+    parent,
+    node,
+    claimId: "claim",
+    value: { topic: "safe" },
+    route,
+    now: "2026-09-14T00:00:00.000Z",
+    nextId: () => `review-${++ids}`,
+    digester,
+  };
+  const legacy = prepareWorkflowChildRun(input);
+  const reviewContext = [
+    { title: "审阅", comment },
+    { title: "确认", comment: null },
+  ];
+  const reviewed = prepareWorkflowChildRun({ ...input, reviewContext });
+  assert.deepEqual(
+    reviewed.thread.messages.slice(0, 2).map((m) => m.content),
+    legacy.thread.messages.slice(0, 2).map((m) => m.content),
+  );
+  assert.equal(
+    reviewed.thread.messages.at(-1)!.content,
+    legacy.thread.messages.at(-1)!.content,
+  );
+  const context = reviewed.thread.messages[2]!.content;
+  assert.deepEqual(
+    JSON.parse(context.slice(context.indexOf("\n") + 1)),
+    reviewContext,
+  );
+  assert.notEqual(
+    reviewed.run.idempotency.requestFingerprint,
+    legacy.run.idempotency.requestFingerprint,
+  );
+  assert.deepEqual(
+    reviewed.thread.history!.items.map((item) =>
+      "content" in item ? item.content : null,
+    ),
+    reviewed.thread.messages.map((m) => m.content),
+  );
+  assert.ok(
+    reviewed.thread.messages.every((m) => Buffer.byteLength(m.content) <= 9999),
+  );
+  const before = ids;
+  assert.throws(
+    () =>
+      prepareWorkflowChildRun({
+        ...input,
+        reviewContext: Array.from({ length: 5 }, () => ({
+          title: "Review",
+          comment: "x".repeat(4096),
+        })),
+      }),
+    { code: "workflow_review_context_limit" },
+  );
+  assert.equal(ids, before);
+});
+
 function prepare(
   prefix: string,
   now: string,

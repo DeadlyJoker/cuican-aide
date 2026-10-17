@@ -9,14 +9,17 @@ export async function callWorkflowHumanGateStore<T>(
   } catch (error) {
     if (error instanceof ApplicationError) throw error;
     if (error instanceof RunStoreError) {
-      const kind = error.code.includes("authorization")
-        ? "authorization"
-        : error.code === "workflow_gate_not_found"
-          ? "notFound"
-          : error.code.endsWith("_conflict") ||
-              error.code === "workflow_gate_not_decidable"
-            ? "conflict"
-            : "internal";
+      const kind =
+        error.code === "workflow_review_context_limit"
+          ? "validation"
+          : error.code.includes("authorization")
+            ? "authorization"
+            : error.code === "workflow_gate_not_found"
+              ? "notFound"
+              : error.code.endsWith("_conflict") ||
+                  error.code === "workflow_gate_not_decidable"
+                ? "conflict"
+                : "internal";
       throw new ApplicationError(kind, error.code, { cause: error });
     }
     throw new ApplicationError("internal", "workflow_gate_store_failed", {

@@ -12,6 +12,37 @@ import {
   workflowReadLocator,
   workflowReadDigest,
 } from "./workflow-run-read.test-support.ts";
+test("review context is explicit and legacy requests and response shapes stay exact", () => {
+  const body = {
+    inputDigest: workflowReadDigest,
+    decision: "approved" as const,
+    comment: "  原文\n😀  ",
+  };
+  assert.deepEqual(parseReviewWorkflowHumanGateRequest(body), body);
+  const context = { ...body, commentContext: "descendants-v1" as const };
+  assert.deepEqual(parseReviewWorkflowHumanGateRequest(context), context);
+  for (const commentContext of [
+    undefined,
+    null,
+    "all",
+    "descendants-v2",
+    false,
+  ])
+    assert.throws(() =>
+      parseReviewWorkflowHumanGateRequest({ ...body, commentContext }),
+    );
+  let hooks = 0;
+  assert.throws(() =>
+    parseReviewWorkflowHumanGateRequest({
+      ...body,
+      get commentContext() {
+        hooks++;
+        return "descendants-v1";
+      },
+    }),
+  );
+  assert.equal(hooks, 0);
+});
 test("review contracts bind old gate authority, status and input limits while preserving exact new review text", () => {
   for (const comment of [
     null,

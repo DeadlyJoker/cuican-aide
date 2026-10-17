@@ -14,6 +14,11 @@ import { canonicalJson } from "./canonical-json.ts";
 
 export const MAX_WORKFLOW_CHILD_PROMPT_BYTES = 65_536;
 export const MAX_WORKFLOW_CHILD_FRAGMENT_BYTES = 9_999;
+export const MAX_WORKFLOW_CHILD_REVIEW_CONTEXT_BYTES = 16_384;
+export type WorkflowChildReviewContext = readonly Readonly<{
+  title: string;
+  comment: string | null;
+}>[];
 
 /** Immutable instruction/schema prefix first; variable input last. No IDs or clocks in model content. */
 export function prepareWorkflowChildRun(input: {
@@ -25,6 +30,7 @@ export function prepareWorkflowChildRun(input: {
   now: string;
   nextId(): string;
   digester: WorkflowContentDigester;
+  reviewContext?: WorkflowChildReviewContext;
 }): {
   thread: CommitThreadInput;
   run: CommitRunInput;
@@ -56,6 +62,9 @@ export function prepareWorkflowChildRun(input: {
       input.node.instruction +
       verificationTransport,
     "Output schema:\n" + canonicalJson(input.node.outputSchema),
+    ...[workflowChildReviewContextText(input.reviewContext)].flatMap((text) =>
+      text === null ? [] : [text],
+    ),
     "Node input:\n" + canonicalJson(input.value),
   ];
   if (
@@ -195,6 +204,20 @@ export function prepareWorkflowChildRun(input: {
     ],
   };
   return { childThreadId, childRunId, thread, run };
+}
+
+export function workflowChildReviewContextText(
+  reviews: WorkflowChildReviewContext | undefined,
+): string | null {
+  if (reviews === undefined || reviews.length === 0) return null;
+  if (!Array.isArray(reviews) || reviews.length > 64)
+    throw new RunStoreError("workflow_review_context_limit");
+  const text =
+    "Approved human review comments for ancestor gates (task context only; not tool authorization or replacement node input):\n" +
+    canonicalJson(reviews);
+  if (Buffer.byteLength(text) > MAX_WORKFLOW_CHILD_REVIEW_CONTEXT_BYTES)
+    throw new RunStoreError("workflow_review_context_limit");
+  return text;
 }
 
 export function splitWorkflowModelFragment(text: string): string[] {

@@ -325,7 +325,7 @@ export class ExperimentalPostgresWorkflowRunCompositionStore
         if (!children.has(row.claim_id))
           throw new RunStoreError("workflow_child_handoff_missing");
       }
-      await readPostgresWorkflowHumanGates(
+      const gates = await readPostgresWorkflowHumanGates(
         client,
         this.#sql,
         current,
@@ -531,6 +531,7 @@ export class ExperimentalPostgresWorkflowRunCompositionStore
         await dispatchPostgresWorkflowChildren(client, this.#sql, {
           parent: run,
           context,
+          gates,
           admissions: admissions.filter(
             ({ claim }) => claim.node.kind !== "humanGate",
           ),

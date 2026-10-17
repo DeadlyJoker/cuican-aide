@@ -1,4 +1,5 @@
 import type { PoolClient } from "pg";
+import { readPostgresWorkflowReviewContexts } from "./workflow-gate-review-context.ts";
 import {
   canonicalJson,
   RunStoreError,
@@ -67,5 +68,6 @@ export async function readPostgresWorkflowHumanGates(
     )
       throw new RunStoreError("workflow_gate_authority_conflict");
   }
+  await readPostgresWorkflowReviewContexts(client, sql, result);
   return result;
 }

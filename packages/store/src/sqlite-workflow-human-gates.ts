@@ -1,5 +1,10 @@
 import type { DatabaseSync } from "node:sqlite";
 import {
+  assertWorkflowReviewContextReplay,
+  assertWorkflowReviewContextFits,
+  workflowReviewContextPayload,
+} from "./workflow-gate-review-context.ts";
+import {
   canonicalJson,
   projectWorkflowExecution,
   RunStoreError,
@@ -152,20 +157,23 @@ export class SqliteWorkflowHumanGates
     >[0],
   ) {
     const captured = captureWorkflowHumanGateReviewRequest(input);
-    const { comment, ...command } = captured.command;
+    const { comment, commentContext, ...command } = captured.command;
     const result = await this.#decide(
       {
         actor: captured.actor,
         command: { ...command, kind: "workflowHumanGate.decide" },
       },
-      { comment },
+      { comment, ...(commentContext ? { commentContext } : {}) },
     );
     if (!result.review) throw new RunStoreError("workflow_gate_review_corrupt");
     return { disposition: result.disposition, review: result.review };
   }
   async #decide(
     input: Parameters<WorkflowHumanGateStore["decideWorkflowHumanGate"]>[0],
-    intent?: Readonly<{ comment: string | null }>,
+    intent?: Readonly<{
+      comment: string | null;
+      commentContext?: "descendants-v1";
+    }>,
   ) {
     this.#ops.assertOpen();
     validateWorkflowHumanGateRequest(input.actor, input.command);
@@ -197,6 +205,8 @@ export class SqliteWorkflowHumanGates
           throw new RunStoreError("workflow_gate_decision_conflict");
         if (intent && previousReview?.comment !== intent.comment)
           throw new RunStoreError("workflow_gate_review_comment_conflict");
+        if (intent)
+          assertWorkflowReviewContextReplay(gate, intent.commentContext);
         this.#db.exec("COMMIT");
         return {
           disposition: "replayed" as const,
@@ -287,13 +297,26 @@ export class SqliteWorkflowHumanGates
         outcome: command.decision,
         decidedAt: now,
       };
+      const review = intent ? { decision, comment: intent.comment } : null;
+      if (review && intent?.commentContext)
+        assertWorkflowReviewContextFits(
+          context.workflow,
+          current.gates,
+          review,
+        );
       const wake: WorkItem = {
         ...context.workItem,
         workItemId: this.#nextId(),
         createdAt: now,
         payload: {
-          ...context.workItem.payload,
+          schemaVersion: "crewon.workflow-scheduler-work-item.v1",
+          trigger: "workflowScheduler",
+          binding: context.workItem.payload.binding!,
+          workflowInput: context.workItem.payload.workflowInput!,
           schedulerOperationId: this.#nextId(),
+          ...(review && intent?.commentContext
+            ? workflowReviewContextPayload(review)
+            : {}),
         },
       };
       const json = canonicalJson(decision);
@@ -329,7 +352,6 @@ export class SqliteWorkflowHumanGates
           },
           this.#ops,
         );
-      const review = intent ? { decision, comment: intent.comment } : null;
       if (review) this.#writeReview(review);
       const persistedGates = readSqliteWorkflowHumanGates(
         this.#db,
@@ -493,6 +515,7 @@ export class SqliteWorkflowHumanGates
       state,
       context,
       gate,
+      gates,
       children,
       row: rows.get(locator.nodeId)!,
       node: state.nodes.find((n) => n.nodeId === locator.nodeId)!,

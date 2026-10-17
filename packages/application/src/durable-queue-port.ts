@@ -22,12 +22,22 @@ export type WorkflowRunInputRef = Readonly<{
 }>;
 
 export type WorkflowSchedulerWorkItemPayload = Readonly<{
-  schemaVersion: "crewon.workflow-scheduler-work-item.v1";
   trigger: "workflowScheduler";
   binding: FrozenWorkflowVersionBinding;
   schedulerOperationId: string;
   workflowInput: WorkflowRunInputRef;
-}>;
+}> &
+  (
+    | Readonly<{ schemaVersion: "crewon.workflow-scheduler-work-item.v1" }>
+    | Readonly<{
+        schemaVersion: "crewon.workflow-scheduler-work-item.v2";
+        reviewContext: Readonly<{
+          nodeId: string;
+          gateRequestId: string;
+          receiptFingerprint: string;
+        }>;
+      }>
+  );
 
 export type AutomationInvocationWorkItemPayload = Readonly<{
   schemaVersion: "crewon.automation-invocation-work-item.v0";
