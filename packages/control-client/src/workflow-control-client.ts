@@ -1,5 +1,9 @@
 import {
   parseWorkflowGateLocator,
+  parseWorkflowVersionCatalogQuery,
+  parseWorkflowVersionCatalogResponse,
+  MAX_WORKFLOW_CATALOG_RESPONSE_BYTES,
+  type WorkflowVersionCatalogResponse,
   parseWorkflowReviewCapability,
   parseReviewWorkflowHumanGateRequest,
   parseWorkflowHumanGateReviewResponse,
@@ -43,6 +47,45 @@ export class WorkflowControlClient {
   constructor(request: WorkflowJsonRequest) {
     this.#request = request;
   }
+  async listWorkflowVersionCatalog(
+    query: { cursor?: string | null; limit?: number } = {},
+    options: ControlApiRequestOptions = {},
+  ): Promise<WorkflowVersionCatalogResponse> {
+    options.signal?.throwIfAborted();
+    const captured = { ...query };
+    if (captured.cursor === null) delete captured.cursor;
+    const parsed = parseWorkflowVersionCatalogQuery({
+      ...captured,
+      ...(typeof captured.limit === "number"
+        ? { limit: String(captured.limit) }
+        : {}),
+    });
+    const parameters = new URLSearchParams();
+    if (captured.cursor !== undefined)
+      parameters.set("cursor", captured.cursor);
+    if (captured.limit !== undefined)
+      parameters.set("limit", String(captured.limit));
+    const suffix = parameters.toString();
+    const response = await this.#request(
+      "GET",
+      `/api/v1/workflow-catalog${suffix ? `?${suffix}` : ""}`,
+      null,
+      {
+        ...options,
+        expectedStatuses: [200],
+        maximumResponseBytes: MAX_WORKFLOW_CATALOG_RESPONSE_BYTES,
+      },
+    );
+    options.signal?.throwIfAborted();
+    try {
+      return parseWorkflowVersionCatalogResponse(response, parsed);
+    } catch {
+      throw new ControlApiProtocolError(
+        "control_client_workflow_catalog_invalid",
+      );
+    }
+  }
+
   async getWorkflowExecutionCapability(
     options: ControlApiRequestOptions = {},
   ): Promise<WorkflowExecutionCapability> {

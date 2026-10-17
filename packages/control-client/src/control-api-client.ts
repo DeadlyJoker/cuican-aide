@@ -1,5 +1,6 @@
 import { WorkflowControlClient } from "./workflow-control-client.ts";
 import type {
+  WorkflowVersionCatalogResponse,
   WorkflowGateLocator,
   WorkflowReviewCapability,
   WorkflowHumanGateReviewResponse,
@@ -1473,6 +1474,13 @@ export class ControlApiClient {
       null,
       { ...options, expectedStatuses: [200] },
     );
+  }
+
+  listWorkflowVersionCatalog(
+    query: { cursor?: string | null; limit?: number } = {},
+    options: ControlApiRequestOptions = {},
+  ): Promise<WorkflowVersionCatalogResponse> {
+    return this.#workflowClient().listWorkflowVersionCatalog(query, options);
   }
 
   listWorkflowVersions(

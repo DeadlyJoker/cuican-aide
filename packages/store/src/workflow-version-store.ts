@@ -3,9 +3,13 @@ import {
   RunStoreError,
   type WorkflowVersionAsset,
   type WorkflowVersionStore,
+  type WorkflowVersionCatalogStore,
+  type WorkflowVersionCatalogQuery,
+  type WorkflowVersionListCursor,
 } from "@crewon/application";
 import {
   parseCompiledWorkflowVersion,
+  MAX_WORKFLOW_DEFINITION_BYTES,
   type WorkflowContentDigester,
 } from "@crewon/domain";
 import type { Pool } from "pg";
@@ -15,7 +19,9 @@ import {
   migrateSqliteWorkflowVersions,
 } from "./workflow-version-schema.ts";
 
-export class InMemoryWorkflowVersionStore implements WorkflowVersionStore {
+export class InMemoryWorkflowVersionStore
+  implements WorkflowVersionStore, WorkflowVersionCatalogStore
+{
   readonly #assets = new Map<string, WorkflowVersionAsset>();
   readonly #digester: WorkflowContentDigester;
   constructor(digester: WorkflowContentDigester) {
@@ -39,6 +45,18 @@ export class InMemoryWorkflowVersionStore implements WorkflowVersionStore {
     const asset = this.#assets.get(key(input));
     return asset ? structuredClone(asset) : null;
   }
+  async listWorkflowVersionCatalog(input: WorkflowVersionCatalogQuery) {
+    catalogInput(input);
+    const page = [...this.#assets.values()]
+      .filter(
+        (asset) =>
+          asset.tenantId === input.tenantId && afterCatalog(asset, input.after),
+      )
+      .sort(compareCatalog)
+      .slice(0, input.limit);
+    catalogBudget(page.map((asset) => Buffer.byteLength(asset.definitionJson)));
+    return page.map((asset) => catalogEntry(asset, this.#digester));
+  }
   async listWorkflowVersions(input: ListInput) {
     listInput(input);
     return [...this.#assets.values()]
@@ -59,7 +77,9 @@ export class InMemoryWorkflowVersionStore implements WorkflowVersionStore {
   }
 }
 
-export class SqliteWorkflowVersionStore implements WorkflowVersionStore {
+export class SqliteWorkflowVersionStore
+  implements WorkflowVersionStore, WorkflowVersionCatalogStore
+{
   readonly #database: DatabaseSync;
   readonly #digester: WorkflowContentDigester;
   constructor(database: DatabaseSync, digester: WorkflowContentDigester) {
@@ -106,6 +126,30 @@ export class SqliteWorkflowVersionStore implements WorkflowVersionStore {
       throw corruption(error);
     }
   }
+  async listWorkflowVersionCatalog(input: WorkflowVersionCatalogQuery) {
+    catalogInput(input);
+    const rows = this.#database
+      .prepare(
+        `WITH page AS MATERIALIZED (
+      SELECT tenant_id,workflow_version_id FROM workflow_versions WHERE tenant_id=? AND
+      (? IS NULL OR (CAST(workflow_id AS BLOB),CAST(workflow_version_id AS BLOB))>(CAST(? AS BLOB),CAST(? AS BLOB)))
+      ORDER BY CAST(workflow_id AS BLOB),CAST(workflow_version_id AS BLOB) LIMIT ?
+    ), bounded AS (SELECT v.*,SUM(length(CAST(v.definition_json AS BLOB))) OVER () AS page_bytes FROM workflow_versions v JOIN page p USING(tenant_id,workflow_version_id))
+    SELECT tenant_id,workflow_id,workflow_version_id,content_digest,created_at,
+      CASE WHEN page_bytes<=? AND length(CAST(definition_json AS BLOB))<=? THEN definition_json ELSE NULL END AS definition_json
+    FROM bounded ORDER BY CAST(workflow_id AS BLOB),CAST(workflow_version_id AS BLOB)`,
+      )
+      .all(
+        input.tenantId,
+        input.after?.workflowId ?? null,
+        input.after?.workflowId ?? null,
+        input.after?.workflowVersionId ?? null,
+        input.limit,
+        CATALOG_DEFINITION_BYTES,
+        MAX_WORKFLOW_DEFINITION_BYTES,
+      ) as unknown as Row[];
+    return catalogEntries(rows, this.#digester);
+  }
   async listWorkflowVersions(input: ListInput) {
     listInput(input);
     const rows = this.#database
@@ -128,7 +172,9 @@ export class SqliteWorkflowVersionStore implements WorkflowVersionStore {
   }
 }
 
-export class PostgresWorkflowVersionStore implements WorkflowVersionStore {
+export class PostgresWorkflowVersionStore
+  implements WorkflowVersionStore, WorkflowVersionCatalogStore
+{
   readonly #pool: Pool;
   readonly #schema: string;
   readonly #digester: WorkflowContentDigester;
@@ -185,6 +231,28 @@ export class PostgresWorkflowVersionStore implements WorkflowVersionStore {
       throw corruption(error);
     }
   }
+  async listWorkflowVersionCatalog(input: WorkflowVersionCatalogQuery) {
+    catalogInput(input);
+    const result = await this.#pool.query<Row>(
+      `WITH page AS MATERIALIZED (
+      SELECT tenant_id,workflow_version_id FROM ${this.#schema}.workflow_versions WHERE tenant_id=$1 AND
+      ($2::text IS NULL OR (workflow_id COLLATE "C",workflow_version_id COLLATE "C")>($2 COLLATE "C",$3 COLLATE "C"))
+      ORDER BY workflow_id COLLATE "C",workflow_version_id COLLATE "C" LIMIT $4
+    ), bounded AS (SELECT v.*,SUM(octet_length(v.definition_json)) OVER () AS page_bytes FROM ${this.#schema}.workflow_versions v JOIN page p USING(tenant_id,workflow_version_id))
+    SELECT tenant_id,workflow_id,workflow_version_id,content_digest,created_at::text,
+      CASE WHEN page_bytes<=$5 AND octet_length(definition_json)<=$6 THEN definition_json ELSE NULL END AS definition_json
+    FROM bounded ORDER BY workflow_id COLLATE "C",workflow_version_id COLLATE "C"`,
+      [
+        input.tenantId,
+        input.after?.workflowId ?? null,
+        input.after?.workflowVersionId ?? null,
+        input.limit,
+        CATALOG_DEFINITION_BYTES,
+        MAX_WORKFLOW_DEFINITION_BYTES,
+      ],
+    );
+    return catalogEntries(result.rows, this.#digester);
+  }
   async listWorkflowVersions(input: ListInput) {
     listInput(input);
     const result = await this.#pool.query<Row>(
@@ -220,7 +288,12 @@ function decode(
   row: Row,
   digester: WorkflowContentDigester,
 ): WorkflowVersionAsset {
-  const asset: WorkflowVersionAsset = {
+  const asset = rowAsset(row);
+  validateAsset(asset, digester);
+  return asset;
+}
+function rowAsset(row: Row): WorkflowVersionAsset {
+  return {
     schemaVersion: "crewon.workflow-version-asset.v0",
     tenantId: row.tenant_id,
     workflowId: row.workflow_id,
@@ -229,8 +302,6 @@ function decode(
     definitionJson: row.definition_json,
     createdAt: new Date(row.created_at).toISOString(),
   };
-  validateAsset(asset, digester);
-  return asset;
 }
 function validateAsset(
   asset: WorkflowVersionAsset,
@@ -273,6 +344,7 @@ function validateAsset(
     compiled.contentDigest !== asset.contentDigest
   )
     throw new RunStoreError("workflow_version_authority_mismatch");
+  return compiled;
 }
 function locator(input: { tenantId: string; workflowVersionId: string }) {
   if (
@@ -363,4 +435,72 @@ function replay(
   )
     throw new RunStoreError("workflow_version_id_conflict");
   return { disposition: "existing" as const, asset: structuredClone(existing) };
+}
+
+const CATALOG_DEFINITION_BYTES = 8 * 1024 * 1024;
+function catalogBudget(sizes: number[]) {
+  if (
+    sizes.some((size) => size > MAX_WORKFLOW_DEFINITION_BYTES) ||
+    sizes.reduce((total, size) => total + size, 0) > CATALOG_DEFINITION_BYTES
+  )
+    throw new RunStoreError("workflow_version_catalog_limit");
+}
+function catalogEntries(rows: Row[], digester: WorkflowContentDigester) {
+  if (rows.some((row) => typeof row.definition_json !== "string"))
+    throw new RunStoreError("workflow_version_catalog_limit");
+  catalogBudget(rows.map((row) => Buffer.byteLength(row.definition_json)));
+  try {
+    return rows.map((row) => catalogEntry(rowAsset(row), digester));
+  } catch (error) {
+    throw corruption(error);
+  }
+}
+function catalogEntry(
+  asset: WorkflowVersionAsset,
+  digester: WorkflowContentDigester,
+) {
+  const workflow = validateAsset(asset, digester);
+  return {
+    workflowId: asset.workflowId,
+    workflowVersionId: asset.workflowVersionId,
+    contentDigest: asset.contentDigest,
+    name: workflow.name,
+    description: workflow.description,
+    createdAt: asset.createdAt,
+  };
+}
+function compareCatalog(
+  left: WorkflowVersionAsset,
+  right: WorkflowVersionListCursor,
+) {
+  return (
+    compareUtf8(left.workflowId, right.workflowId) ||
+    compareUtf8(left.workflowVersionId, right.workflowVersionId)
+  );
+}
+function afterCatalog(
+  asset: WorkflowVersionAsset,
+  cursor: WorkflowVersionListCursor | null,
+) {
+  return cursor === null || compareCatalog(asset, cursor) > 0;
+}
+function catalogInput(input: WorkflowVersionCatalogQuery) {
+  if (
+    !isPlainObject(input) ||
+    !hasExactKeys(input, ["tenantId", "after", "limit"]) ||
+    !Number.isSafeInteger(input.limit) ||
+    input.limit < 1 ||
+    input.limit > 20
+  )
+    throw new RunStoreError("workflow_version_catalog_query_invalid");
+  boundedId(input.tenantId, "workflow_version_catalog_query_invalid");
+  if (input.after !== null) {
+    if (
+      !isPlainObject(input.after) ||
+      !hasExactKeys(input.after, ["workflowId", "workflowVersionId"])
+    )
+      throw new RunStoreError("workflow_version_cursor_invalid");
+    boundedId(input.after.workflowId, "workflow_version_cursor_invalid");
+    boundedId(input.after.workflowVersionId, "workflow_version_cursor_invalid");
+  }
 }

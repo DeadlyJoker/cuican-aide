@@ -273,6 +273,71 @@ function registerConformance(
       /workflow_version_cursor_invalid/,
     );
   });
+  test(`${name} catalog discovers definitions across workflows without a Thread registry, isolates tenant and resumes composite pages`, async () => {
+    const store = factory();
+    for (const [workflowId, versionId] of [
+      ["a-workflow", "z-version"],
+      ["b-workflow", "a-version"],
+      ["a-workflow", "a-version"],
+    ]) {
+      await store.registerWorkflowVersion(
+        asset("catalog-tenant", versionId! + "-" + workflowId, workflowId),
+      );
+    }
+    await store.registerWorkflowVersion(
+      asset("foreign-tenant", "secret-version", "private-workflow"),
+    );
+    const query = { tenantId: "catalog-tenant", after: null, limit: 1 };
+    const seen = [];
+    let page = await store.listWorkflowVersionCatalog(query);
+    while (page.length) {
+      seen.push(...page);
+      const last = page.at(-1)!;
+      page = await store.listWorkflowVersionCatalog({
+        ...query,
+        after: {
+          workflowId: last.workflowId,
+          workflowVersionId: last.workflowVersionId,
+        },
+      });
+    }
+    for (const entry of seen)
+      assert.deepEqual(Object.keys(entry).sort(), [
+        "contentDigest",
+        "createdAt",
+        "description",
+        "name",
+        "workflowId",
+        "workflowVersionId",
+      ]);
+    assert.deepEqual(
+      seen.map((entry) => [entry.workflowId, entry.workflowVersionId]),
+      [
+        ["a-workflow", "a-version-a-workflow"],
+        ["a-workflow", "z-version-a-workflow"],
+        ["b-workflow", "a-version-b-workflow"],
+      ],
+    );
+    assert.deepEqual(
+      await store.listWorkflowVersionCatalog({
+        tenantId: "empty-tenant",
+        after: null,
+        limit: 20,
+      }),
+      [],
+    );
+    await assert.rejects(
+      store.listWorkflowVersionCatalog({ ...query, limit: 21 }),
+      { code: "workflow_version_catalog_query_invalid" },
+    );
+    await assert.rejects(
+      store.listWorkflowVersionCatalog({
+        ...query,
+        after: { workflowId: "a-workflow", workflowVersionId: "bad\0cursor" },
+      }),
+      { code: "workflow_version_cursor_invalid" },
+    );
+  });
 }
 
 function sqliteState(database: DatabaseSync) {
@@ -316,8 +381,15 @@ function postgresAuthoritySql(schema: string, version: number) {
       PRIMARY KEY(tenant_id,workflow_version_id))`;
 }
 
-function asset(tenantId: string, workflowVersionId: string) {
-  const version = compileWorkflowVersion(source(workflowVersionId), digester);
+function asset(
+  tenantId: string,
+  workflowVersionId: string,
+  workflowId = "workflow-1",
+) {
+  const version = compileWorkflowVersion(
+    { ...source(workflowVersionId), workflowId },
+    digester,
+  );
   return {
     schemaVersion: "crewon.workflow-version-asset.v0" as const,
     tenantId,
@@ -369,3 +441,37 @@ function source(workflowVersionId: string): WorkflowVersionSource {
     ],
   };
 }
+
+test("SQLite catalog bounds stored definitions before JSON decoding and never rewrites damaged data", async () => {
+  const db = new DatabaseSync(":memory:"),
+    store = new SqliteWorkflowVersionStore(db, digester);
+  await store.registerWorkflowVersion(asset("catalog-tenant", "version"));
+  const oversized = JSON.stringify("x".repeat(2 * 1024 * 1024 + 1));
+  db.prepare("UPDATE workflow_versions SET definition_json=?").run(oversized);
+  const parse = JSON.parse;
+  JSON.parse = (value: string, ...rest: any[]) => {
+    assert.ok(
+      value.length <= 2 * 1024 * 1024,
+      "oversized definition must not reach decoder",
+    );
+    return parse(value, ...rest);
+  };
+  try {
+    await assert.rejects(
+      store.listWorkflowVersionCatalog({
+        tenantId: "catalog-tenant",
+        after: null,
+        limit: 20,
+      }),
+      { code: "workflow_version_catalog_limit" },
+    );
+  } finally {
+    JSON.parse = parse;
+  }
+  assert.equal(
+    db.prepare("SELECT definition_json FROM workflow_versions").get()!
+      .definition_json,
+    oversized,
+  );
+  db.close();
+});

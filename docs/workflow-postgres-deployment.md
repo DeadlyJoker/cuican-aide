@@ -28,6 +28,14 @@ JSON 的形状与下方 `workflow` 对象一致，不包含 TypeScript 的 `sati
 
 客户端按具体操作检查所需能力；查询失败或响应未知版本不能当成执行许可。请求一旦可能已被后台受理，就应按原键和回执恢复，不能切换到前端重新执行。SDK 验证响应形状、1 KiB 字节预算和取消，不自动重试或选择执行引擎。
 
+## 定义目录与前端切换边界
+
+`GET /api/v1/workflow-catalog` 和 SDK `listWorkflowVersionCatalog({ cursor, limit })` 提供跨 Workflow 身份的不可变版本摘要目录，不依赖隐藏 Thread 标题。默认及最大页长为 20，按 Workflow ID、版本 ID 的 UTF-8 顺序续读；复用现有版本游标，不改变原 `workflow-versions?workflowId=...` 接口。要求当前 `workflowVersion:list` 及每条版本的 read 权限；失败时不返回部分页面，响应为 `no-store`。
+
+目录读取复用原定义表，不迁移、不注册 Thread、不认领或推进任务。Store 每页至多解码 8 MiB 定义、单份仍为 Domain 原 2 MiB 上限；先选有界身份页再读取定义，并在数据库传回前过滤字节预算。每份定义只在 Store 校验并提取摘要，Application/Control 不传递或重复解码整份定义。HTTP/SDK 响应预算为 1 MiB，只返回身份、摘要、名称、描述和创建时间。超过定义页预算时应使用更小页长读取，不能截断定义或伪造摘要。
+
+该目录也能发现经 API 发布、输入 schema 和 DAG 拓扑不同于旧 UI 的版本。因此本批不启用前端目录切换：旧前端逐节点执行器不能接管这些定义。前端定义创建/发现和新任务执行须与有界根 Run 查询、后台提交、订阅恢复、审批意见展示及旧记录边界一起接管。不得为恢复新任务再增加隐藏 Thread/Message 注册表，也不能逐个扫描所有普通会话来拼出根任务目录。
+
 ## 配置与已有运行时的关系
 
 Control 和 Worker 使用相同的 `WorkflowDeploymentConfiguration`：

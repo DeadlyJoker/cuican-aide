@@ -1,0 +1,49 @@
+{
+  "baseCommit": "9db532cd8faab096b6cbfda1f47f8ffb449bf0b6",
+  "environment": {
+    "node": "24.18.1",
+    "vitest": "4.1.8",
+    "baseline": "git archive of baseCommit with the same external dependencies and archived workspace packages"
+  },
+  "catalogScope": "No UI source changes are part of the catalog implementation.",
+  "matchedBaseline": {
+    "files": 2,
+    "tests": 39,
+    "failed": 10,
+    "passed": 29,
+    "failureTitles": [
+      "src/components/app/CommandCrossPageStyle.test.ts > component stylesheets > draws shadows from the elevation tokens",
+      "src/components/app/ShortDramaPluginPreview.test.tsx > ShortDramaPluginPreview > uses an installed module override and withdraws it while original settings are open",
+      "src/components/app/ShortDramaPluginPreview.test.tsx > ShortDramaPluginPreview > keeps the existing homepage and navigation with a hidden module slot",
+      "src/components/app/ShortDramaPluginPreview.test.tsx > ShortDramaPluginPreview > opens in the host pane, returns to original views, and preserves module state without requests",
+      "src/components/app/ShortDramaPluginPreview.test.tsx > ShortDramaPluginPreview > opens every existing settings page from the signed-out footer and returns to the same project without requests or writes",
+      "src/components/app/ShortDramaPluginPreview.test.tsx > ShortDramaPluginPreview > saves and applies local theme and font size while keeping the same project mounted",
+      "src/components/app/ShortDramaPluginPreview.test.tsx > ShortDramaPluginPreview > persists language and updates the existing shell without losing its project",
+      "src/components/app/ShortDramaPluginPreview.test.tsx > ShortDramaPluginPreview > rolls back a font draft and reports failed local persistence without applying it",
+      "src/components/app/ShortDramaPluginPreview.test.tsx > ShortDramaPluginPreview > does not switch the shell language when its storage write fails",
+      "src/components/app/ShortDramaPluginPreview.test.tsx > ShortDramaPluginPreview > uses the original sidebar collapse and right workbench controls across module and original views"
+    ],
+    "identicalInputs": [
+      {
+        "path": "apps/crewon-ui/src/components/app/CommandCrossPageStyle.test.ts",
+        "sha256": "004178eb7a6842e00c11e43270bf1960fd5af5de8b5306bc7dfe8a676e8de1e4"
+      },
+      {
+        "path": "apps/crewon-ui/src/components/app/ShortDramaPluginPreview.test.tsx",
+        "sha256": "4690cc7f77f542d6fc44eca5d8ab48b60e12b2253bc6ce4f26313ea3e19e006d"
+      },
+      {
+        "path": "apps/crewon-ui/test/native-web-api-setup.ts",
+        "sha256": "4397e3e188ecc99205af4f9549632e5fac60368180e9cc078a968aa365770722"
+      }
+    ]
+  },
+  "fullUiAttempt": {
+    "command": "pnpm --filter @crewon/ui test -- CommandWorkspace",
+    "filterApplied": false,
+    "exitStatus": 130,
+    "complete": false,
+    "additionalObservedFailures": "Desktop extension and Native workspace host tests were observed failing; these have not been attributed against baseline."
+  },
+  "acceptance": "Do not report full UI acceptance from this evidence. Catalog HTTP/SDK and bounded Store regressions are separate."
+}

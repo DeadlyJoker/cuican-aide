@@ -1701,6 +1701,23 @@ export interface paths {
     patch?: never;
     trace?: never;
   };
+  "/api/v1/workflow-catalog": {
+    parameters: {
+      query?: never;
+      header?: never;
+      path?: never;
+      cookie?: never;
+    };
+    /** @description Read-only bounded catalog across Workflow identities in the authenticated tenant. Requires list and individual read grants; immutable definitions remain on their existing version endpoint. Maximum 20 summaries per page. */
+    get: operations["listWorkflowVersionCatalog"];
+    put?: never;
+    post?: never;
+    delete?: never;
+    options?: never;
+    head?: never;
+    patch?: never;
+    trace?: never;
+  };
 }
 export type webhooks = Record<string, never>;
 export interface components {
@@ -8314,6 +8331,33 @@ export interface operations {
       409: components["responses"]["Error"];
       500: components["responses"]["Error"];
       503: components["responses"]["Error"];
+    };
+  };
+  listWorkflowVersionCatalog: {
+    parameters: {
+      query?: {
+        cursor?: string;
+        limit?: components["parameters"]["Limit"];
+      };
+      header?: never;
+      path?: never;
+      cookie?: never;
+    };
+    requestBody?: never;
+    responses: {
+      /** @description Tenant- and workflow-scoped immutable WorkflowVersions */
+      200: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          "application/json": components["schemas"]["ListWorkflowVersionsResponse"];
+        };
+      };
+      400: components["responses"]["Error"];
+      401: components["responses"]["Error"];
+      403: components["responses"]["Error"];
+      500: components["responses"]["Error"];
     };
   };
 }

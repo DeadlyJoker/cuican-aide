@@ -12,13 +12,15 @@ import type { ActorContext, AuthorizationPort } from "./authorization-port.ts";
 import type {
   WorkflowVersionListCursor,
   WorkflowVersionStore,
+  WorkflowVersionCatalogStore,
+  WorkflowVersionCatalogQuery,
 } from "./workflow-version-store-port.ts";
 import { RunStoreError } from "./run-store-port.ts";
 
 /** Publishes server-compiled WorkflowVersions after resolving every AgentVersion authority. */
 export class WorkflowVersionApplicationService {
   readonly #dependencies: {
-    store: WorkflowVersionStore;
+    store: WorkflowVersionStore & Partial<WorkflowVersionCatalogStore>;
     agentVersions: AgentVersionStore;
     authorization: AuthorizationPort;
     digester: WorkflowContentDigester;
@@ -26,7 +28,7 @@ export class WorkflowVersionApplicationService {
   };
 
   constructor(dependencies: {
-    store: WorkflowVersionStore;
+    store: WorkflowVersionStore & Partial<WorkflowVersionCatalogStore>;
     agentVersions: AgentVersionStore;
     authorization: AuthorizationPort;
     digester: WorkflowContentDigester;
@@ -117,6 +119,33 @@ export class WorkflowVersionApplicationService {
         tenantId: actor.tenantId,
         ...input,
       });
+    } catch (error) {
+      throw mapWorkflowError(error, "list");
+    }
+  }
+
+  async listCatalog(
+    actor: ActorContext,
+    input: Omit<WorkflowVersionCatalogQuery, "tenantId">,
+  ) {
+    validateActor(actor);
+    actor = Object.freeze({ ...actor });
+    input = structuredClone(input);
+    await this.#authorize(actor, "list", null);
+    const read = this.#dependencies.store.listWorkflowVersionCatalog;
+    if (!read)
+      throw new ApplicationError(
+        "internal",
+        "workflow_version_catalog_unavailable",
+      );
+    try {
+      const assets = await read.call(this.#dependencies.store, {
+        ...input,
+        tenantId: actor.tenantId,
+      });
+      for (const asset of assets)
+        await this.#authorize(actor, "read", asset.workflowVersionId);
+      return assets;
     } catch (error) {
       throw mapWorkflowError(error, "list");
     }

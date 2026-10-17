@@ -321,3 +321,15 @@ PG 实验调度已具备入库、交接、结果结算、停放、人工审批�
 最终同一次相关回归 117 项全部通过、无跳过，覆盖真实 PostgreSQL、SQLite、正式 Control/Worker/SDK、审批与拒绝、并发竞争、回执/权威损坏、晚期撤权、写入回滚、提交前进程退出、提交后丢失应答、跨服务重启、唯一成功回复及失败不伪造回复、终态 SSE 续读。Contracts 全量 758、Control Client 全量 275 项通过；架构边界与实际生产类型图 37 项通过。Contracts、Application、Control Client、Store、Control API、Runtime Worker 完整类型检查及 UI/Electron lint 通过。仓库入口、文档格式和 diff 检查通过。仅使用独立 Unix Socket 测试库；清理测试 schema 和客户端后关闭临时 PostgreSQL，不访问用户数据库。
 
 意见目前是可恢复的审批元数据，不替换冻结输入输出，也尚未注入下游模型上下文。前端执行权没有切换；旧 renderer 意见消息保持原状。下一批应接入能力查询、后台提交/订阅/审批及意见展示，明确旧记录只读边界，并单独验证旧意见的业务上下文语义和未知写入结果恢复，随后退役隐藏 Thread/Message 推进。生产请求级身份、SQLite/桌面入口、Team、资源作用域、生命周期、自主子 Agent 和安装式插件专项仍在原目标内，不能据本批后端验证宣称整套产品完成。
+
+## 第十九批：补齐只读定义目录，确认前端切换依赖（2026-10-17）
+
+上一批意见持久化已提交为 `9db532cd8`。检查前端发现，定义依赖隐藏 Thread 标题注册，执行读取还会自动继续旧节点；已有 snapshot 接口只能按已知根 Run ID 读取，尚没有可替代全量 Thread 扫描的根任务目录。新目录还会发现任意 API 发布的 DAG，不能直接交给只支持串行 prompt/result 约定的旧执行器。因此本批先补齐真实目录协议，不启用半套前端切换；UI 源码和旧记录没有改动。
+
+新增 `GET /api/v1/workflow-catalog` 和正式 SDK，内存、SQLite、PostgreSQL 复用原不可变定义表提供至多 20 条的有界身份页，验证租户、复合游标和当前 list/逐版本 read 权限。数据库先选身份页再取定义，传回及解码前限制单份 2 MiB、合计 8 MiB；Store 一次校验并仅返回六字段摘要，Control 不重复解码定义。响应 1 MiB，SDK 拒绝回退/重叠页面、重复项、错误游标、越界和迟到取消。没有新表、迁移、执行器或隐藏注册记录，不据此宣称运行时延降低。
+
+本批最终相关回归 34 项通过、无跳过，包含真实 Control/SDK 发布、无 Thread 目录、跨 Workflow 分页和服务重启，以及旧部署/审批恢复回归。Contracts 全量 760、Control Client 全量 276、架构与实际生产类型图 37 项通过。Contracts、Application、Control Client、Store、Control API 完整类型检查通过；UI/Electron lint 与构建通过，急切入口仍为 326427 字节。明确文件列表的工作区与 Workflow 兼容测试 92 项通过。
+
+按技能给定命令执行的 `pnpm --filter @crewon/ui test -- CommandWorkspace` 未实际筛选，误启动全量 UI 后已停止本批进程，退出 130，不作为通过证明。独立窄化运行及 `git archive 9db532cd8` 的源码副本均复现完全相同的 10 项样式/短剧插件预览失败（39 项中 29 过、10 失败）；未弱化断言或改写快照。证据见 [基线对照](evidence/workflow-catalog-ui-baseline-2026-10-17.json)。全量运行另外观察到的桌面扩展/Native 工作空间宿主失败尚未完成归因，仍需安装式插件专项处理，不能宣称 UI 全量或安装版验收完成。
+
+下一批继续补齐有界根 Run 发现并迁移前端提交、订阅、审批及未知写入恢复，再删除旧节点推进。目录提供的是版本能力，不是执行许可；还须保留任意 DAG/input schema 的边界、旧记录展示和意见业务上下文。生产请求级身份、SQLite/桌面策略入口、Team、资源作用域、生命周期、自主子 Agent 和安装式插件专项继续保持在完整目标中。

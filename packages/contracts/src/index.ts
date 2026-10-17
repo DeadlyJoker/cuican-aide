@@ -64,3 +64,5 @@ export * from "./workflow-run-read-contract.ts";
 export * from "./workflow-execution-capability.ts";
 
 export * from "./workflow-human-gate-review-contract.ts";
+
+export * from "./workflow-catalog-contract.ts";

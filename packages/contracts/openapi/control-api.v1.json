@@ -6903,6 +6903,50 @@
           }
         }
       }
+    },
+    "/api/v1/workflow-catalog": {
+      "get": {
+        "operationId": "listWorkflowVersionCatalog",
+        "parameters": [
+          {
+            "name": "cursor",
+            "in": "query",
+            "schema": {
+              "type": "string",
+              "minLength": 1,
+              "maxLength": 2048
+            }
+          },
+          {
+            "$ref": "#/components/parameters/Limit"
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Tenant- and workflow-scoped immutable WorkflowVersions",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ListWorkflowVersionsResponse"
+                }
+              }
+            }
+          },
+          "400": {
+            "$ref": "#/components/responses/Error"
+          },
+          "401": {
+            "$ref": "#/components/responses/Error"
+          },
+          "403": {
+            "$ref": "#/components/responses/Error"
+          },
+          "500": {
+            "$ref": "#/components/responses/Error"
+          }
+        },
+        "description": "Read-only bounded catalog across Workflow identities in the authenticated tenant. Requires list and individual read grants; immutable definitions remain on their existing version endpoint. Maximum 20 summaries per page."
+      }
     }
   },
   "components": {

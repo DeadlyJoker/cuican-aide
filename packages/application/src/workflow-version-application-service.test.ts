@@ -15,6 +15,7 @@ import { WorkflowVersionApplicationService } from "./workflow-version-applicatio
 import type {
   WorkflowVersionAsset,
   WorkflowVersionStore,
+  WorkflowVersionCatalogQuery,
 } from "./workflow-version-store-port.ts";
 
 const actor: ActorContext = {
@@ -27,6 +28,67 @@ const digester = {
   sha256: (value: string) =>
     `sha256:${createHash("sha256").update(value).digest("hex")}`,
 };
+
+test("catalog requires both list and every individual read grant and captures the tenant before async authorization", async () => {
+  const store = new FakeWorkflowVersions();
+  const base = createService({ store });
+  const published = await base.publish(actor, source());
+  const entry = {
+    workflowId: published.asset.workflowId,
+    workflowVersionId: published.asset.workflowVersionId,
+    contentDigest: published.asset.contentDigest,
+    createdAt: published.asset.createdAt,
+    name: "catalog",
+    description: "catalog",
+  };
+  let lists = 0;
+  const requests: string[] = [];
+  const catalogStore = {
+    registerWorkflowVersion: store.registerWorkflowVersion.bind(store),
+    loadWorkflowVersion: store.loadWorkflowVersion.bind(store),
+    listWorkflowVersions: store.listWorkflowVersions.bind(store),
+    async listWorkflowVersionCatalog(query: WorkflowVersionCatalogQuery) {
+      lists++;
+      assert.equal(query.tenantId, actor.tenantId);
+      return [entry];
+    },
+  };
+  const service = new WorkflowVersionApplicationService({
+    store: catalogStore,
+    agentVersions: new FakeAgentVersions([]),
+    digester,
+    now: () => "2026-10-17T00:00:00.000Z",
+    authorization: {
+      async authorize(request) {
+        requests.push(request.action);
+        return request.action === "workflowVersion:read"
+          ? { outcome: "deny", reasonCode: "withdrawn" }
+          : { outcome: "allow" };
+      },
+    },
+  });
+  await assert.rejects(service.listCatalog(actor, { after: null, limit: 20 }), {
+    category: "authorization",
+  });
+  assert.deepEqual(requests, ["workflowVersion:list", "workflowVersion:read"]);
+  assert.equal(lists, 1);
+  const principal = { ...actor };
+  const current = new WorkflowVersionApplicationService({
+    store: catalogStore,
+    agentVersions: new FakeAgentVersions([]),
+    digester,
+    now: () => "2026-10-17T00:00:00.000Z",
+    authorization: {
+      async authorize() {
+        await Promise.resolve();
+        return { outcome: "allow" };
+      },
+    },
+  });
+  const pending = current.listCatalog(principal, { after: null, limit: 20 });
+  principal.tenantId = "foreign";
+  assert.deepEqual(await pending, [entry]);
+});
 
 test("publishes after resolving referenced AgentVersions and scopes get/list", async () => {
   const agents = new FakeAgentVersions([

@@ -884,6 +884,27 @@ export function parseWorkflowVersionListQuery(
   };
 }
 
+export function parseWorkflowVersionCatalogQuery(input: unknown): Readonly<{
+  after: Readonly<{ workflowId: string; workflowVersionId: string }> | null;
+  limit: number;
+}> {
+  if (
+    !isPlainObject(input) ||
+    Object.keys(input).some((key) => key !== "cursor" && key !== "limit")
+  )
+    throw new ContractValidationError("workflow_catalog_query_invalid");
+  return {
+    after: parseWorkflowVersionCursor(input.cursor),
+    limit: parseUnsignedQueryInteger(
+      input.limit,
+      20,
+      20,
+      "page_limit_invalid",
+      1,
+    ),
+  };
+}
+
 export function formatWorkflowVersionCursor(
   workflowId: string,
   workflowVersionId: string,

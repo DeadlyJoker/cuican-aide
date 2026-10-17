@@ -1,3 +1,4 @@
+import { registerWorkflowCatalogRoutes } from "./workflow-catalog-routes.ts";
 import {
   registerWorkflowControlRoutes,
   type WorkflowControlServices,
@@ -1466,6 +1467,7 @@ export function buildControlApi(
   registerThreadMessageWindowRoute(app, dependencies);
   registerThreadTranscriptWindowRoute(app, dependencies);
   registerThreadTranscriptSnapshotRoute(app, dependencies);
+  registerWorkflowCatalogRoutes(app, dependencies);
   registerWorkflowControlRoutes(app, {
     ...dependencies,
     workflowGateCommitted: () => wakeOutbox(dependencies.outboxWakeup),
