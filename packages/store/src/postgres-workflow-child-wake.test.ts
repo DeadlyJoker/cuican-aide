@@ -2,8 +2,59 @@ import assert from "node:assert/strict";
 import test from "node:test";
 import type { CommitRunInput } from "@crewon/application";
 import { postgresCompositionFixture } from "./postgres-workflow-composition.test-support.ts";
+import { oversizedChildVersion } from "./workflow-preparation-failure.test-support.ts";
 
 const pgTest = process.env.CREWON_TEST_POSTGRES_URL ? test : test.skip;
+
+for (const target of ["run_events", "workflow_node_children", "work_items"])
+  pgTest(
+    `PostgreSQL rejected child ${target} failure rolls back its Thread, failed Run, ownership and parent wake together`,
+    async (t) => {
+      const f = await postgresCompositionFixture(t, {
+        asset: oversizedChildVersion(),
+      });
+      const condition =
+        target === "run_events"
+          ? "IF NEW.event_json->>'type' <> 'run.failed' THEN RETURN NEW; END IF;"
+          : "";
+      await f.admin.query(
+        `CREATE FUNCTION ${f.sql}.reject_preparation() RETURNS trigger LANGUAGE plpgsql AS $$BEGIN ${condition} RAISE EXCEPTION 'fixture_rejected_child'; END$$;CREATE TRIGGER reject_preparation BEFORE INSERT ON ${f.sql}.${target} FOR EACH ROW EXECUTE FUNCTION ${f.sql}.reject_preparation()`,
+      );
+      const before = await f.snapshot();
+      await assert.rejects(f.composition.admitWorkflowNodes(f.input));
+      assert.deepEqual(await f.snapshot(), before);
+      await f.admin.query(
+        `DROP TRIGGER reject_preparation ON ${f.sql}.${target}`,
+      );
+      await f.composition.admitWorkflowNodes(f.input);
+      const [child] = await f.children();
+      assert.equal(
+        (await f.store.loadRun({
+          tenantId: f.root.tenantId,
+          runId: child!.child_run_id,
+        }))!.status,
+        "failed",
+      );
+      assert.equal(
+        (
+          await f.admin.query(
+            `SELECT count(*)::int AS n FROM ${f.sql}.work_items WHERE work_item_id=$1`,
+            [child!.wake_work_item_id],
+          )
+        ).rows[0]!.n,
+        1,
+      );
+      const store = (await f.open()).experimentalWorkflowRunCompositionStore(
+        f.config,
+      );
+      await store.admitWorkflowNodes(f.input);
+      assert.equal((await f.children()).length, 1);
+      assert.equal(
+        (await store.finalizeWorkflowRun(f.input)).run.status,
+        "failed",
+      );
+    },
+  );
 
 for (const status of ["completed", "failed", "canceled"] as const)
   pgTest(

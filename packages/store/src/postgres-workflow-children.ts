@@ -1,10 +1,11 @@
 import type { PoolClient } from "pg";
+import { writePostgresWorkItems } from "./postgres-run-writer.ts";
 import { workflowNodeReviewContext } from "./workflow-gate-review-context.ts";
 import type { WorkflowHumanGateRow } from "./workflow-human-gate-authority.ts";
 import {
   RunStoreError,
   canonicalJson,
-  prepareWorkflowChildRun,
+  prepareWorkflowChildHandoff,
   type WorkflowExecutionState,
   type WorkflowNodeAttemptAdmission,
   type CommitRunInput,
@@ -150,7 +151,7 @@ export async function dispatchPostgresWorkflowChildren(
       parent: structuredClone(input.parent),
       node: structuredClone(node),
     });
-    const prepared = prepareWorkflowChildRun({
+    const prepared = prepareWorkflowChildHandoff({
       parent: input.parent,
       node,
       claimId: admission.claim.claimId,
@@ -220,6 +221,9 @@ export async function dispatchPostgresWorkflowChildren(
         canonicalJson(wake),
       ],
     );
+    // The child was already terminal before its ownership row existed, so no UPDATE trigger can publish this wake.
+    if (prepared.run.events.at(-1)?.type === "run.failed")
+      await writePostgresWorkItems(client, sql, [wake]);
   }
 }
 function corrupt(): never {

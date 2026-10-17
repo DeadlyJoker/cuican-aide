@@ -14,11 +14,12 @@ import {
 } from "../../../packages/store/src/workflow-run-composition.test-support.ts";
 import { cancellationChildDispatch } from "../../../packages/store/src/workflow-cancellation.test-support.ts";
 import { childWorker } from "./workflow-child-worker.test-support.ts";
+import { oversizedSiblingVersion } from "../../../packages/store/src/workflow-preparation-failure.test-support.ts";
 
-async function fixture(t: TestContext) {
+async function fixture(t: TestContext, asset = parallelVersion(2)) {
   const f = await compositionFixture(t, {
     nowEpochMs: Date.now(),
-    asset: parallelVersion(2),
+    asset,
     composition: { dispatchChildren: cancellationChildDispatch },
   });
   await f.composition.admitWorkflowNodes(f.input);
@@ -228,133 +229,141 @@ test(
   },
 );
 
-test(
-  "a failed workflow keeps an unknown sibling effect reconciling through Worker restart without repeating its model or mutation",
-  { timeout: 15_000 },
-  async (t) => {
-    const f = await fixture(t),
-      capacity = new ToolResultCapacity({ maximumExecutions: 1 });
-    let calls = 0,
-      effects = 0;
-    const broker = new InMemoryToolBroker(
-      [
-        {
-          schemaVersion: "crewon.tool-definition.v0",
-          kind: "function",
-          name: "uncertain_write",
-          description: "Fixture",
-          execution: "serial",
-          inputSchema: { type: "object" },
-        },
-      ],
-      new Map([
+for (const source of ["output", "preparation"] as const)
+  test(
+    `a ${source} failure keeps an unknown sibling effect reconciling through Worker restart without repeating its model or mutation`,
+    { timeout: 15_000 },
+    async (t) => {
+      const f = await fixture(
+          t,
+          source === "preparation" ? oversizedSiblingVersion() : undefined,
+        ),
+        capacity = new ToolResultCapacity({ maximumExecutions: 1 });
+      let calls = 0,
+        effects = 0;
+      const broker = new InMemoryToolBroker(
         [
-          "function:uncertain_write",
-          async () => {
-            effects++;
-            throw new ToolExecutionUnknownOutcomeError();
-          },
-        ],
-      ]),
-      new Map([
-        [
-          "function:uncertain_write",
           {
-            effect: "mutation",
-            recovery: "reconcilable",
-            resourceBindingId: null,
-            credentialBindingId: null,
-            executionTarget: {
-              kind: "control",
-              bindingId: "in-memory-tool-broker",
-            },
-            capability: "workspace.write",
-            approvalRequirement: "none",
-            limits: {
-              timeoutMs: 30000,
-              maxOutputBytes: 262144,
-              maxArtifactBytes: 1048576,
-            },
+            schemaVersion: "crewon.tool-definition.v0",
+            kind: "function",
+            name: "uncertain_write",
+            description: "Fixture",
+            execution: "serial",
+            inputSchema: { type: "object" },
           },
         ],
-      ]),
-      { resultCapacity: capacity },
-    );
-    const transport: ModelTransportPort = {
-      adapterName: "failure-tool-fixture",
-      adapterVersion: "1",
-      modelId: "synthetic",
-      async *stream() {
-        calls++;
-        yield {
-          type: "tool.call",
-          kind: "function",
-          callId: "uncertain-call",
-          name: "uncertain_write",
-          input: "{}",
-        };
-        yield { type: "completed", checkpoint: null };
-      },
-    };
-    const first = childWorker(f, t, transport, broker, "agent-0");
-    const result = await first.wakeChild();
-    assert.equal(result.kind, "retried", JSON.stringify(result));
-    assert.equal("code" in result && result.code, "tool_outcome_unknown");
-    await first.worker.close();
-    await first.store.close();
-    const bad = invalidModel(),
-      other = childWorker(f, t, bad.transport, undefined, "agent-1");
-    assert.equal((await other.wakeChild()).kind, "completed");
-    await other.worker.close();
-    await f.composition.admitWorkflowNodes(f.input);
-    let checks = 0;
-    const cancel = broker.cancel.bind(broker);
-    broker.cancel = (command, signal) => {
-      checks++;
-      return cancel(command, signal);
-    };
-    const recovered = childWorker(f, t, transport, broker, "agent-0");
-    const unknown = await recovered.wakeChild();
-    assert.equal(unknown.kind, "retried", JSON.stringify(unknown));
-    assert.equal("code" in unknown && unknown.code, "tool_outcome_unknown");
-    assert.equal(checks, 1);
-    const waiting = (await f.composition.admitWorkflowNodes(f.input)).execution;
-    assert.deepEqual(
-      waiting.nodes.map((n) => n.status),
-      ["running", "failed", "canceled"],
-    );
-    await assert.rejects(f.composition.finalizeWorkflowRun(f.input), {
-      code: "workflow_finalization_pending",
-    });
-    assert.equal((await f.store.loadRun(f.input))!.status, "running");
-    assert.equal(calls, 1);
-    assert.equal(effects, 1);
-    assert.equal(bad.calls(), 1);
-    assert.equal(capacity.resourceSnapshot().executionCount, 0);
-    assert.equal(capacity.resourceSnapshot().reservedBytes, 0);
-    // The fake Provider must supply a definitive outcome before the real Worker can finish cancellation.
-    broker.cancel = async (command) => ({
-      status: "canceled",
-      executionId: command.executionId,
-      providerReceiptId: "failure-provider-confirmed",
-    });
-    // Hold the failed child's existing scheduler wake while the unknown child becomes eligible again.
-    const wake = compositionInput(
-      f.input.binding,
-      await claimCompositionWork(f.store, "hold-failed-wake"),
-    );
-    assert.equal(wake.runId, f.input.runId);
-    f.clock.advance(5000);
-    assert.equal((await recovered.wakeChild()).kind, "canceled");
-    assert.equal(calls, 1);
-    assert.equal(effects, 1);
-    await recovered.worker.close();
-    // Return the same wake for the final replay acknowledgement; do not create another work item.
-    await f.store.retryWorkItem({
-      ...wake.lease,
-      retryAfterMs: 0,
-      reasonCode: "test-release",
-    });
-    await finishFailure(f);
-  },
-);
+        new Map([
+          [
+            "function:uncertain_write",
+            async () => {
+              effects++;
+              throw new ToolExecutionUnknownOutcomeError();
+            },
+          ],
+        ]),
+        new Map([
+          [
+            "function:uncertain_write",
+            {
+              effect: "mutation",
+              recovery: "reconcilable",
+              resourceBindingId: null,
+              credentialBindingId: null,
+              executionTarget: {
+                kind: "control",
+                bindingId: "in-memory-tool-broker",
+              },
+              capability: "workspace.write",
+              approvalRequirement: "none",
+              limits: {
+                timeoutMs: 30000,
+                maxOutputBytes: 262144,
+                maxArtifactBytes: 1048576,
+              },
+            },
+          ],
+        ]),
+        { resultCapacity: capacity },
+      );
+      const transport: ModelTransportPort = {
+        adapterName: "failure-tool-fixture",
+        adapterVersion: "1",
+        modelId: "synthetic",
+        async *stream() {
+          calls++;
+          yield {
+            type: "tool.call",
+            kind: "function",
+            callId: "uncertain-call",
+            name: "uncertain_write",
+            input: "{}",
+          };
+          yield { type: "completed", checkpoint: null };
+        },
+      };
+      const first = childWorker(f, t, transport, broker, "agent-0");
+      const result = await first.wakeChild();
+      assert.equal(result.kind, "retried", JSON.stringify(result));
+      assert.equal("code" in result && result.code, "tool_outcome_unknown");
+      await first.worker.close();
+      await first.store.close();
+      const bad = invalidModel(),
+        expectedBadCalls = source === "output" ? 1 : 0;
+      if (source === "output") {
+        const other = childWorker(f, t, bad.transport, undefined, "agent-1");
+        assert.equal((await other.wakeChild()).kind, "completed");
+        await other.worker.close();
+      }
+      await f.composition.admitWorkflowNodes(f.input);
+      let checks = 0;
+      const cancel = broker.cancel.bind(broker);
+      broker.cancel = (command, signal) => {
+        checks++;
+        return cancel(command, signal);
+      };
+      const recovered = childWorker(f, t, transport, broker, "agent-0");
+      const unknown = await recovered.wakeChild();
+      assert.equal(unknown.kind, "retried", JSON.stringify(unknown));
+      assert.equal("code" in unknown && unknown.code, "tool_outcome_unknown");
+      assert.equal(checks, 1);
+      const waiting = (await f.composition.admitWorkflowNodes(f.input))
+        .execution;
+      assert.deepEqual(
+        waiting.nodes.map((n) => n.status),
+        ["running", "failed", "canceled"],
+      );
+      await assert.rejects(f.composition.finalizeWorkflowRun(f.input), {
+        code: "workflow_finalization_pending",
+      });
+      assert.equal((await f.store.loadRun(f.input))!.status, "running");
+      assert.equal(calls, 1);
+      assert.equal(effects, 1);
+      assert.equal(bad.calls(), expectedBadCalls);
+      assert.equal(capacity.resourceSnapshot().executionCount, 0);
+      assert.equal(capacity.resourceSnapshot().reservedBytes, 0);
+      // The fake Provider must supply a definitive outcome before the real Worker can finish cancellation.
+      broker.cancel = async (command) => ({
+        status: "canceled",
+        executionId: command.executionId,
+        providerReceiptId: "failure-provider-confirmed",
+      });
+      // Hold the failed child's existing scheduler wake while the unknown child becomes eligible again.
+      const wake = compositionInput(
+        f.input.binding,
+        await claimCompositionWork(f.store, "hold-failed-wake"),
+      );
+      assert.equal(wake.runId, f.input.runId);
+      f.clock.advance(5000);
+      assert.equal((await recovered.wakeChild()).kind, "canceled");
+      assert.equal(calls, 1);
+      assert.equal(effects, 1);
+      await recovered.worker.close();
+      // Return the same wake for the final replay acknowledgement; do not create another work item.
+      await f.store.retryWorkItem({
+        ...wake.lease,
+        retryAfterMs: 0,
+        reasonCode: "test-release",
+      });
+      await finishFailure(f);
+    },
+  );

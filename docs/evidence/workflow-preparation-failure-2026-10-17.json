@@ -1,0 +1,260 @@
+{
+  "schemaVersion": "crewon.workflow-preparation-failure-evidence.v1",
+  "date": "2026-10-17",
+  "baseCommit": "0dc48c5139bfd4f8829e21cd78a0f01d41dab9b9",
+  "scope": "Canonical terminal child handoff for two locally deterministic preparation budget failures; real SQLite/PostgreSQL and formal Control/SDK/Worker/SSE, synthetic model/tools. No frontend authority switch.",
+  "before": {
+    "suite": {
+      "tests": 1,
+      "pass": 0,
+      "fail": 1,
+      "cancelled": 0,
+      "skipped": 0
+    },
+    "expectedTestExitCode": 1,
+    "diagnostics": [
+      {
+        "case": "oversized-child-preparation",
+        "rootStatus": "running",
+        "sampledModels": 0,
+        "outcomes": [
+          {
+            "kind": "retried",
+            "runId": "fixture-run-3",
+            "code": "workflow_child_prompt_limit"
+          },
+          {
+            "kind": "retried",
+            "runId": "fixture-run-3",
+            "code": "workflow_child_prompt_limit"
+          },
+          {
+            "kind": "retried",
+            "runId": "fixture-run-3",
+            "code": "workflow_child_prompt_limit"
+          },
+          {
+            "kind": "retried",
+            "runId": "fixture-run-3",
+            "code": "workflow_child_prompt_limit"
+          },
+          {
+            "kind": "retried",
+            "runId": "fixture-run-3",
+            "code": "workflow_child_prompt_limit"
+          },
+          {
+            "kind": "retried",
+            "runId": "fixture-run-3",
+            "code": "workflow_child_prompt_limit"
+          },
+          {
+            "kind": "retried",
+            "runId": "fixture-run-3",
+            "code": "workflow_child_prompt_limit"
+          },
+          {
+            "kind": "retried",
+            "runId": "fixture-run-3",
+            "code": "workflow_child_prompt_limit"
+          }
+        ]
+      }
+    ],
+    "measurement": "Eight controlled-clock scheduler passes on baseline source, not production elapsed latency."
+  },
+  "after": {
+    "related": {
+      "tests": 105,
+      "pass": 105,
+      "fail": 0,
+      "cancelled": 0,
+      "skipped": 0
+    },
+    "relatedExecution": {
+      "exitCode": 0,
+      "logSha256": "bdbc93deafb569c2f36d429113ce8398a9b6196273751f15658a7ac12ce1b357"
+    },
+    "diagnostics": [
+      {
+        "case": "preparation-failure-http",
+        "contextual": false,
+        "cancel": false,
+        "rootStatus": "failed",
+        "terminalEvents": 1,
+        "modelSamples": 0
+      },
+      {
+        "case": "preparation-failure-http",
+        "contextual": true,
+        "cancel": false,
+        "rootStatus": "failed",
+        "terminalEvents": 1,
+        "modelSamples": 0
+      },
+      {
+        "case": "preparation-failure-http",
+        "contextual": false,
+        "cancel": true,
+        "rootStatus": "canceled",
+        "terminalEvents": 1,
+        "modelSamples": 0
+      },
+      {
+        "case": "oversized-child-preparation",
+        "rootStatus": "failed",
+        "sampledModels": 0,
+        "outcomes": [
+          {
+            "kind": "retried",
+            "runId": "fixture-run-3",
+            "code": "workflow_scheduler_ready"
+          },
+          {
+            "kind": "failed",
+            "runId": "fixture-run-3",
+            "code": "workflow_node_failed"
+          },
+          {
+            "kind": "failed",
+            "runId": "fixture-run-3",
+            "code": "workflow_node_failed"
+          },
+          {
+            "kind": "idle"
+          }
+        ]
+      }
+    ],
+    "architectureAndProductionTypeGraphs": {
+      "tests": 37,
+      "pass": 37,
+      "fail": 0,
+      "cancelled": 0,
+      "skipped": 0
+    },
+    "architectureExecution": {
+      "exitCode": 0,
+      "logSha256": "361dfc82bfa2fde70fe46398f81e8c50e8de8229c07467e4e40e5fa0d992c2a9"
+    }
+  },
+  "compatibility": {
+    "baselinePreparation": {
+      "commit": "0dc48c5139bfd4f8829e21cd78a0f01d41dab9b9",
+      "sourceSha256": "67313d86b77b013b163fb3bb927ea05a08fd44972db6c1903007f0097bcc141c",
+      "cases": [
+        {
+          "mode": "legacy",
+          "commitDigest": "sha256:edffc571a5911026939f63600094b1c21f5fd883886c35cc9e8055ea8efd44cd",
+          "requestFingerprint": "sha256:baba8eed81ce1de8b8cc270803d8162aacf51f4e963f92c1d20573d80245e357"
+        },
+        {
+          "mode": "context",
+          "commitDigest": "sha256:fba2e250a489c6ca15c724b95b278a6a2c0db3de5d55eed956234533e4df4132",
+          "requestFingerprint": "sha256:ec0c2e522d7124fe22597cfc885c81a62c762fa2c5aa0724eff27bf33d14799d"
+        }
+      ]
+    },
+    "readyCommitBytesAndFingerprintUnchanged": true,
+    "purePreparationStillThrowsBeforeIds": true,
+    "newTables": 0,
+    "newIndexes": 0,
+    "schemaMigrations": 0,
+    "httpAndEventShapes": "unchanged",
+    "oldHistoryRewritten": false,
+    "rejectionChildExecutionWorkItems": 0,
+    "rejectionChildModelAttempts": 0,
+    "rejectionChildHistoryItems": 0,
+    "rejectionChildEventTypes": ["run.created", "run.failed"],
+    "rejectionChildFailureRetryable": false,
+    "preciseCodes": [
+      "workflow_child_prompt_limit",
+      "workflow_review_context_limit"
+    ],
+    "rootFailureCode": "workflow_node_failed",
+    "rootCancelRace": "explicit cancellation before settlement may finish canceled",
+    "requiresPriorReviewContextCoordinatedUpgrade": true
+  },
+  "atomicity": [
+    "SQLite and PostgreSQL injected failures at failed run event, child ownership and parent wake insertion roll back all writes.",
+    "Failed child birth and ownership precede the same-transaction declared parent wake; no terminal UPDATE is assumed.",
+    "Reopen and replay produce one owned failed child and one terminal root event."
+  ],
+  "unknownSideEffects": {
+    "newPreparationFailureScenario": "Real SQLite Worker restart, one model call and one unknown mutation; root waits for original receipt reconciliation and only finishes after provider confirms cancellation.",
+    "postgresCoverage": "Ordinary parent failure, pending sibling cancellation/finalization regressions; no new preparation-plus-unknown-mutation PostgreSQL-specific test.",
+    "unknownFailuresReclassified": false
+  },
+  "bounds": {
+    "initialChildUserPromptUtf8Bytes": 65536,
+    "reviewContextIncludingEnvelopeUtf8Bytes": 16384,
+    "fragmentUtf8Bytes": 9999,
+    "meaning": "Generated initial user prompt only, not complete provider/model context."
+  },
+  "typechecks": {
+    "application": {
+      "exitCode": 0,
+      "logSha256": "0ee11f85fba473fec0c9429ea5bf06407fb083b06737b651a28cd517e11e63c3"
+    },
+    "store": {
+      "exitCode": 0,
+      "logSha256": "5c9efc29dccf168531c61ed16f7a65111b113efc2e1e81fae43c3b40a67d55c1"
+    },
+    "worker": {
+      "exitCode": 0,
+      "logSha256": "0723f9ec69a95cba4021c8ac79718e054ce8ef53bf58180f15f25974ce2ec6a6"
+    },
+    "control": {
+      "exitCode": 0,
+      "logSha256": "4156428d53b3f97d9de611b4b2841dec260918eb4571ed5fa9c63ac97398aea0"
+    }
+  },
+  "ui": {
+    "sourceChanged": false,
+    "lint": {
+      "exitCode": 0,
+      "logSha256": "81146a96524321a864257d9c4668a0dbd5ebb7f7cd0567ecd1086416bfa5e5de"
+    },
+    "build": {
+      "exitCode": 0,
+      "logSha256": "02a5a33e29d14bda3b8688bb4b6a0cd4a8b616298d7c9f606d761b697561b699"
+    },
+    "eagerBytes": 326427,
+    "fullTestSuiteRerun": false,
+    "installedAcceptance": false
+  },
+  "limitations": [
+    "No production latency, throughput, power-loss durability or real-provider claim.",
+    "Test PostgreSQL has fsync off, no TCP listener and uses only an isolated test database.",
+    "No frontend generic DAG/input UX, unknown submission recovery, legacy read boundary or execution-authority migration.",
+    "No production request-level Workflow identity or SQLite/desktop policy composition.",
+    "Team, resource/lifecycle isolation, autonomous subagents and installed-plugin acceptance remain pending.",
+    "Prior UI failures are not fixed or reclassified; Contracts/Client full suites were not rerun in this batch."
+  ],
+  "cleanup": {
+    "dataDirectory": "/tmp/crewon-wf-pg-ai1hte94/data",
+    "listenAddresses": "",
+    "fsync": "off",
+    "serverVersion": "PostgreSQL 18.6 (Homebrew) on aarch64-apple-darwin24.6.0, compiled by Apple clang version 17.0.0 (clang-1700.6.4.2), 64-bit",
+    "startedAt": "2026-10-17T15:09:58.344715+08:00",
+    "checkedAt": "2026-10-17T15:30:19.019495+08:00",
+    "userSchemas": 0,
+    "otherClients": 0,
+    "running": false,
+    "statusExitCode": 3,
+    "stoppedAt": "2026-10-17T07:30:19.139387+00:00"
+  },
+  "sourceSha256": {
+    "packages/application/src/workflow-child-run-preparation.ts": "2cde2178d68d9513c2817f62e877ef96188dd42f8efeaa472aadcf2e2003abb3",
+    "packages/application/src/workflow-child-run-preparation.test.ts": "ccf3370977dba7c642b443e9236355847a8f43fdbe4b9daed7180d91ba28e5ee",
+    "packages/store/src/postgres-workflow-children.ts": "16e61c50863819282ce184be12517f5183d9990d7897c54b876a024726e204bd",
+    "packages/store/src/sqlite-workflow-child-dispatch.ts": "752011e9c0e4f79305366d392cb2f93e61c75e64171fe719c11bcdb662e7fc2d",
+    "packages/store/src/workflow-child-outcome.ts": "af6932cbec94a47e0ed49eaca045ce823a920f7f89f7508e9fa76e99a4f42348",
+    "packages/store/src/postgres-workflow-child-wake.test.ts": "c91c8800a9e7af1226ffa5a4b8872ec206060d0ac71e020ec596492436a378fd",
+    "packages/store/src/sqlite-workflow-child-dispatch.test.ts": "6d0992274493ea9ce57576d172e68b8ee5534971e6fd2a95d04c61550ff70db9",
+    "apps/runtime-worker/src/workflow-failure-runtime.test.ts": "b49ec182aba216a9501566ddac2e41485db4d0bc143ac39cbe5ea3ee0a774d9b",
+    "packages/store/src/workflow-preparation-failure.test-support.ts": "79984720137330fabf8697ce5cdcd71c7b63f9c42efd00fba36e4474a6d2fb19",
+    "apps/runtime-worker/src/workflow-preparation-failure.test.ts": "42f7cf20d5b0231df622fa61af465d0d2bc28dfd219584d4bab412c222016362",
+    "apps/control-api/src/postgres-workflow-preparation-failure.integration.test.ts": "e9f039d50e6848396fe7742b17e8fdc02814b1c04f2e642e14d27fe9b48c0dd0"
+  }
+}

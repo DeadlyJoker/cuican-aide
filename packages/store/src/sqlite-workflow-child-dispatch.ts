@@ -3,7 +3,7 @@ import { workflowNodeReviewContext } from "./workflow-gate-review-context.ts";
 import type { WorkflowHumanGateRow } from "./workflow-human-gate-authority.ts";
 import {
   canonicalJson,
-  prepareWorkflowChildRun,
+  prepareWorkflowChildHandoff,
   RunStoreError,
   type CommitRunInput,
   type CommitRunResult,
@@ -13,6 +13,7 @@ import {
   type RunRoute,
   type WorkflowExecutionState,
   type WorkflowNodeAttemptAdmission,
+  type WorkItem,
 } from "@crewon/application";
 import type { RunState, WorkflowNodeDefinition } from "@crewon/domain";
 import {
@@ -39,6 +40,7 @@ export type WorkflowChildOperations = {
   commitChildThread(input: CommitThreadInput): CommitThreadResult;
   commitChildRun(input: CommitRunInput): CommitRunResult;
   hasPendingProviderSwitch(tenantId: string): boolean;
+  enqueue(work: WorkItem): void;
 };
 export type WorkflowChildRow = {
   node_id: string;
@@ -178,7 +180,7 @@ export class SqliteWorkflowChildDispatcher {
         parent: input.parent,
         node,
       });
-      const prepared = prepareWorkflowChildRun({
+      const prepared = prepareWorkflowChildHandoff({
         parent: input.parent,
         node,
         claimId: admission.claim.claimId,
@@ -226,6 +228,8 @@ export class SqliteWorkflowChildDispatcher {
           wake.workItemId,
           canonicalJson(wake),
         );
+      if (prepared.run.events.at(-1)?.type === "run.failed")
+        this.#operations.enqueue(wake);
     }
   }
 }

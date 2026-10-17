@@ -365,3 +365,19 @@ Application 在首次 await 前捕获 Actor/筛选，检查版本和 Thread 范�
 Contracts 全量 763、Control Client 全量 278 项通过，架构及实际生产类型图合计 37 项通过。新增能力路径需要登记到原严格 OpenAPI 路径清单；补齐精确条目后完整协议检查通过，未删除或放宽断言。Contracts、Application、Control Client、Store、Control API、Runtime Worker 完整类型检查及 UI/Electron lint、构建通过。UI 源码没有变动，启动入口仍为 326427 字节；不宣称全量 UI、安装版或真实供应商验收完成，也未处理原已复现的 UI/插件专项失败。验证证据见 [意见上下文](evidence/workflow-review-context-2026-10-17.json)。
 
 只使用独立 Unix Socket 测试库，结束时核对 schema 和其他客户端为零后关闭，没有访问用户数据库或发布安装包。前端执行权、任意 DAG/input schema 的 UI 适配、完整提示超限的确定性失败收敛、未知提交恢复和旧记录边界仍需继续接管，再退役旧 renderer 推进；本批消除了意见语义缺口，但不是前端迁移完成。生产请求级身份、SQLite/桌面策略入口、Team、资源与生命周期、自主子 Agent 和安装式插件继续属于完整目标。
+
+## 第二十二批：完整提示预算失败的持久收敛（2026-10-17）
+
+上一批审批上下文已提交为 `0dc48c513`。前端迁移核对发现，合法编译的定义仍可能由大 schema、指令、实际输入和意见组合超过 64 KiB 初始用户提示预算；原调度器将准备错误归入通用恢复重试。本批先用原源码复现：受控时钟下连续八轮返回 `workflow_child_prompt_limit`，根任务仍 running，模型调用为零。这是确定性错误未收尾，不是模型慢；受控时钟推进不是生产耗时测量。
+
+复用现有子任务权威和失败结算，不新增执行器或父任务特殊终态。原纯准备函数保持超限前不分配 ID；Store 使用的新原子交接仅捕获自身准备阶段的两个确定预算错误（`workflow_child_prompt_limit`、`workflow_review_context_limit`）。它创建原协议的子 Thread 和失败子 Run：序号 1 为 created，序号 2 为不可重试 failed，两条 Outbox；初始消息和历史为空，不创建模型执行 WorkItem、不截断上下文或伪造回复。拒绝回执指纹绑定完整节点、输入和意见摘要；正常准备的两种旧提交字节摘要与上一提交精确一致。
+
+子任务在父子归属写入前就已失败，普通终态 UPDATE 触发器无法发布唤醒。因此 SQLite/PG 在归属之后同事务写入原声明父任务 wake；失败事件、归属、回执、节点及唤醒任一步异常全部回滚。父任务沿已有节点失败、兄弟取消和最终结算推进，重启、重复 wake 不增加子任务、模型调用或终态事件；节点/子任务保留准确预算代码，根失败沿用 `workflow_node_failed`。用户在子失败入库后、父结算前明确取消时，根可以收敛为 canceled，子失败证据保留。
+
+SQLite 新增真实 Worker 未知副作用兄弟用例：已有工具执行一次并报告 unknown 后，另一节点准备失败；关闭并重开 Worker 后只核对原执行回执，根保持待恢复，不重采样或重做工具，只有假供应商返回确定取消后才结束。PostgreSQL 已验证普通 Worker、原兄弟取消/最终结算回归，以及正式 HTTP/SDK/Worker 的普通超限、小意见叠加超限、取消竞争与服务重启；不将 SQLite 新用例称作 PostgreSQL 未知副作用专项。授权、路由、ID 回调、租约、存储损坏和其他未知失败不被该预算分支转成业务终态。
+
+最终同一次相关回归 105 项全部通过、无跳过，包含 SQLite/真实 PostgreSQL 的三处故障注入、原子回滚、普通 Worker 和父任务调度、审批、取消、重启、原历史保留、终态 SSE 续读及唯一根终态。Application、Store、Runtime Worker、Control API 完整类型检查通过，架构和实际生产类型图 37 项通过；UI/Electron lint 及正式构建通过，启动入口仍为 326427 字节。本批没有修改 UI，未重跑 Contracts/Client 全量或 UI 全量，不把上批结果当本批结果；没有真实模型供应商、安装版或真实账号验收。证据见 [准备失败收敛](evidence/workflow-preparation-failure-2026-10-17.json)。
+
+只用本批独立 Unix Socket 测试 PostgreSQL，核对业务 schema、其他客户端归零后关闭并确认状态退出码 3；未访问用户数据库。测试库关闭 fsync，不声明断电持久性或生产性能。新旧正常交接字节兼容、失败子任务沿用原事件与读取协议，不新增数据库 schema 或公开协议；此前显式意见上下文仍需 Control/Worker 协调升级。
+
+前端执行权、任意 DAG/input schema 的 UI 适配、未知提交恢复及旧记录边界仍未接管；下一批应把已有目录、根提交/发现、订阅、审批和取消接入真实前端路径并退役旧推进。生产请求级身份、SQLite/桌面策略入口、Team、工具资源/生命周期、自主子 Agent 与安装式插件继续属于完整目标，本批不能代表它们完成。

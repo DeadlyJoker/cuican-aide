@@ -10,6 +10,7 @@ import {
 import type { SqliteWorkflowChildDispatchOptions } from "./sqlite-workflow-child-dispatch.ts";
 import { migrateSqliteWorkflowChildren } from "./sqlite-workflow-child-schema.ts";
 import { SqliteWorkflowExecutionStore } from "./workflow-execution-store.ts";
+import { oversizedChildVersion } from "./workflow-preparation-failure.test-support.ts";
 
 export const childDispatch: SqliteWorkflowChildDispatchOptions = {
   resolveRoute: ({ parent, node }) => ({
@@ -25,6 +26,55 @@ export const childDispatch: SqliteWorkflowChildDispatchOptions = {
           : "invalid-gate",
   }),
 };
+
+for (const target of ["run_events", "workflow_node_children", "work_items"])
+  test(`SQLite rejected child ${target} failure rolls back its Thread, failed Run, ownership and parent wake together`, async (t) => {
+    const f = await compositionFixture(t, {
+      asset: oversizedChildVersion(),
+      composition: { dispatchChildren: childDispatch },
+    });
+    const predicate =
+      target === "run_events"
+        ? "WHEN json_extract(NEW.event_json,'$.type')='run.failed'"
+        : "";
+    f.database.exec(
+      `CREATE TRIGGER reject_preparation BEFORE INSERT ON ${target} ${predicate} BEGIN SELECT RAISE(ABORT,'fixture_rejected_child'); END`,
+    );
+    const before = snapshot(f);
+    await assert.rejects(f.composition.admitWorkflowNodes(f.input));
+    assert.deepEqual(snapshot(f), before);
+    f.database.exec("DROP TRIGGER reject_preparation");
+    await f.composition.admitWorkflowNodes(f.input);
+    const child = f.database
+      .prepare(
+        "SELECT child_run_id,wake_work_item_id FROM workflow_node_children",
+      )
+      .get()!;
+    assert.equal(
+      (await f.store.loadRun({
+        tenantId: f.input.tenantId,
+        runId: String(child.child_run_id),
+      }))!.status,
+      "failed",
+    );
+    assert.equal(
+      f.database
+        .prepare("SELECT count(*) AS n FROM work_items WHERE work_item_id=?")
+        .get(child.wake_work_item_id!)!.n,
+      1,
+    );
+    await f.composition.admitWorkflowNodes(f.input);
+    assert.equal(
+      f.database
+        .prepare("SELECT count(*) AS n FROM workflow_node_children")
+        .get()!.n,
+      1,
+    );
+    assert.equal(
+      (await f.composition.finalizeWorkflowRun(f.input)).run.status,
+      "failed",
+    );
+  });
 
 test("SQLite standalone DAG writers cannot overwrite the lease-owned state of a real Workflow Run", async (t) => {
   const f = await compositionFixture(t, {

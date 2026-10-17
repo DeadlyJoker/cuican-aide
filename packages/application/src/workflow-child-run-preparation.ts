@@ -20,8 +20,7 @@ export type WorkflowChildReviewContext = readonly Readonly<{
   comment: string | null;
 }>[];
 
-/** Immutable instruction/schema prefix first; variable input last. No IDs or clocks in model content. */
-export function prepareWorkflowChildRun(input: {
+type WorkflowChildRunInput = {
   parent: RunState;
   node: WorkflowNodeDefinition;
   claimId: string;
@@ -31,12 +30,59 @@ export function prepareWorkflowChildRun(input: {
   nextId(): string;
   digester: WorkflowContentDigester;
   reviewContext?: WorkflowChildReviewContext;
-}): {
+};
+type WorkflowChildRunCommits = {
   thread: CommitThreadInput;
   run: CommitRunInput;
   childThreadId: string;
   childRunId: string;
-} {
+};
+export type WorkflowChildPreparationFailureCode =
+  | "workflow_child_prompt_limit"
+  | "workflow_review_context_limit";
+type ChildPreparation =
+  | Readonly<{ kind: "ready"; fragments: readonly string[] }>
+  | Readonly<{ kind: "failed"; code: WorkflowChildPreparationFailureCode }>;
+
+export function isWorkflowChildPreparationFailureCode(
+  code: unknown,
+): code is WorkflowChildPreparationFailureCode {
+  return (
+    code === "workflow_child_prompt_limit" ||
+    code === "workflow_review_context_limit"
+  );
+}
+
+/** Pure preparation retains its fail-before-ID contract for validation callers. */
+export function prepareWorkflowChildRun(
+  input: WorkflowChildRunInput,
+): WorkflowChildRunCommits {
+  return childCommits(input, {
+    kind: "ready",
+    fragments: childModelFragments(input),
+  });
+}
+
+/** Atomic handoff records known prompt-budget rejection as a terminal child, never a model work item. */
+export function prepareWorkflowChildHandoff(
+  input: WorkflowChildRunInput,
+): WorkflowChildRunCommits {
+  let preparation: ChildPreparation;
+  try {
+    preparation = { kind: "ready", fragments: childModelFragments(input) };
+  } catch (error) {
+    if (
+      !(error instanceof RunStoreError) ||
+      !isWorkflowChildPreparationFailureCode(error.code)
+    )
+      throw error;
+    preparation = { kind: "failed", code: error.code };
+  }
+  return childCommits(input, preparation);
+}
+
+/** Immutable instruction/schema prefix first; variable input last. No IDs or clocks in model content. */
+function childModelFragments(input: WorkflowChildRunInput): string[] {
   if (input.node.kind === "humanGate")
     throw new RunStoreError("workflow_child_gate_unsupported");
   const agentVersionId =
@@ -72,7 +118,14 @@ export function prepareWorkflowChildRun(input: {
     MAX_WORKFLOW_CHILD_PROMPT_BYTES
   )
     throw new RunStoreError("workflow_child_prompt_limit");
-  const fragments = content.flatMap(splitWorkflowModelFragment);
+  return content.flatMap(splitWorkflowModelFragment);
+}
+
+function childCommits(
+  input: WorkflowChildRunInput,
+  preparation: ChildPreparation,
+): WorkflowChildRunCommits {
+  const fragments = preparation.kind === "ready" ? preparation.fragments : [];
   const childThreadId = input.nextId(),
     childRunId = input.nextId();
   const identity = { tenantId: input.parent.tenantId, threadId: childThreadId };
@@ -125,7 +178,18 @@ export function prepareWorkflowChildRun(input: {
       canonicalJson({
         nodeId: input.node.nodeId,
         route: input.route,
-        fragments,
+        ...(preparation.kind === "ready"
+          ? { fragments }
+          : {
+              rejectedPreparation: {
+                code: preparation.code,
+                nodeDigest: input.digester.sha256(canonicalJson(input.node)),
+                valueDigest: input.digester.sha256(canonicalJson(input.value)),
+                reviewDigest: input.digester.sha256(
+                  canonicalJson(input.reviewContext ?? []),
+                ),
+              },
+            }),
       }),
     ),
   };
@@ -173,35 +237,47 @@ export function prepareWorkflowChildRun(input: {
       goalBinding: null,
     },
   };
+  const runEvents: CommitRunInput["events"][number][] = [event];
+  if (preparation.kind === "failed")
+    runEvents.push({
+      schemaVersion: "crewon.run-event.v0",
+      identity: { runId: childRunId },
+      eventId: input.nextId(),
+      sequence: 2,
+      occurredAt: input.now,
+      type: "run.failed",
+      data: { code: preparation.code, retryable: false },
+    });
   const run: CommitRunInput = {
     tenantId: input.parent.tenantId,
     idempotency,
     expectedRevision: 0,
-    events: [event],
-    outbox: [
-      {
-        messageId: input.nextId(),
-        tenantId: input.parent.tenantId,
-        runId: childRunId,
-        topic: "run.updated",
-        payload: {
-          eventId: event.eventId,
-          eventType: event.type,
-          throughSequence: 1,
-        },
-        createdAt: input.now,
+    events: runEvents,
+    outbox: runEvents.map((runEvent) => ({
+      messageId: input.nextId(),
+      tenantId: input.parent.tenantId,
+      runId: childRunId,
+      topic: "run.updated",
+      payload: {
+        eventId: runEvent.eventId,
+        eventType: runEvent.type,
+        throughSequence: runEvent.sequence,
       },
-    ],
-    workItems: [
-      {
-        workItemId: input.nextId(),
-        tenantId: input.parent.tenantId,
-        runId: childRunId,
-        kind: "run.execute",
-        payload: { throughSequence: 1 },
-        createdAt: input.now,
-      },
-    ],
+      createdAt: input.now,
+    })),
+    workItems:
+      preparation.kind === "failed"
+        ? []
+        : [
+            {
+              workItemId: input.nextId(),
+              tenantId: input.parent.tenantId,
+              runId: childRunId,
+              kind: "run.execute",
+              payload: { throughSequence: 1 },
+              createdAt: input.now,
+            },
+          ],
   };
   return { childThreadId, childRunId, thread, run };
 }

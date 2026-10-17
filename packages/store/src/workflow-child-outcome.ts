@@ -4,7 +4,10 @@ import {
   type WorkflowValueSchema,
   type WorkflowNodeDefinition,
 } from "@crewon/domain";
-import { RunStoreError } from "@crewon/application";
+import {
+  RunStoreError,
+  isWorkflowChildPreparationFailureCode,
+} from "@crewon/application";
 import { workflowNodeValue } from "./workflow-node-value.ts";
 
 /** Protocol corruption is a storage failure; a known response violating its schema is terminal. */
@@ -24,7 +27,9 @@ export function workflowChildOutcome(input: {
       ? null
       : input.child.status === "canceled"
         ? "workflow_child_canceled"
-        : "workflow_child_failed";
+        : isWorkflowChildPreparationFailureCode(input.child.failure?.code)
+          ? input.child.failure!.code
+          : "workflow_child_failed";
   let value: ReturnType<typeof workflowNodeValue> | null = null;
   if (input.child.status === "completed") {
     try {
