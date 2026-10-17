@@ -413,3 +413,21 @@ SDK 另用真实 HTTP 服务模拟“新节点发现、旧节点处理写入”�
 最终同一次相关回归 37 项、Contracts 全量 765 项、Control Client 全量 283 项、BFF 全量 124 项及架构/实际生产类型图 37 项全部通过，无跳过。Contracts、Client、Control、BFF、Worker 完整类型检查通过，UI/Electron lint 与正式 build 通过，启动入口仍为 326427 字节；实际结果见 [恢复绑定证据](evidence/workflow-recovery-context-2026-10-17.json)。本批没有 UI 源码、CSS 或模型历史修改，不宣称前端切换、真实供应商、完整 UI 或安装版完成。测试仅用独立 Unix Socket PostgreSQL，关闭 fsync，不作为生产性能或断电持久性证据。
 
 下一步直接把这套绑定接入前端不可变提交意图与回放，再贯通后台根提交/发现、审批、取消和结果显示，退役旧 renderer 推进。任意 DAG/input schema、旧记录只读与子 Thread 普通会话归属须一同处理；生产请求级策略、SQLite/桌面、Team、资源/生命周期、自主子 Agent 和安装式插件仍属于完整目标。
+
+## 第二十五批：前端不可变提交与显式恢复命令（2026-10-18）
+
+上一批恢复绑定已提交为 `0be5082f8`。本批直接实现前端命令层 `ControlWorkflowCommands` 和 `ControlWorkflowIntentJournal`，使用现有正式 SDK 的带绑定提交、审批和取消入口；没有增加后台接口、执行引擎、Store 或 schema。模块不 fork Thread、不调用普通 createRun、不推进节点；读取能力和待恢复记录不会自动重放写入。
+
+每条意图独立保存原请求正文、原 start/cancel 幂等键、主 Thread、WorkflowVersion、恢复上下文和时间；审批保存原门身份、输入摘要、完整意见及明确的 auditOnly/descendants-v1 模式。存储写入并读回确认后才发请求，不 trim 意见，不按新输入、最新任务或目录缺失替换旧请求。默认使用 browser localStorage，每条独立 key 避免多窗口覆盖整个数组。单记录最多 64 KiB，扫描最多 4096 个存储 key、最多 32 条本应用意图；并发窗口可以同时越过创建前的数量检查，读取遇到超限会拒绝，不宣称跨进程严格配额或通过驱逐未知意图控制容量。损坏、禁用、配额不足和键冲突均保留可用数据并明确失败。
+
+显式恢复先核对当前上下文，变化时不发送原写请求，不覆盖原意图；原上下文恢复后沿原正文、键、门及模式重放。根提交应答验证 Workflow purpose、主 Thread、版本绑定和 disposition，取消还验证原根身份及实际取消状态；审批验证原门、输入、决定、意见及版本。迟到响应在来源信号取消后保留意图。只有收到已验证应答才移除自己的记录；移除失败时仍返回已经确认的服务端结果，并标记记录保留，不让 UI 将已受理操作误报为新的业务失败。
+
+同一 JS 调度中的重复点击会在异步能力查询之后重新读取存储，避免分配第二个键；跨窗口请求仍由服务端持久幂等和活动任务约束处理，不将 localStorage 当作分布式锁。只拦截同一提交、同一门或同根不更新版本的重复取消，不让旧未知意见/取消挡住不相关的后续动作。原审批结果未知时，用户仍能明确取消已知根任务；旧取消版本过期时，可按已观察的新版本发起新的明确停止动作，保留旧记录且不将新动作当作原请求的恢复。取消不确认或删除旧审批意图，应答保留后台真实状态，accepted cancellation 不等于 canceled。未装配持久能力、未知版本或缺少恢复边界时明确拒绝，不回退旧 renderer 执行。
+
+真实正式前端命令模块经 SDK/Control HTTP、Worker 和独立 PostgreSQL 完成三条集成：提交已入库后丢失应答，改变部署拒绝恢复，恢复原配置并重开 Control 后回放同一根；人工门已提交后丢失应答，重开后保持原意见及后代上下文模式，只执行一次 Producer/Verifier、主 Thread 唯一回复并可续读 terminal SSE；取消已提交后丢失应答，重开后以原 revision 取回 queued/cancelRequested 回执，随后 Worker 才收敛 canceled，零模型调用。另用两个独立命令实例共享 Storage 接口，分别恢复不同会话的未知提交，真实模型 transport 同时进入两个 Producer，最终两根各自唯一回复、归属正确，没有覆盖另一条意图。
+
+最终验证：上述新增三项加上一批恢复绑定/BFF 三项共 6 项通过、无跳过；前端命令/存储与现有 Workflow Panel、进度、结果、导航、旧 Runtime 和执行选择共 8 文件 70 项通过，原视觉快照未更新；架构和生产类型图 37 项通过，Control 完整类型检查、UI/Electron lint、正式 build、仓库边界和格式检查通过。启动入口仍为 326427 字节。初次验证修复了新 SSE 测试缺少 Origin 导致的 403，以及跨包源码 fixture 引用和 NodeNext 类型导入扩展名；没有放宽鉴权、类型图或断言。
+
+本批未修改页面、CSS 或原模型历史。独立命令实例及可重开的内存 Storage 接口不是两个真实浏览器窗口，也不是 browser localStorage/浏览器重启验收；模型为明确合成 transport，非真实供应商。临时 PostgreSQL 仅 Unix Socket、fsync 关闭，业务 schema 和其他客户端归零后已关闭并确认退出码 3；没有访问用户数据库，不声明生产性能或断电持久性。证据见 [前端命令恢复](evidence/workflow-frontend-commands-2026-10-18.json)。
+
+`CommandWorkspace` 尚未使用新命令模块，页面仍走旧 `ControlWorkflowRuntime`，本批不代表前端执行权已经迁移。下一批必须接已有目录、选中版本/已知根快照和源绑定状态所有者，将不可变意图恢复入口、通用 schema 输入、审批/取消及结果显示接入真实页面，并退出旧列表读取推进；不再增设后台前置能力。旧记录只读、子 Thread 目录归属、生产身份和 SQLite/桌面部署差异仍需各自验收；Team、工具资源/生命周期、自主子 Agent 与安装式插件继续属于完整目标。

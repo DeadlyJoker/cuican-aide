@@ -1,0 +1,150 @@
+{
+  "schemaVersion": "crewon.evidence.workflow-frontend-commands.v1",
+  "date": "2026-10-18",
+  "baseCommit": "0be5082f8fe5d665ec4984cdc41599bed4d38c85",
+  "scope": {
+    "frontendCommandModule": true,
+    "newBackendApi": false,
+    "storeOrProtocolChange": false,
+    "commandWorkspaceConnected": false,
+    "rendererAdvancerRetired": false,
+    "browserWindowOrLocalStorageRestartVerified": false,
+    "realProviderVerified": false,
+    "cssChanged": false
+  },
+  "intentBounds": {
+    "entryUtf8Bytes": 65536,
+    "storageKeysScanned": 4096,
+    "intentsDiscovered": 32,
+    "crossWindowGlobalCapacityLock": false,
+    "automaticWriteReplay": false
+  },
+  "diagnostics": [
+    {
+      "case": "frontend-intent-admission-review-recovery",
+      "rootCount": 1,
+      "modelCalls": ["agent", "verifier"],
+      "mainReplies": 1,
+      "originalBodiesAndKeys": true,
+      "terminalSse": true
+    },
+    {
+      "case": "frontend-intent-cancel-recovery",
+      "originalRevision": 1,
+      "acceptedStatus": "queued",
+      "terminalStatus": "canceled",
+      "modelCalls": 0
+    },
+    {
+      "case": "two-frontend-owners-parallel-results",
+      "roots": 2,
+      "peakProducerModels": 2,
+      "modelCalls": 4,
+      "repliesPerMainThread": 1,
+      "crossAttribution": false
+    },
+    {
+      "case": "guarded-workflow-unknown-recovery",
+      "roots": 1,
+      "models": ["agent", "verifier"],
+      "assistantReplies": 1,
+      "originalContextRestored": true
+    },
+    {
+      "case": "browser-bff-workflow-context",
+      "guardedMutations": 7,
+      "mismatchWrites": 0,
+      "droppedHeaderWrites": 0,
+      "models": ["agent"],
+      "browserCsrfRejectedBeforeForward": true
+    }
+  ],
+  "checks": {
+    "postgresRelated": {
+      "passed": 6,
+      "failed": 0,
+      "skipped": 0
+    },
+    "uiRelated": {
+      "files": 8,
+      "passed": 70,
+      "failed": 0,
+      "snapshotsUpdated": false
+    },
+    "architecture": {
+      "passed": 37,
+      "failed": 0
+    },
+    "controlFullTypes": "passed",
+    "uiBuild": {
+      "passed": true,
+      "eagerJavaScriptBytes": 326427
+    },
+    "boundary": "passed",
+    "uiRendererAndElectronLint": "passed"
+  },
+  "sourceSha256": {
+    "apps/crewon-ui/src/lib/control-runtime/controlWorkflowCommands.ts": "c73fed78a2b0cc36527306e101883af798c3aff391f1f96f86effb144e450036",
+    "apps/crewon-ui/src/lib/control-runtime/controlWorkflowIntentJournal.ts": "329e99de88433047fd2c978c43ba75f0cab31685e4dd266c57e47b350bbc8bba",
+    "apps/crewon-ui/src/lib/control-runtime/controlWorkflowCommands.test.ts": "559de7cb6c4f56ac62cdad7cb5ee4be44fb14113b4e718a082d6f3aa7bd48eb6",
+    "apps/crewon-ui/src/lib/control-runtime/controlWorkflowIntentJournal.test.ts": "f791cb33f3c6c05377fc0061e8ff8f14d0b2ab004fc1062d5cd73e14a0ccc59f",
+    "apps/crewon-ui/src/lib/control-runtime/controlWorkflowCommands.test-support.ts": "2a3698fcd85b2ef0be794d0f736ba1d82a948fa01668bbd7adf7ce46275e490d",
+    "apps/control-api/src/postgres-workflow-frontend-commands.integration.test.ts": "b36e9c010241dd7cc9db1f3f27ad9fdb0a7cfa2d0e484f7d31ede7174c8c032c"
+  },
+  "logSha256": {
+    "postgresRelated": {
+      "path": "/tmp/crewon-workflow-frontend-commands-pg-verified.log",
+      "sha256": "d6b38dd6b186aad49e7b3bc8e762b9c367450b2d537f7c207d9dab996b5d9b07"
+    },
+    "uiRelated": {
+      "path": "/tmp/crewon-workflow-frontend-commands-ui-verified.log",
+      "sha256": "1adc1521d4aa5444405d0fad9ff633dc01639c761a1df72908bab96317521ce3"
+    },
+    "architecture": {
+      "path": "/tmp/crewon-workflow-frontend-commands-architecture-final.log",
+      "sha256": "5327f80f7e11d73edc5e481bd2356149173185d0e6c77136971cc003c989342f"
+    },
+    "controlTypes": {
+      "path": "/tmp/crewon-workflow-frontend-commands-control-types-verified.log",
+      "sha256": "4156428d53b3f97d9de611b4b2841dec260918eb4571ed5fa9c63ac97398aea0"
+    },
+    "uiBuild": {
+      "path": "/tmp/crewon-workflow-frontend-commands-ui-build-verified.log",
+      "sha256": "673f70ffee6547805c4c4ee004f142ed7ddc3121dbc342eb46f89407ba4a9ee2"
+    },
+    "boundary": {
+      "path": "/tmp/crewon-workflow-frontend-commands-boundary.log",
+      "sha256": "bc758e5932a9f2268662d8f0b3ea26cd6c729eac0eb2bc610fd806b55f7bbc6c"
+    },
+    "uiLint": {
+      "path": "/tmp/crewon-workflow-frontend-commands-ui-types-last2.log",
+      "sha256": "81146a96524321a864257d9c4668a0dbd5ebb7f7cd0567ecd1086416bfa5e5de"
+    }
+  },
+  "postgresCleanup": {
+    "root": "/tmp/crewon-wf-pg-ai1hte94",
+    "bindir": "/opt/homebrew/Cellar/postgresql@18/18.6/bin",
+    "url": "postgresql://crewon_workflow_test@localhost/crewon_workflow_test?host=%2Ftmp%2Fcrewon-wf-pg-ai1hte94%2Fsocket&port=55439",
+    "running": false,
+    "validationDatabase": "crewon_workflow_utf8_test",
+    "startedAt": "2026-10-18T03:17:06.950029+08:00",
+    "testSchemasRemaining": 0,
+    "otherClientsRemaining": 0,
+    "stoppedAt": "2026-10-18T03:19:18.047+08:00",
+    "statusExitCode": 3,
+    "dataDirectory": "/tmp/crewon-wf-pg-ai1hte94/data",
+    "listenAddresses": "",
+    "fsync": "off",
+    "serverVersion": "PostgreSQL 18.6 (Homebrew) on aarch64-apple-darwin24.6.0, compiled by Apple clang version 17.0.0 (clang-1700.6.4.2), 64-bit",
+    "checkedAt": "2026-10-18T03:19:15.695076+08:00",
+    "userSchemas": 0,
+    "otherClients": 0
+  },
+  "limits": [
+    "The real formal SDK, Control HTTP, Worker and PostgreSQL were used with a synthetic model transport.",
+    "Storage was a shared in-memory Storage interface reconstructed across command owners, not real browser persistence.",
+    "No actual browser, installed desktop, real account, TLS, fsync power-loss, or production performance acceptance.",
+    "Product CommandWorkspace still uses the legacy renderer Workflow runtime.",
+    "Each-window independent intent keys prevent whole-array overwrite; localStorage is not a distributed execution lock."
+  ]
+}
