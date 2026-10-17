@@ -1,3 +1,8 @@
+import {
+  POSTGRES_WORKFLOW_CHILD_COLUMNS,
+  postgresWorkflowChildConstraints,
+  normalizePostgresWorkflowConstraint as normalize,
+} from "./postgres-workflow-child-membership-schema.ts";
 import type { PoolClient } from "pg";
 import { RunStoreError } from "@crewon/application";
 import { migratePostgresWorkflowExecutions } from "./workflow-execution-schema.ts";
@@ -89,8 +94,7 @@ export async function assertPostgresWorkflowCompositionSchema(
       "tenant_id:text!,run_id:text!,node_id:text!,claim_id:text!,step_id:text!,attempt_id:text,work_item_id:text!,lease_epoch:bigint!,operation_id:text!,input_digest:text!,input_json:text!,output_digest:text,output_json:text,settlement_fingerprint:text",
     workflow_node_passes:
       "tenant_id:text!,run_id:text!,operation_id:text!,work_item_id:text!,fingerprint:text!,node_ids_json:jsonb!",
-    workflow_node_children:
-      "tenant_id:text!,run_id:text!,node_id:text!,claim_id:text!,child_thread_id:text!,child_run_id:text!,input_digest:text!,wake_work_item_id:text!,wake_json:jsonb!",
+    workflow_node_children: POSTGRES_WORKFLOW_CHILD_COLUMNS,
   };
   const cols = await client.query<{
     table_name: string;
@@ -143,19 +147,8 @@ export async function assertPostgresWorkflowCompositionSchema(
       `FOREIGN KEY(tenant_id,run_id) REFERENCES ${sql}.workflow_executions(tenant_id,run_id)`,
       `FOREIGN KEY(work_item_id) REFERENCES ${sql}.work_items(work_item_id)`,
     ],
-    workflow_node_children: [
-      "PRIMARY KEY(tenant_id,run_id,node_id)",
-      "UNIQUE(claim_id)",
-      "UNIQUE(child_thread_id)",
-      "UNIQUE(child_run_id)",
-      "UNIQUE(wake_work_item_id)",
-      `FOREIGN KEY(tenant_id,run_id,node_id) REFERENCES ${sql}.workflow_node_admissions(tenant_id,run_id,node_id)`,
-      `FOREIGN KEY(tenant_id,child_thread_id) REFERENCES ${sql}.threads(tenant_id,thread_id)`,
-      `FOREIGN KEY(tenant_id,child_run_id) REFERENCES ${sql}.run_snapshots(tenant_id,run_id)`,
-    ],
+    workflow_node_children: [...postgresWorkflowChildConstraints(schema)],
   };
-  const normalize = (value: string) =>
-    value.replaceAll(/[\s()"']/gu, "").toLowerCase();
   for (const [table, definitions] of Object.entries(required)) {
     const rows = constraints.rows.filter((c) => c.name === table);
     if (

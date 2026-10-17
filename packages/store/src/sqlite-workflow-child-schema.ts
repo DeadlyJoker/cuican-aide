@@ -66,6 +66,37 @@ export function assertSqliteWorkflowChildSchema(db: DatabaseSync): boolean {
     if (!row || normalize(String(row.sql)) !== normalize(sql!))
       throw new RunStoreError("workflow_child_schema_corrupt");
   }
+  assertSqliteWorkflowChildVersion(db);
+
+  return true;
+}
+/** Directory ownership needs the identity tables, not a functioning terminal wake. */
+export function assertSqliteWorkflowChildMembershipSchema(
+  db: DatabaseSync,
+): boolean {
+  const observed = db
+    .prepare(
+      "SELECT name,sql FROM sqlite_master WHERE name IN ('workflow_node_children','workflow_child_schema','workflow_child_terminal_wake')",
+    )
+    .all();
+  const rows = observed.filter(
+    (row) => row.name !== "workflow_child_terminal_wake",
+  );
+  if (rows.length === 0 && observed.length === 0) return false;
+  if (rows.length !== 2)
+    throw new RunStoreError("workflow_child_schema_corrupt");
+  for (const [name, sql] of [
+    ["workflow_node_children", TABLE],
+    ["workflow_child_schema", VERSION],
+  ]) {
+    const row = rows.find((value) => value.name === name);
+    if (!row || normalize(String(row.sql)) !== normalize(sql!))
+      throw new RunStoreError("workflow_child_schema_corrupt");
+  }
+  assertSqliteWorkflowChildVersion(db);
+  return true;
+}
+function assertSqliteWorkflowChildVersion(db: DatabaseSync): void {
   const versions = db
     .prepare("SELECT singleton,version FROM workflow_child_schema LIMIT 2")
     .all();
@@ -75,7 +106,6 @@ export function assertSqliteWorkflowChildSchema(db: DatabaseSync): boolean {
     versions[0]!.version !== 1
   )
     throw new RunStoreError("workflow_child_schema_unsupported");
-  return true;
 }
 function normalize(sql: string) {
   return sql.trim().replace(/;$/u, "");

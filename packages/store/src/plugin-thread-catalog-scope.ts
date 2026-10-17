@@ -1,3 +1,7 @@
+import {
+  sqliteWorkflowChildCatalogTable,
+  postgresWorkflowChildCatalogTable,
+} from "./workflow-thread-catalog-scope.ts";
 import type { DatabaseSync } from "node:sqlite";
 import type { PoolClient } from "pg";
 import {
@@ -15,12 +19,15 @@ export type OrdinaryThreadCatalogTables = Readonly<{
   conversations?: string;
   officeBindings?: string;
   workspaces?: string;
+  workflowChildren?: string;
 }>;
 
 export function sqliteOrdinaryThreadCatalogTables(
   db: DatabaseSync,
 ): OrdinaryThreadCatalogTables {
+  const workflowChildren = sqliteWorkflowChildCatalogTable(db);
   return {
+    ...(workflowChildren === undefined ? {} : { workflowChildren }),
     officeBindings: "office_thread_bindings",
     ...(hasSqliteConversationSchema(db)
       ? { conversations: "project_conversation_bindings" }
@@ -36,7 +43,12 @@ export async function postgresOrdinaryThreadCatalogTables(
   schema: string,
 ): Promise<OrdinaryThreadCatalogTables> {
   const prefix = `${creativeProjectSchemaName(schema)}.`;
+  const workflowChildren = await postgresWorkflowChildCatalogTable(
+    client,
+    schema,
+  );
   return {
+    ...(workflowChildren === undefined ? {} : { workflowChildren }),
     officeBindings: `${prefix}office_thread_bindings`,
     ...((await hasPostgresConversationSchema(client, schema))
       ? { conversations: `${prefix}project_conversation_bindings` }

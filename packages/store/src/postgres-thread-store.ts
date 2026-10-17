@@ -1,4 +1,4 @@
-import { postgresOrdinaryThreadCatalogTables } from "./plugin-thread-catalog-scope.ts";
+import { readPostgresOrdinaryThreadList } from "./ordinary-thread-list-snapshot.ts";
 import { PostgresOfficeThreadStore } from "./postgres-office-thread-store.ts";
 import { PostgresPluginProjectWorkspaceStore } from "./postgres-plugin-project-workspace-store.ts";
 import {
@@ -14,7 +14,6 @@ import type {
 import { assertOfficeThreadReplay, officeThreadLockKey } from "./office-thread-binding.ts";
 import { advisoryLock, threadLockKey } from "./postgres-thread-lock.ts";
 import type { BindOfficeThreadInput, OfficeThreadLocator } from "@crewon/application";
-import { threadListSql } from "./thread-list-query.ts";
 import { PostgresThreadMessageWindowStore } from "./postgres-thread-message-window.ts";
 import type { ThreadMessageWindowStore } from "@crewon/application";
 import {
@@ -293,25 +292,16 @@ export class PostgresThreadStore
       const client = await this.pool.connect();
       let result;
       try {
-        const ownership = await postgresOrdinaryThreadCatalogTables(
+        result = await readPostgresOrdinaryThreadList(
           client,
           this.schema,
-        );
-        const statement = threadListSql(
           query,
-          this.#tableSql("threads"),
-          "postgres",
-          ownership,
-        );
-        result = await client.query<PostgresThreadRow>(
-          statement.sql,
-          statement.values,
         );
       } finally {
         client.release();
       }
-      if (query.after != null) result.rows.reverse();
-      return result.rows.map((row) =>
+      if (query.after != null) result.reverse();
+      return result.map((row) =>
         decodePostgresThreadState(row, {
           tenantId: query.tenantId,
           threadId: row.thread_id,

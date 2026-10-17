@@ -1,0 +1,148 @@
+{
+  "date": "2026-10-18",
+  "baselineCommit": "02a4301268b4540b1c4e5e271e94e28a7ee7bdb9",
+  "branch": "codex/runtime-concurrency-result-streaming",
+  "scope": "Persisted Workflow child ownership in ordinary catalogs and consistent schema-discovery/page read snapshots",
+  "before": {
+    "backend": "sqlite",
+    "expectedOrdinaryThreads": 3,
+    "observedOrdinaryThreads": 5,
+    "leakedChildren": 2,
+    "validation": "real Control/SDK/Worker with synthetic model; assertion reproduced before implementation"
+  },
+  "regression": {
+    "tests": 358,
+    "suites": 19,
+    "pass": 358,
+    "fail": 0,
+    "cancelled": 0,
+    "skipped": 0,
+    "command": "Node 24.18.1 --experimental-strip-types --test --test-concurrency=1",
+    "files": [
+      "apps/control-api/src/workflow-thread-catalog.integration.test.ts",
+      "apps/control-api/src/workflow-thread-catalog-snapshot.integration.test.ts",
+      "apps/control-api/src/thread-catalog-route.test.ts",
+      "apps/control-api/src/plugin-thread-catalog-isolation.test.ts",
+      "apps/control-api/src/standalone-office-thread-e2e.test.ts",
+      "apps/control-api/src/postgres-workflow-renderer-runtime.integration.test.ts",
+      "apps/control-api/src/postgres-workflow-control.integration.test.ts",
+      "packages/store/src/workflow-thread-catalog-scope.test.ts",
+      "packages/store/src/thread-catalog-selection.test.ts",
+      "packages/store/src/team-thread-catalog-isolation.test.ts",
+      "packages/store/src/plugin-thread-catalog-scope.integration.test.ts",
+      "packages/store/src/postgres-thread-store.test.ts",
+      "packages/store/src/sqlite-run-store.test.ts",
+      "packages/store/src/office-thread-store.test.ts",
+      "packages/store/src/postgres-office-thread-store.test.ts",
+      "packages/store/src/postgres-workflow-run-composition.test.ts",
+      "packages/store/src/sqlite-workflow-child-dispatch.test.ts",
+      "packages/store/src/postgres-workflow-run-query.test.ts",
+      "packages/store/src/sqlite-workflow-run-query.test.ts",
+      "packages/store/src/postgres-workflow-child-wake.test.ts",
+      "packages/store/src/sqlite-workflow-composition-authority.test.ts"
+    ],
+    "postgres": "owned Unix-socket PostgreSQL 18.6, fsync=off; not production durability/performance"
+  },
+  "frontEndCatalogState": {
+    "files": 1,
+    "passed": 4,
+    "command": "pnpm --filter @crewon/ui exec vitest run src/lib/control-runtime/controlThreadCatalog.test.ts --maxWorkers=1",
+    "uiSourceChanged": false
+  },
+  "boundaries": {
+    "tests": 37,
+    "suites": 0,
+    "pass": 37,
+    "fail": 0,
+    "cancelled": 0,
+    "skipped": 0
+  },
+  "typecheck": {
+    "passed": true,
+    "packages": ["packages/store", "apps/runtime-worker", "apps/control-api"]
+  },
+  "cases": [
+    {
+      "backends": ["sqlite", "postgres"],
+      "roots": 2,
+      "children": 4,
+      "ordinaryThreads": 3,
+      "modelCalls": 4,
+      "coverage": [
+        "filter before LIMIT and cursor",
+        "same-title ordinary thread retained",
+        "search with and without excludeForks",
+        "older/newer page navigation",
+        "foreign tenant read returns 404",
+        "qualified child Thread/Transcript read",
+        "child forkedFromThreadId remains null",
+        "main original user input and one final reply",
+        "completion and archive",
+        "server restart and execution disabled",
+        "ordinary navigation and qualified Thread history survive missing/disabled wake without repair"
+      ]
+    },
+    {
+      "backends": ["sqlite", "postgres"],
+      "coverage": [
+        "first capability installation and real Thread publication between ownership discovery and page SELECT",
+        "captured response sees only prior data; next snapshot sees publication",
+        "no model requests during catalog/snapshot-only setup"
+      ]
+    },
+    {
+      "backend": "postgres",
+      "coverage": [
+        "lost BEGIN reply while actual read-only transaction exists",
+        "ROLLBACK before pool return restores transaction_read_only=off and default read committed in fixture"
+      ]
+    },
+    {
+      "backend": "sqlite",
+      "coverage": [
+        "caller-owned write transaction is never committed or rolled back by the reader",
+        "unsupported version remains unchanged until caller rollback",
+        "visible-list and child Thread identity index seeks, no temporary sorting"
+      ]
+    },
+    {
+      "backends": ["sqlite", "postgres"],
+      "coverage": [
+        "future/partial ownership schema rejected without migration/repair",
+        "orphan wake marker cannot silently disable ownership filtering"
+      ]
+    }
+  ],
+  "design": {
+    "authority": "existing workflow_node_children tenant/child_thread_id membership; never title or inferred fork",
+    "snapshot": "SQLite synchronous short read transaction, reused caller transaction; PostgreSQL repeatable-read read-only",
+    "boundedRead": "at most two fixed Workflow PostgreSQL metadata queries per Store page read, not per entire HTTP search; bounded column/constraint candidates; no per-child Run/model-history fetch",
+    "executionSafety": "existing full scheduler schema/wake checks remain; shared identity constants/constraints avoid a second contract",
+    "dataCompatibility": "no SQL schema, HTTP/event DTO or data rewrite; ordinary navigation intentionally excludes persisted background children"
+  },
+  "fixtureCorrections": [
+    "restore intercepted pg.query before client.release so pool callbacks and cleanup complete; stopped only identified stuck test runner/child",
+    "explicitly install children schema for the two SQLite authority fixtures",
+    "respect existing PostgreSQL globally unique Thread IDs; use a valid distinct foreign-tenant ID rather than impossible duplicate data"
+  ],
+  "cleanup": {
+    "dataDirectory": "/tmp/crewon-wf-pg-ai1hte94/data",
+    "listenAddresses": "",
+    "otherClients": 0,
+    "userSchemas": [],
+    "statusExitCode": 3,
+    "stopped": true
+  },
+  "remaining": [
+    "Team still coordinated in renderer; preserve history forks, manager planning, bounded failure recovery, Goal semantics and final manager/member response during backend migration",
+    "default desktop automatic publication/activation/private Workflow grant provisioning",
+    "production request-level Workflow policy",
+    "tool resource/lifecycle convergence",
+    "autonomous subagent limits and full installed-plugin/product acceptance"
+  ],
+  "limits": [
+    "synthetic model and owned local services; no real provider or account acceptance",
+    "Node/API and existing front-end state tests, not new browser DOM/visual or installed desktop acceptance",
+    "not the entire repository/UI/plugin suite and no latency or bundle-size improvement claim"
+  ]
+}

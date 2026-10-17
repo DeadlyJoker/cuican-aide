@@ -34,7 +34,7 @@ JSON 的形状与下方 `workflow` 对象一致，不包含 TypeScript 的 `sati
 
 目录读取复用原定义表，不迁移、不注册 Thread、不认领或推进任务。Store 每页至多解码 8 MiB 定义、单份仍为 Domain 原 2 MiB 上限；先选有界身份页再读取定义，并在数据库传回前过滤字节预算。每份定义只在 Store 校验并提取摘要，Application/Control 不传递或重复解码整份定义。HTTP/SDK 响应预算为 1 MiB，只返回身份、摘要、名称、描述和创建时间。超过定义页预算时应使用更小页长读取，不能截断定义或伪造摘要。
 
-Control 前端现已使用有界目录、根 Run 查询、后台提交、订阅恢复和审批意见；简单 prompt 与通用 JSON schema 均按冻结定义处理。旧 renderer 执行记录只读，不重发旧任务。不得为恢复新任务再增加隐藏 Thread/Message 注册表，也不能逐个扫描所有普通会话拼根任务目录。子 Thread 在普通会话目录中的归属仍需下一阶段处理。
+Control 前端现已使用有界目录、根 Run 查询、后台提交、订阅恢复和审批意见；简单 prompt 与通用 JSON schema 均按冻结定义处理。旧 renderer 执行记录只读，不重发旧任务。不得为恢复新任务再增加隐藏 Thread/Message 注册表，也不能逐个扫描所有普通会话拼根任务目录。新 Workflow 子 Thread 按持久 `workflow_node_children` 归属从普通会话目录及搜索中过滤，不按标题或伪造 fork 字段判断；任务中的授权详情读取仍可用。
 
 ## 根任务查询与恢复边界
 
@@ -220,4 +220,12 @@ SDK 的 `WorkflowMutationRequestOptions.workflowRecoveryContext` 会同时携带
 
 未知写入恢复仍以原业务回执为准。前端集成必须在首次发送前保留原比较标识、完整不可变 body 和原幂等键/门身份，恢复时核验当前上下文并回放同一请求，不换键、不猜最新任务、不因目录没有记录或某次 400/404/409/503 就判定原请求未入库。重启后相同配置的标识稳定；配置变化时保留原意图和未知状态，不能把新标识覆盖到旧意图后自动重发。标识使用可信逻辑 authorityId 与 namespace，不是物理数据库指纹；独立部署须使用独立逻辑权威身份。
 
-Control 前端已实现意图持久化和后台执行权切换，接入有界目录、已知根快照、流恢复、通用 input schema 和旧记录只读边界。子 Thread 目录归属、production 请求级 Workflow 策略、桌面自动配置仍未完成；显式意见上下文须保持 Control/Worker 协调升级要求。
+Control 前端已实现意图持久化和后台执行权切换，接入有界目录、已知根快照、流恢复、通用 input schema 和旧记录只读边界。子 Thread 已按持久父子权威退出普通目录；production 请求级 Workflow 策略和桌面自动配置仍未完成；显式意见上下文须保持 Control/Worker 协调升级要求。
+
+## 子任务目录与只读快照
+
+普通 `listThreads` / Thread catalog 在游标与 LIMIT 前排除已持久关联的 Workflow 子 Thread。同名普通会话、主会话、明确授权的子 Thread 详情及其历史仍可读取；新子任务的 `forkedFromThreadId` 保持原来的 null，不伪装成历史 fork。不增加目录注册表或读取时执行推进。关闭 Workflow 执行配置、子任务完成或归档后，归属仍存在并继续过滤。
+
+SQLite 在同步短读事务中检查归属表并读取页面；已有调用者事务仍由调用者提交或回滚。PostgreSQL 对同一次目录读取使用 repeatable-read 只读事务，避免首次安装执行表和新建 Thread 恰好发生在表发现与分页查询之间。每页是独立快照；不是整个翻页过程的长事务。
+
+目录只核对既有归属表的版本、字段和身份约束，不要求唤醒触发器健康，也不逐个加载子 Run、模型历史或节点输入。每次 Store 页面读取的 PG Workflow 归属检查使用固定至多两次有界 metadata 查询（不代表整次 HTTP 搜索只有两次 SQL）；SQLite 的相关排除仍使用现有可见页索引和 child Thread 唯一索引。部分/未来归属 schema 和遗留的孤立唤醒标记拒绝读取，不通过修复、推断标题或省略过滤继续返回。执行调度继续使用原完整 schema / wake 校验，目录可读不代表任务可执行。

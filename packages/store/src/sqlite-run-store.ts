@@ -1,6 +1,6 @@
 import { normalizeSqliteError } from "./sqlite-errors.ts";
 import { SqliteWorkflowRunQueryStore } from "./sqlite-workflow-run-query.ts";
-import { sqliteOrdinaryThreadCatalogTables } from "./plugin-thread-catalog-scope.ts";
+import { readSqliteOrdinaryThreadList } from "./ordinary-thread-list-snapshot.ts";
 import { SqliteProjectAssetV2RecoveryStore } from "./project-asset-vtwo-recovery-store.ts";
 import { SqliteProjectMediaInputStageStore } from "./project-media-input-stage-store.ts";
 import { SqliteProjectAssetUiIntentJournalStore } from "./project-asset-ui-intent-sqlite-store.ts";
@@ -91,7 +91,6 @@ import {
   listSqliteModelCalls,
 } from "./sqlite-model-call-store.ts";
 import { readSqliteActiveRun } from "./sqlite-active-run-read.ts";
-import { threadListSql } from "./thread-list-query.ts";
 import { wakeSqliteCanceledReconciliation } from "./sqlite-reconciliation-cancellation-wake.ts";
 import { signalSqliteWorkflowCancellationRequest } from "./sqlite-workflow-cancellation.ts";
 import {
@@ -2332,15 +2331,10 @@ export class SqliteRunStore implements DomainStore {
     this.#assertOpen();
     validateThreadListQuery(query);
     try {
-      const statement = threadListSql(
+      const rows = readSqliteOrdinaryThreadList(
+        this.#database,
         query,
-        "threads",
-        "sqlite",
-        sqliteOrdinaryThreadCatalogTables(this.#database),
-      );
-      const rows = this.#database
-        .prepare(statement.sql)
-        .all(...statement.values) as unknown as ThreadSnapshotRow[];
+      ) as unknown as ThreadSnapshotRow[];
       if (query.after != null) rows.reverse();
       return rows.map((row) =>
         decodeStoredThreadState(row, {
