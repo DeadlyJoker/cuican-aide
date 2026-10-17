@@ -1,6 +1,10 @@
 import { WorkflowControlClient } from "./workflow-control-client.ts";
 import type {
   WorkflowGateLocator,
+  WorkflowReviewCapability,
+  WorkflowHumanGateReviewResponse,
+  WorkflowHumanGateReviewMutationResponse,
+  ReviewWorkflowHumanGateRequest,
   WorkflowRunSnapshotResponse,
   WorkflowHumanGateResponse,
   WorkflowHumanGateMutationResponse,
@@ -1323,6 +1327,28 @@ export class ControlApiClient {
     });
   }
 
+  getWorkflowReviewCapability(
+    options: ControlApiRequestOptions = {},
+  ): Promise<WorkflowReviewCapability> {
+    return this.#workflowClient().getWorkflowReviewCapability(options);
+  }
+  getWorkflowHumanGateReview(
+    locator: WorkflowGateLocator,
+    options: ControlApiRequestOptions = {},
+  ): Promise<WorkflowHumanGateReviewResponse> {
+    return this.#workflowClient().getWorkflowHumanGateReview(locator, options);
+  }
+  reviewWorkflowHumanGate(
+    locator: WorkflowGateLocator,
+    body: ReviewWorkflowHumanGateRequest,
+    options: ControlApiRequestOptions = {},
+  ): Promise<WorkflowHumanGateReviewMutationResponse> {
+    return this.#workflowClient().reviewWorkflowHumanGate(
+      locator,
+      body,
+      options,
+    );
+  }
   getWorkflowExecutionCapability(
     options: ControlApiRequestOptions = {},
   ): Promise<WorkflowExecutionCapability> {

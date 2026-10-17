@@ -2,11 +2,17 @@ import type { FastifyInstance } from "fastify";
 import { ApplicationError } from "@crewon/application";
 import type {
   WorkflowHumanGateApplicationService,
+  WorkflowHumanGateReviewApplicationService,
   WorkflowRunQueryService,
   WorkflowRunApplicationService,
 } from "@crewon/application";
 import {
   parseRunId,
+  parseReviewWorkflowHumanGateRequest,
+  parseWorkflowHumanGateReviewResponse,
+  parseWorkflowHumanGateReviewMutationResponse,
+  parseWorkflowReviewCapability,
+  MAX_WORKFLOW_GATE_REVIEW_REQUEST_BYTES,
   parseWorkflowGateLocator,
   parseDecideWorkflowHumanGateRequest,
   parseWorkflowRunSnapshotResponse,
@@ -19,6 +25,10 @@ import { WorkspaceControlUnavailableError } from "./control-api-errors.ts";
 import { requestContext } from "./request-context.ts";
 
 export type WorkflowControlServices = {
+  workflowHumanGateReviews?: Pick<
+    WorkflowHumanGateReviewApplicationService,
+    "getReview" | "reviewGate"
+  > | null;
   workflowQueries?: Pick<
     WorkflowRunQueryService,
     "getWorkflowRunSnapshot"
@@ -51,6 +61,17 @@ export function registerWorkflowControlRoutes(
         admission: dependencies.workflowRuns != null,
         snapshots,
         humanGates,
+      });
+    },
+  );
+  app.get(
+    "/api/v1/capabilities/workflow-reviews-v1",
+    async (request, reply) => {
+      reply.header("cache-control", "no-store");
+      await dependencies.identity.resolveActor(requestContext(request));
+      return parseWorkflowReviewCapability({
+        version: "v1",
+        available: dependencies.workflowHumanGateReviews != null,
       });
     },
   );
@@ -115,6 +136,60 @@ export function registerWorkflowControlRoutes(
       });
       const response = project(() =>
         parseWorkflowHumanGateMutationResponse(result, locator, body),
+      );
+      if (response.disposition === "committed")
+        dependencies.workflowGateCommitted?.();
+      return response;
+    },
+  );
+  app.get<{ Params: GateParams }>(
+    `${gatePath}/review-v1`,
+    async (request, reply) => {
+      reply.header("cache-control", "no-store");
+      const actor = await dependencies.identity.resolveActor(
+        requestContext(request),
+      );
+      const locator = parseWorkflowGateLocator({
+        runId: request.params.runId,
+        nodeId: request.params.nodeId,
+        gateRequestId: request.params.gateRequestId,
+      });
+      if (!dependencies.workflowHumanGateReviews)
+        throw new WorkspaceControlUnavailableError();
+      const view = await dependencies.workflowHumanGateReviews.getReview(
+        actor,
+        locator,
+      );
+      return project(() =>
+        parseWorkflowHumanGateReviewResponse(
+          { schemaVersion: "crewon.workflow-human-gate-review.v1", ...view },
+          locator,
+        ),
+      );
+    },
+  );
+  app.post<{ Params: GateParams; Body: unknown }>(
+    `${gatePath}/review-v1`,
+    { bodyLimit: MAX_WORKFLOW_GATE_REVIEW_REQUEST_BYTES },
+    async (request, reply) => {
+      reply.header("cache-control", "no-store");
+      const actor = await dependencies.identity.resolveActor(
+        requestContext(request),
+      );
+      const locator = parseWorkflowGateLocator({
+        runId: request.params.runId,
+        nodeId: request.params.nodeId,
+        gateRequestId: request.params.gateRequestId,
+      });
+      const body = parseReviewWorkflowHumanGateRequest(request.body);
+      if (!dependencies.workflowHumanGateReviews)
+        throw new WorkspaceControlUnavailableError();
+      const result = await dependencies.workflowHumanGateReviews.reviewGate(
+        actor,
+        { kind: "workflowHumanGate.review", ...locator, ...body },
+      );
+      const response = project(() =>
+        parseWorkflowHumanGateReviewMutationResponse(result, locator, body),
       );
       if (response.disposition === "committed")
         dependencies.workflowGateCommitted?.();

@@ -4,6 +4,10 @@ import {
   projectWorkflowExecution,
   RunStoreError,
   validateWorkflowHumanGateRequest,
+  captureWorkflowHumanGateReviewRead,
+  captureWorkflowHumanGateReviewRequest,
+  type WorkflowHumanGateReviewStore,
+  type WorkflowHumanGateReview,
   type WorkflowHumanGateStore,
   type WorkflowHumanGateAuthorization,
   type WorkflowHumanGateView,
@@ -38,12 +42,23 @@ import {
   type GateContext,
 } from "./sqlite-workflow-human-gate-authority.ts";
 
+import {
+  WORKFLOW_GATE_REVIEW_SCOPE,
+  WORKFLOW_GATE_REVIEW_MAX_BYTES,
+  workflowGateReviewKey,
+  workflowGateReviewReceipt,
+  readWorkflowGateReviewReceipt,
+  type WorkflowGateReviewReceiptRow,
+} from "./workflow-human-gate-review-receipt.ts";
+
 type Ops = WorkflowChildOperations & {
   now(): number;
   enqueue(work: WorkItem): void;
   assertOpen(): void;
 };
-export class SqliteWorkflowHumanGates implements WorkflowHumanGateStore {
+export class SqliteWorkflowHumanGates
+  implements WorkflowHumanGateStore, WorkflowHumanGateReviewStore
+{
   readonly #db: DatabaseSync;
   readonly #ops: Ops;
   readonly #authorize: WorkflowHumanGateAuthorization;
@@ -128,6 +143,30 @@ export class SqliteWorkflowHumanGates implements WorkflowHumanGateStore {
   async decideWorkflowHumanGate(
     input: Parameters<WorkflowHumanGateStore["decideWorkflowHumanGate"]>[0],
   ) {
+    const { disposition, decision } = await this.#decide(input);
+    return { disposition, decision };
+  }
+  async reviewWorkflowHumanGate(
+    input: Parameters<
+      WorkflowHumanGateReviewStore["reviewWorkflowHumanGate"]
+    >[0],
+  ) {
+    const captured = captureWorkflowHumanGateReviewRequest(input);
+    const { comment, ...command } = captured.command;
+    const result = await this.#decide(
+      {
+        actor: captured.actor,
+        command: { ...command, kind: "workflowHumanGate.decide" },
+      },
+      { comment },
+    );
+    if (!result.review) throw new RunStoreError("workflow_gate_review_corrupt");
+    return { disposition: result.disposition, review: result.review };
+  }
+  async #decide(
+    input: Parameters<WorkflowHumanGateStore["decideWorkflowHumanGate"]>[0],
+    intent?: Readonly<{ comment: string | null }>,
+  ) {
     this.#ops.assertOpen();
     validateWorkflowHumanGateRequest(input.actor, input.command);
     const command = structuredClone(input.command),
@@ -147,16 +186,22 @@ export class SqliteWorkflowHumanGates implements WorkflowHumanGateStore {
       this.checkAuthorization(actor, "decide", gate.authority);
       if (command.inputDigest !== gate.authority.inputDigest)
         throw new RunStoreError("workflow_gate_input_conflict");
+      const previousReview = intent
+        ? this.#readReview(gate.authority, gate.decision)
+        : null;
       if (gate.decision) {
         if (
           canonicalJson(gate.decision.actor) !== canonicalJson(actor) ||
           gate.decision.outcome !== command.decision
         )
           throw new RunStoreError("workflow_gate_decision_conflict");
+        if (intent && previousReview?.comment !== intent.comment)
+          throw new RunStoreError("workflow_gate_review_comment_conflict");
         this.#db.exec("COMMIT");
         return {
           disposition: "replayed" as const,
           decision: structuredClone(gate.decision),
+          review: structuredClone(previousReview),
         };
       }
       if (
@@ -284,11 +329,27 @@ export class SqliteWorkflowHumanGates implements WorkflowHumanGateStore {
           },
           this.#ops,
         );
-      readSqliteWorkflowHumanGates(this.#db, next, run, context, {
-        requirePublishedGates: true,
-      });
+      const review = intent ? { decision, comment: intent.comment } : null;
+      if (review) this.#writeReview(review);
+      const persistedGates = readSqliteWorkflowHumanGates(
+        this.#db,
+        next,
+        run,
+        context,
+        {
+          requirePublishedGates: true,
+        },
+      );
+      const persistedDecision = persistedGates.get(node.nodeId)?.decision;
+      if (
+        !persistedDecision ||
+        canonicalJson(persistedDecision) !== canonicalJson(decision)
+      )
+        throw new RunStoreError("workflow_gate_authority_conflict");
+      this.checkAuthorization(actor, "decide", gate.authority);
       this.#db.exec("COMMIT");
       return {
+        review: structuredClone(review),
         disposition: "committed" as const,
         decision: structuredClone(decision),
       };
@@ -298,6 +359,73 @@ export class SqliteWorkflowHumanGates implements WorkflowHumanGateStore {
       } catch {}
       throw error;
     }
+  }
+  async loadWorkflowHumanGateReview(
+    input: Parameters<
+      WorkflowHumanGateReviewStore["loadWorkflowHumanGateReview"]
+    >[0],
+  ) {
+    const { actor, locator } = captureWorkflowHumanGateReviewRead(input);
+    this.#ops.assertOpen();
+    this.#db.exec("BEGIN");
+    try {
+      const current = this.context(actor, locator);
+      this.checkAuthorization(actor, "read", current.gate.authority);
+      const review = this.#readReview(
+        current.gate.authority,
+        current.gate.decision,
+      );
+      const result = {
+        authority: current.gate.authority,
+        title: current.definition.title,
+        instruction: current.definition.instruction,
+        input: JSON.parse(current.row.input_json!),
+        status: current.node.status as WorkflowHumanGateView["status"],
+        review,
+      };
+      this.checkAuthorization(actor, "read", current.gate.authority);
+      this.#db.exec("COMMIT");
+      return structuredClone(result);
+    } catch (error) {
+      try {
+        this.#db.exec("ROLLBACK");
+      } catch {}
+      throw error;
+    }
+  }
+  #readReview(
+    authority: WorkflowHumanGateDecision["authority"],
+    decision: WorkflowHumanGateDecision | null,
+  ) {
+    const row = this.#db
+      .prepare(
+        "SELECT tenant_id,run_id,fingerprint,CASE WHEN length(CAST(result_json AS BLOB))<=? THEN result_json ELSE NULL END AS result_json FROM idempotency_receipts WHERE scope=? AND idempotency_key=?",
+      )
+      .get(
+        WORKFLOW_GATE_REVIEW_MAX_BYTES,
+        WORKFLOW_GATE_REVIEW_SCOPE,
+        workflowGateReviewKey(authority),
+      ) as WorkflowGateReviewReceiptRow | undefined;
+    return readWorkflowGateReviewReceipt(row, authority, decision);
+  }
+  #writeReview(review: WorkflowHumanGateReview) {
+    const receipt = workflowGateReviewReceipt(review),
+      authority = review.decision.authority;
+    this.#db
+      .prepare(
+        "INSERT INTO idempotency_receipts(tenant_id,scope,idempotency_key,run_id,fingerprint,result_json) VALUES(?,?,?,?,?,?)",
+      )
+      .run(
+        authority.tenantId,
+        WORKFLOW_GATE_REVIEW_SCOPE,
+        workflowGateReviewKey(authority),
+        authority.runId,
+        receipt.fingerprint,
+        receipt.json,
+      );
+    const stored = this.#readReview(authority, review.decision);
+    if (canonicalJson(stored) !== canonicalJson(review))
+      throw new RunStoreError("workflow_gate_review_corrupt");
   }
   private context(
     actor: ActorContext,

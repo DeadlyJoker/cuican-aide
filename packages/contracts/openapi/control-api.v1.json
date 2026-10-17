@@ -6737,6 +6737,172 @@
           }
         }
       }
+    },
+    "/api/v1/capabilities/workflow-reviews-v1": {
+      "get": {
+        "operationId": "getWorkflowReviewCapabilityV1",
+        "responses": {
+          "200": {
+            "description": "Authenticated Workflow API capabilities",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/WorkflowReviewCapability"
+                }
+              }
+            }
+          },
+          "401": {
+            "$ref": "#/components/responses/Error"
+          },
+          "403": {
+            "$ref": "#/components/responses/Error"
+          },
+          "500": {
+            "$ref": "#/components/responses/Error"
+          }
+        },
+        "description": "Read-only instance support hint. This does not prove Worker liveness, deployment readiness, permission or fleet-wide support. Clients must not fall back to renderer execution after a possibly accepted write."
+      }
+    },
+    "/api/v1/workflow-runs/{runId}/nodes/{nodeId}/gates/{gateRequestId}/review-v1": {
+      "get": {
+        "operationId": "getWorkflowHumanGateReviewV1",
+        "parameters": [
+          {
+            "$ref": "#/components/parameters/RunId"
+          },
+          {
+            "name": "nodeId",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "minLength": 1,
+              "maxLength": 512
+            }
+          },
+          {
+            "name": "gateRequestId",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "minLength": 1,
+              "maxLength": 512
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "A bounded, authorized consistent Workflow snapshot",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/WorkflowHumanGateReviewResponse"
+                }
+              }
+            }
+          },
+          "400": {
+            "$ref": "#/components/responses/Error"
+          },
+          "401": {
+            "$ref": "#/components/responses/Error"
+          },
+          "403": {
+            "$ref": "#/components/responses/Error"
+          },
+          "404": {
+            "$ref": "#/components/responses/Error"
+          },
+          "409": {
+            "$ref": "#/components/responses/Error"
+          },
+          "500": {
+            "$ref": "#/components/responses/Error"
+          },
+          "503": {
+            "$ref": "#/components/responses/Error"
+          }
+        },
+        "description": "Reads the immutable review together with the authorized frozen gate. A prior v0 decision without a review receipt returns 409; no absent comment is fabricated."
+      },
+      "post": {
+        "operationId": "reviewWorkflowHumanGateV1",
+        "description": "Atomically commits one immutable decision and exact comment using the existing gate transaction. Equal actor/input/outcome/comment replays the original review; changes conflict. Null differs from empty. No retroactive annotation of legacy v0 decisions.",
+        "parameters": [
+          {
+            "$ref": "#/components/parameters/RunId"
+          },
+          {
+            "name": "nodeId",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "minLength": 1,
+              "maxLength": 512
+            }
+          },
+          {
+            "name": "gateRequestId",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "minLength": 1,
+              "maxLength": 512
+            }
+          },
+          {
+            "$ref": "#/components/parameters/CsrfToken"
+          }
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/ReviewWorkflowHumanGateRequest"
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "A bounded, authorized consistent Workflow snapshot",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/WorkflowHumanGateReviewMutationResponse"
+                }
+              }
+            }
+          },
+          "400": {
+            "$ref": "#/components/responses/Error"
+          },
+          "401": {
+            "$ref": "#/components/responses/Error"
+          },
+          "403": {
+            "$ref": "#/components/responses/Error"
+          },
+          "404": {
+            "$ref": "#/components/responses/Error"
+          },
+          "409": {
+            "$ref": "#/components/responses/Error"
+          },
+          "500": {
+            "$ref": "#/components/responses/Error"
+          },
+          "503": {
+            "$ref": "#/components/responses/Error"
+          }
+        }
+      }
     }
   },
   "components": {
@@ -16020,6 +16186,151 @@
             "items": {
               "$ref": "#/components/schemas/WorkflowRunNodeView"
             }
+          }
+        }
+      },
+      "WorkflowReviewComment": {
+        "anyOf": [
+          {
+            "type": "string",
+            "maxLength": 4096,
+            "pattern": "^[^\\u0000]*$"
+          },
+          {
+            "type": "null"
+          }
+        ],
+        "description": "Exact, well-formed Unicode comment, at most 4096 UTF-8 bytes. Null and empty are distinct. Metadata only; never replaces frozen gate input/output."
+      },
+      "WorkflowHumanGateReviewView": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": [
+          "decision",
+          "comment"
+        ],
+        "properties": {
+          "decision": {
+            "$ref": "#/components/schemas/WorkflowHumanGateDecisionView"
+          },
+          "comment": {
+            "$ref": "#/components/schemas/WorkflowReviewComment"
+          }
+        }
+      },
+      "WorkflowHumanGateReviewResponse": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": [
+          "schemaVersion",
+          "authority",
+          "title",
+          "instruction",
+          "input",
+          "status",
+          "review"
+        ],
+        "properties": {
+          "schemaVersion": {
+            "type": "string",
+            "const": "crewon.workflow-human-gate-review.v1"
+          },
+          "authority": {
+            "$ref": "#/components/schemas/WorkflowHumanGateAuthorityView"
+          },
+          "title": {
+            "type": "string",
+            "maxLength": 512
+          },
+          "instruction": {
+            "type": "string",
+            "maxLength": 9999
+          },
+          "input": {
+            "$ref": "#/components/schemas/PluginUiJsonValue",
+            "description": "Frozen intermediate node input, at most 32768 UTF-8 bytes; uses node value limits rather than root admission input limits."
+          },
+          "status": {
+            "type": "string",
+            "enum": [
+              "waitingHuman",
+              "completed",
+              "failed",
+              "canceled"
+            ]
+          },
+          "review": {
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/WorkflowHumanGateReviewView"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          }
+        }
+      },
+      "ReviewWorkflowHumanGateRequest": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": [
+          "inputDigest",
+          "decision",
+          "comment"
+        ],
+        "properties": {
+          "inputDigest": {
+            "type": "string",
+            "pattern": "^sha256:[a-f0-9]{64}$"
+          },
+          "decision": {
+            "type": "string",
+            "enum": [
+              "approved",
+              "rejected"
+            ]
+          },
+          "comment": {
+            "$ref": "#/components/schemas/WorkflowReviewComment"
+          }
+        }
+      },
+      "WorkflowHumanGateReviewMutationResponse": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": [
+          "disposition",
+          "review"
+        ],
+        "properties": {
+          "disposition": {
+            "type": "string",
+            "enum": [
+              "committed",
+              "replayed"
+            ]
+          },
+          "review": {
+            "$ref": "#/components/schemas/WorkflowHumanGateReviewView"
+          }
+        }
+      },
+      "WorkflowReviewCapability": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": [
+          "version",
+          "available"
+        ],
+        "properties": {
+          "version": {
+            "type": "string",
+            "const": "v1"
+          },
+          "available": {
+            "type": "boolean",
+            "description": "Review read/write support is composed, not a permission grant or Worker liveness check."
           }
         }
       }

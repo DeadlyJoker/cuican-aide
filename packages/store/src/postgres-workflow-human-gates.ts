@@ -4,6 +4,10 @@ import {
   projectWorkflowExecution,
   RunStoreError,
   validateWorkflowHumanGateRequest,
+  captureWorkflowHumanGateReviewRead,
+  captureWorkflowHumanGateReviewRequest,
+  type WorkflowHumanGateReviewStore,
+  type WorkflowHumanGateReview,
   type WorkflowHumanGateStore,
   type WorkflowHumanGateAuthorization,
   type WorkflowHumanGateAuthority,
@@ -33,6 +37,15 @@ import {
   rollbackPostgres,
   normalizePostgresError,
 } from "./postgres-store-support.ts";
+
+import {
+  WORKFLOW_GATE_REVIEW_SCOPE,
+  WORKFLOW_GATE_REVIEW_MAX_BYTES,
+  workflowGateReviewKey,
+  workflowGateReviewReceipt,
+  readWorkflowGateReviewReceipt,
+  type WorkflowGateReviewReceiptRow,
+} from "./workflow-human-gate-review-receipt.ts";
 
 /** Resolve current durable policy through this transaction's client; no external I/O. */
 export type PostgresWorkflowHumanGateAuthorization = (
@@ -108,7 +121,9 @@ export async function publishPostgresWorkflowGates(
   );
 }
 
-export class PostgresWorkflowHumanGates implements WorkflowHumanGateStore {
+export class PostgresWorkflowHumanGates
+  implements WorkflowHumanGateStore, WorkflowHumanGateReviewStore
+{
   readonly #pool: Pool;
   readonly #sql: string;
   readonly #ops: PostgresWorkflowCompositionDependencies;
@@ -157,6 +172,30 @@ export class PostgresWorkflowHumanGates implements WorkflowHumanGateStore {
   async decideWorkflowHumanGate(
     input: Parameters<WorkflowHumanGateStore["decideWorkflowHumanGate"]>[0],
   ) {
+    const { disposition, decision } = await this.#decide(input);
+    return { disposition, decision };
+  }
+  async reviewWorkflowHumanGate(
+    input: Parameters<
+      WorkflowHumanGateReviewStore["reviewWorkflowHumanGate"]
+    >[0],
+  ) {
+    const captured = captureWorkflowHumanGateReviewRequest(input);
+    const { comment, ...command } = captured.command;
+    const result = await this.#decide(
+      {
+        actor: captured.actor,
+        command: { ...command, kind: "workflowHumanGate.decide" },
+      },
+      { comment },
+    );
+    if (!result.review) throw new RunStoreError("workflow_gate_review_corrupt");
+    return { disposition: result.disposition, review: result.review };
+  }
+  async #decide(
+    input: Parameters<WorkflowHumanGateStore["decideWorkflowHumanGate"]>[0],
+    intent?: Readonly<{ comment: string | null }>,
+  ) {
     validateWorkflowHumanGateRequest(input.actor, input.command);
     const actor = structuredClone(input.actor),
       command = structuredClone(input.command);
@@ -173,14 +212,23 @@ export class PostgresWorkflowHumanGates implements WorkflowHumanGateStore {
       await this.#checkAuthorization(client, actor, "decide", gate.authority);
       if (command.inputDigest !== gate.authority.inputDigest)
         throw new RunStoreError("workflow_gate_input_conflict");
+      const previousReview = intent
+        ? await this.#readReview(client, gate.authority, gate.decision)
+        : null;
       if (gate.decision) {
         if (
           canonicalJson(gate.decision.actor) !== canonicalJson(actor) ||
           gate.decision.outcome !== command.decision
         )
           throw new RunStoreError("workflow_gate_decision_conflict");
+        if (intent && previousReview?.comment !== intent.comment)
+          throw new RunStoreError("workflow_gate_review_comment_conflict");
         await this.#checkAuthorization(client, actor, "decide", gate.authority);
-        return { disposition: "replayed" as const, decision: gate.decision };
+        return {
+          disposition: "replayed" as const,
+          decision: gate.decision,
+          review: previousReview,
+        };
       }
       if (
         run.cancelRequested ||
@@ -302,7 +350,9 @@ export class PostgresWorkflowHumanGates implements WorkflowHumanGateStore {
           },
           this.#ops,
         );
-      await readPostgresWorkflowHumanGates(
+      const review = intent ? { decision, comment: intent.comment } : null;
+      if (review) await this.#writeReview(client, review);
+      const persistedGates = await readPostgresWorkflowHumanGates(
         client,
         this.#sql,
         next,
@@ -310,9 +360,88 @@ export class PostgresWorkflowHumanGates implements WorkflowHumanGateStore {
         context,
         true,
       );
+      const persistedDecision = persistedGates.get(node.nodeId)?.decision;
+      if (
+        !persistedDecision ||
+        canonicalJson(persistedDecision) !== canonicalJson(decision)
+      )
+        throw new RunStoreError("workflow_gate_authority_conflict");
       await this.#checkAuthorization(client, actor, "decide", gate.authority);
-      return { disposition: "committed" as const, decision };
+      return { disposition: "committed" as const, decision, review };
     });
+  }
+  async loadWorkflowHumanGateReview(
+    input: Parameters<
+      WorkflowHumanGateReviewStore["loadWorkflowHumanGateReview"]
+    >[0],
+  ) {
+    const { actor, locator } = captureWorkflowHumanGateReviewRead(input);
+    return this.#transaction(actor, locator, async (client, current) => {
+      await this.#checkAuthorization(
+        client,
+        actor,
+        "read",
+        current.gate.authority,
+      );
+      const review = await this.#readReview(
+        client,
+        current.gate.authority,
+        current.gate.decision,
+      );
+      await this.#checkAuthorization(
+        client,
+        actor,
+        "read",
+        current.gate.authority,
+      );
+      return {
+        authority: current.gate.authority,
+        title: current.definition.title,
+        instruction: current.definition.instruction,
+        input: JSON.parse(current.row.input_json!),
+        status: current.node.status as
+          | "waitingHuman"
+          | "completed"
+          | "failed"
+          | "canceled",
+        review,
+      };
+    });
+  }
+  async #readReview(
+    client: PoolClient,
+    authority: WorkflowHumanGateAuthority,
+    decision: WorkflowHumanGateDecision | null,
+  ) {
+    const row = (
+      await client.query<WorkflowGateReviewReceiptRow>(
+        `SELECT tenant_id,run_id,fingerprint,CASE WHEN octet_length(result_json::text)<=$3 THEN result_json::text ELSE NULL END AS result_json FROM ${this.#sql}.idempotency_receipts WHERE scope=$1 AND idempotency_key=$2`,
+        [
+          WORKFLOW_GATE_REVIEW_SCOPE,
+          workflowGateReviewKey(authority),
+          WORKFLOW_GATE_REVIEW_MAX_BYTES,
+        ],
+      )
+    ).rows[0];
+    return readWorkflowGateReviewReceipt(row, authority, decision);
+  }
+  async #writeReview(client: PoolClient, review: WorkflowHumanGateReview) {
+    const receipt = workflowGateReviewReceipt(review),
+      authority = review.decision.authority;
+    await client.query(
+      `INSERT INTO ${this.#sql}.idempotency_receipts(tenant_id,scope,idempotency_key,run_id,fingerprint,result_json) VALUES($1,$2,$3,$4,$5,$6)`,
+      [
+        authority.tenantId,
+        WORKFLOW_GATE_REVIEW_SCOPE,
+        workflowGateReviewKey(authority),
+        authority.runId,
+        receipt.fingerprint,
+        receipt.json,
+      ],
+    );
+    const stored = await this.#readReview(client, authority, review.decision);
+    if (canonicalJson(stored) !== canonicalJson(review))
+      throw new RunStoreError("workflow_gate_review_corrupt");
   }
   async #transaction<T>(
     actor: ActorContext,

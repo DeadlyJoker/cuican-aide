@@ -1,6 +1,6 @@
 import type { ActorContext } from "./authorization-port.ts";
 import { ApplicationError } from "./application-error.ts";
-import { RunStoreError } from "./run-store-port.ts";
+import { callWorkflowHumanGateStore } from "./workflow-human-gate-errors.ts";
 import type {
   DecideWorkflowHumanGateCommand,
   WorkflowHumanGateLocator,
@@ -15,7 +15,7 @@ export class WorkflowHumanGateApplicationService {
   }
   async getGate(actor: ActorContext, locator: WorkflowHumanGateLocator) {
     validateWorkflowHumanGateRequest(actor, locator);
-    return this.call(() =>
+    return callWorkflowHumanGateStore(() =>
       this.#store.loadWorkflowHumanGate({ actor, locator }),
     );
   }
@@ -32,30 +32,9 @@ export class WorkflowHumanGateApplicationService {
         "decision,gateRequestId,inputDigest,kind,nodeId,runId"
     )
       throw new ApplicationError("validation", "workflow_gate_command_invalid");
-    return this.call(() =>
+    return callWorkflowHumanGateStore(() =>
       this.#store.decideWorkflowHumanGate({ actor, command }),
     );
-  }
-  private async call<T>(operation: () => Promise<T>): Promise<T> {
-    try {
-      return await operation();
-    } catch (error) {
-      if (error instanceof ApplicationError) throw error;
-      if (error instanceof RunStoreError) {
-        const kind = error.code.includes("authorization")
-          ? "authorization"
-          : error.code === "workflow_gate_not_found"
-            ? "notFound"
-            : error.code.endsWith("_conflict") ||
-                error.code === "workflow_gate_not_decidable"
-              ? "conflict"
-              : "internal";
-        throw new ApplicationError(kind, error.code, { cause: error });
-      }
-      throw new ApplicationError("internal", "workflow_gate_store_failed", {
-        cause: error,
-      });
-    }
   }
 }
 export function validateWorkflowHumanGateRequest(

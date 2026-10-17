@@ -31,6 +31,7 @@ import {
   type WorkflowRunCompositionStore,
   type WorkflowRunFinalizationStore,
   type WorkflowHumanGateStore,
+  type WorkflowHumanGateReviewStore,
   type WorkflowRunSchedulerStore,
   type WorkflowSchedulerPassResult,
   type WorkflowSchedulerInput,
@@ -116,7 +117,10 @@ export type PostgresWorkflowCompositionDependencies =
 
 /** Experimental persistent execution. Human decisions require explicit policy; production routing remains off. */
 export class ExperimentalPostgresWorkflowRunCompositionStore
-  implements WorkflowRunSchedulerStore, WorkflowHumanGateStore
+  implements
+    WorkflowRunSchedulerStore,
+    WorkflowHumanGateStore,
+    WorkflowHumanGateReviewStore
 {
   readonly #pool: Pool;
   readonly #schema: string;
@@ -643,6 +647,22 @@ export class ExperimentalPostgresWorkflowRunCompositionStore
         },
       ),
     );
+  }
+  async loadWorkflowHumanGateReview(
+    input: Parameters<
+      WorkflowHumanGateReviewStore["loadWorkflowHumanGateReview"]
+    >[0],
+  ) {
+    if (!this.#gates) throw new RunStoreError("workflow_gate_unavailable");
+    return this.#gates.loadWorkflowHumanGateReview(input);
+  }
+  async reviewWorkflowHumanGate(
+    input: Parameters<
+      WorkflowHumanGateReviewStore["reviewWorkflowHumanGate"]
+    >[0],
+  ) {
+    if (!this.#gates) throw new RunStoreError("workflow_gate_unavailable");
+    return this.#gates.reviewWorkflowHumanGate(input);
   }
   async loadWorkflowHumanGate(
     input: Parameters<WorkflowHumanGateStore["loadWorkflowHumanGate"]>[0],

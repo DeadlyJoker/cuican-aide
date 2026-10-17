@@ -6,6 +6,7 @@ import {
   captureWorkflowDeploymentConfiguration,
   WorkflowRunApplicationService,
   WorkflowHumanGateApplicationService,
+  WorkflowHumanGateReviewApplicationService,
   type WorkflowDeploymentConfiguration,
 } from "@crewon/application";
 import type { WorkflowControlServices } from "./workflow-control-routes.ts";
@@ -896,6 +897,10 @@ function composeControlApi(
               ids,
               workflowDigester: digester,
             }),
+      workflowHumanGateReviews:
+        workflow === undefined
+          ? undefined
+          : new WorkflowHumanGateReviewApplicationService(workflow.composition),
       workflowHumanGates:
         workflow === undefined
           ? config.workflowHumanGates

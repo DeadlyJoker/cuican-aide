@@ -1666,6 +1666,41 @@ export interface paths {
     patch?: never;
     trace?: never;
   };
+  "/api/v1/capabilities/workflow-reviews-v1": {
+    parameters: {
+      query?: never;
+      header?: never;
+      path?: never;
+      cookie?: never;
+    };
+    /** @description Read-only instance support hint. This does not prove Worker liveness, deployment readiness, permission or fleet-wide support. Clients must not fall back to renderer execution after a possibly accepted write. */
+    get: operations["getWorkflowReviewCapabilityV1"];
+    put?: never;
+    post?: never;
+    delete?: never;
+    options?: never;
+    head?: never;
+    patch?: never;
+    trace?: never;
+  };
+  "/api/v1/workflow-runs/{runId}/nodes/{nodeId}/gates/{gateRequestId}/review-v1": {
+    parameters: {
+      query?: never;
+      header?: never;
+      path?: never;
+      cookie?: never;
+    };
+    /** @description Reads the immutable review together with the authorized frozen gate. A prior v0 decision without a review receipt returns 409; no absent comment is fabricated. */
+    get: operations["getWorkflowHumanGateReviewV1"];
+    put?: never;
+    /** @description Atomically commits one immutable decision and exact comment using the existing gate transaction. Equal actor/input/outcome/comment replays the original review; changes conflict. Null differs from empty. No retroactive annotation of legacy v0 decisions. */
+    post: operations["reviewWorkflowHumanGateV1"];
+    delete?: never;
+    options?: never;
+    head?: never;
+    patch?: never;
+    trace?: never;
+  };
 }
 export type webhooks = Record<string, never>;
 export interface components {
@@ -4125,6 +4160,41 @@ export interface components {
         updatedAt: string;
       } | null;
       nodes: components["schemas"]["WorkflowRunNodeView"][];
+    };
+    /** @description Exact, well-formed Unicode comment, at most 4096 UTF-8 bytes. Null and empty are distinct. Metadata only; never replaces frozen gate input/output. */
+    WorkflowReviewComment: string | null;
+    WorkflowHumanGateReviewView: {
+      decision: components["schemas"]["WorkflowHumanGateDecisionView"];
+      comment: components["schemas"]["WorkflowReviewComment"];
+    };
+    WorkflowHumanGateReviewResponse: {
+      /** @constant */
+      schemaVersion: "crewon.workflow-human-gate-review.v1";
+      authority: components["schemas"]["WorkflowHumanGateAuthorityView"];
+      title: string;
+      instruction: string;
+      /** @description Frozen intermediate node input, at most 32768 UTF-8 bytes; uses node value limits rather than root admission input limits. */
+      input: components["schemas"]["PluginUiJsonValue"];
+      /** @enum {string} */
+      status: "waitingHuman" | "completed" | "failed" | "canceled";
+      review: components["schemas"]["WorkflowHumanGateReviewView"] | null;
+    };
+    ReviewWorkflowHumanGateRequest: {
+      inputDigest: string;
+      /** @enum {string} */
+      decision: "approved" | "rejected";
+      comment: components["schemas"]["WorkflowReviewComment"];
+    };
+    WorkflowHumanGateReviewMutationResponse: {
+      /** @enum {string} */
+      disposition: "committed" | "replayed";
+      review: components["schemas"]["WorkflowHumanGateReviewView"];
+    };
+    WorkflowReviewCapability: {
+      /** @constant */
+      version: "v1";
+      /** @description Review read/write support is composed, not a permission grant or Worker liveness check. */
+      available: boolean;
     };
   };
   responses: {
@@ -8143,6 +8213,98 @@ export interface operations {
         };
         content: {
           "application/json": components["schemas"]["WorkflowHumanGateMutationResponse"];
+        };
+      };
+      400: components["responses"]["Error"];
+      401: components["responses"]["Error"];
+      403: components["responses"]["Error"];
+      404: components["responses"]["Error"];
+      409: components["responses"]["Error"];
+      500: components["responses"]["Error"];
+      503: components["responses"]["Error"];
+    };
+  };
+  getWorkflowReviewCapabilityV1: {
+    parameters: {
+      query?: never;
+      header?: never;
+      path?: never;
+      cookie?: never;
+    };
+    requestBody?: never;
+    responses: {
+      /** @description Authenticated Workflow API capabilities */
+      200: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          "application/json": components["schemas"]["WorkflowReviewCapability"];
+        };
+      };
+      401: components["responses"]["Error"];
+      403: components["responses"]["Error"];
+      500: components["responses"]["Error"];
+    };
+  };
+  getWorkflowHumanGateReviewV1: {
+    parameters: {
+      query?: never;
+      header?: never;
+      path: {
+        runId: components["parameters"]["RunId"];
+        nodeId: string;
+        gateRequestId: string;
+      };
+      cookie?: never;
+    };
+    requestBody?: never;
+    responses: {
+      /** @description A bounded, authorized consistent Workflow snapshot */
+      200: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          "application/json": components["schemas"]["WorkflowHumanGateReviewResponse"];
+        };
+      };
+      400: components["responses"]["Error"];
+      401: components["responses"]["Error"];
+      403: components["responses"]["Error"];
+      404: components["responses"]["Error"];
+      409: components["responses"]["Error"];
+      500: components["responses"]["Error"];
+      503: components["responses"]["Error"];
+    };
+  };
+  reviewWorkflowHumanGateV1: {
+    parameters: {
+      query?: never;
+      header?: {
+        /** @description Required by the identity adapter for cookie-authenticated mutations. */
+        "X-CSRF-Token"?: components["parameters"]["CsrfToken"];
+      };
+      path: {
+        runId: components["parameters"]["RunId"];
+        nodeId: string;
+        gateRequestId: string;
+      };
+      cookie?: never;
+    };
+    requestBody: {
+      content: {
+        "application/json": components["schemas"]["ReviewWorkflowHumanGateRequest"];
+      };
+    };
+    responses: {
+      /** @description A bounded, authorized consistent Workflow snapshot */
+      200: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          "application/json": components["schemas"]["WorkflowHumanGateReviewMutationResponse"];
         };
       };
       400: components["responses"]["Error"];

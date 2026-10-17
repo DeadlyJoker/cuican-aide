@@ -16,6 +16,7 @@ import {
   type WorkItem,
   type WorkItemLeaseInput,
   type WorkflowHumanGateStore,
+  type WorkflowHumanGateReviewStore,
   type WorkflowHumanGateAuthorization,
   type WorkflowSchedulerAuthorization,
   type WorkflowRunSchedulerStore,
@@ -99,6 +100,7 @@ export class ExperimentalSqliteWorkflowRunCompositionStore
     WorkflowRunFinalizationStore,
     WorkflowRunCancellationStore,
     WorkflowHumanGateStore,
+    WorkflowHumanGateReviewStore,
     WorkflowRunSchedulerStore
 {
   readonly #database: DatabaseSync;
@@ -496,6 +498,22 @@ export class ExperimentalSqliteWorkflowRunCompositionStore
     }
   }
 
+  async loadWorkflowHumanGateReview(
+    input: Parameters<
+      WorkflowHumanGateReviewStore["loadWorkflowHumanGateReview"]
+    >[0],
+  ) {
+    if (!this.#gates) throw new RunStoreError("workflow_gate_unavailable");
+    return this.#gates.loadWorkflowHumanGateReview(input);
+  }
+  async reviewWorkflowHumanGate(
+    input: Parameters<
+      WorkflowHumanGateReviewStore["reviewWorkflowHumanGate"]
+    >[0],
+  ) {
+    if (!this.#gates) throw new RunStoreError("workflow_gate_unavailable");
+    return this.#gates.reviewWorkflowHumanGate(input);
+  }
   async loadWorkflowHumanGate(
     input: Parameters<WorkflowHumanGateStore["loadWorkflowHumanGate"]>[0],
   ) {

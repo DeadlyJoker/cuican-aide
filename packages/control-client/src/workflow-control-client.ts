@@ -1,5 +1,13 @@
 import {
   parseWorkflowGateLocator,
+  parseWorkflowReviewCapability,
+  parseReviewWorkflowHumanGateRequest,
+  parseWorkflowHumanGateReviewResponse,
+  parseWorkflowHumanGateReviewMutationResponse,
+  type WorkflowReviewCapability,
+  type ReviewWorkflowHumanGateRequest,
+  type WorkflowHumanGateReviewResponse,
+  type WorkflowHumanGateReviewMutationResponse,
   parseDecideWorkflowHumanGateRequest,
   parseWorkflowRunSnapshotResponse,
   parseWorkflowHumanGateResponse,
@@ -51,6 +59,82 @@ export class WorkflowControlClient {
     } catch {
       throw new ControlApiProtocolError(
         "control_client_workflow_capability_invalid",
+      );
+    }
+  }
+  async getWorkflowReviewCapability(
+    options: ControlApiRequestOptions = {},
+  ): Promise<WorkflowReviewCapability> {
+    options.signal?.throwIfAborted();
+    const value = await this.#request(
+      "GET",
+      "/api/v1/capabilities/workflow-reviews-v1",
+      null,
+      { ...options, expectedStatuses: [200], maximumResponseBytes: 1024 },
+    );
+    options.signal?.throwIfAborted();
+    try {
+      return parseWorkflowReviewCapability(value);
+    } catch {
+      throw new ControlApiProtocolError(
+        "control_client_workflow_review_capability_invalid",
+      );
+    }
+  }
+  async getWorkflowHumanGateReview(
+    input: WorkflowGateLocator,
+    options: ControlApiRequestOptions = {},
+  ): Promise<WorkflowHumanGateReviewResponse> {
+    options.signal?.throwIfAborted();
+    const locator = parseWorkflowGateLocator(input);
+    const value = await this.#request(
+      "GET",
+      `${workflowGatePath(locator)}/review-v1`,
+      null,
+      {
+        ...options,
+        expectedStatuses: [200],
+        maximumResponseBytes: MAX_WORKFLOW_GATE_RESPONSE_BYTES,
+      },
+    );
+    options.signal?.throwIfAborted();
+    try {
+      return parseWorkflowHumanGateReviewResponse(value, locator);
+    } catch {
+      throw new ControlApiProtocolError(
+        "control_client_workflow_review_invalid",
+      );
+    }
+  }
+  async reviewWorkflowHumanGate(
+    input: WorkflowGateLocator,
+    body: ReviewWorkflowHumanGateRequest,
+    options: ControlApiRequestOptions = {},
+  ): Promise<WorkflowHumanGateReviewMutationResponse> {
+    options.signal?.throwIfAborted();
+    const locator = parseWorkflowGateLocator(input),
+      command = parseReviewWorkflowHumanGateRequest(body);
+    const value = await this.#request(
+      "POST",
+      `${workflowGatePath(locator)}/review-v1`,
+      command,
+      {
+        ...options,
+        requireCsrf: true,
+        expectedStatuses: [200],
+        maximumResponseBytes: MAX_WORKFLOW_GATE_RESPONSE_BYTES,
+      },
+    );
+    options.signal?.throwIfAborted();
+    try {
+      return parseWorkflowHumanGateReviewMutationResponse(
+        value,
+        locator,
+        command,
+      );
+    } catch {
+      throw new ControlApiProtocolError(
+        "control_client_workflow_review_decision_invalid",
       );
     }
   }

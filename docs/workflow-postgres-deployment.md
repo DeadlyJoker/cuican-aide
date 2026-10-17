@@ -89,7 +89,29 @@ const worker = await createPostgresRuntimeWorker({
 
 前后端使用 Domain 的同一纯函数，renderer 从 `@crewon/domain/workflow-verification` 子入口引用，避免导入总入口的 Node 类型和其他领域实现。保留原前端导出的标记及全部旧指令字节；不修改 HTTP、事件、表结构或旧任务数据。若保留记录把一个明确 FAIL 的 v1 结果标为 completed，即使其摘要及结算指纹相符，也不能当作有效完成权威继续推进；读取拒绝该不一致，不自动重写历史或补发任务。
 
-审批意见当前仍只有旧 renderer 消息记录，现有持久审批 HTTP 协议只接受决定和输入摘要。前端迁移之前须单独提供意见的持久协议及同事务回执绑定；不能先写一条普通消息再批准，也不能默默丢弃意见。该缺口尚未在本批关闭。
+## 审批意见与原子回执
+
+显式装配 Workflow 的 standalone PostgreSQL Control 现在同时提供意见服务。`GET /api/v1/capabilities/workflow-reviews-v1` 返回 `{ "version": "v1", "available": true }`，要求原认证并返回 `no-store`。这是独立的接口支持标记，不能从旧 `humanGates` 标记推断；不证明权限、Worker 在线或整个集群已经升级。没有装配时标记为 false，实际意见接口返回 503。
+
+使用 `GET` 和 `POST /api/v1/workflow-runs/:runId/nodes/:nodeId/gates/:gateRequestId/review-v1` 读取或提交意见，正式 SDK 分别为 `getWorkflowHumanGateReview()`、`reviewWorkflowHumanGate()`；能力查询为 `getWorkflowReviewCapability()`。提交示例：
+
+```typescript
+await client.reviewWorkflowHumanGate(locator, {
+  inputDigest: gate.authority.inputDigest,
+  decision: "approved",
+  comment: "核对完成，批准。",
+});
+```
+
+意见必须明确提供 string 或 null，最多 4096 UTF-8 字节；拒绝不完整 Unicode 和 PostgreSQL JSONB 无法保存的 NUL。保留空白、换行和原文，null 与空字符串不同；正文预算为 32 KiB，包含 JSON 转义开销，响应仍为 128 KiB。意见作为审批元数据保存，不替换冻结节点输入或输出，也尚未作为下游模型上下文注入。
+
+决定、意见、Gate Step、节点输出、执行状态、拒绝后的兄弟取消及唤醒使用原审批事务提交。意见复用 `idempotency_receipts`，scope 为 `workflow-human-gate-review.v1`，键摘要绑定 tenant/Run/节点/门请求；回执包含原四字段决定与意见并校验指纹。读取先限制数据库传回的 JSON 字节，再校验其与规范决定一致。不新增表、不改变原决定 JSON 或 schema 版本。
+
+同一 Actor、输入、决定和意见重放原时间及结果，不新增唤醒；改意见、改决定或改输入返回 409，撤销当前审批权限后读和重放均拒绝。SDK 不自动重试写入；应答丢失后通过同一门身份读取或由调用者显式重放原请求。不要改意见重试或切换到 renderer 重新执行。
+
+原无意见接口及旧决定仍保持原格式。若旧决定没有意见回执，新接口返回 `workflow_gate_review_not_recorded_conflict`，不虚构“无意见”，也不事后添加意见；丢失回执同样不能悄悄恢复。历史决定仍可通过原门读取接口查看；旧 renderer 的审批意见仍从原消息记录读取。旧接口对已经提交的新决定进行相等重放时不会改动意见。
+
+SQLite Store 同样实现原子保存与恢复，但 SQLite/桌面部署入口尚未接线。前端执行权仍未迁移，旧 renderer 消息不被重写；后续适配须明确历史读取和新任务写入边界，并验证意见展示及原有业务语义，不能先写普通消息再批准或默默丢弃意见。
 
 ## 验证范围
 

@@ -105,6 +105,8 @@ export * from "./tool-execution-store-port.ts";
 export * from "./artifact-retention-port.ts";
 export * from "./workflow-human-gate-port.ts";
 export * from "./workflow-human-gate-service.ts";
+export * from "./workflow-human-gate-review-port.ts";
+export * from "./workflow-human-gate-review-service.ts";
 
 export * from "./compaction-checkpoint-store-port.ts";
 
