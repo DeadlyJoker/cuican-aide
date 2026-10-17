@@ -342,3 +342,39 @@ test("configuration capture is immutable, bounded and does not execute accessor 
   assert.throws(() => captureWorkflowDeploymentConfiguration(unsafe));
   assert.equal(calls, 0);
 });
+
+test("synchronous SQLite policy matches async admission and observes current release/deployment changes", async () => {
+  const f = fixture();
+  const reader = {
+    loadActiveRelease: () => f.active,
+    loadAgentVersion: (_: string, id: string) => f.assets.get(id) ?? null,
+    loadDeployment: (_: string, id: string) => f.deployments.get(id) ?? null,
+  };
+  assert.deepEqual(
+    f.policy.resolveAdmissionRouteSync(f.admission, reader),
+    await f.policy.resolveAdmissionRoute(f.admission, f.reader),
+  );
+  assert.deepEqual(
+    f.policy.authorizeSchedulerSync(f.run, reader),
+    await f.policy.authorizeScheduler(f.run, f.reader),
+  );
+  assert.deepEqual(
+    f.policy.resolveChildRouteSync(f.run, f.workflow.nodes[2]!, reader),
+    await f.policy.resolveChildRoute(f.run, f.workflow.nodes[2]!, f.reader),
+  );
+  f.deployments.set("agent", {
+    ...f.deployments.get("agent")!,
+    materializationDigest: digester.sha256("new"),
+  });
+  assert.throws(() => f.policy.resolveAdmissionRouteSync(f.admission, reader), {
+    code: "workflow_agent_not_active",
+  });
+  assert.throws(
+    () =>
+      f.policy.authorizeSchedulerSync(
+        { ...f.run, createdByActorId: "foreign" },
+        reader,
+      ),
+    { code: "workflow_deployment_scope_denied" },
+  );
+});

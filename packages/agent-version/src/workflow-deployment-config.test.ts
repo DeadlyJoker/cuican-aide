@@ -58,7 +58,7 @@ test("Workflow deployment is absent by default and rejects unsupported modes bef
           { [WORKFLOW_DEPLOYMENT_CONFIG_ENV]: "/must-not-read" },
           mode,
         ),
-      /workflow_deployment_requires_standalone_postgres/,
+      /workflow_deployment_requires_standalone_database/,
     );
   assert.throws(
     () =>
@@ -69,7 +69,20 @@ test("Workflow deployment is absent by default and rejects unsupported modes bef
         },
         "production",
       ),
-    /workflow_deployment_requires_standalone_postgres/,
+    /workflow_deployment_requires_standalone_database/,
+  );
+});
+test("explicit standalone SQLite uses the same private deployment capture", (t) => {
+  const f = fixture(t);
+  assert.deepEqual(
+    loadWorkflowDeploymentEnvironment(
+      {
+        CREWON_CONTROL_DB_PATH: join(f.root, "control.sqlite"),
+        [WORKFLOW_DEPLOYMENT_CONFIG_ENV]: f.path,
+      },
+      "standalone",
+    ),
+    f.configuration,
   );
 });
 test("a private deployment is captured once and cannot change through the file or returned grant", (t) => {

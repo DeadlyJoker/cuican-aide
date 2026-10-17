@@ -1,18 +1,16 @@
 import assert from "node:assert/strict";
-import test from "node:test";
 import { ControlApiClientError } from "@crewon/control-client";
 import {
-  workflowDeploymentFixture,
   deploymentWorkflowSource,
   waitWorkflow,
 } from "./workflow-deployment.test-support.ts";
-const pgTest = process.env.CREWON_TEST_POSTGRES_URL ? test : test.skip;
+import { workflowDeploymentIntegrationTest } from "./workflow-deployment-integration.test-support.ts";
 
-pgTest(
+workflowDeploymentIntegrationTest(
   "a legacy review after an explicit contextual gate stays metadata-only instead of inheriting the earlier wake mode",
-  async (t) => {
+  async (t, fixture) => {
     const requests: string[] = [];
-    const f = await workflowDeploymentFixture(t, {
+    const f = await fixture(t, {
       output(request) {
         requests.push(JSON.stringify(request));
         return '{"topic":"reviewed"}';
@@ -94,11 +92,11 @@ pgTest(
   },
 );
 
-pgTest(
+workflowDeploymentIntegrationTest(
   "real branching Workflow isolates human comments by DAG ancestry, persists exact child context and rejoins after restart",
-  async (t) => {
+  async (t, fixture) => {
     const sampled = new Map<string, string>();
-    const f = await workflowDeploymentFixture(t, {
+    const f = await fixture(t, {
       output(request) {
         const text = JSON.stringify(request);
         const branch = [
@@ -279,11 +277,11 @@ pgTest(
   },
 );
 
-pgTest(
+workflowDeploymentIntegrationTest(
   "aggregate review context overflow rejects the approval atomically, then accepts shorter context without duplicate sampling",
-  async (t) => {
+  async (t, fixture) => {
     let samples = 0;
-    const f = await workflowDeploymentFixture(t, {
+    const f = await fixture(t, {
       output() {
         samples++;
         return '{"topic":"reviewed"}';

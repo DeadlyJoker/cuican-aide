@@ -5,11 +5,12 @@ import {
   deploymentWorkflowSource,
   waitWorkflow,
 } from "./workflow-deployment.test-support.ts";
+import { workflowDeploymentIntegrationTest } from "./workflow-deployment-integration.test-support.ts";
 const pgTest = process.env.CREWON_TEST_POSTGRES_URL ? test : test.skip;
-pgTest(
+workflowDeploymentIntegrationTest(
   "real HTTP/SDK discovers each canonical Workflow root across restart, filtered pages, approval and terminal SSE",
-  async (t) => {
-    const f = await workflowDeploymentFixture(t);
+  async (t, fixture) => {
+    const f = await fixture(t);
     let server = await f.control();
     const published = await server.client.publishWorkflowVersion(
       deploymentWorkflowSource(),

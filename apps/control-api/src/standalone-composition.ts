@@ -1,5 +1,6 @@
 import {
   prepareWorkflowControl,
+  prepareSqliteWorkflowControl,
   type PreparedWorkflowControl,
 } from "./workflow-deployment-composition.ts";
 import {
@@ -618,7 +619,7 @@ function composeControlApi(
     extensions: preparedExtensions,
     plugins: preparedPlugins,
     projects: preparedProjects,
-    workflow,
+    workflow: preparedWorkflow,
   } = capabilities;
   const storageCapacity = createLocalStorageAdmissionOwner({
     configured: config.storageAdmission,
@@ -659,8 +660,20 @@ function composeControlApi(
       store,
       config.artifactRetention,
     );
+    if (config.workflow !== undefined && config.workflowHumanGates != null)
+      throw new Error("workflow_gate_configuration_conflict");
+    const workflow =
+      preparedWorkflow ??
+      (config.workflow !== undefined && store instanceof SqliteRunStore
+        ? prepareSqliteWorkflowControl({
+            store,
+            configuration: config.workflow,
+            actor: config.actor,
+            defaultAgentVersionId: config.defaultAgentVersionId,
+          })
+        : undefined);
     if (config.workflow !== undefined && workflow === undefined)
-      throw new Error("workflow_deployment_requires_postgres");
+      throw new Error("workflow_deployment_unavailable");
     const authorization = new StandaloneAuthorization(config.actor);
     const clock = new SystemApplicationClock();
     const digester = new NodeSha256ContentDigester();
@@ -908,20 +921,14 @@ function composeControlApi(
         workflow === undefined
           ? config.workflowHumanGates
           : new WorkflowHumanGateApplicationService(workflow.composition),
-      workflowRootRuns:
-        store instanceof PostgresDomainStore
-          ? new WorkflowRunListApplicationService({
-              store: store.workflowRunReadStore(),
-              authorization,
-            })
-          : null,
-      workflowQueries:
-        store instanceof PostgresDomainStore
-          ? new WorkflowRunQueryService({
-              store: store.workflowRunReadStore(),
-              authorization,
-            })
-          : null,
+      workflowRootRuns: new WorkflowRunListApplicationService({
+        store: store.workflowRunReadStore(),
+        authorization,
+      }),
+      workflowQueries: new WorkflowRunQueryService({
+        store: store.workflowRunReadStore(),
+        authorization,
+      }),
       agentVersionCatalogs,
       artifacts,
       automations,

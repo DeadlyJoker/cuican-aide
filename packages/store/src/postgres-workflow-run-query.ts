@@ -1,13 +1,10 @@
+import { workflowReadProjection } from "./workflow-read-projection.ts";
 import { listPostgresWorkflowRuns } from "./postgres-workflow-run-list.ts";
 import type { Pool, PoolClient } from "pg";
-import {
-  parseWorkflowRunSnapshotResponse,
-  type WorkflowRunSnapshotResponse,
-} from "@crewon/contracts";
+import { type WorkflowRunSnapshotResponse } from "@crewon/contracts";
 import {
   ApplicationError,
   canonicalJson,
-  initialWorkflowExecution,
   RunStoreError,
   type RunLocator,
   type WorkflowRunReadStore,
@@ -117,74 +114,18 @@ export class PostgresWorkflowRunQueryStore
           runId: child.run.runId,
           threadId: child.run.threadId,
         });
-      const state =
-        authority?.execution ??
-        initialWorkflowExecution({
-          tenantId: run.tenantId,
-          runId: run.runId,
-          workflow: context.workflow,
-          now: run.createdAt,
-        });
-      const nodes = state.nodes.map((node) => {
-        const definition = context.workflow.nodes.find(
-          (value) => value.nodeId === node.nodeId,
-        )!;
-        const child =
-          node.claimId === null
-            ? null
-            : (authority?.children.get(node.claimId)?.run ?? null);
-        const gate = authority?.gates.get(node.nodeId)?.authority ?? null;
-        const output = authority?.rows.get(node.nodeId)?.output_json;
-        return {
-          nodeId: node.nodeId,
-          kind: node.kind,
-          title: definition.title,
-          agentVersionId: node.agentVersionId,
-          status: node.status,
-          inputDigest: node.inputDigest,
-          resultDigest: node.resultDigest,
-          failureCode: node.failureCode,
-          child:
-            child === null
-              ? null
-              : {
-                  runId: child.runId,
-                  threadId: child.threadId,
-                  status: child.status,
-                  revision: child.revision,
-                },
-          gate:
-            gate === null
-              ? null
-              : {
-                  gateRequestId: gate.gateRequestId,
-                  approvalPolicyId: gate.approvalPolicyId,
-                  inputDigest: gate.inputDigest,
-                },
-          output: output == null ? null : JSON.parse(output),
-        };
-      });
-      const response = parseWorkflowRunSnapshotResponse(
-        {
-          schemaVersion: "crewon.workflow-run-snapshot.v0",
-          run: publicRun(run),
-          workflow: {
-            name: context.workflow.name,
-            description: context.workflow.description,
-          },
-          input: context.rootInput.value,
-          execution:
-            execution === null
-              ? null
-              : {
-                  revision: execution.revision,
-                  status: execution.status,
-                  cancelRequested: execution.cancelRequested,
-                  updatedAt: execution.updatedAt,
-                },
-          nodes,
-        },
-        input.runId,
+      const response = workflowReadProjection(
+        run,
+        context,
+        authority?.execution ?? null,
+        authority?.rows ?? new Map(),
+        new Map(
+          [...(authority?.children ?? [])].map(([claimId, child]) => [
+            claimId,
+            child.run,
+          ]),
+        ),
+        authority?.gates ?? new Map(),
       );
       // Authorization is current policy, not a grant inferred from persisted ownership.
       await input.authorize({ runId: run.runId, threadId: run.threadId });
@@ -347,45 +288,6 @@ export class PostgresWorkflowRunQueryStore
   }
 }
 
-function publicRun(run: RunState) {
-  const {
-    runId,
-    threadId,
-    status,
-    revision,
-    lastSequence,
-    cancelRequested,
-    collaborationMode,
-    workflowVersionBinding,
-    goalBinding,
-    outputRef,
-    failure,
-    createdAt,
-    updatedAt,
-    terminalAt,
-  } = run;
-  return {
-    runId,
-    threadId,
-    status,
-    revision,
-    lastSequence,
-    cancelRequested,
-    collaborationMode,
-    purpose: "workflow",
-    workflowVersionBinding,
-    goalBinding,
-    outputRef,
-    failure,
-    createdAt,
-    updatedAt,
-    terminalAt,
-    waitingApproval:
-      run.waitingApproval === null
-        ? null
-        : { approvalId: run.waitingApproval.approvalId },
-  };
-}
 function corrupt(): never {
   throw new RunStoreError("workflow_read_authority_corrupt");
 }

@@ -56,6 +56,19 @@ export type WorkflowDeploymentReader = Readonly<{
   ): Promise<AgentVersionDeployment | null>;
 }>;
 
+/** Same transaction-bound reads, with no Promise permitted inside SQLite writes. */
+export type WorkflowDeploymentSyncReader = Readonly<{
+  loadActiveRelease(tenantId: string): ActiveAgentVersionRelease | null;
+  loadAgentVersion(
+    tenantId: string,
+    agentVersionId: string,
+  ): AgentVersionAsset | null;
+  loadDeployment(
+    tenantId: string,
+    agentVersionId: string,
+  ): AgentVersionDeployment | null;
+}>;
+
 export function captureWorkflowDeploymentConfiguration(
   value: WorkflowDeploymentConfiguration,
 ): WorkflowDeploymentConfiguration {
@@ -145,6 +158,41 @@ export class WorkflowDeploymentPolicy {
     },
     reader: WorkflowDeploymentReader,
   ): Promise<RunRoute> {
+    const versions = this.admissionVersions(input);
+    const active = await reader.loadActiveRelease(input.tenantId);
+    this.assertActiveRelease(active, input.tenantId);
+    for (const version of versions) {
+      const retained = await this.route(version, reader);
+      this.assertActiveDeployment(active!, version, retained.deployment);
+    }
+    return { ...this.configuration.route };
+  }
+
+  resolveAdmissionRouteSync(
+    input: {
+      tenantId: string;
+      spaceId: string;
+      workflowVersion: WorkflowVersionAsset;
+    },
+    reader: WorkflowDeploymentSyncReader,
+  ): RunRoute {
+    const versions = this.admissionVersions(input);
+    const active = reader.loadActiveRelease(input.tenantId);
+    this.assertActiveRelease(active, input.tenantId);
+    for (const version of versions)
+      this.assertActiveDeployment(
+        active!,
+        version,
+        this.routeSync(version, reader).deployment,
+      );
+    return { ...this.configuration.route };
+  }
+
+  private admissionVersions(input: {
+    tenantId: string;
+    spaceId: string;
+    workflowVersion: WorkflowVersionAsset;
+  }) {
     const cfg = this.configuration;
     if (
       input.tenantId !== cfg.issuer.tenantId ||
@@ -162,17 +210,6 @@ export class WorkflowDeploymentPolicy {
       workflow.contentDigest !== input.workflowVersion.contentDigest
     )
       deny("workflow_deployment_version_mismatch");
-    const active = await reader.loadActiveRelease(input.tenantId);
-    if (
-      !active ||
-      active.bundle.tenantId !== input.tenantId ||
-      active.activation.tenantId !== input.tenantId ||
-      active.activation.releaseId !== active.bundle.releaseId ||
-      active.bundle.releaseId !==
-        compileAgentVersionReleaseBundle(active.bundle, this.#digester)
-          .releaseId
-    )
-      deny("workflow_deployment_release_missing");
     const versions = new Set([
       cfg.route.agentVersionId,
       ...workflow.nodes.flatMap((node) =>
@@ -187,30 +224,48 @@ export class WorkflowDeploymentPolicy {
         )
       )
         deny("workflow_gate_policy_unconfigured");
-    for (const version of versions) {
-      const deployed = active.bundle.deployments.find(
-        (item) => item.agentVersionId === version,
-      );
-      const retained = await this.route(version, reader);
-      const stored = retained.deployment;
-      if (
-        !deployed ||
-        [
-          "tenantId",
-          "agentVersionId",
-          "contentDigest",
-          "materializationDigest",
-          "authorityId",
-          "workspaceBindingId",
-        ].some(
-          (key) =>
-            deployed[key as keyof typeof deployed] !==
-            stored[key as keyof typeof stored],
-        )
+    return versions;
+  }
+
+  private assertActiveRelease(
+    active: ActiveAgentVersionRelease | null,
+    tenantId: string,
+  ): void {
+    if (
+      !active ||
+      active.bundle.tenantId !== tenantId ||
+      active.activation.tenantId !== tenantId ||
+      active.activation.releaseId !== active.bundle.releaseId ||
+      active.bundle.releaseId !==
+        compileAgentVersionReleaseBundle(active.bundle, this.#digester)
+          .releaseId
+    )
+      deny("workflow_deployment_release_missing");
+  }
+  private assertActiveDeployment(
+    active: ActiveAgentVersionRelease,
+    version: string,
+    stored: AgentVersionDeployment,
+  ): void {
+    const deployed = active.bundle.deployments.find(
+      (item) => item.agentVersionId === version,
+    );
+    if (
+      !deployed ||
+      [
+        "tenantId",
+        "agentVersionId",
+        "contentDigest",
+        "materializationDigest",
+        "authorityId",
+        "workspaceBindingId",
+      ].some(
+        (key) =>
+          deployed[key as keyof typeof deployed] !==
+          stored[key as keyof typeof stored],
       )
-        deny("workflow_agent_not_active");
-    }
-    return { ...cfg.route };
+    )
+      deny("workflow_agent_not_active");
   }
 
   async authorizeScheduler(
@@ -232,6 +287,24 @@ export class WorkflowDeploymentPolicy {
     return (await this.route(agentId(node), reader)).route;
   }
 
+  authorizeSchedulerSync(
+    run: RunState,
+    reader: WorkflowDeploymentSyncReader,
+  ): AuthorizationDecision {
+    this.assertRoot(run);
+    this.routeSync(run.agentVersionId, reader);
+    return { outcome: "allow" };
+  }
+  resolveChildRouteSync(
+    parent: RunState,
+    node: WorkflowNodeDefinition,
+    reader: WorkflowDeploymentSyncReader,
+  ): RunRoute {
+    this.assertRoot(parent);
+    if (node.kind === "humanGate") deny("workflow_child_gate_unsupported");
+    return this.routeSync(agentId(node), reader).route;
+  }
+
   async authorizeGate(
     input: {
       run: RunState;
@@ -240,6 +313,28 @@ export class WorkflowDeploymentPolicy {
     },
     reader: WorkflowDeploymentReader,
   ): Promise<AuthorizationDecision> {
+    this.assertGate(input);
+    await this.route(input.run.agentVersionId, reader);
+    return { outcome: "allow" };
+  }
+
+  authorizeGateSync(
+    input: {
+      run: RunState;
+      actor: ActorContext;
+      authority: WorkflowHumanGateAuthority;
+    },
+    reader: WorkflowDeploymentSyncReader,
+  ): AuthorizationDecision {
+    this.assertGate(input);
+    this.routeSync(input.run.agentVersionId, reader);
+    return { outcome: "allow" };
+  }
+  private assertGate(input: {
+    run: RunState;
+    actor: ActorContext;
+    authority: WorkflowHumanGateAuthority;
+  }): void {
     this.assertRoot(input.run);
     const policy = this.configuration.humanGates.find(
       (gate) => gate.approvalPolicyId === input.authority.approvalPolicyId,
@@ -254,8 +349,6 @@ export class WorkflowDeploymentPolicy {
         canonicalJson(input.run.workflowVersionBinding)
     )
       deny("workflow_gate_authorization_denied");
-    await this.route(input.run.agentVersionId, reader);
-    return { outcome: "allow" };
   }
 
   private assertRoot(run: RunState): void {
@@ -294,6 +387,29 @@ export class WorkflowDeploymentPolicy {
       cfg.issuer.tenantId,
       agentVersionId,
     );
+    return this.checkedRoute(agentVersionId, asset, deployment);
+  }
+  private routeSync(
+    agentVersionId: string,
+    reader: WorkflowDeploymentSyncReader,
+  ) {
+    if (!this.configuration.allowedAgentVersionIds.includes(agentVersionId))
+      deny("workflow_agent_not_allowed");
+    return this.checkedRoute(
+      agentVersionId,
+      reader.loadAgentVersion(
+        this.configuration.issuer.tenantId,
+        agentVersionId,
+      ),
+      reader.loadDeployment(this.configuration.issuer.tenantId, agentVersionId),
+    );
+  }
+  private checkedRoute(
+    agentVersionId: string,
+    asset: AgentVersionAsset | null,
+    deployment: AgentVersionDeployment | null,
+  ) {
+    const cfg = this.configuration;
     if (
       !asset ||
       !deployment ||

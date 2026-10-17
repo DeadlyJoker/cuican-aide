@@ -74,6 +74,15 @@ pgTest(
 
 test("SQLite oversized child preparation reaches a durable failed root without model sampling or repeated budget retries", async (t) => {
   const f = await schedulerFixture(t, oversizedChildVersion());
+  const originalMessages = await f.store.listMessages(
+    { tenantId: f.root.tenantId, threadId: f.started.run.state.threadId },
+    0,
+    100,
+  );
+  assert.deepEqual(
+    originalMessages.map(({ role, content }) => ({ role, content })),
+    [{ role: "user", content: JSON.stringify({ topic: "safe" }) }],
+  );
   const runtime = schedulerWorker(f, t),
     outcomes = [];
   for (let pass = 0; pass < 8; pass++) {
@@ -143,7 +152,7 @@ test("SQLite oversized child preparation reaches a durable failed root without m
       0,
       100,
     ),
-    [],
+    originalMessages,
   );
   assert.equal(
     await f.store.loadActiveRunInThread({

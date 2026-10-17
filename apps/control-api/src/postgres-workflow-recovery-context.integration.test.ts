@@ -1,5 +1,4 @@
 import assert from "node:assert/strict";
-import test from "node:test";
 import {
   ControlApiClient,
   ControlApiClientError,
@@ -8,19 +7,18 @@ import {
 import { WORKFLOW_RECOVERY_CONTEXT_HEADER } from "@crewon/contracts";
 import { createWebBff } from "../../web-bff/src/web-bff.ts";
 import {
-  workflowDeploymentFixture,
   deploymentWorkflowSource,
   waitWorkflow,
 } from "./workflow-deployment.test-support.ts";
-const pgTest = process.env.CREWON_TEST_POSTGRES_URL ? test : test.skip;
+import { workflowDeploymentIntegrationTest } from "./workflow-deployment-integration.test-support.ts";
 const changed = (code: string) => (error: unknown) =>
   error instanceof ControlApiClientError &&
   error.status === 409 &&
   error.code === code;
-pgTest(
+workflowDeploymentIntegrationTest(
   "real guarded Workflow restores the original unknown POST after restart, rejects a changed deployment, and replays one contextual Gate review before one final reply",
-  async (t) => {
-    const f = await workflowDeploymentFixture(t);
+  async (t, fixture) => {
+    const f = await fixture(t);
     let server = await f.control();
     const initial = await server.client.getWorkflowRecoveryContext();
     assert.equal(initial.version, "v1");
@@ -204,10 +202,10 @@ pgTest(
     );
   },
 );
-pgTest(
+workflowDeploymentIntegrationTest(
   "real cancellation rejects a stale or unavailable guard before requesting cancellation and retains legacy omission",
-  async (t) => {
-    const f = await workflowDeploymentFixture(t);
+  async (t, fixture) => {
+    const f = await fixture(t);
     let server = await f.control();
     const context = (await server.client.getWorkflowRecoveryContext())
       .contextId!;
@@ -288,10 +286,10 @@ pgTest(
   },
 );
 
-pgTest(
+workflowDeploymentIntegrationTest(
   "browser SDK through the real BFF preserves Workflow context and rejects mismatches without dropping identity, CSRF or cancellation boundaries",
-  async (t) => {
-    const f = await workflowDeploymentFixture(t, {
+  async (t, fixture) => {
+    const f = await fixture(t, {
         origin: "https://workflow.example.test",
       }),
       server = await f.control();

@@ -25,7 +25,7 @@ export function migrateSqliteWorkflowExecutions(database: DatabaseSync): void {
       .prepare("INSERT INTO workflow_execution_schema VALUES (1, ?)")
       .run(SCHEMA_VERSION);
   }
-  assertSqliteShape(database);
+  assertSqliteWorkflowExecutionShape(database);
 }
 
 export async function migratePostgresWorkflowExecutions(
@@ -87,7 +87,9 @@ CREATE TABLE workflow_execution_receipts (
   FOREIGN KEY (tenant_id, run_id) REFERENCES workflow_executions(tenant_id, run_id)
 ) STRICT;`;
 
-function assertSqliteShape(database: DatabaseSync): void {
+export function assertSqliteWorkflowExecutionShape(
+  database: DatabaseSync,
+): void {
   for (const [table, expected] of Object.entries(sqliteColumns)) {
     const actual = database
       .prepare(`PRAGMA table_info(${table})`)

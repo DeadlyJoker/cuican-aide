@@ -82,7 +82,10 @@ const initialized = await (async () => {
     const securityMode = parseRuntimeWorkerSecurityMode(
       environment.CREWON_CONTROL_SECURITY_MODE ?? "standalone",
     );
-    const workflow = loadWorkflowDeploymentEnvironment(environment, securityMode);
+    const workflow = loadWorkflowDeploymentEnvironment(
+      environment,
+      securityMode,
+    );
     const pluginCreditSettlementConfiguration =
       loadPluginCreditSettlementWorkerConfigFromEnvironment(environment);
     const installedPluginConfigPath =
@@ -591,6 +594,13 @@ if (environment.CREWON_WORKER_ONCE === "1") {
   }
   await processLifetime.close();
 } else {
+  // SQLite has no pool socket to keep a continuous Worker process alive.
+  // Runtime scan timers are deliberately unreferenced; the CLI owns residency.
+  const residency = setInterval(() => {}, 60_000);
+  processLifetime.own(
+    { close: () => clearInterval(residency) },
+    { phase: "stop" },
+  );
   installRuntimeProcessShutdown({
     host: process,
     close: () => processLifetime.close(),

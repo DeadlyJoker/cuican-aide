@@ -1,6 +1,6 @@
-# PostgreSQL Workflow 部署接线
+# SQLite / PostgreSQL Workflow 部署接线
 
-当前能力位于 `createPostgresControlApi` 和 `createPostgresRuntimeWorker` 工厂，并已接入两端的 standalone PostgreSQL Main。可信宿主可以通过 `workflow` 配置显式装配既有持久调度器；默认不装配。生产模式的请求级身份接线和前端 Workflow/Team 迁移尚未完成，不能据此宣称整套产品已经上线。
+当前能力位于 SQLite 的 `createStandaloneControlApi` / `createStandaloneRuntimeWorker`、PostgreSQL 的对应工厂及两端 standalone Main。可信宿主通过 `workflow` 配置显式装配既有持久调度器；默认不自动授权或启用。Control 前端 Workflow 已采用后台执行，Team 尚未迁移；production 请求级身份与策略、桌面自动配置和安装版验收仍未完成。
 
 ## Main 入口
 
@@ -10,7 +10,7 @@
 export CREWON_WORKFLOW_DEPLOYMENT_CONFIG_PATH=/absolute/path/workflow.json
 ```
 
-JSON 的形状与下方 `workflow` 对象一致，不包含 TypeScript 的 `satisfies`。保留各进程原有数据库、模型、身份和 Artifact 配置。该入口只接受 `CREWON_CONTROL_SECURITY_MODE=standalone` 且配置 PostgreSQL URL 的模式；production 和 SQLite 在读取文件及分配资源前拒绝，不会默默忽略声明的配置。
+JSON 的形状与下方 `workflow` 对象一致，不包含 TypeScript 的 `satisfies`。保留各进程原有数据库、模型、身份和 Artifact 配置。该入口只接受 `CREWON_CONTROL_SECURITY_MODE=standalone`，并明确配置 `CREWON_CONTROL_DATABASE_URL` 或 SQLite 的 `CREWON_CONTROL_DB_PATH`。production 或未指定数据库时，在读取配置文件前拒绝，不默默忽略声明。SQLite 继续使用原 Release CLI 和运行时绑定，不会因填写允许列表自动创建 AgentVersion。
 
 文件必须是当前用户拥有的私有普通文件，路径为规范绝对路径，不能使用软/硬链接；文件权限不能开放给组或其他用户，推荐 `0600`。读取使用同一文件描述符，并核对读取前后的身份、尺寸及时间元数据，最多 256 KiB，严格解码 UTF-8。这个私有文件入口目前支持 POSIX，Windows 显式配置会拒绝。两个进程各自在启动时捕获一次并冻结，不热重载；策略变更应协调重启两端。
 
@@ -34,7 +34,7 @@ JSON 的形状与下方 `workflow` 对象一致，不包含 TypeScript 的 `sati
 
 目录读取复用原定义表，不迁移、不注册 Thread、不认领或推进任务。Store 每页至多解码 8 MiB 定义、单份仍为 Domain 原 2 MiB 上限；先选有界身份页再读取定义，并在数据库传回前过滤字节预算。每份定义只在 Store 校验并提取摘要，Application/Control 不传递或重复解码整份定义。HTTP/SDK 响应预算为 1 MiB，只返回身份、摘要、名称、描述和创建时间。超过定义页预算时应使用更小页长读取，不能截断定义或伪造摘要。
 
-该目录也能发现经 API 发布、输入 schema 和 DAG 拓扑不同于旧 UI 的版本。因此本批不启用前端目录切换：旧前端逐节点执行器不能接管这些定义。前端定义创建/发现和新任务执行须与下方的根 Run 查询、后台提交、订阅恢复、审批意见展示及旧记录边界一起接管。不得为恢复新任务再增加隐藏 Thread/Message 注册表，也不能逐个扫描所有普通会话来拼出根任务目录。
+Control 前端现已使用有界目录、根 Run 查询、后台提交、订阅恢复和审批意见；简单 prompt 与通用 JSON schema 均按冻结定义处理。旧 renderer 执行记录只读，不重发旧任务。不得为恢复新任务再增加隐藏 Thread/Message 注册表，也不能逐个扫描所有普通会话拼根任务目录。子 Thread 在普通会话目录中的归属仍需下一阶段处理。
 
 ## 根任务查询与恢复边界
 
@@ -62,7 +62,7 @@ const next = page.nextCursor
 
 请求检查当前版本 read 和 Thread 范围 read 权限；指定 Thread 时还检查线程范围 Run read，返回前检查每条 Thread/Run 及当前范围权限。任一拒绝均拒绝整页，不返回部分结果。响应为 `no-store`，只包含已有公开 Run 形状与 `nextCursor`。节点、人工门及冻结输出应通过已知根 ID 的 `getWorkflowRunSnapshot()` 读取，流式进度及终态继续使用原 Run SSE。
 
-该只读服务装配于 standalone PostgreSQL Control；不依赖启用调度配置。未安装入库 schema 时返回空页，部分或不支持的 schema 会拒绝；不据此判断 Worker 是否在线。SQLite/其他尚未装配此服务的宿主返回 503，不静默降级到 renderer 执行；现有执行能力响应字段保持原状。生产请求级身份和桌面策略入口仍需后续接线。
+该只读服务装配于 standalone SQLite / PostgreSQL Control；不依赖启用调度配置。未安装入库 schema 时返回空页，部分或不支持的 schema 会拒绝；不据此判断 Worker 是否在线。未装配服务的其他宿主返回 503，不静默降级到 renderer 执行；现有执行能力响应字段保持原状。SQLite 在短同步事务中捕获快照，异步授权在事务外完成，响应前再次校验捕获的身份。production 请求级身份和桌面自动策略配置仍需后续接线。
 
 ## 配置与已有运行时的关系
 
@@ -103,13 +103,32 @@ const worker = await createPostgresRuntimeWorker({
 ## 新任务、恢复与审批
 
 - 新任务校验当前激活 Release 中的根 Agent 和全部节点 Agent、实际保留部署以及已配置审批策略。新根 Run 的 issuer 在同一入库事务中再校验；失败回滚 Run、队列、输入与回执。
-- 校验与入库期间持有现有 Release 发布锁的共享模式。真实发布切换使用同一租户键的独占模式，避免校验完旧发布后把任务写入新发布窗口。
+- PostgreSQL 校验与入库期间持有现有 Release 发布锁的共享模式，真实发布切换使用同一租户键的独占模式；SQLite 在同一 BEGIN IMMEDIATE 写事务中读取并提交，Release 激活不能插入校验后的写入窗口。
 - 已入库任务按冻结 WorkflowVersion、输入和保留部署继续执行。切换默认 Release 不重写旧任务；当前宿主允许列表、执行路由及审批策略仍约束后续执行。
 - 同键恢复先读取原入库回执，不重新创建任务，也不因当前默认 Release 切换而重发模型请求。只读快照与终态 SSE 仍使用现有协议。
 - 审批同时绑定 Actor、principal、租户、空间、根 Run、冻结定义和策略。客户端不能指定审批人或替换输入。当前审批人改变后，旧身份不能读取或决定该门。
 - 用户获准取消根任务时，停止仍可收敛已撤销执行权限的任务；不要求重新授予模型执行权限。移除调度配置会停用调度能力，已有任务应先通过仍运行的调度器完成或取消收敛。
 
-未配置时，PostgreSQL 的 Workflow 定义发布仍可使用；执行启动返回能力不可用。该路径仅初始化定义表，不安装执行表或启动调度器。SQLite 显式传入这份 PostgreSQL 部署配置会拒绝启动，并释放已接管的资源。
+未配置时，两种数据库的 Workflow 定义发布仍可使用，执行启动返回能力不可用；根目录为空时不安装执行表或启动调度器。SQLite 使用同一配置形状和共享纯策略，但写事务中的 Release、资产、部署及审批校验全部在原连接同步执行，不在 BEGIN IMMEDIATE 内等待 Promise。连续 Worker Main 明确持有进程生命周期，空闲或停在人工门时不会依赖 PG socket 保持存活；关闭先停止任务，再释放资源与存储。
+
+SQLite 显式部署创建独立的 `workflow_deployment_identity` v1 表，存储数据库身份，不修改既有 Run/消息/模型历史。恢复上下文绑定该身份和配置：同库重开保持不变，同路径替换数据库生成新身份，未来版本或损坏证据拒绝启动，不覆盖修复。该身份不是用户授权。
+
+## SQLite 显式装配
+
+同一份受信 `workflow` 配置可传入 SQLite 工厂；复用现有发布、模型和资源配置：
+
+```typescript
+const control = createStandaloneControlApi({
+  ...existingStandaloneControlConfig,
+  workflow,
+});
+const worker = await createStandaloneRuntimeWorker({
+  ...existingStandaloneWorkerConfig,
+  workflow,
+});
+```
+
+Main 使用同一个私有配置文件和同一个 `CREWON_CONTROL_DB_PATH`。这提供显式 standalone SQLite 执行能力，不代表桌面安装器已经自动发布/激活 Workflow Agent 或生成授权文件；不能默认把全部已激活 Agent 视为允许调度。
 
 ## 活动任务期间重新打开 Store
 
@@ -147,7 +166,7 @@ await client.reviewWorkflowHumanGate(locator, {
 
 原无意见接口及旧决定仍保持原格式。若旧决定没有意见回执，新接口返回 `workflow_gate_review_not_recorded_conflict`，不虚构“无意见”，也不事后添加意见；丢失回执同样不能悄悄恢复。历史决定仍可通过原门读取接口查看；旧 renderer 的审批意见仍从原消息记录读取。旧接口对已经提交的新决定进行相等重放时不会改动意见。
 
-SQLite Store 同样实现原子保存与恢复，但 SQLite/桌面部署入口尚未接线。前端执行权仍未迁移，旧 renderer 消息不被重写；后续适配须明确历史读取和新任务写入边界，并验证意见展示及原有业务语义，不能先写普通消息再批准或默默丢弃意见。
+SQLite 与 PostgreSQL 的意见保存及恢复均已接入显式 standalone 部署；Control 前端已展示意见并切换后台执行。旧 renderer 消息不重写，历史只读；审批仍须原子保存意见和决定，不能先写普通消息再批准或默默丢弃意见。
 
 ## 显式向后代节点传递审批意见
 
@@ -180,7 +199,7 @@ await client.reviewWorkflowHumanGate(locator, {
 
 另有真实进程验证：原 Release CLI 发布生产者和独立 Verifier，原 Control Main 通过 HTTP 入库后关闭，原 Worker Main 的两个槽继续执行到人工门；重启 Control/Worker 后，以相同键恢复入库、审批、完成，并从各自 transcript 与终态 SSE 读取最终结果。所有进程只注入命名 fixture 环境，不继承调用者凭据。
 
-模型响应来自明确的本机 HTTP SSE fixture，未调用真实供应商，也未验收安装版账号和可见 UI。后续需要 Workflow 前端接管及旧执行链退役，再让 Team 复用同一父子任务机制；生产请求级授权、SQLite/桌面策略入口、资源隔离、生命周期收敛和自主子 Agent 限额仍是后续阶段。
+模型响应来自明确的本机 HTTP SSE fixture，未调用真实供应商，也未验收安装版账号和可见 UI。后续需要 Workflow 前端接管及旧执行链退役，再让 Team 复用同一父子任务机制；生产请求级授权、桌面自动策略配置、资源隔离、生命周期收敛和自主子 Agent 限额仍是后续阶段。
 
 ## 未知提交恢复的请求绑定
 
@@ -201,4 +220,4 @@ SDK 的 `WorkflowMutationRequestOptions.workflowRecoveryContext` 会同时携带
 
 未知写入恢复仍以原业务回执为准。前端集成必须在首次发送前保留原比较标识、完整不可变 body 和原幂等键/门身份，恢复时核验当前上下文并回放同一请求，不换键、不猜最新任务、不因目录没有记录或某次 400/404/409/503 就判定原请求未入库。重启后相同配置的标识稳定；配置变化时保留原意图和未知状态，不能把新标识覆盖到旧意图后自动重发。标识使用可信逻辑 authorityId 与 namespace，不是物理数据库指纹；独立部署须使用独立逻辑权威身份。
 
-当前前端尚未实现这套意图持久化和后台执行权切换。它们仍需接入有界目录、已知根快照、流恢复、任意 DAG/input schema、旧记录边界与子 Thread 归属。该接口没有补齐生产请求级 Workflow 策略或 SQLite/桌面入口；显式意见上下文仍需原有 Control/Worker 协调升级要求。
+Control 前端已实现意图持久化和后台执行权切换，接入有界目录、已知根快照、流恢复、通用 input schema 和旧记录只读边界。子 Thread 目录归属、production 请求级 Workflow 策略、桌面自动配置仍未完成；显式意见上下文须保持 Control/Worker 协调升级要求。

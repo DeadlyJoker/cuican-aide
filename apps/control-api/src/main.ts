@@ -391,6 +391,7 @@ try {
       };
     const standaloneConfig = {
       ...sharedConfig,
+      workflow,
       actor,
       desktopWorkspaceRegistryPath,
       defaultAgentVersionId: environmentOr(
@@ -409,7 +410,6 @@ try {
     if (connectionString !== undefined && connectionString.length > 0) {
       runtime = await createPostgresControlApi({
         ...standaloneConfig,
-        workflow,
         connectionString,
         ...(extensionEnvironment === undefined
           ? {}

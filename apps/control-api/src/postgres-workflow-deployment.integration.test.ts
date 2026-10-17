@@ -22,6 +22,7 @@ import {
   deploymentWorkflowSource,
   waitWorkflow,
 } from "./workflow-deployment.test-support.ts";
+import { workflowDeploymentIntegrationTest } from "./workflow-deployment-integration.test-support.ts";
 const pgTest = process.env.CREWON_TEST_POSTGRES_URL ? test : test.skip;
 function barrier() {
   let resolve!: () => void;
@@ -33,10 +34,10 @@ function barrier() {
   return { promise, resolve, reject };
 }
 
-pgTest(
+workflowDeploymentIntegrationTest(
   "production Control and Worker factories share real release policy and recover a parked Workflow across server/Worker restart and an active release switch",
-  async (t) => {
-    const f = await workflowDeploymentFixture(t);
+  async (t, fixture) => {
+    const f = await fixture(t);
     let server = await f.control();
     assert.deepEqual(await server.client.getWorkflowExecutionCapability(), {
       version: "v1",

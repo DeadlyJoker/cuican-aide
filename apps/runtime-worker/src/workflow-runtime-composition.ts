@@ -4,7 +4,7 @@ import {
   type WorkflowDeploymentConfiguration,
   type ContentDigester,
 } from "@crewon/application";
-import { PostgresDomainStore, type SqliteRunStore } from "@crewon/store";
+import type { PostgresDomainStore, SqliteRunStore } from "@crewon/store";
 import type { RunRoute } from "@crewon/application";
 import { ExperimentalWorkflowScheduler } from "./workflow-scheduler.ts";
 
@@ -16,8 +16,6 @@ export async function composeWorkflowScheduler(input: {
   digester: ContentDigester;
 }): Promise<ExperimentalWorkflowScheduler | undefined> {
   if (input.configuration === undefined) return undefined;
-  if (!(input.store instanceof PostgresDomainStore))
-    throw new Error("workflow_deployment_requires_postgres");
   if (
     input.configuration.issuer.tenantId !== input.runtimeTenantId ||
     canonicalJson(input.configuration.route) !== canonicalJson(input.route)

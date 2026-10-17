@@ -134,6 +134,10 @@ function expressions(postgres: boolean) {
 }
 
 /** Shared bounded public projection; the query supplies snapshots as s and bindings as b. */
+export function sqlitePublicRunSummaryColumns(): string {
+  return expressions(false);
+}
+
 export function postgresPublicRunSummaryColumns(): string {
   return expressions(true);
 }

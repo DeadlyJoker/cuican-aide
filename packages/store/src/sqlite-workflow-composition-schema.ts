@@ -17,30 +17,36 @@ export function migrateSqliteWorkflowComposition(database: DatabaseSync): void {
       for (const sql of Object.values(TABLES)) database.exec(sql);
       database.exec("INSERT INTO workflow_composition_schema VALUES(1,1)");
     }
-    const versions = database
-      .prepare(
-        "SELECT singleton,version FROM workflow_composition_schema LIMIT 2",
-      )
-      .all();
-    if (
-      versions.length !== 1 ||
-      versions[0]!.singleton !== 1 ||
-      versions[0]!.version !== 1
-    )
-      throw new RunStoreError("workflow_composition_schema_unsupported");
-    for (const [name, sql] of Object.entries(TABLES)) {
-      const row = database
-        .prepare("SELECT sql FROM sqlite_master WHERE name=? AND type='table'")
-        .get(name);
-      if (!row || normalize(String(row.sql)) !== normalize(sql))
-        throw new RunStoreError("workflow_composition_schema_corrupt");
-    }
+    assertSqliteWorkflowCompositionSchema(database);
     database.exec("COMMIT");
   } catch (error) {
     try {
       database.exec("ROLLBACK");
     } catch {}
     throw error;
+  }
+}
+
+export function assertSqliteWorkflowCompositionSchema(
+  database: DatabaseSync,
+): void {
+  const versions = database
+    .prepare(
+      "SELECT singleton,version FROM workflow_composition_schema LIMIT 2",
+    )
+    .all();
+  if (
+    versions.length !== 1 ||
+    versions[0]!.singleton !== 1 ||
+    versions[0]!.version !== 1
+  )
+    throw new RunStoreError("workflow_composition_schema_unsupported");
+  for (const [name, sql] of Object.entries(TABLES)) {
+    const row = database
+      .prepare("SELECT sql FROM sqlite_master WHERE name=? AND type='table'")
+      .get(name);
+    if (!row || normalize(String(row.sql)) !== normalize(sql))
+      throw new RunStoreError("workflow_composition_schema_corrupt");
   }
 }
 

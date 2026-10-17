@@ -1,5 +1,5 @@
 import assert from "node:assert/strict";
-import test, { type TestContext } from "node:test";
+import { type TestContext } from "node:test";
 import { setTimeout } from "node:timers/promises";
 import { ControlApiClient } from "@crewon/control-client";
 import { ControlDurableWorkflowRuntime } from "../../crewon-ui/src/lib/control-runtime/controlDurableWorkflowRuntime.ts";
@@ -10,7 +10,10 @@ import {
   waitWorkflow,
 } from "./workflow-deployment.test-support.ts";
 
-const pgTest = process.env.CREWON_TEST_POSTGRES_URL ? test : test.skip;
+import {
+  workflowDeploymentIntegrationTest,
+  type WorkflowDeploymentFixtureFactory,
+} from "./workflow-deployment-integration.test-support.ts";
 const nodes = (gate: boolean) => [
   {
     type: "agent" as const,
@@ -36,9 +39,10 @@ const nodes = (gate: boolean) => [
 ];
 async function fixture(
   t: TestContext,
+  create: WorkflowDeploymentFixtureFactory,
   options: Parameters<typeof workflowDeploymentFixture>[1] = {},
 ) {
-  const f = await workflowDeploymentFixture(t, options);
+  const f = await create(t, options);
   const configuration = {
     ...f.workflow,
     humanGates: [
@@ -75,11 +79,11 @@ const output =
         : "Producer evidence",
     });
 
-pgTest(
+workflowDeploymentIntegrationTest(
   "the product Workflow renderer publishes without hidden Threads, uses the main root, survives reopen, passes exact review context and reads one final reply/SSE",
-  async (t) => {
+  async (t, create) => {
     const requests: string[] = [];
-    const f = await fixture(t, {
+    const f = await fixture(t, create, {
       output(request) {
         requests.push(JSON.stringify(request));
         return output()(request);
@@ -228,10 +232,10 @@ pgTest(
   },
 );
 
-pgTest(
+workflowDeploymentIntegrationTest(
   "the product renderer retains rejection as a terminal Gate failure and never schedules verification",
-  async (t) => {
-    const f = await fixture(t, { output: output() });
+  async (t, create) => {
+    const f = await fixture(t, create, { output: output() });
     const ui = f.ui();
     const context = (await ui.availability()).contextId!;
     const definition = await ui.createWorkflow({
@@ -316,10 +320,10 @@ for (const [name, text, failure] of [
     null,
   ],
 ] as const)
-  pgTest(
+  workflowDeploymentIntegrationTest(
     `the product renderer preserves durable strict-v1 verification: ${name}`,
-    async (t) => {
-      const f = await fixture(t, { output: output(text) }),
+    async (t, create) => {
+      const f = await fixture(t, create, { output: output(text) }),
         ui = f.ui();
       const context = (await ui.availability()).contextId!;
       const definition = await ui.createWorkflow({
@@ -368,9 +372,9 @@ for (const [name, text, failure] of [
     },
   );
 
-pgTest(
+workflowDeploymentIntegrationTest(
   "the product renderer cancels an approved running verifier without letting late PASS resurrect the root",
-  async (t) => {
+  async (t, create) => {
     let entered!: () => void, release!: () => void;
     const started = new Promise<void>((resolve) => {
       entered = resolve;
@@ -378,7 +382,7 @@ pgTest(
     const held = new Promise<void>((resolve) => {
       release = resolve;
     });
-    const f = await fixture(t, {
+    const f = await fixture(t, create, {
       output: output(),
       async beforeModel(role) {
         if (role === "verifier") {

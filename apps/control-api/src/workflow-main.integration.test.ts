@@ -9,9 +9,11 @@ import { fileURLToPath } from "node:url";
 import { setTimeout as delay } from "node:timers/promises";
 import test from "node:test";
 import { Pool } from "pg";
+import { DatabaseSync } from "node:sqlite";
 import { ControlApiClient } from "@crewon/control-client";
 import type { WorkflowDeploymentConfiguration } from "@crewon/application";
 import { WORKFLOW_DEPLOYMENT_CONFIG_ENV } from "@crewon/agent-version/workflow-deployment-config";
+import { workflowStorageIntegrationTest } from "./workflow-deployment-integration.test-support.ts";
 import { deploymentWorkflowSource } from "./workflow-deployment.test-support.ts";
 import {
   startFullAppProcess,
@@ -68,7 +70,7 @@ async function completed(child: Child) {
   }
 }
 
-test("both original Mains reject static Workflow grants in production and SQLite before allocating other resources", async () => {
+test("both original Mains reject static Workflow grants in production or without a database before allocating other resources", async () => {
   for (const entry of ["control-api", "runtime-worker"] as const)
     for (const mode of ["standalone", "production"] as const) {
       const child = start(entry, {
@@ -82,7 +84,7 @@ test("both original Mains reject static Workflow grants in production and SQLite
       assert.equal(result.code, 1, child.stderr());
       assert.match(
         child.stderr(),
-        /workflow_deployment_requires_standalone_postgres/,
+        /workflow_deployment_requires_standalone_database/,
       );
       assert.doesNotMatch(
         child.stderr(),
@@ -92,19 +94,23 @@ test("both original Mains reject static Workflow grants in production and SQLite
     }
 });
 
-test(
+workflowStorageIntegrationTest(
   "actual release CLI, Control Main and Worker Main run two parked Workflows from one private configuration and recover each result after process restart",
-  { skip: !process.env.CREWON_TEST_POSTGRES_URL, timeout: 90_000 },
-  async (t) => {
+  async (t, backend) => {
     const directory = await realpath(
       await mkdtemp(join(tmpdir(), "crewon-workflow-main-")),
     );
     const schema = `workflow_main_${randomUUID().replaceAll("-", "_")}`;
     const sql = `"${schema}"`;
-    const admin = new Pool({
-      connectionString: process.env.CREWON_TEST_POSTGRES_URL,
-      max: 2,
-    });
+    const databasePath = join(directory, "control.sqlite");
+    const admin =
+      backend === "postgres"
+        ? new Pool({
+            connectionString: process.env.CREWON_TEST_POSTGRES_URL,
+            max: 2,
+          })
+        : null;
+    let sqlite: DatabaseSync | undefined;
     const children: Child[] = [];
     let releaseStreams!: () => void;
     const streams = new Promise<void>((resolve) => {
@@ -181,9 +187,10 @@ test(
         model.close((error) => (error ? reject(error) : resolve())),
       );
       try {
-        await admin.query(`DROP SCHEMA IF EXISTS ${sql} CASCADE`);
+        await admin?.query(`DROP SCHEMA IF EXISTS ${sql} CASCADE`);
       } finally {
-        await admin.end();
+        await admin?.end();
+        sqlite?.close();
         await rm(directory, { recursive: true, force: true });
       }
       if (failures.length)
@@ -222,8 +229,12 @@ test(
       token = "named-workflow-main-session-0000000001";
     const common: NodeJS.ProcessEnv = {
       CREWON_CONTROL_SECURITY_MODE: "standalone",
-      CREWON_CONTROL_DATABASE_URL: process.env.CREWON_TEST_POSTGRES_URL!,
-      CREWON_CONTROL_DATABASE_SCHEMA: schema,
+      ...(backend === "postgres"
+        ? {
+            CREWON_CONTROL_DATABASE_URL: process.env.CREWON_TEST_POSTGRES_URL!,
+            CREWON_CONTROL_DATABASE_SCHEMA: schema,
+          }
+        : { CREWON_CONTROL_DB_PATH: databasePath }),
       CREWON_TENANT_ID: actor.tenantId,
       CREWON_SPACE_ID: actor.spaceId,
       CREWON_ACTOR_ID: actor.actorId,
@@ -250,6 +261,8 @@ test(
     children.push(release);
     assert.equal((await completed(release)).code, 0, release.stderr());
     assert.equal(requests, 0, "publication must not sample a model");
+    if (backend === "sqlite")
+      sqlite = new DatabaseSync(databasePath, { readOnly: true });
     const controlEnv = {
       ...common,
       CREWON_CONTROL_PORT: "0",
@@ -340,14 +353,26 @@ test(
     await waitFor(
       "both gates while Control is closed",
       async () =>
-        (
-          await admin.query(
-            `SELECT count(*)::int AS n FROM ${sql}.workflow_executions WHERE state_json->>'status'='waitingHuman'`,
-          )
-        ).rows[0].n === 2,
+        admin
+          ? (
+              await admin.query(
+                `SELECT count(*)::int AS n FROM ${sql}.workflow_executions WHERE state_json->>'status'='waitingHuman'`,
+              )
+            ).rows[0].n === 2
+          : sqlite!
+              .prepare(
+                "SELECT count(*) AS n FROM workflow_executions WHERE json_extract(state_json,'$.status')='waitingHuman'",
+              )
+              .get()!.n === 2,
       [worker],
     );
     assert.equal(requests, 2);
+    await delay(200);
+    assert.equal(
+      worker.finished(),
+      false,
+      "a parked SQLite Worker must remain resident without a database socket",
+    );
     await stopFullAppProcess(worker);
     control = await openControl();
     worker = start("runtime-worker", workerEnv);
@@ -428,4 +453,5 @@ test(
     await stopFullAppProcess(worker);
     await stopFullAppProcess(control);
   },
+  { timeout: 90_000 },
 );

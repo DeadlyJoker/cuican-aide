@@ -27,9 +27,10 @@ export function loadWorkflowDeploymentEnvironment(
   if (path === undefined) return undefined;
   if (
     securityMode !== "standalone" ||
-    !environment.CREWON_CONTROL_DATABASE_URL?.trim()
+    (!environment.CREWON_CONTROL_DATABASE_URL?.trim() &&
+      !environment.CREWON_CONTROL_DB_PATH?.trim())
   )
-    throw new Error("workflow_deployment_requires_standalone_postgres");
+    throw new Error("workflow_deployment_requires_standalone_database");
   try {
     if (
       !path ||

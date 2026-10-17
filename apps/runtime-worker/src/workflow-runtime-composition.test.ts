@@ -20,13 +20,26 @@ function configuration(
     humanGates: [],
   };
 }
-test("SQLite refuses explicit PostgreSQL Workflow execution and joins every owned startup resource", async (t) => {
+test("SQLite composes explicit Workflow execution and joins every owned resource on close", async (t) => {
   const f = compositionFixture(t, "sqlite");
   await f.activate();
   f.observeStoreClose();
-  await assert.rejects(f.create({ workflow: configuration(f.config.route) }), {
-    message: "workflow_deployment_requires_postgres",
-  });
+  const runtime = await f.create({ workflow: configuration(f.config.route) });
+  await runtime.close();
+  assert.deepEqual(f.counts, { tools: 1, models: 1, stores: 1 });
+});
+test("SQLite rejects a mismatched Workflow route and unwinds its owned resources", async (t) => {
+  const f = compositionFixture(t, "sqlite");
+  await f.activate();
+  f.observeStoreClose();
+  await assert.rejects(
+    f.create({
+      workflow: configuration({ ...f.config.route, authorityId: "foreign" }),
+    }),
+    {
+      message: "workflow_runtime_deployment_mismatch",
+    },
+  );
   assert.deepEqual(f.counts, { tools: 1, models: 1, stores: 1 });
 });
 test("invalid Workflow deployment capture fails before Store open and still disposes owned tools and model transport", async (t) => {

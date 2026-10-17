@@ -18,6 +18,7 @@ import {
 import {
   MAX_WORKFLOW_DEFINITION_BYTES,
   type ThreadState,
+  type RunState,
 } from "@crewon/domain";
 import {
   migrateSqliteWorkflowCancellation,
@@ -60,22 +61,34 @@ type Dependencies = Readonly<{
   commitThreadWithinTransaction(input: CommitThreadInput): CommitThreadResult;
   resolveRouteWithinTransaction: SqliteWorkflowRouteResolver;
 }>;
+export type SqliteWorkflowAdmissionPolicy = Readonly<{
+  authorizeCreatedRun?(input: {
+    database: DatabaseSync;
+    run: RunState;
+  }): import("@crewon/application").AuthorizationDecision;
+}>;
 
 /**
- * Internal admission foundation; deliberately absent from production composition.
- * Atomic DAG node admission, execution routing and old-writer fencing are still required.
+ * Atomic admission shared by experimental fixtures and explicitly configured
+ * standalone hosts. The host supplies transaction-bound deployment policy.
  */
 export class ExperimentalSqliteWorkflowRunAdmissionStore
   implements WorkflowRunAdmissionStore
 {
   readonly #database: DatabaseSync;
   readonly #dependencies: Dependencies;
+  readonly #policy: SqliteWorkflowAdmissionPolicy;
 
-  constructor(database: DatabaseSync, dependencies: Dependencies) {
+  constructor(
+    database: DatabaseSync,
+    dependencies: Dependencies,
+    policy: SqliteWorkflowAdmissionPolicy = {},
+  ) {
     dependencies.assertOpen();
     migrateSqliteWorkflowCancellation(database);
     this.#database = database;
     this.#dependencies = dependencies;
+    this.#policy = policy;
   }
 
   async commitWorkflowRunStart(
@@ -150,6 +163,14 @@ export class ExperimentalSqliteWorkflowRunAdmissionStore
       );
       if (run.disposition !== "committed")
         throw new RunStoreError("workflow_run_admission_receipt_invalid");
+      if (
+        this.#policy.authorizeCreatedRun &&
+        this.#policy.authorizeCreatedRun({
+          database: db,
+          run: structuredClone(run.state),
+        })?.outcome !== "allow"
+      )
+        throw new RunStoreError("workflow_scheduler_policy_denied");
       const head = db
         .prepare(
           `SELECT COALESCE(MAX(sequence),0) AS n FROM model_history_items WHERE tenant_id=? AND thread_id=?`,

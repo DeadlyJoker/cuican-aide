@@ -1,7 +1,7 @@
 import type { DatabaseSync } from "node:sqlite";
 import { RunStoreError } from "@crewon/application";
 
-/** Experimental authority only. Production composition must not create scheduler work yet. */
+/** Explicit authority migration; ordinary Store construction and query reads never call it. */
 export function migrateSqliteWorkflowRunAdmission(
   database: DatabaseSync,
 ): void {
@@ -18,41 +18,47 @@ export function migrateSqliteWorkflowRunAdmission(
       for (const sql of Object.values(TABLES)) database.exec(sql);
       database.exec("INSERT INTO workflow_run_admission_schema VALUES (1,1)");
     }
-    const version = database
-      .prepare(
-        "SELECT singleton,version FROM workflow_run_admission_schema LIMIT 2",
-      )
-      .all() as { singleton: number; version: number }[];
-    if (version.length !== 1 || version[0]!.singleton !== 1)
-      throw new RunStoreError("workflow_run_admission_schema_corrupt");
-    if (version[0]!.version !== 1)
-      throw new RunStoreError("workflow_run_admission_schema_unsupported");
-    for (const [table, columns] of Object.entries({
-      workflow_run_inputs: "tenant_id,run_id,value_id,value_digest,value_json",
-      workflow_run_admissions:
-        "scope,idempotency_key,tenant_id,run_id,authority_json",
-    })) {
-      const actual = database.prepare(`PRAGMA table_info(${table})`).all() as {
-        name: string;
-      }[];
-      if (actual.map((column) => column.name).join(",") !== columns)
-        throw new RunStoreError("workflow_run_admission_schema_corrupt");
-    }
-    // This is the first version of this authority: validate the complete constraints,
-    // including uniqueness/FKs/STRICT, rather than trusting matching column names.
-    for (const [table, expected] of Object.entries(TABLES)) {
-      const row = database
-        .prepare("SELECT sql FROM sqlite_master WHERE type='table' AND name=?")
-        .get(table) as { sql: string } | undefined;
-      if (!row || normalizeDdl(row.sql) !== normalizeDdl(expected))
-        throw new RunStoreError("workflow_run_admission_schema_corrupt");
-    }
+    assertSqliteWorkflowRunAdmissionSchema(database);
     database.exec("COMMIT");
   } catch (error) {
     try {
       database.exec("ROLLBACK");
     } catch {}
     throw error;
+  }
+}
+
+export function assertSqliteWorkflowRunAdmissionSchema(
+  database: DatabaseSync,
+): void {
+  const version = database
+    .prepare(
+      "SELECT singleton,version FROM workflow_run_admission_schema LIMIT 2",
+    )
+    .all() as { singleton: number; version: number }[];
+  if (version.length !== 1 || version[0]!.singleton !== 1)
+    throw new RunStoreError("workflow_run_admission_schema_corrupt");
+  if (version[0]!.version !== 1)
+    throw new RunStoreError("workflow_run_admission_schema_unsupported");
+  for (const [table, columns] of Object.entries({
+    workflow_run_inputs: "tenant_id,run_id,value_id,value_digest,value_json",
+    workflow_run_admissions:
+      "scope,idempotency_key,tenant_id,run_id,authority_json",
+  })) {
+    const actual = database.prepare(`PRAGMA table_info(${table})`).all() as {
+      name: string;
+    }[];
+    if (actual.map((column) => column.name).join(",") !== columns)
+      throw new RunStoreError("workflow_run_admission_schema_corrupt");
+  }
+  // This is the first version of this authority: validate the complete constraints,
+  // including uniqueness/FKs/STRICT, rather than trusting matching column names.
+  for (const [table, expected] of Object.entries(TABLES)) {
+    const row = database
+      .prepare("SELECT sql FROM sqlite_master WHERE type='table' AND name=?")
+      .get(table) as { sql: string } | undefined;
+    if (!row || normalizeDdl(row.sql) !== normalizeDdl(expected))
+      throw new RunStoreError("workflow_run_admission_schema_corrupt");
   }
 }
 

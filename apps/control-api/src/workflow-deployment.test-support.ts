@@ -47,79 +47,15 @@ export async function workflowDeploymentFixture(
       await admin.end();
     }
   });
-  const actor = {
-    tenantId: "tenant-1",
-    spaceId: "space-1",
-    actorId: "operator-1",
-    principalId: "principal-1",
-  };
-  const authorization = new StandaloneAuthorization(actor),
-    clock = { now: () => new Date().toISOString() };
-  const requests: string[] = [];
-  const base = compositionConfig();
-  const transport = {
-    ...base.transport,
-    async *stream(request: Parameters<typeof base.transport.stream>[0]) {
-      const value = JSON.stringify(request);
-      const role = value.includes("workflow-producer-role")
-        ? "agent"
-        : value.includes("workflow-verifier-role")
-          ? "verifier"
-          : "unexpected";
-      requests.push(role);
-      assert.notEqual(
-        role,
-        "unexpected",
-        "scheduler must never sample a model",
-      );
-      await options.beforeModel?.(role);
-      const output = options.output?.(request) ?? '{"topic":"verified"}';
-      const middle = Math.floor(output.length / 2);
-      yield { type: "output.delta" as const, delta: output.slice(0, middle) };
-      yield { type: "output.delta" as const, delta: output.slice(middle) };
-      yield { type: "completed" as const, checkpoint: null };
-    },
-  };
-  const versions = [
-    compileRuntimeAgentVersion({
-      ...base,
-      transport,
-      route: { ...base.route, agentVersionId: "agent-1" },
-      agentInstructions: "workflow-producer-role",
-    }),
-    compileRuntimeAgentVersion({
-      ...base,
-      transport,
-      route: { ...base.route, agentVersionId: "verifier-1" },
-      agentInstructions: "workflow-verifier-role",
-    }),
-  ];
-  const root = compileRuntimeAgentVersionRelease({ ...base, transport })
-    .deployments[0]!;
-  const runtimeConfig = {
-    ...base,
-    transport,
-    additionalAgentVersions: versions,
-    agentVersionDeployments: versions.map((version) => ({
-      ...root,
-      agentVersionId: version.agentVersionId,
-      contentDigest: version.contentDigest,
-    })),
-    scanIntervalMs: 25,
-    workerConcurrency: 2,
-  };
-  const workflow: WorkflowDeploymentConfiguration = {
-    schemaVersion: "crewon.workflow-deployment.v1",
-    issuer: actor,
-    route: base.route,
-    allowedAgentVersionIds: [
-      base.route.agentVersionId,
-      "agent-1",
-      "verifier-1",
-    ],
-    maximumParallelNodes: 2,
-    humanGates: [{ approvalPolicyId: "review-policy", approver: actor }],
-  };
+  const {
+    actor,
+    authorization,
+    clock,
+    requests,
+    base,
+    runtimeConfig,
+    workflow,
+  } = workflowDeploymentConfiguration(options);
   const activate = async (bootstrapOnly = false) =>
     activatePostgresRuntimeAgentVersionRelease({
       ...(bootstrapOnly
@@ -210,6 +146,101 @@ export async function workflowDeploymentFixture(
     worker,
     token,
     origin,
+  };
+}
+
+/** Real immutable release/configuration shared by SQLite and PostgreSQL acceptance fixtures. */
+export function workflowDeploymentConfiguration(
+  options: {
+    beforeModel?(role: string): Promise<void>;
+    output?(
+      request: Parameters<
+        ReturnType<typeof compositionConfig>["transport"]["stream"]
+      >[0],
+    ): string;
+  } = {},
+) {
+  const actor = {
+    tenantId: "tenant-1",
+    spaceId: "space-1",
+    actorId: "operator-1",
+    principalId: "principal-1",
+  };
+  const authorization = new StandaloneAuthorization(actor),
+    clock = { now: () => new Date().toISOString() };
+  const requests: string[] = [];
+  const base = compositionConfig();
+  const transport = {
+    ...base.transport,
+    async *stream(request: Parameters<typeof base.transport.stream>[0]) {
+      const value = JSON.stringify(request);
+      const role = value.includes("workflow-producer-role")
+        ? "agent"
+        : value.includes("workflow-verifier-role")
+          ? "verifier"
+          : "unexpected";
+      requests.push(role);
+      assert.notEqual(
+        role,
+        "unexpected",
+        "scheduler must never sample a model",
+      );
+      await options.beforeModel?.(role);
+      const output = options.output?.(request) ?? '{"topic":"verified"}';
+      const middle = Math.floor(output.length / 2);
+      yield { type: "output.delta" as const, delta: output.slice(0, middle) };
+      yield { type: "output.delta" as const, delta: output.slice(middle) };
+      yield { type: "completed" as const, checkpoint: null };
+    },
+  };
+  const versions = [
+    compileRuntimeAgentVersion({
+      ...base,
+      transport,
+      route: { ...base.route, agentVersionId: "agent-1" },
+      agentInstructions: "workflow-producer-role",
+    }),
+    compileRuntimeAgentVersion({
+      ...base,
+      transport,
+      route: { ...base.route, agentVersionId: "verifier-1" },
+      agentInstructions: "workflow-verifier-role",
+    }),
+  ];
+  const root = compileRuntimeAgentVersionRelease({ ...base, transport })
+    .deployments[0]!;
+  const runtimeConfig = {
+    ...base,
+    transport,
+    additionalAgentVersions: versions,
+    agentVersionDeployments: versions.map((version) => ({
+      ...root,
+      agentVersionId: version.agentVersionId,
+      contentDigest: version.contentDigest,
+    })),
+    scanIntervalMs: 25,
+    workerConcurrency: 2,
+  };
+  const workflow: WorkflowDeploymentConfiguration = {
+    schemaVersion: "crewon.workflow-deployment.v1",
+    issuer: actor,
+    route: base.route,
+    allowedAgentVersionIds: [
+      base.route.agentVersionId,
+      "agent-1",
+      "verifier-1",
+    ],
+    maximumParallelNodes: 2,
+    humanGates: [{ approvalPolicyId: "review-policy", approver: actor }],
+  };
+  return {
+    actor,
+    authorization,
+    clock,
+    requests,
+    base,
+    runtimeConfig,
+    workflow,
   };
 }
 

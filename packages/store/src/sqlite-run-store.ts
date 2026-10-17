@@ -1,3 +1,5 @@
+import { normalizeSqliteError } from "./sqlite-errors.ts";
+import { SqliteWorkflowRunQueryStore } from "./sqlite-workflow-run-query.ts";
 import { sqliteOrdinaryThreadCatalogTables } from "./plugin-thread-catalog-scope.ts";
 import { SqliteProjectAssetV2RecoveryStore } from "./project-asset-vtwo-recovery-store.ts";
 import { SqliteProjectMediaInputStageStore } from "./project-media-input-stage-store.ts";
@@ -127,9 +129,11 @@ import {
 } from "./sqlite-model-history-append.ts";
 import type { WorkflowContentDigester } from "@crewon/domain";
 import { SqliteWorkflowVersionStore } from "./workflow-version-store.ts";
+import { createSqliteWorkflowDeployment } from "./sqlite-workflow-deployment.ts";
 import {
   ExperimentalSqliteWorkflowRunAdmissionStore,
   type SqliteWorkflowRouteResolver,
+  type SqliteWorkflowAdmissionPolicy,
 } from "./sqlite-workflow-run-admission.ts";
 import { validateWorkflowSchedulerWorkItems } from "./workflow-run-admission-validation.ts";
 import {
@@ -142,9 +146,6 @@ import {
 } from "./sqlite-office-store.ts";
 
 import {
-  RunLifecycleError,
-  ThreadLifecycleError,
-  ThreadGoalError,
   validateModelHistoryItem,
   validateThreadGoal,
   validateThreadGoalEvent,
@@ -951,31 +952,76 @@ export class SqliteRunStore implements DomainStore {
     return new SqliteWorkflowVersionStore(this.#database, digester);
   }
 
-  /** Internal foundation only; production must keep Workflow routing disabled. */
-  experimentalWorkflowRunAdmissionStore(
-    resolveRouteWithinTransaction: SqliteWorkflowRouteResolver,
+  /** Explicit trusted-host Workflow capability, with synchronous SQLite policy. */
+  workflowDeployment(
+    configuration: import("@crewon/application").WorkflowDeploymentConfiguration,
+    decodeAgentVersion: import("@crewon/application").WorkflowAgentVersionDecoder,
+    digester: WorkflowContentDigester,
   ) {
     this.#assertOpen();
-    return new ExperimentalSqliteWorkflowRunAdmissionStore(this.#database, {
-      assertOpen: () => this.#assertOpen(),
-      loadThread: (locator) => this.#loadThread(locator),
-      hasActiveRun: (locator) =>
-        readSqliteActiveRun(this.#database, locator, (row) =>
-          decodeStoredRunState(row as unknown as SnapshotRow, {
-            tenantId: locator.tenantId,
-            runId: String(row.run_id),
-          }),
-        ) !== null,
-      hasPendingProviderSwitch: (tenantId) =>
-        this.#hasPendingProviderSwitch(tenantId),
-      resolveRouteWithinTransaction,
-      commitThreadWithinTransaction: (input) => this.#commitThread(input, {withinTransaction: true}),
-      commitRunWithinTransaction: (input) =>
-        this.#commitRun(input, null, null, {
-          withinTransaction: true,
-          workflowSchedulerAdmission: true,
-        }),
+    return createSqliteWorkflowDeployment({
+      database: this.#database,
+      configuration,
+      decodeAgentVersion,
+      digester,
+      migrateDefinition: () => {
+        this.workflowVersionStore(digester);
+      },
+      reader: {
+        loadActiveRelease: (tenantId) =>
+          this.currentActiveAgentVersionRelease({ tenantId }),
+        loadAgentVersion: (tenantId, agentVersionId) =>
+          this.currentAgentVersion({ tenantId, agentVersionId }),
+        loadDeployment: (tenantId, agentVersionId) =>
+          this.currentAgentVersionDeployment({ tenantId, agentVersionId }),
+      },
+      loadRoot: (locator) => this.#loadRun(locator),
+      admission: (resolver, policy) =>
+        this.experimentalWorkflowRunAdmissionStore(resolver, policy),
+      composition: (options) =>
+        this.experimentalWorkflowRunCompositionStore(options),
     });
+  }
+
+  workflowRunReadStore() {
+    this.#assertOpen();
+    return new SqliteWorkflowRunQueryStore(this.#database, {
+      assertOpen: () => this.#assertOpen(),
+      loadRun: (locator) => this.#loadRun(locator),
+    });
+  }
+
+  /** Internal foundation; the public deployment capability supplies trusted policy. */
+  experimentalWorkflowRunAdmissionStore(
+    resolveRouteWithinTransaction: SqliteWorkflowRouteResolver,
+    policy: SqliteWorkflowAdmissionPolicy = {},
+  ) {
+    this.#assertOpen();
+    return new ExperimentalSqliteWorkflowRunAdmissionStore(
+      this.#database,
+      {
+        assertOpen: () => this.#assertOpen(),
+        loadThread: (locator) => this.#loadThread(locator),
+        hasActiveRun: (locator) =>
+          readSqliteActiveRun(this.#database, locator, (row) =>
+            decodeStoredRunState(row as unknown as SnapshotRow, {
+              tenantId: locator.tenantId,
+              runId: String(row.run_id),
+            }),
+          ) !== null,
+        hasPendingProviderSwitch: (tenantId) =>
+          this.#hasPendingProviderSwitch(tenantId),
+        resolveRouteWithinTransaction,
+        commitThreadWithinTransaction: (input) =>
+          this.#commitThread(input, { withinTransaction: true }),
+        commitRunWithinTransaction: (input) =>
+          this.#commitRun(input, null, null, {
+            withinTransaction: true,
+            workflowSchedulerAdmission: true,
+          }),
+      },
+      policy,
+    );
   }
 
   experimentalWorkflowRunCompositionStore(
@@ -1564,6 +1610,13 @@ export class SqliteRunStore implements DomainStore {
   async loadActiveAgentVersionRelease(input: {
     tenantId: string;
   }): Promise<ActiveAgentVersionRelease | null> {
+    return this.currentActiveAgentVersionRelease(input);
+  }
+
+  /** Current release on the same connection, for synchronous transaction policy. */
+  currentActiveAgentVersionRelease(input: {
+    tenantId: string;
+  }): ActiveAgentVersionRelease | null {
     this.#assertOpen();
     validateAgentVersionReleaseTenant(input);
     try {
@@ -7517,32 +7570,6 @@ function normalizeToolApprovalError(error: unknown): Error {
       : new RunStoreError("tool_approval_error", { cause: error });
 }
 
-function normalizeSqliteError(error: unknown): Error {
-  if (error instanceof ThreadGoalError) {
-    return new RunStoreError(error.code, { cause: error });
-  }
-  if (
-    error instanceof RunStoreError ||
-    error instanceof RunLifecycleError ||
-    error instanceof ThreadLifecycleError
-  ) {
-    return error;
-  }
-  const message = error instanceof Error ? error.message : String(error);
-  if (
-    message === "run_output_replay_requires_stream_append" ||
-    message === "outbox_message_conflict"
-  ) {
-    return new RunStoreError(message, { cause: error });
-  }
-  if (/busy|locked/i.test(message)) {
-    return new RunStoreError("sqlite_busy", { cause: error });
-  }
-  if (/constraint/i.test(message)) {
-    return new RunStoreError("sqlite_constraint", { cause: error });
-  }
-  return new RunStoreError("sqlite_error", { cause: error });
-}
 import type {
   ArtifactRetentionCandidate,
   ArtifactRetentionReadOptions,
