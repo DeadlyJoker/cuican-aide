@@ -17,6 +17,7 @@ import {
 import { projectWorkflowWorkbench } from "../../lib/workbench/taskWorkbenchProjection";
 import { MessageActions } from "../messages/MessageActions";
 import { currentWorkflowExecution } from "../../lib/workflow/currentWorkflowExecution";
+import { useWorkflowProgressRefresh } from "./useWorkflowProgressRefresh";
 
 export function CommandWorkflowPanel({
   active = true,
@@ -73,9 +74,6 @@ export function CommandWorkflowPanel({
   const [execution, setExecution] = useState<CrewonWorkflowExecution | null>(
     null,
   );
-  // No pendingExecutionId needed - progress is tracked via onReload
-  // polling during the busy state, and cancelExecutionId is derived
-  // from the persisted run data.
   const selected = available.find(
     (workflow) => workflow.config.workflowId === openedId,
   );
@@ -108,16 +106,22 @@ export function CommandWorkflowPanel({
         (node) => node.status === "waitingForApproval",
       )
     : undefined;
-  // Use the real executionId from the persisted run (via onReload)
-  // for cancel. During the initial blocking onRun call, the real
-  // executionId may not be available until the first reload picks it
-  // up. pendingExecutionId is only used for UI state tracking.
+  // Only a persisted or accepted execution identity can be canceled.
   const cancelExecutionId = projectedExecution?.executionId;
   const runActive =
     matchesActiveWorkflowStatus(projectedExecution?.status) || busy;
   const controlPresentation = workflowControlPresentation({
     cancelBusy,
     gateBusy,
+  });
+
+  useWorkflowProgressRefresh({
+    enabled: active && (runActive || gateBusy || cancelBusy),
+    workflowId: selected?.config.workflowId ?? null,
+    executionId: projectedExecution?.executionId ?? null,
+    cadence:
+      pendingGate && !gateBusy && !cancelBusy ? "waitingForApproval" : "active",
+    reload: onReload,
   });
 
   useEffect(() => {
@@ -160,10 +164,6 @@ export function CommandWorkflowPanel({
     setError(null);
     setExecution(null);
     setSubmittedInput(prompt);
-    // Poll for progress updates while the blocking run call is in flight.
-    const progressInterval = setInterval(() => {
-      void onReload();
-    }, 2000);
     try {
       const result = await onRun(selected, prompt);
       setExecution(result);
@@ -173,7 +173,6 @@ export function CommandWorkflowPanel({
         runError instanceof Error ? runError.message : "这次协作没有完成",
       );
     } finally {
-      clearInterval(progressInterval);
       setBusy(false);
       // Final reload to pick up the settled state.
       void onReload();
@@ -192,9 +191,6 @@ export function CommandWorkflowPanel({
     }
     setGateBusy(true);
     setError(null);
-    const progressInterval = setInterval(() => {
-      void onReload().catch(() => undefined);
-    }, 2000);
     try {
       const resolved = await onResolveGate(
         selected,
@@ -215,7 +211,6 @@ export function CommandWorkflowPanel({
           : "确认没有生效，请重试",
       );
     } finally {
-      clearInterval(progressInterval);
       setGateBusy(false);
     }
   }

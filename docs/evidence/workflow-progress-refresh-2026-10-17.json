@@ -1,0 +1,613 @@
+{
+  "schemaVersion": "crewon.workflow-progress-refresh-evidence.v1",
+  "date": "2026-10-17",
+  "baseCommit": "419216a5c2c99660470bb23499c889f705169292",
+  "scope": "UI-only progress refresh ownership in the real CommandWorkflowPanel; no backend authority switch, protocol, styles or model-history changes.",
+  "before": {
+    "source": "CommandWorkflowPanel at baseCommit, before hook integration",
+    "domRegression": {
+      "files": "1 failed (1)",
+      "tests": "10 failed (10)"
+    },
+    "expectedExitCode": 1
+  },
+  "after": {
+    "commandWorkflowTeamAndAdjacentRuntime": {
+      "files": "30 passed (30)",
+      "tests": "249 passed (249)"
+    },
+    "execution": {
+      "exitCode": 0,
+      "logSha256": "9a6fcccfce2a7cefddebc2353cd3f77d83d53b5ab831f82f20c1939e9749726e"
+    },
+    "newProgressCases": 13,
+    "strictMode": true,
+    "snapshotsUpdated": false,
+    "uiAndElectronLint": {
+      "exitCode": 0,
+      "logSha256": "81146a96524321a864257d9c4668a0dbd5ebb7f7cd0567ecd1086416bfa5e5de"
+    },
+    "productionUiBuild": {
+      "exitCode": 0,
+      "logSha256": "1002d1ef8fe62b04ddb09a5e57a894d7b141d823e2e415ee3ddb1fc69e0e8b3b"
+    },
+    "eagerJavaScriptBytes": 326427
+  },
+  "refreshPolicy": {
+    "firstReadAfterMs": 2000,
+    "activeDelayAfterSettledReadMs": 2000,
+    "passiveGateDelayAfterSettledReadMs": 15000,
+    "maxAutomaticReadsInFlightPerMountedPanel": 1,
+    "manualOrExternalRefreshCoalesced": false,
+    "inFlightIoAbortedOnHide": false,
+    "boundaries": [
+      "visible selected Workflow identity",
+      "execution identity",
+      "active command or nonterminal execution",
+      "passive Gate cadence"
+    ],
+    "stopOn": [
+      "return to list",
+      "hidden panel",
+      "terminal projection",
+      "unmount"
+    ],
+    "rejectedRead": "Schedules another automatic refresh if the owner still retains the visible task; no implicit submit/cancel."
+  },
+  "browser": {
+    "surface": "Real Panel and production CSS with explicit synthetic fixture data, local Vite; no user records or provider.",
+    "finalFreshChecks": [
+      "passive Gate observe",
+      "approval returns running",
+      "completion visible, cancel removed and composer enabled"
+    ],
+    "viewports": [
+      {
+        "width": 1280,
+        "height": 720
+      },
+      {
+        "width": 390,
+        "height": 600
+      },
+      {
+        "width": 900,
+        "height": 450
+      }
+    ],
+    "activeEightSecondSamples": [
+      {
+        "at": 1792222802319,
+        "commands": 0,
+        "composer": {
+          "height": 72,
+          "width": 718,
+          "x": 281,
+          "y": 555
+        },
+        "document": {
+          "height": 762,
+          "width": 1280
+        },
+        "overflow": [],
+        "peakReads": 1,
+        "reads": 5,
+        "room": {
+          "height": 678,
+          "width": 1258,
+          "x": 11,
+          "y": 42
+        },
+        "roomHtmlLength": 4135,
+        "shell": "team",
+        "state": "running",
+        "viewport": {
+          "height": 720,
+          "width": 1280
+        }
+      },
+      {
+        "at": 1792222804339,
+        "commands": 0,
+        "composer": {
+          "height": 72,
+          "width": 718,
+          "x": 281,
+          "y": 555
+        },
+        "document": {
+          "height": 762,
+          "width": 1280
+        },
+        "overflow": [],
+        "peakReads": 1,
+        "reads": 5,
+        "room": {
+          "height": 678,
+          "width": 1258,
+          "x": 11,
+          "y": 42
+        },
+        "roomHtmlLength": 4135,
+        "shell": "team",
+        "state": "running",
+        "viewport": {
+          "height": 720,
+          "width": 1280
+        }
+      },
+      {
+        "at": 1792222806383,
+        "commands": 0,
+        "composer": {
+          "height": 72,
+          "width": 718,
+          "x": 281,
+          "y": 555
+        },
+        "document": {
+          "height": 762,
+          "width": 1280
+        },
+        "overflow": [],
+        "peakReads": 1,
+        "reads": 6,
+        "room": {
+          "height": 678,
+          "width": 1258,
+          "x": 11,
+          "y": 42
+        },
+        "roomHtmlLength": 4135,
+        "shell": "team",
+        "state": "running",
+        "viewport": {
+          "height": 720,
+          "width": 1280
+        }
+      },
+      {
+        "at": 1792222808410,
+        "commands": 0,
+        "composer": {
+          "height": 72,
+          "width": 718,
+          "x": 281,
+          "y": 555
+        },
+        "document": {
+          "height": 762,
+          "width": 1280
+        },
+        "overflow": [],
+        "peakReads": 1,
+        "reads": 6,
+        "room": {
+          "height": 678,
+          "width": 1258,
+          "x": 11,
+          "y": 42
+        },
+        "roomHtmlLength": 4135,
+        "shell": "team",
+        "state": "running",
+        "viewport": {
+          "height": 720,
+          "width": 1280
+        }
+      },
+      {
+        "at": 1792222810429,
+        "commands": 0,
+        "composer": {
+          "height": 72,
+          "width": 718,
+          "x": 281,
+          "y": 555
+        },
+        "document": {
+          "height": 762,
+          "width": 1280
+        },
+        "overflow": [],
+        "peakReads": 1,
+        "reads": 6,
+        "room": {
+          "height": 678,
+          "width": 1258,
+          "x": 11,
+          "y": 42
+        },
+        "roomHtmlLength": 4135,
+        "shell": "team",
+        "state": "running",
+        "viewport": {
+          "height": 720,
+          "width": 1280
+        }
+      }
+    ],
+    "activeSampleScope": "Collected before passive-Gate cadence adjustment. The active refresh path was unchanged; final source additionally has the full tests and fresh browser checks.",
+    "layoutAndCompletionSamples": {
+      "narrow": {
+        "at": 1792222845161,
+        "commands": 1,
+        "composer": {
+          "height": 58,
+          "width": 342,
+          "x": 24,
+          "y": 454.6015625
+        },
+        "document": {
+          "height": 600,
+          "width": 390
+        },
+        "overflow": [
+          {
+            "cls": "",
+            "minHeight": "0px",
+            "minWidth": "0px",
+            "rect": {
+              "height": 18,
+              "width": 24,
+              "x": 378.578125,
+              "y": 6.5
+            },
+            "tag": "BUTTON"
+          },
+          {
+            "cls": "",
+            "minHeight": "0px",
+            "minWidth": "0px",
+            "rect": {
+              "height": 18,
+              "width": 48,
+              "x": 405.953125,
+              "y": 6.5
+            },
+            "tag": "BUTTON"
+          },
+          {
+            "cls": "",
+            "minHeight": "0px",
+            "minWidth": "0px",
+            "rect": {
+              "height": 14,
+              "width": 49,
+              "x": 457.328125,
+              "y": 8.5
+            },
+            "tag": "LABEL"
+          },
+          {
+            "cls": "",
+            "minHeight": "0px",
+            "minWidth": "0px",
+            "rect": {
+              "height": 13,
+              "width": 13,
+              "x": 457.328125,
+              "y": 7
+            },
+            "tag": "INPUT"
+          },
+          {
+            "cls": "workflow-step-node",
+            "minHeight": "auto",
+            "minWidth": "210px",
+            "rect": {
+              "height": 49.25,
+              "width": 210,
+              "x": 239,
+              "y": 167.046875
+            },
+            "tag": "ARTICLE"
+          },
+          {
+            "cls": "status",
+            "minHeight": "24px",
+            "minWidth": "auto",
+            "rect": {
+              "height": 24,
+              "width": 56.3671875,
+              "x": 382.6328125,
+              "y": 179.671875
+            },
+            "tag": "EM"
+          }
+        ],
+        "peakReads": 0,
+        "reads": 1,
+        "room": {
+          "height": 558,
+          "width": 368,
+          "x": 11,
+          "y": 42
+        },
+        "roomHtmlLength": 4135,
+        "shell": "team",
+        "state": "running",
+        "viewport": {
+          "height": 600,
+          "width": 390
+        }
+      },
+      "low": {
+        "at": 1792222855719,
+        "commands": 1,
+        "composer": {
+          "height": 72,
+          "width": 718,
+          "x": 91,
+          "y": 285
+        },
+        "document": {
+          "height": 450,
+          "width": 900
+        },
+        "overflow": [],
+        "peakReads": 1,
+        "reads": 6,
+        "room": {
+          "height": 408,
+          "width": 878,
+          "x": 11,
+          "y": 42
+        },
+        "roomHtmlLength": 4135,
+        "shell": "team",
+        "state": "running",
+        "viewport": {
+          "height": 450,
+          "width": 900
+        }
+      },
+      "returned": {
+        "at": 1792222856192,
+        "commands": 1,
+        "composer": null,
+        "document": {
+          "height": 450,
+          "width": 900
+        },
+        "overflow": [],
+        "peakReads": 1,
+        "reads": 6,
+        "room": null,
+        "shell": "team",
+        "state": "running",
+        "viewport": {
+          "height": 450,
+          "width": 900
+        }
+      },
+      "completedStart": {
+        "at": 1792222856771,
+        "commands": 1,
+        "composer": {
+          "height": 72,
+          "width": 718,
+          "x": 91,
+          "y": 285
+        },
+        "document": {
+          "height": 450,
+          "width": 900
+        },
+        "overflow": [],
+        "peakReads": 1,
+        "reads": 6,
+        "room": {
+          "height": 408,
+          "width": 878,
+          "x": 11,
+          "y": 42
+        },
+        "roomHtmlLength": 4605,
+        "shell": "team",
+        "state": "completed",
+        "viewport": {
+          "height": 450,
+          "width": 900
+        }
+      },
+      "completedEnd": {
+        "at": 1792222860988,
+        "commands": 1,
+        "composer": {
+          "height": 72,
+          "width": 718,
+          "x": 91,
+          "y": 285
+        },
+        "document": {
+          "height": 450,
+          "width": 900
+        },
+        "overflow": [],
+        "peakReads": 1,
+        "reads": 6,
+        "room": {
+          "height": 408,
+          "width": 878,
+          "x": 11,
+          "y": 42
+        },
+        "roomHtmlLength": 4605,
+        "shell": "team",
+        "state": "completed",
+        "viewport": {
+          "height": 450,
+          "width": 900
+        }
+      }
+    },
+    "finalPassiveGateSamples": [
+      {
+        "at": 1792222918541,
+        "commands": 0,
+        "composer": {
+          "height": 72,
+          "width": 718,
+          "x": 281,
+          "y": 555
+        },
+        "document": {
+          "height": 720,
+          "width": 1280
+        },
+        "overflow": [],
+        "peakReads": 0,
+        "reads": 0,
+        "room": {
+          "height": 678,
+          "width": 1258,
+          "x": 11,
+          "y": 42
+        },
+        "roomHtmlLength": 5509,
+        "shell": "team",
+        "state": "waitingForApproval",
+        "viewport": {
+          "height": 720,
+          "width": 1280
+        }
+      },
+      {
+        "at": 1792222920561,
+        "commands": 0,
+        "composer": {
+          "height": 72,
+          "width": 718,
+          "x": 281,
+          "y": 555
+        },
+        "document": {
+          "height": 720,
+          "width": 1280
+        },
+        "overflow": [],
+        "peakReads": 1,
+        "reads": 1,
+        "room": {
+          "height": 678,
+          "width": 1258,
+          "x": 11,
+          "y": 42
+        },
+        "roomHtmlLength": 5509,
+        "shell": "team",
+        "state": "waitingForApproval",
+        "viewport": {
+          "height": 720,
+          "width": 1280
+        }
+      },
+      {
+        "at": 1792222922582,
+        "commands": 0,
+        "composer": {
+          "height": 72,
+          "width": 718,
+          "x": 281,
+          "y": 555
+        },
+        "document": {
+          "height": 720,
+          "width": 1280
+        },
+        "overflow": [],
+        "peakReads": 1,
+        "reads": 1,
+        "room": {
+          "height": 678,
+          "width": 1258,
+          "x": 11,
+          "y": 42
+        },
+        "roomHtmlLength": 5509,
+        "shell": "team",
+        "state": "waitingForApproval",
+        "viewport": {
+          "height": 720,
+          "width": 1280
+        }
+      },
+      {
+        "at": 1792222924601,
+        "commands": 0,
+        "composer": {
+          "height": 72,
+          "width": 718,
+          "x": 281,
+          "y": 555
+        },
+        "document": {
+          "height": 720,
+          "width": 1280
+        },
+        "overflow": [],
+        "peakReads": 1,
+        "reads": 1,
+        "room": {
+          "height": 678,
+          "width": 1258,
+          "x": 11,
+          "y": 42
+        },
+        "roomHtmlLength": 5509,
+        "shell": "team",
+        "state": "waitingForApproval",
+        "viewport": {
+          "height": 720,
+          "width": 1280
+        }
+      }
+    ],
+    "pageHorizontalOverflow": false,
+    "stepStripInternallyScrollable": true,
+    "formalRoot": "Account login page shown. Enterprise configuration proxy at port 8000 was unavailable. No login/authentication bypass.",
+    "finalPreviewConsoleErrors": [],
+    "screenshots": [
+      {
+        "path": "/Users/cheneywang/.codex/visualizations/2026/10/16/01a1429d-e9a8-7db0-9e97-e51e1ee04cf0/workflow-progress-completed.jpg",
+        "sha256": "133dd66e35ed13188b796872b8af83915b36e9d29aac1bc93ca8b22db038b447"
+      },
+      {
+        "path": "/Users/cheneywang/.codex/visualizations/2026/10/16/01a1429d-e9a8-7db0-9e97-e51e1ee04cf0/workflow-progress-narrow.jpg",
+        "sha256": "9a3fda337ad6a03c9ea2f44702a929a60b5a0e045e960b418356a97b3c5830b3"
+      },
+      {
+        "path": "/Users/cheneywang/.codex/visualizations/2026/10/16/01a1429d-e9a8-7db0-9e97-e51e1ee04cf0/workflow-progress-low-height.jpg",
+        "sha256": "5c1ae0f08b94814668497589b45571c49b82157412ff066e0e92d999be0a7e30"
+      }
+    ]
+  },
+  "limitations": [
+    "Legacy ControlWorkflowRuntime.listWorkflows still enumerates Threads and can resume legacy execution; the callback is not claimed read-only or constant-cost.",
+    "No durable Workflow frontend submission, arbitrary DAG/input UX, unknown-write receipt recovery or legacy read boundary switch.",
+    "No new protection for Workspace-level stale source responses or failure-driven record clearing.",
+    "Automatic request serialization does not serialize command-final, manual or external reloads, or separate mounted panels.",
+    "No full UI suite, real-provider, installed desktop or real-account acceptance. Existing UI/plugin failures are not reclassified.",
+    "Preview root wrapper reserves space for its synthetic control bar; product CSS/layout remains unchanged."
+  ],
+  "cleanup": {
+    "previewOnlySourceSha256": {
+      "apps/crewon-ui/workflow-progress-preview.html": "17df3cfd089504d8ebf2da52cb0469eb0203c0dcd9ec29b6798dba93685869f7",
+      "apps/crewon-ui/src/workflow-progress-preview.tsx": "6a16d728d19aaafe04785ea886d87bcd1503ec6252574d8839346019555c9af7"
+    },
+    "ownedVitePid": 84736,
+    "port": 5197,
+    "entriesRemoved": true,
+    "tabClosed": true,
+    "viewportReset": true,
+    "stoppedAt": "2026-10-17T07:42:42.838225+00:00",
+    "portListening": false,
+    "previewSessionExitCode": 143
+  },
+  "sourceSha256": {
+    "apps/crewon-ui/src/components/app/CommandWorkflowPanel.tsx": "eaefaea847e3a439310e6c22624010111c640d750616b71653aaffa51e0174a3",
+    "apps/crewon-ui/src/components/app/useWorkflowProgressRefresh.ts": "72f54fcd09f1aff59ba2abf58b54d493a436497a6f8d0a6eb366a3df132efeab",
+    "apps/crewon-ui/src/components/app/CommandWorkflowPanel.progress.test.tsx": "c6051d4c33e622f4da8fe28fa867d58bd9a42bf188bc7415e02359958ab72a33"
+  }
+}
