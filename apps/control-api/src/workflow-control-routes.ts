@@ -4,10 +4,13 @@ import type {
   WorkflowHumanGateApplicationService,
   WorkflowHumanGateReviewApplicationService,
   WorkflowRunQueryService,
+  WorkflowRunListApplicationService,
   WorkflowRunApplicationService,
 } from "@crewon/application";
 import {
   parseRunId,
+  parseWorkflowRunListQuery,
+  parseWorkflowRunListResponse,
   parseReviewWorkflowHumanGateRequest,
   parseWorkflowHumanGateReviewResponse,
   parseWorkflowHumanGateReviewMutationResponse,
@@ -25,6 +28,7 @@ import { WorkspaceControlUnavailableError } from "./control-api-errors.ts";
 import { requestContext } from "./request-context.ts";
 
 export type WorkflowControlServices = {
+  workflowRootRuns?: Pick<WorkflowRunListApplicationService, "listRuns"> | null;
   workflowHumanGateReviews?: Pick<
     WorkflowHumanGateReviewApplicationService,
     "getReview" | "reviewGate"
@@ -73,6 +77,20 @@ export function registerWorkflowControlRoutes(
         version: "v1",
         available: dependencies.workflowHumanGateReviews != null,
       });
+    },
+  );
+  app.get<{ Querystring: Record<string, unknown> }>(
+    "/api/v1/workflow-runs",
+    async (request, reply) => {
+      reply.header("cache-control", "no-store");
+      const actor = await dependencies.identity.resolveActor(
+        requestContext(request),
+      );
+      const query = parseWorkflowRunListQuery({ ...request.query });
+      if (!dependencies.workflowRootRuns)
+        throw new WorkspaceControlUnavailableError();
+      const result = await dependencies.workflowRootRuns.listRuns(actor, query);
+      return project(() => parseWorkflowRunListResponse(result, query));
     },
   );
   app.get<{ Params: { runId: string } }>(

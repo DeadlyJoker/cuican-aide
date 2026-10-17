@@ -1,3 +1,4 @@
+import { listPostgresWorkflowRuns } from "./postgres-workflow-run-list.ts";
 import type { Pool, PoolClient } from "pg";
 import {
   parseWorkflowRunSnapshotResponse,
@@ -10,6 +11,7 @@ import {
   RunStoreError,
   type RunLocator,
   type WorkflowRunReadStore,
+  type WorkflowRunListStore,
 } from "@crewon/application";
 import type { RunState } from "@crewon/domain";
 import { validatePostgresSchemaName } from "./postgres-queue-schema.ts";
@@ -35,7 +37,9 @@ type Dependencies = {
 };
 
 /** Reads never migrate, claim work, take aggregate write locks or advance a Workflow. */
-export class PostgresWorkflowRunQueryStore implements WorkflowRunReadStore {
+export class PostgresWorkflowRunQueryStore
+  implements WorkflowRunReadStore, WorkflowRunListStore
+{
   private readonly sql: string;
   private readonly pool: Pool;
   private readonly schema: string;
@@ -46,6 +50,13 @@ export class PostgresWorkflowRunQueryStore implements WorkflowRunReadStore {
     this.dependencies = dependencies;
     validatePostgresSchemaName(schema);
     this.sql = `"${schema}"`;
+  }
+
+  async listWorkflowRuns(
+    input: Parameters<WorkflowRunListStore["listWorkflowRuns"]>[0],
+  ) {
+    this.dependencies.assertOpen();
+    return listPostgresWorkflowRuns(this.pool, this.schema, input);
   }
 
   async readWorkflowRunSnapshot(

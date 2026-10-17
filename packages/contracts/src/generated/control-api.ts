@@ -476,7 +476,8 @@ export interface paths {
       path?: never;
       cookie?: never;
     };
-    get?: never;
+    /** @description Read-only authorized Workflow root summaries in the current tenant and space. Cursor binds version and optional Thread filters; Creation-time pages are not an admission receipt or proof of execution completion. */
+    get: operations["listWorkflowRuns"];
     put?: never;
     post: operations["startWorkflowRun"];
     delete?: never;
@@ -4213,6 +4214,10 @@ export interface components {
       /** @description Review read/write support is composed, not a permission grant or Worker liveness check. */
       available: boolean;
     };
+    ListWorkflowRunsResponse: {
+      data: components["schemas"]["RunView"][];
+      nextCursor: string | null;
+    };
   };
   responses: {
     /** @description Stable safe error envelope */
@@ -5494,6 +5499,36 @@ export interface operations {
       403: components["responses"]["Error"];
       409: components["responses"]["Error"];
       500: components["responses"]["Error"];
+    };
+  };
+  listWorkflowRuns: {
+    parameters: {
+      query: {
+        workflowVersionId: string;
+        threadId?: string;
+        cursor?: string;
+        limit?: number;
+      };
+      header?: never;
+      path?: never;
+      cookie?: never;
+    };
+    requestBody?: never;
+    responses: {
+      /** @description At most 20 public root Run summaries; no private state, model/tool bodies or DAG outputs. */
+      200: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          "application/json": components["schemas"]["ListWorkflowRunsResponse"];
+        };
+      };
+      400: components["responses"]["Error"];
+      401: components["responses"]["Error"];
+      403: components["responses"]["Error"];
+      500: components["responses"]["Error"];
+      503: components["responses"]["Error"];
     };
   };
   startWorkflowRun: {

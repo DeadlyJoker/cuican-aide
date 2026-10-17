@@ -34,7 +34,35 @@ JSON 的形状与下方 `workflow` 对象一致，不包含 TypeScript 的 `sati
 
 目录读取复用原定义表，不迁移、不注册 Thread、不认领或推进任务。Store 每页至多解码 8 MiB 定义、单份仍为 Domain 原 2 MiB 上限；先选有界身份页再读取定义，并在数据库传回前过滤字节预算。每份定义只在 Store 校验并提取摘要，Application/Control 不传递或重复解码整份定义。HTTP/SDK 响应预算为 1 MiB，只返回身份、摘要、名称、描述和创建时间。超过定义页预算时应使用更小页长读取，不能截断定义或伪造摘要。
 
-该目录也能发现经 API 发布、输入 schema 和 DAG 拓扑不同于旧 UI 的版本。因此本批不启用前端目录切换：旧前端逐节点执行器不能接管这些定义。前端定义创建/发现和新任务执行须与有界根 Run 查询、后台提交、订阅恢复、审批意见展示及旧记录边界一起接管。不得为恢复新任务再增加隐藏 Thread/Message 注册表，也不能逐个扫描所有普通会话来拼出根任务目录。
+该目录也能发现经 API 发布、输入 schema 和 DAG 拓扑不同于旧 UI 的版本。因此本批不启用前端目录切换：旧前端逐节点执行器不能接管这些定义。前端定义创建/发现和新任务执行须与下方的根 Run 查询、后台提交、订阅恢复、审批意见展示及旧记录边界一起接管。不得为恢复新任务再增加隐藏 Thread/Message 注册表，也不能逐个扫描所有普通会话来拼出根任务目录。
+
+## 根任务查询与恢复边界
+
+`GET /api/v1/workflow-runs` 和正式 SDK `listWorkflowRuns()` 提供当前租户、空间内的 Workflow 根 Run 摘要。必须指定 `workflowVersionId`，可选 `threadId`；默认及最大页长为 20。示例：
+
+```typescript
+const page = await client.listWorkflowRuns({
+  workflowVersionId,
+  threadId,
+  limit: 20,
+});
+const next = page.nextCursor
+  ? await client.listWorkflowRuns({
+      workflowVersionId,
+      threadId,
+      limit: 20,
+      cursor: page.nextCursor,
+    })
+  : null;
+```
+
+游标绑定版本及 Thread 筛选，按不可变的创建时间（毫秒）及 Run ID 的 UTF-8 字节顺序倒序续读，不能按更新时间跨页：旧任务晚完成不应挤到新任务之前。每次请求是独立的一致只读快照，不是整个翻页过程的长事务；重新刷新首页才能发现新任务。游标只是读取位置，不授予权限，也不是入库回执或完成证明。目录中没有某条记录不能证明提交失败；未知写入仍按原幂等键和回执恢复，不匹配最近时间或相同输入后另起任务。
+
+查询复用原入库记录定位根身份，使用现有租户/Run 索引取公开摘要，不枚举普通 Thread/Run，不解码或返回模型、工具和完整 DAG 正文，也不认领、推进任务或安装执行表。每条摘要上限 64 KiB，HTTP/SDK 整页上限 1 MiB；超预算应缩小页长，不能截断记录。候选读取仍随该租户已入库的 Workflow 根任务数量增长，不保证任意历史规模下恒定查询耗时；当前不新增索引、迁移或目录注册表。
+
+请求检查当前版本 read 和 Thread 范围 read 权限；指定 Thread 时还检查线程范围 Run read，返回前检查每条 Thread/Run 及当前范围权限。任一拒绝均拒绝整页，不返回部分结果。响应为 `no-store`，只包含已有公开 Run 形状与 `nextCursor`。节点、人工门及冻结输出应通过已知根 ID 的 `getWorkflowRunSnapshot()` 读取，流式进度及终态继续使用原 Run SSE。
+
+该只读服务装配于 standalone PostgreSQL Control；不依赖启用调度配置。未安装入库 schema 时返回空页，部分或不支持的 schema 会拒绝；不据此判断 Worker 是否在线。SQLite/其他尚未装配此服务的宿主返回 503，不静默降级到 renderer 执行；现有执行能力响应字段保持原状。生产请求级身份和桌面策略入口仍需后续接线。
 
 ## 配置与已有运行时的关系
 

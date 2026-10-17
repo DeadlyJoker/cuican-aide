@@ -1,3 +1,4 @@
+import { base64UrlEncode, base64UrlDecode } from "./utf8-base64url.ts";
 import type { components, operations, paths } from "./generated/control-api.ts";
 
 import { ContractValidationError } from "./contract-validation-error.ts";
@@ -1254,27 +1255,6 @@ function isRfc3339Utc(value: unknown): value is string {
     typeof value === "string" &&
     /^\d{4}-\d{2}-\d{2}T\d{2}:\d{2}:\d{2}(?:\.\d+)?Z$/u.test(value) &&
     !Number.isNaN(Date.parse(value))
-  );
-}
-
-function base64UrlEncode(value: string): string {
-  const bytes = new TextEncoder().encode(value);
-  let binary = "";
-  for (const byte of bytes) {
-    binary += String.fromCharCode(byte);
-  }
-  return btoa(binary)
-    .replaceAll("+", "-")
-    .replaceAll("/", "_")
-    .replace(/=+$/u, "");
-}
-
-function base64UrlDecode(value: string): string {
-  const base64 = value.replaceAll("-", "+").replaceAll("_", "/");
-  const padded = base64.padEnd(Math.ceil(base64.length / 4) * 4, "=");
-  const binary = atob(padded);
-  return new TextDecoder(undefined, { fatal: true }).decode(
-    Uint8Array.from(binary, (character) => character.charCodeAt(0)),
   );
 }
 

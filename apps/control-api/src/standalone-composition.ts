@@ -5,6 +5,7 @@ import {
 import {
   captureWorkflowDeploymentConfiguration,
   WorkflowRunApplicationService,
+  WorkflowRunListApplicationService,
   WorkflowHumanGateApplicationService,
   WorkflowHumanGateReviewApplicationService,
   type WorkflowDeploymentConfiguration,
@@ -905,6 +906,13 @@ function composeControlApi(
         workflow === undefined
           ? config.workflowHumanGates
           : new WorkflowHumanGateApplicationService(workflow.composition),
+      workflowRootRuns:
+        store instanceof PostgresDomainStore
+          ? new WorkflowRunListApplicationService({
+              store: store.workflowRunReadStore(),
+              authorization,
+            })
+          : null,
       workflowQueries:
         store instanceof PostgresDomainStore
           ? new WorkflowRunQueryService({

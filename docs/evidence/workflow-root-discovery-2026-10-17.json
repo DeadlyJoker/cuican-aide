@@ -1,0 +1,130 @@
+{
+  "schemaVersion": "crewon.workflow-root-discovery-evidence.v1",
+  "date": "2026-10-17",
+  "baseCommit": "ddb208cf31a0c740c0a407369d5da54dfb9ffe3a",
+  "scope": "Isolated PostgreSQL root discovery and compatibility regression; no installed desktop UI or real model provider acceptance.",
+  "environment": {
+    "node": "24.18.1",
+    "pnpm": "10.33.0",
+    "postgres": "18.6 (Homebrew)",
+    "transport": "Owned Unix socket only; no TCP listener; test-only fsync disabled."
+  },
+  "queryPlanFixture": {
+    "case": "workflow-root-discovery",
+    "ordinaryRows": 1000,
+    "privateRootBytes": 2097152,
+    "publicResponseBytes": 544,
+    "snapshotReads": [
+      {
+        "type": "Index Scan",
+        "index": "run_snapshots_tenant_id_run_id_key",
+        "loops": 1,
+        "rows": 1
+      },
+      {
+        "type": "Index Scan",
+        "index": "run_snapshots_tenant_id_run_id_key",
+        "loops": 1,
+        "rows": 1
+      }
+    ]
+  },
+  "suites": {
+    "workflowAndCompatibility": {
+      "tests": 40,
+      "pass": 40,
+      "fail": 0,
+      "cancelled": 0,
+      "skipped": 0
+    },
+    "contracts": {
+      "tests": 762,
+      "pass": 762,
+      "fail": 0,
+      "cancelled": 0,
+      "skipped": 0
+    },
+    "controlClient": {
+      "tests": 277,
+      "pass": 277,
+      "fail": 0,
+      "cancelled": 0,
+      "skipped": 0
+    },
+    "architectureAndProductionTypes": {
+      "tests": 37,
+      "pass": 37,
+      "fail": 0,
+      "cancelled": 0,
+      "skipped": 0
+    },
+    "queryPlan": {
+      "tests": 1,
+      "pass": 1,
+      "fail": 0,
+      "cancelled": 0,
+      "skipped": 0
+    },
+    "finalContractSyntax": {
+      "tests": 2,
+      "pass": 2,
+      "fail": 0,
+      "cancelled": 0,
+      "skipped": 0
+    }
+  },
+  "typechecks": {
+    "contracts": {
+      "exitCode": 0
+    },
+    "application": {
+      "exitCode": 0
+    },
+    "client": {
+      "exitCode": 0
+    },
+    "store": {
+      "exitCode": 0
+    },
+    "control": {
+      "exitCode": 0
+    }
+  },
+  "readSemantics": {
+    "rootCandidateSource": "Existing workflow_run_admissions tenant and Run identities",
+    "order": "createdAt normalized to milliseconds DESC, UTF8 Run ID bytes DESC",
+    "pageLimit": 20,
+    "publicRunByteLimit": 65536,
+    "responseByteLimit": 1048576,
+    "newTables": 0,
+    "newIndexes": 0,
+    "schemaMigrations": 0
+  },
+  "limitations": [
+    "The plan contains one admitted Workflow root and 1000 ordinary Runs; it does not measure arbitrary Workflow history scale.",
+    "The root candidate scan still scales with admitted Workflow roots for the tenant. PostgreSQL may decompress root JSON internally.",
+    "Creation-time pages are independent snapshots. New entries require refreshing the first page.",
+    "Directory absence is not proof of failed admission; use the original idempotency key and receipt.",
+    "No production latency, throughput, memory, power-loss durability or installed UI performance claim.",
+    "Standalone PostgreSQL composition only. SQLite and production request-level Workflow authority are not enabled by this change.",
+    "Approval comments remain metadata and have not yet been injected into downstream model context."
+  ],
+  "cleanup": {
+    "userSchemas": 0,
+    "otherClients": 0,
+    "startedAt": "2026-10-17T11:38:10.307385+08:00",
+    "serverVersion": "18.6 (Homebrew)",
+    "running": false,
+    "statusExitCode": 3,
+    "stoppedAt": "2026-10-17T04:04:35.401638+00:00"
+  },
+  "sourceSha256": {
+    "packages/contracts/src/workflow-run-list-contract.ts": "e0ce9cd0fb2cd14ac14bba0e8951463fcd5432d548150f0c631d14e1292c86e0",
+    "packages/application/src/workflow-run-list-service.ts": "26f378c54fba1f90098999fd6e529e4a4966467cb5988e4cb0dfb1c69ad69cfb",
+    "packages/store/src/postgres-workflow-run-list.ts": "1b767cb02418c1212d8bf1dc98dedcb3ed6d195a4e481f66daf9f43206af8417",
+    "packages/control-client/src/workflow-control-client.ts": "0fa82d085d3e57990081dd16060cae6dc9bc7d1adeec8b46bb652fdb9a0a9752",
+    "apps/control-api/src/workflow-control-routes.ts": "58dd750e2d7f8e2168251fc6090380b16b12305ae955665a975279eaca7e317e",
+    "apps/control-api/src/postgres-workflow-run-list.integration.test.ts": "d00d4d759389e560d75d0213ce601e8b951f58569294ceee4cde415f79489bc3",
+    "packages/store/src/postgres-workflow-run-list.test.ts": "f9b221e4744ef8289eb0ee308de51714c03b58c04685021d36df12e656b43f4a"
+  }
+}

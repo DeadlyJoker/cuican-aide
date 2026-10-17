@@ -1,6 +1,8 @@
 import { WorkflowControlClient } from "./workflow-control-client.ts";
 import type {
   WorkflowVersionCatalogResponse,
+  WorkflowRunListRequest,
+  WorkflowRunListResponse,
   WorkflowGateLocator,
   WorkflowReviewCapability,
   WorkflowHumanGateReviewResponse,
@@ -1328,6 +1330,12 @@ export class ControlApiClient {
     });
   }
 
+  listWorkflowRuns(
+    query: WorkflowRunListRequest,
+    options: ControlApiRequestOptions = {},
+  ): Promise<WorkflowRunListResponse> {
+    return this.#workflowClient().listWorkflowRuns(query, options);
+  }
   getWorkflowReviewCapability(
     options: ControlApiRequestOptions = {},
   ): Promise<WorkflowReviewCapability> {

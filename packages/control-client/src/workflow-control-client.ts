@@ -1,5 +1,11 @@
 import {
   parseWorkflowGateLocator,
+  parseWorkflowRunListQuery,
+  formatWorkflowRunListCursor,
+  parseWorkflowRunListResponse,
+  MAX_WORKFLOW_RUN_LIST_BYTES,
+  type WorkflowRunListRequest,
+  type WorkflowRunListResponse,
   parseWorkflowVersionCatalogQuery,
   parseWorkflowVersionCatalogResponse,
   MAX_WORKFLOW_CATALOG_RESPONSE_BYTES,
@@ -82,6 +88,39 @@ export class WorkflowControlClient {
     } catch {
       throw new ControlApiProtocolError(
         "control_client_workflow_catalog_invalid",
+      );
+    }
+  }
+
+  async listWorkflowRuns(
+    input: WorkflowRunListRequest,
+    options: ControlApiRequestOptions = {},
+  ): Promise<WorkflowRunListResponse> {
+    options.signal?.throwIfAborted();
+    const query = parseWorkflowRunListQuery(input);
+    const params = new URLSearchParams({
+      workflowVersionId: query.workflowVersionId,
+      limit: String(query.limit),
+    });
+    if (query.threadId !== null) params.set("threadId", query.threadId);
+    if (query.before !== null)
+      params.set("cursor", formatWorkflowRunListCursor(query, query.before));
+    const result = await this.#request(
+      "GET",
+      `/api/v1/workflow-runs?${params.toString()}`,
+      null,
+      {
+        ...options,
+        expectedStatuses: [200],
+        maximumResponseBytes: MAX_WORKFLOW_RUN_LIST_BYTES,
+      },
+    );
+    options.signal?.throwIfAborted();
+    try {
+      return parseWorkflowRunListResponse(result, query);
+    } catch {
+      throw new ControlApiProtocolError(
+        "control_client_workflow_run_list_invalid",
       );
     }
   }

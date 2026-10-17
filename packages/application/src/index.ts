@@ -388,3 +388,5 @@ export {
 export * from "./workflow-run-query-service.ts";
 
 export * from "./workflow-deployment-policy.ts";
+
+export * from "./workflow-run-list-service.ts";

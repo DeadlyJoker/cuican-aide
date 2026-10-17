@@ -133,6 +133,11 @@ function expressions(postgres: boolean) {
   return `s.run_id, (${identity}) AS identity_valid, ${size} AS stored_bytes, CASE WHEN ${size} <= ${MAX_RUN_BYTES} THEN ${view} ELSE NULL END AS run_view`;
 }
 
+/** Shared bounded public projection; the query supplies snapshots as s and bindings as b. */
+export function postgresPublicRunSummaryColumns(): string {
+  return expressions(true);
+}
+
 /** Caller owns the existing short message-window transaction; no full Run/tool bodies leave SQL. */
 export function readSqliteTranscriptRuns(
   database: DatabaseSync,

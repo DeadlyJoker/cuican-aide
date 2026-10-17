@@ -1866,6 +1866,75 @@
             "$ref": "#/components/responses/Error"
           }
         }
+      },
+      "get": {
+        "operationId": "listWorkflowRuns",
+        "description": "Read-only authorized Workflow root summaries in the current tenant and space. Cursor binds version and optional Thread filters; Creation-time pages are not an admission receipt or proof of execution completion.",
+        "parameters": [
+          {
+            "name": "workflowVersionId",
+            "in": "query",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "maxLength": 512
+            }
+          },
+          {
+            "name": "threadId",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "type": "string",
+              "maxLength": 512
+            }
+          },
+          {
+            "name": "cursor",
+            "in": "query",
+            "schema": {
+              "type": "string",
+              "maxLength": 4096
+            }
+          },
+          {
+            "name": "limit",
+            "in": "query",
+            "schema": {
+              "type": "integer",
+              "minimum": 1,
+              "maximum": 20,
+              "default": 20
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "At most 20 public root Run summaries; no private state, model/tool bodies or DAG outputs.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ListWorkflowRunsResponse"
+                }
+              }
+            }
+          },
+          "400": {
+            "$ref": "#/components/responses/Error"
+          },
+          "401": {
+            "$ref": "#/components/responses/Error"
+          },
+          "403": {
+            "$ref": "#/components/responses/Error"
+          },
+          "500": {
+            "$ref": "#/components/responses/Error"
+          },
+          "503": {
+            "$ref": "#/components/responses/Error"
+          }
+        }
       }
     },
     "/api/v1/runs/{runId}": {
@@ -16375,6 +16444,30 @@
           "available": {
             "type": "boolean",
             "description": "Review read/write support is composed, not a permission grant or Worker liveness check."
+          }
+        }
+      },
+      "ListWorkflowRunsResponse": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": [
+          "data",
+          "nextCursor"
+        ],
+        "properties": {
+          "data": {
+            "type": "array",
+            "maxItems": 20,
+            "items": {
+              "$ref": "#/components/schemas/RunView"
+            }
+          },
+          "nextCursor": {
+            "type": [
+              "string",
+              "null"
+            ],
+            "maxLength": 4096
           }
         }
       }
