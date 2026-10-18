@@ -723,3 +723,9 @@ Node 24 验证：Control Client 与 Control API typecheck 通过；facade 单测
 新增 `createControlTeamApplicationOperations`，直接绑定 standalone Control 已有的 Actor、Thread/Run/Turn/Office/Goal application services 和 route resolver。它实现 Team 所需的读取、Office target 授权、Run/Thread/Goal/Turn 命令，并在每次 `withTeamTaskFence` 后返回独立 facade；不经过 HTTP，不读取 session/CSRF/BFF 凭据，也没有接入 scheduler。
 
 该 adapter 只在 `createStandaloneControlApi` 的返回对象暴露，Production composition 不提供固定 Team operations，避免把 request-scoped actor 变成后台身份。Node 24 真实 SQLite Control/Worker 组合验证覆盖 Thread snapshot、Office target、消息分页、execution-intent capability 和 Goal read，共 1 项通过；Control API typecheck、Prettier 和 diff 检查通过。
+
+## 第五十八批：Standalone scheduler 接线的异步 composition 边界（2026-10-19）
+
+尝试把 Team scheduler 直接接入现有 `composeControlApi` 时发现该 composition root 是同步构造，而 Team journal `migrate()` 及 Store factory 是异步操作。直接改成 async 会影响现有 standalone、PostgreSQL、extension/plugin 和同步创建入口，扩大变更面并改变启动错误与资源清理时序。
+
+本次未保留该接线尝试。已验证的 application operations adapter 保持独立；后续应新增明确的 async standalone scheduler composition/启动入口，在完成 journal migration、pump close 和失败清理后再由显式部署调用，不改写现有同步 Control composition，也不提前启用 scheduler。
