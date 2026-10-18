@@ -516,6 +516,19 @@ export class PostgresDomainStore
     });
   }
 
+  /** Explicit storage foundation only; does not enable Team scheduling. */
+  async experimentalTeamTaskJournalStore() {
+    this.assertOpen();
+    const { ExperimentalPostgresTeamTaskJournal } = await import(
+      "./postgres-team-task-journal.ts"
+    );
+    this.assertOpen();
+    return new ExperimentalPostgresTeamTaskJournal(this.pool, this.schemaSql(), {
+      assertOpen: () => this.assertOpen(),
+      loadRun: (client, locator) => this.loadRunWithin(client, locator),
+    });
+  }
+
   /** Admission foundation only. Neither construction nor migration enables a scheduler. */
   experimentalWorkflowRunAdmissionStore(
     resolveRouteWithinTransaction: PostgresWorkflowRouteResolver,

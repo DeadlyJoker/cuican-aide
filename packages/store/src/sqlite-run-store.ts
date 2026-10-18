@@ -990,6 +990,20 @@ export class SqliteRunStore implements DomainStore {
     });
   }
 
+  /** Explicit storage foundation only; does not enable Team scheduling. */
+  async experimentalTeamTaskJournalStore() {
+    this.#assertOpen();
+    const { ExperimentalSqliteTeamTaskJournal } = await import(
+      "./sqlite-team-task-journal.ts"
+    );
+    this.#assertOpen();
+    return new ExperimentalSqliteTeamTaskJournal(this.#database, {
+      assertOpen: () => this.#assertOpen(),
+      now: () => readLeaseClock(this.#clock),
+      loadRun: (locator) => this.#loadRun(locator),
+    });
+  }
+
   /** Internal foundation; the public deployment capability supplies trusted policy. */
   experimentalWorkflowRunAdmissionStore(
     resolveRouteWithinTransaction: SqliteWorkflowRouteResolver,

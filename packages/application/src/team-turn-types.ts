@@ -144,6 +144,8 @@ export type StartControlTeamTurnInput = Readonly<{
   onExecutionIntentMismatch?: (run: RunView) => void;
   pollIntervalMs?: number;
   runDeadlineMs?: number;
+  /** Only the backend task host supplies immutable stage observations. */
+  checkpoint?: TeamTurnCheckpoint;
 }> &
   (
     | Readonly<{
@@ -155,3 +157,16 @@ export type StartControlTeamTurnInput = Readonly<{
         managerResponseKind?: never;
       }>
   );
+
+export type TeamTurnCheckpoint = <T>(
+  label: string,
+  read: () => Promise<T>,
+) => Promise<T>;
+
+export function readTeamCheckpoint<T>(
+  input: { checkpoint?: TeamTurnCheckpoint },
+  label: string,
+  read: () => Promise<T>,
+): Promise<T> {
+  return input.checkpoint ? input.checkpoint(label, read) : read();
+}

@@ -6,6 +6,8 @@
   "exports": {
     ".": "./src/index.ts",
     "./team-turn": "./src/team-turn.ts",
+    "./team-task-journal": "./src/team-task-journal.ts",
+    "./team-task-execution": "./src/team-task-execution.ts",
     "./host-project-workspaces": "./src/host-project-workspaces.ts"
   },
   "scripts": {

@@ -3,6 +3,7 @@ import type {
   StartControlTeamTurnInput,
   ControlTeamTurnResult,
 } from "./team-turn-types.ts";
+import { readTeamCheckpoint } from "./team-turn-types.ts";
 import {
   controlTeamDelegatedMemberId,
   controlExpertManagerFinalResponseMessage,
@@ -51,10 +52,10 @@ const DEFAULT_RUN_DEADLINE_MS = 15 * 60 * 1_000;
  * them according to local capacity. The manager receives a bounded, auditable
  * report before the final synthesis Run starts on the original Thread.
  *
- * Migration entrypoint only: individual commands/Runs are durable, but this
- * coordinator's continuation is not. Do not replay it as a background job.
- * Durable Team admission, command receipts, ownership and cancellation must
- * be composed before replacing the legacy renderer driver in production.
+ * A bare invocation is not restartable. The experimental executeTeamTask host
+ * supplies frozen observations and command receipts. Current authorization,
+ * main-Thread reservation and full cancellation must still be composed before
+ * replacing the legacy renderer driver in production.
  */
 export async function startControlTeamTurn(
   input: StartControlTeamTurnInput,
@@ -70,7 +71,9 @@ export async function startControlTeamTurn(
     pollIntervalMs,
     runDeadlineMs,
   });
-  const forkSource = await input.client.getThread(input.threadId);
+  const forkSource = await readTeamCheckpoint(input, "context", () =>
+    input.client.getThread(input.threadId),
+  );
   if (
     forkSource.thread.threadId !== input.threadId ||
     forkSource.thread.status !== "active"
@@ -227,6 +230,7 @@ export async function startControlTeamTurn(
             input.client,
             managerFork.thread.threadId,
             managerPlanningPrompt.message.sequence,
+            input.checkpoint,
           )
         : null;
     if (managerTerminal.status !== "completed" || managerPlan === null) {
@@ -300,6 +304,7 @@ export async function startControlTeamTurn(
               input.client,
               fork.thread.threadId,
               workerAssignments[index]!.message.sequence,
+              input.checkpoint,
             )
           : null;
       if (directOutput !== null) {
@@ -322,7 +327,9 @@ export async function startControlTeamTurn(
     1 +
     (reports.some((report) => report.recoveredBy !== null) ? 1 : 0);
 
-  const current = await input.client.getThread(input.threadId);
+  const current = await readTeamCheckpoint(input, "managerFinalThread", () =>
+    input.client.getThread(input.threadId),
+  );
   if (
     current.thread.threadId !== input.threadId ||
     current.thread.status !== "active"
@@ -409,6 +416,7 @@ export async function startControlTeamTurn(
           input.client,
           input.threadId,
           finalManagerStarted.message.sequence,
+          input.checkpoint,
         )
       : null;
   if (finalManagerTerminal.status !== "completed" || delegation === null) {
@@ -424,7 +432,11 @@ export async function startControlTeamTurn(
     throw new Error("control_team_manager_delegation_invalid");
   }
 
-  const memberThread = await input.client.getThread(input.threadId);
+  const memberThread = await readTeamCheckpoint(
+    input,
+    "memberFinalThread",
+    () => input.client.getThread(input.threadId),
+  );
   if (
     memberThread.thread.threadId !== input.threadId ||
     memberThread.thread.status !== "active"

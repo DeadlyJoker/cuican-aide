@@ -1,0 +1,183 @@
+{
+  "schemaVersion": "crewon.team-task-journal-evidence.v1",
+  "date": "2026-10-18",
+  "baselineCommit": "f8468e5616bb21b993f3aa5451d642f09972412c",
+  "branch": "codex/runtime-concurrency-result-streaming",
+  "scope": "Explicit experimental Team task/command journal and leased continuation. No production task admission, Main background host or UI cutover.",
+  "storage": {
+    "schemaVersion": 1,
+    "tables": [
+      "team_task_journal_schema",
+      "team_task_journals",
+      "team_task_effects"
+    ],
+    "installation": "Explicit migrate only; parent Store factories lazily load modules, check owner lifetime before and after import, and do not migrate.",
+    "defaultProductionRegistration": false,
+    "existingHttpEventRunPurposeOrHistoryShapesChanged": false,
+    "leaseClock": {
+      "sqlite": "parent validated LeaseClock",
+      "postgres": "database clock_timestamp milliseconds"
+    },
+    "transactionBoundary": "No HTTP, model or arbitrary async callback inside SQLite transaction. PostgreSQL BEGIN is inside rollback try/finally; metadata row is shared-locked for writes.",
+    "bounds": {
+      "intentBytes": 131072,
+      "individualEffectPayloadBytes": 262144,
+      "taskPayloadBytes": 1048576,
+      "effectCount": 128,
+      "serializationDepth": 32,
+      "serializationNodes": 16384
+    }
+  },
+  "continuationSemantics": [
+    "Frozen intent captures tenant, space, issuer actor/principal, exact Office plan, source Thread revision, response mode, Goal intent and Tool permission mode. It is data, not an execution grant.",
+    "Thread and Office membership/target/responsibility match stored authority on fresh creation. Same task identity with changed intent rejects; no public Task API was added.",
+    "Every mutation records its operation, original arguments and stable per-task idempotency key before dispatch. Receipt settlement follows actual response, with immutable request/receipt conflicts rejected.",
+    "Context, initial/paused Goal, stage Thread revisions and selected assistant output are immutable stage observations. Nonterminal Run reads stay live; only terminal replies settle their observation.",
+    "Preparing an effect and extending its existing lease share one transaction. Epoch/owner/lease checks reject an expired or replaced writer; no new idempotency key is generated on takeover.",
+    "Cancellation blocks new prepare/renew and is not swallowed by transient status-read retries. Existing prepared work may still settle while its current lease is valid; this is not child cancellation propagation.",
+    "SQL NULL distinguishes an unsettled response from a settled JSON null. Unknown work is never evicted to meet count or byte budgets.",
+    "finalAccepted stores the original admission receipt after qualified real main Run lookup. It is not model completion; actual Run/Transcript remains authoritative."
+  ],
+  "verification": {
+    "dualStorageTeam": {
+      "tests": 28,
+      "passed": 28,
+      "failed": 0,
+      "skipped": 0,
+      "files": [
+        "apps/control-api/src/team-task-journal.integration.test.ts",
+        "apps/control-api/src/team-task-interruption.integration.test.ts",
+        "apps/control-api/src/team-turn-application.integration.test.ts"
+      ]
+    },
+    "adjacentRunThreadGoalWorkerPool": {
+      "tests": 248,
+      "suites": 20,
+      "passed": 248,
+      "failed": 0,
+      "skipped": 0,
+      "files": [
+        "packages/store/src/sqlite-run-store.test.ts",
+        "packages/store/src/postgres-run-store.test.ts",
+        "packages/store/src/postgres-thread-store.test.ts",
+        "packages/application/src/thread-goal-application-service.test.ts",
+        "apps/runtime-worker/src/runtime-worker-pool.integration.test.ts"
+      ]
+    },
+    "architectureAndProductionTypeGraph": {
+      "tests": 37,
+      "passed": 37,
+      "failed": 0,
+      "skipped": 0
+    },
+    "typechecks": {
+      "application": "passed",
+      "store": "passed",
+      "controlApi": "passed",
+      "runtimeWorker": "passed"
+    },
+    "format": "passed",
+    "typescriptEntrypoints": "passed",
+    "diffWhitespace": "passed",
+    "sourceFormat": "passed"
+  },
+  "runtimeEvidence": [
+    "Real Store, SDK, Control HTTP, Worker pool and Kernel on SQLite and PostgreSQL. Synthetic model transport; no real provider or external Tool side effects.",
+    "Planner Run, worker Run, manager final Turn and member final Turn each commit through real HTTP before a deliberately lost response. Close original parent Store and Control, expire the lease, reopen independent Store/Control and use a new owner/epoch.",
+    "The restarted coordinator reuses identical original body/key. Already sampled Runs are not sampled again; main transcript contains one original input and one final answer. Planned/member modes use five unique model Runs including the seed; other modes use four.",
+    "Goal pause loss preserves the initial null snapshot and original mutation body; restored children run while the same Goal is paused, and only the final main Turn resumes it. Explicit user pause and Run cancel retain existing semantics.",
+    "Concurrent lease claim has one winner. A stale owner cannot settle an unknown effect. Wrong principal, changed intent/effect, foreign space, forged Office Agent and malformed/accessor profiles reject without launching new work.",
+    "Caller mutation after create starts does not alter the frozen intent. Partial/future schema rejects without repair or downgrade.",
+    "Both child models are gated during a live cancellation. Pending Run observations are unsettled, cancellation promptly stops the coordinator without final submission or exhausting read retries. Test explicitly cancels child Runs afterward: propagation has not been implemented.",
+    "Existing Team tests retain parallel execution, failed-member manager recovery, bounded report truncation, Goal semantics, running SSE disconnect/reopen/resume and completed history convergence."
+  ],
+  "correctionsDuringDevelopment": [
+    "Initial parameter properties passed TypeScript but failed Node strip-only execution. Replaced with explicit fields; no new transform flags or build system.",
+    "SQLite STRICT uses INTEGER for lease milliseconds, while PostgreSQL uses BIGINT. No SQLite transaction awaits external work.",
+    "Actual ordinary Run snapshots may omit purpose for compatibility. Final qualification normalizes omitted purpose to turn exactly as existing projection/Store validation; explicit non-turn purposes remain rejected.",
+    "Lease extension and effect preparation were combined to avoid a separate renewal transaction per operation."
+  ],
+  "cleanup": {
+    "dataDirectory": "/tmp/crewon-wf-pg-ai1hte94/data",
+    "listenAddresses": "",
+    "otherClients": 0,
+    "userSchemas": [],
+    "stoppedStatus": 3
+  },
+  "remainingBeforeProduction": [
+    "Atomic trusted admission, current Office/Run/tenant authorization and exact retained deployment binding.",
+    "Main Thread reservation/fork source head and Goal identity controls across ordinary writes and concurrent windows.",
+    "Persistent wait/terminal wake, bounded dispatch/discovery, task failure/deadline/budget handling and host shutdown lifecycle.",
+    "Unknown-command cancellation reconciliation and complete child/final Run cancellation propagation. Journal fences do not retract already-dispatched HTTP effects.",
+    "Task snapshot/progress/result/approval API and actual UI cutover, retirement of renderer Team orchestration, real Main/process and installed-product acceptance.",
+    "Remaining original goal: default desktop Workflow configuration, production request identity, Tool resource/lifetime consolidation, autonomous subagents and installed-plugin full acceptance."
+  ],
+  "claimsNotMade": [
+    "No complete Team scheduler or production activation",
+    "No OS-process kill/restart proof: coordinator interruption and Store/Control reopening are explicit in-process fault injection",
+    "No product speed improvement, whole-repository, full UI, installed desktop or real-account/model acceptance"
+  ],
+  "logs": {
+    "dualStorageTeam": {
+      "localPath": "/tmp/crewon-team-journal-both.log",
+      "sha256": "dc6b2150309a64396785d93b976eed60302a2650078b629ba63c4c562409769c"
+    },
+    "adjacentRegression": {
+      "localPath": "/tmp/crewon-team-journal-adjacent-regression.log",
+      "sha256": "506e1f80a87560466b9b728529a7b9af43a2bc2ff464649778221e7b0c1f6cf3"
+    },
+    "architecture": {
+      "localPath": "/tmp/crewon-team-journal-boundaries.log",
+      "sha256": "26e13bb6f8e9a99a9d074a61e70e2200b7e435cc7a8c7289cb997844cb592ba7"
+    },
+    "applicationTypecheck": {
+      "localPath": "/tmp/crewon-team-journal-app-types.log",
+      "sha256": "0ee11f85fba473fec0c9429ea5bf06407fb083b06737b651a28cd517e11e63c3"
+    },
+    "storeTypecheck": {
+      "localPath": "/tmp/crewon-team-journal-store-types.log",
+      "sha256": "5c9efc29dccf168531c61ed16f7a65111b113efc2e1e81fae43c3b40a67d55c1"
+    },
+    "controlApiTypecheck": {
+      "localPath": "/tmp/crewon-team-journal-control-types.log",
+      "sha256": "4156428d53b3f97d9de611b4b2841dec260918eb4571ed5fa9c63ac97398aea0"
+    },
+    "runtimeWorkerTypecheck": {
+      "localPath": "/tmp/crewon-team-journal-worker-types.log",
+      "sha256": "0723f9ec69a95cba4021c8ac79718e054ce8ef53bf58180f15f25974ce2ec6a6"
+    },
+    "repositoryFormat": {
+      "localPath": "/tmp/crewon-team-journal-format-check.log",
+      "sha256": "9a2087ae12e6c8e06db131d1a71ef265a99f59c07e6dc1be48db2a0c00371a20"
+    },
+    "sourceFormat": {
+      "localPath": "/tmp/crewon-team-journal-source-format.log",
+      "sha256": "17aa973d3f004560237d9a95171210b0671deff23d61628eecf7322ff5938f20"
+    },
+    "typescriptEntrypoints": {
+      "localPath": "/tmp/crewon-team-journal-entry-boundary.log",
+      "sha256": "bc758e5932a9f2268662d8f0b3ea26cd6c729eac0eb2bc610fd806b55f7bbc6c"
+    }
+  },
+  "verificationCommands": [
+    "CREWON_TEST_POSTGRES_URL=<owned isolated socket database> node --experimental-strip-types --test --test-concurrency=1 apps/control-api/src/team-task-journal.integration.test.ts apps/control-api/src/team-task-interruption.integration.test.ts apps/control-api/src/team-turn-application.integration.test.ts",
+    "CREWON_TEST_POSTGRES_URL=<owned isolated socket database> node --experimental-strip-types --test --test-concurrency=1 packages/store/src/sqlite-run-store.test.ts packages/store/src/postgres-run-store.test.ts packages/store/src/postgres-thread-store.test.ts packages/application/src/thread-goal-application-service.test.ts apps/runtime-worker/src/runtime-worker-pool.integration.test.ts",
+    "node --experimental-strip-types --test packages/test-contracts/src/package-boundaries.test.ts packages/test-contracts/src/package-boundary-adapters.test.ts packages/test-contracts/src/package-boundary-foundation-adapters.test.ts packages/test-contracts/src/production-typecheck-boundary.test.ts",
+    "pnpm --filter @crewon/application typecheck",
+    "pnpm --filter @crewon/store typecheck",
+    "pnpm --filter @crewon/control-api typecheck",
+    "pnpm --filter @crewon/runtime-worker typecheck",
+    "pnpm crewon:boundary:check",
+    "pnpm format",
+    "git diff --check"
+  ],
+  "sourceHashes": {
+    "packages/application/src/team-task-journal.ts": "a3e778ed9499ad81d9ee3e61d7c2e56532fe51ba0657210757b40533ebba8fdb",
+    "packages/application/src/team-task-execution.ts": "5b5849d175ccfc2ed12939b28fe6565408fcc0cb7ce163ef6d6f165c6a647709",
+    "packages/store/src/team-task-journal-state.ts": "c097e393e5548414939c634391280c414ae58cfe3842074761fe2423d61ebe41",
+    "packages/store/src/sqlite-team-task-journal.ts": "b7c5a7b2658310c98352f3d943995222d50775ac261b183d4fbc22909e2bc176",
+    "packages/store/src/postgres-team-task-journal.ts": "2f1d23567e628ea6acd53c14bf0a6dc24c1f64c2c24ac0d6fe7b13458eaac134",
+    "apps/control-api/src/team-task-journal.integration.test.ts": "a9e07add4d200a78baabbded0cffa2c9c8a3173ec5c3542461937311145773b7",
+    "apps/control-api/src/team-task-interruption.integration.test.ts": "12ce1588abbe7eff7173c6ab97b2d77e62038bdd7341f35593c18af6ea2ebe5c"
+  }
+}

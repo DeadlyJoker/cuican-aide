@@ -501,3 +501,17 @@ Application 新增独立 `team-turn` 入口，通过显式宿主操作端口调�
 既有 Team 行为 46 项、Team 展示/快照 14 项、架构及生产类型图 37 项通过，原快照未更新。Application、Domain、Control 完整类型检查、UI/Electron lint 与正式 UI build 通过；启动入口验证为 326428 字节，不将构建体积或测试耗时称为产品提速。详细范围、失败修正、静态提取摘要与临时数据库清理记录见 [本批证据](evidence/team-application-migration-2026-10-18.json)。测试使用合成模型，不构成真实供应商、浏览器或安装版验收，也不构成性能改善数据。
 
 **本批没有完成 Team 持久后台接管。** 新入口的单个命令和 Run 已持久化，但协调器 continuation 仍在内存，不能直接重放为后台 job；生产 UI 暂保留旧驱动。下一步必须接同一底座上的 Team 持久入库、主会话占用、不可变命令及回执、租约续推进和取消，再完成重启/多窗口恢复并删除旧 renderer 推进。默认桌面 Workflow 配置、production 身份、工具资源/生命周期、自主子 Agent 与安装式插件完整验收继续属于原目标。
+
+## 第三十批：Team 持久意图、阶段快照与租约恢复基础（2026-10-18）
+
+基线为 `f8468e561`。本批为两库增加显式实验性 Team journal，保存冻结任务意图、命令原文和回执。父 Store 通过按需加载的能力工厂提供原连接与生命周期；构造不迁移，读取不认领、不推进，只有明确 `migrate()` 才安装独立 v1 表。未新增生产配置、HTTP 入口或 Run purpose，不改原 Thread / Run / Goal / 模型历史。首次创建核对同空间的真实 Thread revision、Office 成员/目标和职责，仍不把这类存储核对称为执行授权。
+
+续执行使用原计划和阶段读取快照：初始 Goal、暂停后的主会话、fork 来源、恢复/最终阶段 revision、选定助手输出固定；Run 的非终态继续实时读取，只有终态才保存回执。每个写命令先原子保存操作、正文和稳定幂等键，再调用既有 API；收到结果后另行结算。租约续期与命令准备合并在一笔事务，旧 owner/epoch 不能写新回执，SQL 事务内不等待 HTTP 或模型。任务 payload 总量限制 1 MiB，意图 128 KiB、单个 effect payload 256 KiB、effect 总数 128；超限拒绝且保留未知命令。SQL NULL 与已结算的 JSON null 明确区分。
+
+两库共 28 项相关集成全部通过、无跳过。主管规划、成员 Run、主管最终 Turn、成员直答 Turn 和 Goal 暂停均在真实 API 提交后故意丢失响应；关闭原父 Store / Control，等待租约失效，独立重开后换 owner/epoch 继续，确认重用原正文与键、不增加旧 Run 的模型采样、主会话只有一份原输入和最终回复。这里是明确的进程内故障注入与 Store/Control 重开，不冒充 OS 进程强杀验收。原有分工/补救/流式恢复用例继续通过。
+
+撤销只记录意图并阻止新准备/续租；已准备且可能发出的命令仍可在当前有效租约内保存结果，不丢失未知副作用。实测两成员等待模型期间撤销，协调器立即退出，未消耗普通读取的重试预算，也未提交最终回复；测试随后显式取消子 Run，因此本批不代表子树取消传播完成。`finalAccepted` 同样只是原最终 Run 的接受回执，完成状态仍从真实 Run/Transcript 读取。
+
+普通 Run、Thread、Goal、Worker 池相邻回归 248 项及架构/生产类型图 37 项通过，均无跳过；Application、Store、Control、Worker 的完整类型检查、TypeScript 入口、格式及 diff 检查通过。初始校验还发现 Node strip-only 不接受参数属性，以及普通 Run 的 purpose 可以按既有兼容规则省略；已分别采用原生可剥离字段写法、沿用 `purpose ?? "turn"`，没有加入构建变换或放宽 Workflow 目的校验。具体范围、容量/版本拒绝、调用者快照、身份与清理证据见 [Team journal 证据](evidence/team-task-journal-2026-10-18.json)。
+
+**生产 Team 尚未接管，原目标继续进行。** 后续须完成受信准入/当前授权和保留部署绑定、主会话占用及 fork/Goal 上下文控制、持久停放/终态唤醒与有界发现、未知命令取消收敛和子树传播，再接实际任务投影/UI并删除旧 renderer 推进。现有 journal 的租约不撤回已发出的 HTTP 请求；不能跳过这些条件而直接打开后台自动执行。默认桌面 Workflow、production 身份、资源/生命周期、自主子 Agent、安装式插件及安装版验收继续保留在完整目标中。

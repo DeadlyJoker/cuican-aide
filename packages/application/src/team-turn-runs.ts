@@ -1,4 +1,5 @@
 import type { RunView } from "@crewon/contracts";
+import { TeamTaskJournalError } from "./team-task-journal.ts";
 import type {
   ControlTeamRuntimeClient,
   StartControlTeamTurnInput,
@@ -26,6 +27,7 @@ export async function waitForTerminalRun(input: {
       current = (await input.client.getRun(current.runId)).run;
       consecutiveReadFailures = 0;
     } catch (error) {
+      if (error instanceof TeamTaskJournalError) throw error;
       consecutiveReadFailures += 1;
       if (
         consecutiveReadFailures >= MAX_CONSECUTIVE_RUN_READ_FAILURES ||

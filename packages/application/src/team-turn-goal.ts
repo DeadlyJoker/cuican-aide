@@ -1,5 +1,9 @@
 import type { StartTurnRequest, StartTurnResponse } from "@crewon/contracts";
 import type { ControlTeamRuntimeClient } from "./team-turn-types.ts";
+import {
+  readTeamCheckpoint,
+  type TeamTurnCheckpoint,
+} from "./team-turn-types.ts";
 import { isTerminalRun, waitForTerminalRun } from "./team-turn-runs.ts";
 
 const MAX_FINAL_EXECUTION_INTENT_RETRY_WINDOW_MS = 45_000;
@@ -33,8 +37,11 @@ export async function pauseTeamGoalIfNeeded(input: {
   idempotencyKey: (operation: string) => string;
   pollIntervalMs: number;
   runDeadlineMs: number;
+  checkpoint?: TeamTurnCheckpoint;
 }): Promise<{ threadRevision: number } | null> {
-  const current = await input.client.getThreadGoal(input.threadId);
+  const current = await readTeamCheckpoint(input, "goalInitial", () =>
+    input.client.getThreadGoal(input.threadId),
+  );
   const shouldCreateOrReplace = input.executionIntent === "goal";
   if (!shouldCreateOrReplace && current.goal?.status !== "active") {
     return null;
@@ -81,7 +88,9 @@ export async function pauseTeamGoalIfNeeded(input: {
     pollIntervalMs: input.pollIntervalMs,
     runDeadlineMs: input.runDeadlineMs,
   });
-  const snapshot = await input.client.getThread(input.threadId);
+  const snapshot = await readTeamCheckpoint(input, "goalPausedThread", () =>
+    input.client.getThread(input.threadId),
+  );
   if (
     snapshot.thread.threadId !== input.threadId ||
     snapshot.thread.status !== "active"

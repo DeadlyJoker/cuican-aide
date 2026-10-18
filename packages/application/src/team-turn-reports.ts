@@ -7,6 +7,10 @@ import type {
   ControlTeamRunAcceptedEvent,
 } from "./team-turn-types.ts";
 import {
+  readTeamCheckpoint,
+  type TeamTurnCheckpoint,
+} from "./team-turn-types.ts";
+import {
   controlTeamMemberGuidance,
   controlTeamDelegationMarker,
   controlTeamModelVisibleReportExecution,
@@ -44,8 +48,13 @@ export async function recoverWorker(input: {
   toolPermissionMode?: ToolPermissionMode;
   pollIntervalMs: number;
   runDeadlineMs: number;
+  checkpoint?: TeamTurnCheckpoint;
 }): Promise<MemberReport> {
-  const snapshot = await input.client.getThread(input.workerThreadId);
+  const snapshot = await readTeamCheckpoint(
+    input,
+    `recoveryThread.${input.worker.memberId}`,
+    () => input.client.getThread(input.workerThreadId),
+  );
   const recovery = await input.client.appendThreadMessage(
     input.workerThreadId,
     {
@@ -90,6 +99,7 @@ export async function recoverWorker(input: {
           input.client,
           input.workerThreadId,
           recovery.message.sequence,
+          input.checkpoint,
         )
       : null;
   return memberReport(
@@ -183,17 +193,24 @@ export async function latestAssistantOutput(
   client: ControlTeamRuntimeClient,
   threadId: string,
   afterSequence: number,
+  checkpoint?: TeamTurnCheckpoint,
 ): Promise<string | null> {
-  const response = await client.listThreadMessages(threadId, {
-    cursor: formatMessageCursor(afterSequence),
-    limit: 100,
-  });
-  const assistant = response.data
-    .filter(
-      (message) =>
-        message.role === "assistant" && message.sequence > afterSequence,
-    )
-    .sort((left, right) => right.sequence - left.sequence)[0];
-  const content = assistant?.content.trim();
-  return content ? content : null;
+  return readTeamCheckpoint(
+    { checkpoint },
+    `output.${threadId}.${afterSequence}`,
+    async () => {
+      const response = await client.listThreadMessages(threadId, {
+        cursor: formatMessageCursor(afterSequence),
+        limit: 100,
+      });
+      const assistant = response.data
+        .filter(
+          (message) =>
+            message.role === "assistant" && message.sequence > afterSequence,
+        )
+        .sort((left, right) => right.sequence - left.sequence)[0];
+      const content = assistant?.content.trim();
+      return content ? content : null;
+    },
+  );
 }
