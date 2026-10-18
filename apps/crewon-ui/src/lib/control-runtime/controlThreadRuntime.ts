@@ -1053,16 +1053,31 @@ export class ControlThreadRuntime {
         ([, stream]) => stream.threadId === threadId,
       ),
     );
-    const snapshot = await this.#getThreadSnapshot(threadId, signal);
-    read.assertCurrent();
-    const [transcript, taskChangeLedgerResult] = await Promise.all([
-      readControlTranscript({
-        client: this.#client,
-        threadId,
-        threadRevision: snapshot.thread.revision,
-        cursor: transcriptCursor,
-        signal,
-      }),
+    // The first page does not need a current revision to encode a cursor, so
+    // overlap the independent Thread head and transcript snapshot reads. An
+    // older cursor still waits for the head first so it can be rebound to the
+    // current revision before the server validates the request.
+    const snapshotPromise = this.#getThreadSnapshot(threadId, signal);
+    const transcriptPromise =
+      transcriptCursor === null
+        ? readControlTranscript({
+            client: this.#client,
+            threadId,
+            cursor: transcriptCursor,
+            signal,
+          })
+        : snapshotPromise.then((snapshot) =>
+            readControlTranscript({
+              client: this.#client,
+              threadId,
+              threadRevision: snapshot.thread.revision,
+              cursor: transcriptCursor,
+              signal,
+            }),
+          );
+    const [snapshot, transcript, taskChangeLedgerResult] = await Promise.all([
+      snapshotPromise,
+      transcriptPromise,
       includeTaskChanges
         ? this.#loadThreadTaskChangeLedger(threadId, signal)
         : Promise.resolve(null),

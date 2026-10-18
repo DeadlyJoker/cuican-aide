@@ -8,7 +8,7 @@ import {
 export async function readControlTranscript(input: {
   client: ControlApiClient;
   threadId: string;
-  threadRevision: number;
+  threadRevision?: number;
   cursor: string | null;
   signal: AbortSignal | undefined;
 }) {
@@ -16,11 +16,15 @@ export async function readControlTranscript(input: {
   const cursor =
     input.cursor === null
       ? null
-      : formatThreadMessageWindowCursor(threadId, {
-          ...parseThreadMessageWindowQuery({ cursor: input.cursor }, threadId)
-            .position!,
-          threadRevision: input.threadRevision,
-        });
+      : (() => {
+          if (input.threadRevision === undefined)
+            throw new Error("control_thread_cursor_revision_required");
+          return formatThreadMessageWindowCursor(threadId, {
+            ...parseThreadMessageWindowQuery({ cursor: input.cursor }, threadId)
+              .position!,
+            threadRevision: input.threadRevision,
+          });
+        })();
   const snapshot = await client.getThreadTranscriptSnapshot(
     threadId,
     { ...(cursor ? { cursor } : {}), limit: 50 },
@@ -28,7 +32,10 @@ export async function readControlTranscript(input: {
   );
   signal?.throwIfAborted();
   const window = snapshot.transcriptWindow;
-  if (window.messageWindow.threadRevision !== input.threadRevision)
+  if (
+    input.threadRevision !== undefined &&
+    window.messageWindow.threadRevision !== input.threadRevision
+  )
     throw new Error("control_thread_projection_snapshot_changed");
   const activeRun =
     snapshot.activeRunId === null
