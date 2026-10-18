@@ -1,0 +1,37 @@
+{
+  "schemaVersion": "crewon.evidence.v0",
+  "kind": "team-task-runtime-worker-executor",
+  "date": "2026-10-19",
+  "branch": "codex/runtime-concurrency-result-streaming",
+  "baseCommit": "a677f2bc0",
+  "scope": "two-backend Runtime Worker scheduler to fenced executeTeamTask end-to-end path",
+  "flow": [
+    "create durable Team journal intent",
+    "Runtime Worker scheduler discovers and claims the task",
+    "injected actor and Control operations run executeTeamTask with the claim fence",
+    "child Runs execute through the existing Worker pool",
+    "final main Run completes and the journal records finalAccepted"
+  ],
+  "verification": {
+    "teamRelatedBothBackends": {
+      "tests": 34,
+      "passed": 34,
+      "failed": 0,
+      "skipped": 0
+    },
+    "newSchedulerExecutorScenario": {
+      "sqlite": "passed",
+      "postgres": "passed"
+    },
+    "typechecks": ["application", "store", "control-api", "runtime-worker"],
+    "boundaryCheck": "passed",
+    "format": "passed",
+    "gitDiffCheck": "passed",
+    "postgresCleanup": "stopped and socket rejected a follow-up connection"
+  },
+  "limitations": [
+    "Actor, authorization and Control operations are explicitly injected by the test host; production composition is still opt-in.",
+    "Process-level kill/restart, cancellation signal propagation and unknown side-effect recovery are not yet proven for the Worker scheduler path.",
+    "No default desktop Team or autonomous sub-agent activation is claimed."
+  ]
+}

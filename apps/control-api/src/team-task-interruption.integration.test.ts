@@ -226,3 +226,88 @@ workflowDeploymentIntegrationTest(
     );
   },
 );
+
+workflowDeploymentIntegrationTest(
+  "Runtime Worker scheduler discovers and completes a persisted Team task through the fenced executor",
+  async (t, fixture) => {
+    const f = await fixture(t, {
+      output: (request) =>
+        lastUser(request) === priorContext ? "PRIOR_REPLY" : "MEMBER_REPORT",
+    });
+    const server = await f.control(null);
+    const journal = await f.store.experimentalTeamTaskJournalStore();
+    await journal.migrate();
+    let operations: ReturnType<typeof teamOperations> | null = null;
+    const executorErrors: unknown[] = [];
+    const worker = await f.worker(f.workflow, 2, {
+      scope: { tenantId: f.actor.tenantId, spaceId: f.actor.spaceId },
+      concurrency: 1,
+      listLimit: 1,
+      leaseDurationMs: 5_000,
+      scanIntervalMs: null,
+      execute: (fence) =>
+        executeTeamTask({
+          actor: f.actor,
+          store: journal,
+          fence,
+          operations: operations!,
+          digester: new NodeSha256ContentDigester(),
+          pollIntervalMs: 10,
+          runDeadlineMs: 20_000,
+          leaseDurationMs: 5_000,
+        }).then(() => undefined),
+      onError: (_fence, error) => {
+        executorErrors.push(error);
+      },
+    });
+    worker.start();
+    const { thread, plan } = await prepare(server.client, true);
+    const intent: TeamTaskIntent = {
+      schemaVersion: "crewon.team-task.v1",
+      ...f.actor,
+      taskId: "runtime-worker-scheduled-team-task",
+      turn: {
+        threadId: thread.threadId,
+        expectedRevision: thread.revision,
+        content: originalTask,
+        plan,
+        responseMode: "manager",
+        managerResponseKind: "office",
+      },
+    };
+    await journal.create(intent);
+    operations = teamOperations(server.client);
+    worker.teamTaskScheduler!.notify();
+    const deadline = Date.now() + 30_000;
+    let record = await journal.read(intent);
+    while (record?.status !== "finalAccepted") {
+      assert.ok(Date.now() < deadline, "scheduled Team task did not finish");
+      await setTimeout(10);
+      record = await journal.read(intent);
+    }
+    assert.deepEqual(executorErrors, []);
+    assert.equal(record.result?.message.threadId, thread.threadId);
+    assert.equal(record.result?.message.content, originalTask);
+    const messageDeadline = Date.now() + 5_000;
+    let scheduledMessages = (
+      await server.client.listThreadMessages(thread.threadId)
+    ).data;
+    while (
+      scheduledMessages.every(
+        (message) => message.content !== "MEMBER_REPORT",
+      ) &&
+      Date.now() < messageDeadline
+    ) {
+      await setTimeout(10);
+      scheduledMessages = (
+        await server.client.listThreadMessages(thread.threadId)
+      ).data;
+    }
+    assert.equal(
+      scheduledMessages.filter((message) => message.content === "MEMBER_REPORT")
+        .length,
+      1,
+    );
+    await worker.close();
+  },
+);

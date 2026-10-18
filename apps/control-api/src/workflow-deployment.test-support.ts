@@ -20,6 +20,7 @@ import {
 } from "../../runtime-worker/src/agent-version-release.ts";
 import { activatePostgresRuntimeAgentVersionRelease } from "../../runtime-worker/src/agent-version-release-composition.ts";
 import { createPostgresRuntimeWorker } from "../../runtime-worker/src/standalone-composition.ts";
+import type { RuntimeTeamTaskSchedulerConfig } from "../../runtime-worker/src/standalone-composition.ts";
 import { createPostgresControlApi } from "./standalone-composition.ts";
 import { StandaloneAuthorization } from "./standalone-adapters.ts";
 
@@ -112,9 +113,17 @@ export async function workflowDeploymentFixture(
       }),
     };
   };
-  const worker = async (configuration = workflow, concurrency = 2) => {
+  const worker = async (
+    configuration = workflow,
+    concurrency = 2,
+    teamTaskScheduler?: RuntimeTeamTaskSchedulerConfig,
+  ) => {
     const tools = new InMemoryToolBroker();
-    const config = { ...runtimeConfig, toolRuntime: tools };
+    const config = {
+      ...runtimeConfig,
+      toolRuntime: tools,
+      ...(teamTaskScheduler === undefined ? {} : { teamTaskScheduler }),
+    };
     const runtime = await createPostgresRuntimeWorker({
       ...config,
       agentVersionRuntimeFactory: sharedAgentVersionRuntimeFactory(

@@ -11,6 +11,7 @@ import { ControlApiClient } from "@crewon/control-client";
 import { activateStandaloneRuntimeAgentVersionRelease } from "../../runtime-worker/src/agent-version-release-composition.ts";
 import { sharedAgentVersionRuntimeFactory } from "../../runtime-worker/src/shared-agent-version-runtime-factory.ts";
 import { createStandaloneRuntimeWorker } from "../../runtime-worker/src/standalone-composition.ts";
+import type { RuntimeTeamTaskSchedulerConfig } from "../../runtime-worker/src/standalone-composition.ts";
 import { createStandaloneControlApi } from "./standalone-composition.ts";
 import { workflowDeploymentConfiguration } from "./workflow-deployment.test-support.ts";
 
@@ -89,9 +90,17 @@ export async function sqliteWorkflowDeploymentFixture(
       }),
     };
   };
-  const worker = async (configuration = f.workflow, concurrency = 2) => {
+  const worker = async (
+    configuration = f.workflow,
+    concurrency = 2,
+    teamTaskScheduler?: RuntimeTeamTaskSchedulerConfig,
+  ) => {
     const tools = new InMemoryToolBroker();
-    const config = { ...f.runtimeConfig, toolRuntime: tools };
+    const config = {
+      ...f.runtimeConfig,
+      toolRuntime: tools,
+      ...(teamTaskScheduler === undefined ? {} : { teamTaskScheduler }),
+    };
     const runtime = await createStandaloneRuntimeWorker({
       ...config,
       databasePath,

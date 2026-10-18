@@ -561,3 +561,11 @@ SQLite 与 PostgreSQL 共用相同的 scope/limit 校验和结果身份形状；
 验证：Application 全量 922 项中 884 项通过、38 项既有条件跳过；Runtime Worker standalone composition 17/17；新增默认关闭和显式开启的 SQLite lifecycle 用例 2/2；Runtime Worker 类型检查、TypeScript 入口边界和相关格式/diff 检查通过。没有启用生产 Team、没有为默认部署自动迁移 journal，也没有声称 executor 的真实 Team 业务执行已经完成。
 
 下一步需要把受信 actor/current authorization、`executeTeamTask` 的 Control operations、取消 signal、未知副作用恢复和多进程 stop/restart 接到这个可选入口；完成这些验证前继续保持默认关闭。
+
+## 第三十六批：Runtime Worker scheduler 的真实 Team executor 闭环（2026-10-19）
+
+基线为 `a677f2bc0`。本批没有让 Worker 自行猜测身份或调用 HTTP；测试宿主显式提供 actor、已迁移 Team journal、Control operations 和 `executeTeamTask` executor，再通过 Runtime Worker 的 scheduler pump 发现并 claim 持久 task。闭环为：journal create → Worker start/wake → listRunnable/claim → fenced Control operations → 子 Run 并行执行 → 最终主 Run → `finalAccepted`。
+
+SQLite 与 PostgreSQL 各验证一次，最终主 Thread 保留一份原始用户输入并出现最终助手消息；executor error 为空，lease/fence 仍由 Store 事务校验。完整 Team journal、interruption 和 Team application 回归共 34 项全部通过，覆盖原有 lease takeover、取消、Goal、主会话 reservation 和新 Worker scheduler 路径。Application、Store、Control API、Runtime Worker 类型检查、入口边界、相关格式和 diff 检查通过。
+
+当前真实 executor 仍是测试宿主注入的受信组合，不代表默认 Runtime Worker 已经具备 production actor/authorization、取消 signal、未知副作用恢复或进程强杀重启接管。默认配置仍不迁移 journal、不启动 Team scheduler；自主子 Agent 仍需在这些边界完成后接入。
