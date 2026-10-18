@@ -1,0 +1,313 @@
+{
+  "schemaVersion": "crewon.team-migration-evidence.v1",
+  "date": "2026-10-18",
+  "baselineCommit": "410cd994b3c647662017d20264baa646b06de584",
+  "branch": "codex/runtime-concurrency-result-streaming",
+  "scope": "Share pure Team rules and validate an Application migration entrypoint using real ordinary Control/Worker operations. No production Team execution ownership cutover.",
+  "productionChanges": [
+    "Domain team-prompts public subpath owns role planning, bounded guidance/report text and delegate marker parsing. Legacy UI import paths re-export it.",
+    "Application team-turn public subpath has a host operations port, plan resolution and existing Team coordinator semantics split into focused modules. Not registered as a background job or HTTP endpoint.",
+    "Renderer remains forbidden from importing Application. No dependency-boundary exceptions, new runtime, persisted schema or HTTP/event protocol changes."
+  ],
+  "checks": {
+    "dualStorageIntegration": {
+      "passed": 8,
+      "failed": 0,
+      "skipped": 0,
+      "file": "apps/control-api/src/team-turn-application.integration.test.ts"
+    },
+    "existingUiTeamBehavior": {
+      "passed": 46,
+      "failed": 0,
+      "files": [
+        "controlTeamRuntime.test.ts",
+        "controlTeamPlanning.test.ts",
+        "controlTeamProgress.test.ts",
+        "controlTeamGuiObservation.test.ts"
+      ]
+    },
+    "existingUiTeamVisual": {
+      "passed": 14,
+      "failed": 0,
+      "files": [
+        "TranscriptTeamPresentation.test.tsx",
+        "TranscriptTeamProgress.test.tsx",
+        "TranscriptPendingTeamSubmission.test.tsx"
+      ],
+      "snapshotsUpdated": false
+    },
+    "architectureAndProductionTypeGraph": {
+      "passed": 37,
+      "failed": 0,
+      "skipped": 0
+    },
+    "typechecks": {
+      "application": "passed",
+      "domain": "passed",
+      "controlApi": "passed",
+      "uiRendererAndElectronLint": "passed"
+    },
+    "uiBuild": {
+      "status": "passed",
+      "startupBuildVerified": true,
+      "eagerBytes": 326428,
+      "javascriptLimitBytes": 524288,
+      "largeWorkspaceAndMermaidChunkWarnings": true,
+      "performanceImprovementClaim": false
+    },
+    "typescriptEntrypoints": "passed",
+    "repositoryFormat": "passed",
+    "diffWhitespace": "passed"
+  },
+  "integrationCoverage": [
+    "Same four cases on real SQLite and PostgreSQL stores, SDK, Control HTTP, Worker pool and Kernel; model transport is synthetic.",
+    "Manager-generated and role-directed planning, two concurrently admitted worker streams and frozen forks carrying a completed prior user/assistant exchange.",
+    "Bounded reports mark truncation; worker forks do not observe sibling reports; exactly one original input and one final answer on the main thread.",
+    "Final ordinary Run is gated while running, SSE disconnects after run.started, Control reopens, continuation delivers only events after its cursor, model delta and one run.completed.",
+    "Fixture background Outbox scans are disabled. Live resume explicitly wakes the real Outbox dispatcher after final execution; it does not validate Main automatic wakeup lifecycle.",
+    "Completed SSE replay and canonical main transcript remain identical across another Control reopen, without extra model sampling.",
+    "A failed QA Run exhausts its existing sampling retries, manager recovery uses the same child branch, then manager delegation and selected-member main response finish.",
+    "Requested Goal is paused throughout member work and resumed only by final main turn. Explicit Goal pause retains the user turn; a separate revision-bound Run cancel stops it and prevents continuation."
+  ],
+  "staticFunctionComparison": {
+    "method": "TypeScript transpilation with comments removed; normalize printed JS function declarations and export modifier, then SHA-256. This checks extraction fidelity only, not runtime equivalence.",
+    "compiler": "TypeScript 5.9.3",
+    "functions": [
+      {
+        "name": "controlStartTurnExecutionIntentMatches",
+        "matched": true,
+        "hash": "db6d9fe9b9eab5002defb26b78ec5bd8e18d062b1ac1c99750d072889b96a912"
+      },
+      {
+        "name": "resolveControlTeamPlan",
+        "matched": true,
+        "hash": "20d25e68f4702e5ccc03d9f3c96521574b6ffb48b80f69461d3761249d24b451"
+      },
+      {
+        "name": "startControlTeamTurn",
+        "matched": true,
+        "hash": "cdf0de1785270cc46c51ef0fae3fa93fe364b6ea3150b044f350a09a7f142f31"
+      },
+      {
+        "name": "pauseTeamGoalIfNeeded",
+        "matched": true,
+        "hash": "ab89b360670978cef0ea872ecd74784679b0dc6502836e76dc0bd5505d255f0b"
+      },
+      {
+        "name": "startFinalTeamTurn",
+        "matched": true,
+        "hash": "18f362718e8720909f3927fc0ee413d54a76b83a87c3a28aea1b2749ab9d12e1"
+      },
+      {
+        "name": "isExecutionIntentCapabilityUnavailable",
+        "matched": true,
+        "hash": "47ebc64de983c7d85bf3dd97b56fe3670dd80c984369e0ec6178c0b7fe3464c0"
+      },
+      {
+        "name": "requireControlExecutionIntentCapability",
+        "matched": true,
+        "hash": "44a0708e651ac94a3f07997df61916a41f502b4efbc015f3a5d1a05559aab080"
+      },
+      {
+        "name": "settleGoalMutationRuns",
+        "matched": true,
+        "hash": "951222def427bf7f996e8a091c711623042197d955a14dd3f52cd1179488bb2b"
+      },
+      {
+        "name": "recoverWorker",
+        "matched": true,
+        "hash": "632025f9c86387232fe8116282b6ac4d0918d342f491cb8a00e670e6eb7a3944"
+      },
+      {
+        "name": "memberReport",
+        "matched": true,
+        "hash": "24a63217a97a2a6af5b152d814bd556f6d4ccb3c2542d4282cacc55f3ea77f14"
+      },
+      {
+        "name": "teamDelegationMessage",
+        "matched": true,
+        "hash": "6901de53702fc3b85bd267f179196a1dcf1c0999ed06f6d31a1f141f9e7c52be"
+      },
+      {
+        "name": "teamMemberDirectResponsePrompt",
+        "matched": true,
+        "hash": "d2ad7168293f10cea80f1d1744db2208f4688f8acf58499ee370275be02cc7b0"
+      },
+      {
+        "name": "latestAssistantOutput",
+        "matched": true,
+        "hash": "4861e1692e4e7380282c2727e7ba09861a821ca774aaa67e88858b3415b87b75"
+      },
+      {
+        "name": "waitForTerminalRun",
+        "matched": true,
+        "hash": "f3c08b56b9b29235bc36a010749fa4ee0d0135cf1c2fa61af82036998ddad42b"
+      },
+      {
+        "name": "validateOfficeIdentity",
+        "matched": true,
+        "hash": "33d4b1958e4764c02e03d26f460db15132ff1660adf49d4c721298ffb78d2324"
+      },
+      {
+        "name": "validateStartedRun",
+        "matched": true,
+        "hash": "7ca6661b256f62cafd2001ee18e1095fc4b2d691acbd057e8aea9b077c1288ff"
+      },
+      {
+        "name": "emitControlTeamRunAccepted",
+        "matched": true,
+        "hash": "d3fe9320159a5bfc61c2aea14980d13f9cf39829f8af629e48f8e101f8b22e3a"
+      },
+      {
+        "name": "isTerminalRun",
+        "matched": true,
+        "hash": "0ba90e58d7e64b0d05656782490942456d78150a8753a45363f7c83e622a1cf5"
+      },
+      {
+        "name": "controlTeamPlanningStrategy",
+        "matched": true,
+        "hash": "50ae1564139836fd98a73f13a0d25e111a123045aff00e12828fc0c53e6f4d5a"
+      },
+      {
+        "name": "controlTeamExecutionBudget",
+        "matched": true,
+        "hash": "0408fc230d6f129d6c297ee002e3be04c1f14577136946516222be9e7bcdb530"
+      },
+      {
+        "name": "controlTeamMemberAssignment",
+        "matched": true,
+        "hash": "e59b56632c1e8feba9f4e6249e1e0a3bdef35786e3b26170192e9200c5d4489d"
+      },
+      {
+        "name": "controlTeamManagerPlanningPrompt",
+        "matched": true,
+        "hash": "c763adf514a091c738a666f6f97007986126e9c4247c262f110fe2a0c4aa19ff"
+      },
+      {
+        "name": "controlTeamMemberGuidance",
+        "matched": true,
+        "hash": "e8a64bb405830a0d4a3a9cb2ff1fa3d824f45174290d2b3a485f53e8448edd1d"
+      },
+      {
+        "name": "stripGeneratedOfficeResponsibility",
+        "matched": true,
+        "hash": "65142e3e04abf764268a30f35403a841a7871f02735fca951e7859c107cf79e6"
+      },
+      {
+        "name": "appendCapabilityGuidance",
+        "matched": true,
+        "hash": "46c9b957d1ba7d8982e5cdb28334a857f0b5013310c8e624f4eb7d8b9b0abdb0"
+      },
+      {
+        "name": "normalizeResponsibility",
+        "matched": true,
+        "hash": "2e8138ebf845168c69d3c8f3539a03ef05a5904e5ef60555cd913cfaac82df8c"
+      },
+      {
+        "name": "controlTeamDelegationMarker",
+        "matched": true,
+        "hash": "5617354c45c9cbade1fe6faf935e9a4461347dcb60c728154523ca76020c8e6d"
+      },
+      {
+        "name": "controlTeamDelegatedMemberId",
+        "matched": true,
+        "hash": "70d9ad80db5753b14cb3e9e6d0638d43e4361f071924b6b06dc5e736b03ad8e8"
+      },
+      {
+        "name": "visibleControlTeamAssistantContent",
+        "matched": true,
+        "hash": "3b62082365c0440fde5397ab0fd949897a495f43dbf6d5aa6c90e2f57343f133"
+      },
+      {
+        "name": "controlOfficeManagerFinalResponseMessage",
+        "matched": true,
+        "hash": "bcd752a00e041a7db366aae70e7641e5633087c85455c2320ca2c831b979f6aa"
+      },
+      {
+        "name": "controlExpertManagerFinalResponseMessage",
+        "matched": true,
+        "hash": "88be38149ca8e58cf88b36d24693d37295fe325d27a616ded0e6ddfc66b79c34"
+      },
+      {
+        "name": "controlTeamModelVisibleReportExecution",
+        "matched": true,
+        "hash": "55983d4eede3ab309e33620c01967c9819a109f77a6130859d6ffeedb1219935"
+      },
+      {
+        "name": "responseWithMemberReports",
+        "matched": true,
+        "hash": "a823b43b0b2d7ac9fe26ea505f350ae85bad93d324f46e4d7e88c93eaf84dcbf"
+      }
+    ]
+  },
+  "fixtureAndVerificationCorrections": [
+    "Initial unfinished prior user message was correctly rejected by thread_fork_boundary_incomplete. Fixture now executes a real prior ordinary Run; product fork validation unchanged.",
+    "RunView intentionally omits agentVersionId. Agent attribution is checked against the actual sampled ModelRequest and structural Team accepted event.",
+    "Goal pause was incorrectly assumed to cancel a user turn; current application policy preserves it. Test now separately asserts retainedRun and explicit revision-bound cancelRun.",
+    "Existing ES2022 type library does not expose Promise.withResolvers; local fixture barrier uses the existing Promise pattern. No tsconfig changes.",
+    "First live SSE attempt timed out because the fixture disables automatic Outbox scans. Added explicit actual dispatcher wake, without changing product retries or timeouts."
+  ],
+  "logs": {
+    "teamStorageIntegration": {
+      "localPath": "/tmp/crewon-team-application-both.log",
+      "sha256": "5e3219ec8e2f8c847163aae4742e3185bcfdab33496302eb1497819a4e4e7c8b"
+    },
+    "teamUiVisual": {
+      "localPath": "/tmp/crewon-team-visual-tests.log",
+      "sha256": "b5d2594ddb7b146c7dbc364b0af3748b9673d19e3c53597aef0de66d52085d94"
+    },
+    "architecture": {
+      "localPath": "/tmp/crewon-team-boundaries.log",
+      "sha256": "66afeb22bf0aabb7b2a7b13111f3bf2bfc052acaa456bdb369de658362e0f249"
+    },
+    "initialLiveStreamFixtureFailure": {
+      "localPath": "/tmp/crewon-team-application-live-before-outbox-wake.log",
+      "sha256": "1c3c225a820a783ea89afbb6af03f66a130bc477997515746cff6df523166e5c"
+    },
+    "uiBuild": {
+      "localPath": "/tmp/crewon-team-ui-build.log",
+      "sha256": "9be9bb7f57b21201329bb1cb1e56d5f0266b0651c629e5b4a8c0b76c024d038d"
+    },
+    "controlApiTypecheck": {
+      "localPath": "/tmp/crewon-team-control-types.log",
+      "sha256": "4156428d53b3f97d9de611b4b2841dec260918eb4571ed5fa9c63ac97398aea0"
+    },
+    "domainTypecheck": {
+      "localPath": "/tmp/crewon-team-domain-types.log",
+      "sha256": "091e29e6f7e52855bb601b32f1bca82e89263635e36f9465da07bcc5ae7202e0"
+    },
+    "uiLint": {
+      "localPath": "/tmp/crewon-team-ui-lint.log",
+      "sha256": "81146a96524321a864257d9c4668a0dbd5ebb7f7cd0567ecd1086416bfa5e5de"
+    },
+    "repositoryFormat": {
+      "localPath": "/tmp/crewon-team-repository-format.log",
+      "sha256": "9a2087ae12e6c8e06db131d1a71ef265a99f59c07e6dc1be48db2a0c00371a20"
+    }
+  },
+  "cleanup": {
+    "dataDirectory": "/tmp/crewon-wf-pg-ai1hte94/data",
+    "listenAddresses": "",
+    "otherClients": 0,
+    "userSchemas": [],
+    "stoppedStatus": 3
+  },
+  "notProvenOrNotCompleted": [
+    "Team durable task admission, immutable command bodies/receipts, main thread reservation, leased continuation, background restart and parent/child cancellation are not implemented by this entrypoint.",
+    "Legacy renderer Team orchestration is retained during migration. The Application coordinator must not be replayed as a scheduler job.",
+    "No browser DOM, installed desktop, real account or upstream model acceptance, no product latency claim, no whole-repository or full UI pass claim.",
+    "Default desktop Workflow configuration, production request identity, resource/lifetime consolidation, autonomous subagents and installed-plugin full acceptance remain within the active goal."
+  ],
+  "verificationCommands": [
+    "CREWON_TEST_POSTGRES_URL=<owned isolated socket database> node --experimental-strip-types --test --test-concurrency=1 apps/control-api/src/team-turn-application.integration.test.ts",
+    "pnpm --filter @crewon/ui exec vitest run src/lib/control-runtime/controlTeamRuntime.test.ts src/lib/control-runtime/controlTeamPlanning.test.ts src/lib/control-runtime/controlTeamProgress.test.ts src/lib/control-runtime/controlTeamGuiObservation.test.ts --maxWorkers=1",
+    "pnpm --filter @crewon/ui exec vitest run src/components/TranscriptTeamPresentation.test.tsx src/components/TranscriptTeamProgress.test.tsx src/components/TranscriptPendingTeamSubmission.test.tsx --maxWorkers=1",
+    "node --experimental-strip-types --test packages/test-contracts/src/package-boundaries.test.ts packages/test-contracts/src/package-boundary-adapters.test.ts packages/test-contracts/src/package-boundary-foundation-adapters.test.ts packages/test-contracts/src/production-typecheck-boundary.test.ts",
+    "pnpm crewon:boundary:check",
+    "pnpm --filter @crewon/application typecheck",
+    "pnpm --filter @crewon/domain typecheck",
+    "pnpm --filter @crewon/control-api typecheck",
+    "pnpm --filter @crewon/ui lint",
+    "pnpm --filter @crewon/ui build"
+  ]
+}

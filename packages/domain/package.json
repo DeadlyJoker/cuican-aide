@@ -5,6 +5,7 @@
   "type": "module",
   "exports": {
     ".": "./src/index.ts",
+    "./team-prompts": "./src/team-prompts.ts",
     "./thread-title": "./src/thread-title.ts",
     "./workflow-schema": "./src/workflow-schema-entry.ts",
     "./workflow-verification": "./src/workflow-verification.ts"

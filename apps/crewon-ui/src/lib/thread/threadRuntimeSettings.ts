@@ -1,3 +1,4 @@
+import type { TeamMemberRuntimeProfile } from "@crewon/domain/team-prompts";
 import type { ProjectMediaInputStageComposerSelection } from "../control-runtime/controlProjectMediaInputStageTurn";
 import type { ProjectAssetStageComposerSelection } from "../control-runtime/controlProjectAssetStageTurn";
 import type { ProjectConversationComposerSelection } from "../control-runtime/controlProjectConversationTurn";
@@ -66,23 +67,10 @@ export type ThreadRuntimeSettings = {
   threadSource?: string;
 };
 
-export type TeamMemberRuntimeCapability = Readonly<{
-  name: string;
-  description: string;
-}>;
-
-export type TeamMemberRuntimeProfile = Readonly<{
-  memberId: string;
-  systemPrompt: string;
-  skills: readonly TeamMemberRuntimeCapability[];
-  mcp: readonly TeamMemberRuntimeCapability[];
-  knowledge: readonly TeamMemberRuntimeCapability[];
-  teamCoordination?: Readonly<{
-    assignmentMode: "roleDirected";
-    responsibility: string;
-    source: "officeDefinition";
-  }>;
-}>;
+export type {
+  TeamMemberRuntimeCapability,
+  TeamMemberRuntimeProfile,
+} from "@crewon/domain/team-prompts";
 
 export type ThreadSceneSelection = {
   sceneId: "office" | "code" | "design";

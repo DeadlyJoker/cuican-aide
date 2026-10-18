@@ -5,6 +5,7 @@
   "type": "module",
   "exports": {
     ".": "./src/index.ts",
+    "./team-turn": "./src/team-turn.ts",
     "./host-project-workspaces": "./src/host-project-workspaces.ts"
   },
   "scripts": {
