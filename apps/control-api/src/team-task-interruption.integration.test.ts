@@ -1,11 +1,16 @@
 import assert from "node:assert/strict";
+import { appendFileSync, readFileSync } from "node:fs";
+import { spawn } from "node:child_process";
 import { setTimeout } from "node:timers/promises";
+import { fileURLToPath } from "node:url";
+import test, { type TestContext } from "node:test";
 import { executeTeamTask } from "@crewon/application/team-task-execution";
 import {
   TeamTaskJournalError,
   type TeamTaskIntent,
 } from "@crewon/application/team-task-journal";
 import { workflowDeploymentIntegrationTest } from "./workflow-deployment-integration.test-support.ts";
+import { sqliteWorkflowDeploymentFixture } from "./sqlite-workflow-deployment.test-support.ts";
 import { NodeSha256ContentDigester } from "./standalone-adapters.ts";
 import {
   originalTask,
@@ -15,6 +20,68 @@ import {
   prepare,
   teamOperations,
 } from "./team-turn-application.test-support.ts";
+
+function spawnTeamClaimProcess(input: {
+  databasePath: string;
+  markerPath: string;
+  tenantId: string;
+  spaceId: string;
+  ownerId: string;
+  leaseDurationMs: number;
+}) {
+  const child = spawn(
+    process.execPath,
+    [
+      "--experimental-strip-types",
+      fileURLToPath(
+        new URL(
+          "./team-task-scheduler-process.test-support.ts",
+          import.meta.url,
+        ),
+      ),
+    ],
+    {
+      cwd: process.cwd(),
+      env: {
+        PATH: fileURLToPath(
+          new URL("../../../node_modules/.bin/", import.meta.url),
+        ),
+        CREWON_TEAM_PROCESS_DATABASE: input.databasePath,
+        CREWON_TEAM_PROCESS_MARKER: input.markerPath,
+        CREWON_TEAM_PROCESS_TENANT: input.tenantId,
+        CREWON_TEAM_PROCESS_SPACE: input.spaceId,
+        CREWON_TEAM_PROCESS_OWNER: input.ownerId,
+        CREWON_TEAM_PROCESS_LEASE_MS: String(input.leaseDurationMs),
+      },
+      stdio: ["ignore", "pipe", "pipe"],
+    },
+  );
+  let stdout = "";
+  let stderr = "";
+  child.stdout.on("data", (chunk) => (stdout += String(chunk)));
+  child.stderr.on("data", (chunk) => (stderr += String(chunk)));
+  const completion = new Promise<{
+    code: number | null;
+    signal: NodeJS.Signals | null;
+  }>((resolve, reject) => {
+    child.once("error", reject);
+    child.once("close", (code, signal) => resolve({ code, signal }));
+  });
+  return { child, completion, stdout: () => stdout, stderr: () => stderr };
+}
+
+async function waitForClaimProcess(
+  processHandle: ReturnType<typeof spawnTeamClaimProcess>,
+): Promise<void> {
+  const deadline = Date.now() + 10_000;
+  while (!processHandle.stdout().includes("claimed\n")) {
+    assert.ok(
+      Date.now() < deadline,
+      `claim process did not start: ${processHandle.stderr()}`,
+    );
+    await setTimeout(10);
+  }
+}
 
 function isCode(code: string) {
   return (error: unknown) =>
@@ -516,5 +583,86 @@ workflowDeploymentIntegrationTest(
     }
     release();
     await worker.close();
+  },
+);
+
+test(
+  "SQLite Team scheduler reclaims a task after an actual owner process SIGKILL",
+  { timeout: 30_000 },
+  async (t: TestContext) => {
+    const f = await sqliteWorkflowDeploymentFixture(t, {
+      output: (request) =>
+        lastUser(request) === priorContext ? "PRIOR_REPLY" : "MEMBER_REPORT",
+    });
+    const server = await f.control(null);
+    const bootstrap = await f.worker();
+    bootstrap.start();
+    const { thread, plan } = await prepare(server.client, true);
+    await bootstrap.close();
+    const journal = await f.store.experimentalTeamTaskJournalStore();
+    await journal.migrate();
+    const intent: TeamTaskIntent = {
+      schemaVersion: "crewon.team-task.v1",
+      ...f.actor,
+      taskId: "process-owner-recovery",
+      turn: {
+        threadId: thread.threadId,
+        expectedRevision: thread.revision,
+        content: originalTask,
+        plan,
+        responseMode: "manager",
+        managerResponseKind: "office",
+      },
+    };
+    await journal.create(intent);
+    const markerPath = `${f.databasePath}.team-claim-markers`;
+    appendFileSync(markerPath, "", { mode: 0o600 });
+    const first = spawnTeamClaimProcess({
+      databasePath: f.databasePath,
+      markerPath,
+      tenantId: f.actor.tenantId,
+      spaceId: f.actor.spaceId,
+      ownerId: "process-owner-a",
+      leaseDurationMs: 200,
+    });
+    t.after(async () => {
+      if (first.child.exitCode === null && first.child.signalCode === null)
+        first.child.kill("SIGKILL");
+      await first.completion;
+    });
+    await waitForClaimProcess(first);
+    const claimed = await journal.read(intent);
+    assert.equal(claimed?.lease?.ownerId, "process-owner-a");
+    const expiry = claimed.lease!.expiresAt;
+    first.child.kill("SIGKILL");
+    assert.equal((await first.completion).signal, "SIGKILL");
+    while (Date.now() <= expiry) await setTimeout(10);
+
+    const second = spawnTeamClaimProcess({
+      databasePath: f.databasePath,
+      markerPath,
+      tenantId: f.actor.tenantId,
+      spaceId: f.actor.spaceId,
+      ownerId: "process-owner-b",
+      leaseDurationMs: 5_000,
+    });
+    t.after(async () => {
+      if (second.child.exitCode === null && second.child.signalCode === null)
+        second.child.kill("SIGKILL");
+      await second.completion;
+    });
+    await waitForClaimProcess(second);
+    const recovered = await journal.read(intent);
+    assert.equal(recovered?.lease?.ownerId, "process-owner-b");
+    assert.equal(recovered?.lease?.epoch, 2);
+    assert.deepEqual(
+      readFileSync(markerPath, "utf8")
+        .trim()
+        .split("\n")
+        .map((line) => line.split(":")[0]),
+      ["process-owner-a", "process-owner-b"],
+    );
+    second.child.kill("SIGKILL");
+    assert.equal((await second.completion).signal, "SIGKILL");
   },
 );

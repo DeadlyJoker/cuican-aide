@@ -593,3 +593,11 @@ scheduler 单测 5/5 通过，覆盖 durable cancellation abort、失败回调�
 SQLite/PostgreSQL 取消场景均通过；最终 Team 相关回归 38/38 通过。Application 全量 923 项中 885 项通过、38 项既有条件跳过；Application、Store、Control API、Runtime Worker 类型检查、边界、格式和 diff 检查通过。
 
 取消监控、executor signal 和 Worker close 仍只在显式 Team scheduler 配置下启用；默认桌面 Team 与自主子 Agent 保持关闭。下一阶段可在真实生产 actor/authorization host 上做 OS 强杀、取消与未知副作用的综合验收。
+
+## 第四十批：SQLite Team scheduler 的真实子进程 SIGKILL recovery（2026-10-19）
+
+基线为 `10d839c0b`。本批新增真实 Node 子进程测试：第一进程打开同一 SQLite journal、claim task 后保持 executor 在途；测试发送 `SIGKILL`，不执行 Worker close 或 journal 清理；等待原 lease 过期后，第二进程打开同一数据库并重新 claim。最终核对 marker、owner 和 lease epoch（1→2），证明 durable claim 能跨进程恢复。
+
+该测试只验证 scheduler claim/recovery，不把未完成 executor 的外部副作用伪造成已回滚；第二进程同样在 claim 后由测试结束。Control API 类型检查、进程测试、diff/格式检查通过；已有双库 Team 38/38 回归继续作为业务路径证据。
+
+PG/生产多实例和 OS 强杀后的完整 `executeTeamTask` 外部副作用恢复仍待独立验证；默认桌面 Team 与自主子 Agent 继续关闭。
