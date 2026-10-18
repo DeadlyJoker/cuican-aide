@@ -849,3 +849,9 @@ Node 24 验证：Application 全量 933 项中 895 项通过、38 项既有条�
 5. 可重放的 child wake/queue marker。
 
 当前 edge 表只保存关系和创建时间，暂不承载这些 admission 元数据；在没有确定 schema version、旧 edge 迁移和 child Team intent 兼容策略前，不扩展公开 HTTP 或模型触发入口。该审计没有修改执行代码，避免把两个独立事务误报成原子能力。下一步先定义 Store 内部的事务组合 port，并用 SQLite 故障注入证明“全写入或全回滚”。
+
+## 第七十五批：child admission 输入契约（2026-10-19）
+
+新增纯 application capture `captureAutonomousTaskChildAdmission`，把 parent/child edge、Team child intent、冻结 budget、capability snapshot 和幂等 key 绑定成一次 admission 输入。它在写入前拒绝 tenant/space/actor/principal 不一致、child ID/edge 不一致、depth 超预算和 accessor/未知字段；capture 本身不写 Store、不生成 wake、不声称原子提交。
+
+Node 24 下新增契约测试 2/2、Application typecheck 和格式检查通过。下一步再把这个输入接到 SQLite/PostgreSQL 同一事务的内部 Store port，补 parent effect、child journal、edge、metadata 和 wake 的故障注入回滚测试。

@@ -12,6 +12,7 @@
     "./team-task-scheduler": "./src/team-task-scheduler.ts",
     "./task-lineage-policy": "./src/task-lineage-policy.ts",
     "./autonomous-task-edge-store": "./src/autonomous-task-edge-store-port.ts",
+    "./autonomous-task-admission": "./src/autonomous-task-admission.ts",
     "./host-project-workspaces": "./src/host-project-workspaces.ts"
   },
   "scripts": {
