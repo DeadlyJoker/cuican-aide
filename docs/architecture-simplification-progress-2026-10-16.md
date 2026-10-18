@@ -628,4 +628,6 @@ SQLite 场景通过；本轮环境没有 `CREWON_TEST_POSTGRES_URL`，因此新�
 
 基线为 `0a265ff9c`。当前首次 transcript 页没有旧 cursor 时，Thread head 与有界 transcript snapshot 不存在数据依赖；本批让两次读取并行执行。带旧 cursor 的分页仍先读取当前 Thread revision，再重编码 cursor 后请求 snapshot，保留服务端 cursor 校验和 revision 一致性。没有修改 HTTP 形状、事件顺序或权限边界。
 
-验证：`controlTranscriptRead` 与 `controlThreadRuntime` 共 119 个 UI 测试通过，UI typecheck、Electron host lint、格式和 diff 检查通过。该批只减少串行等待，未宣称减少请求数量；工具历史、Run plan 和 hydration 后 Thread head 校验仍保留。
+验证：`controlTranscriptRead` 与 `controlThreadRuntime` 共 120 个 UI 测试通过，UI typecheck、Electron host lint、格式和 diff 检查通过。新增测试同时证明首次两路读取确实并行，并保持并行响应的 `threadRevision/eventSequence` identity 校验。该批只减少串行等待，未宣称减少请求数量；工具历史、Run plan 和 hydration 后 Thread head 校验仍保留。
+
+复核结论：hydration 前的第二次 Thread head 读取不能直接删除。它在发布基础投影前阻止混合 revision；若只依赖 hydration 后检查，可能先把过期基础状态发布到 UI。后续若要继续减少该读取，必须先改变发布边界或让服务端快照同时承担 Thread summary 与最终一致性证明，再补流式期间和 hydration 竞态验收。
