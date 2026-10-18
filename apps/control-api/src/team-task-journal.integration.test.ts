@@ -9,7 +9,10 @@ import {
   type TeamTaskJournalStore,
 } from "@crewon/application/team-task-journal";
 import { workflowDeploymentIntegrationTest } from "./workflow-deployment-integration.test-support.ts";
-import { NodeSha256ContentDigester } from "./standalone-adapters.ts";
+import {
+  NodeSha256ContentDigester,
+  UuidV7ApplicationIdGenerator,
+} from "./standalone-adapters.ts";
 import {
   originalTask,
   priorContext,
@@ -18,8 +21,131 @@ import {
   prepare,
   teamOperations as operations,
 } from "./team-turn-application.test-support.ts";
+import { ThreadApplicationService } from "@crewon/application";
 
 const digester = new NodeSha256ContentDigester();
+
+workflowDeploymentIntegrationTest(
+  "Team admission atomically commits the main message and journal, then replays without a stale revision",
+  async (t, fixture) => {
+    const server = await fixture(t, {});
+    const control = await server.control(null);
+    const worker = await server.worker();
+    worker.start();
+    const prepared = await prepare(control.client, true);
+    const threads = new ThreadApplicationService({
+      store: server.store,
+      authorization: server.authorization,
+      clock: server.clock,
+      ids: new UuidV7ApplicationIdGenerator(),
+      digester,
+    });
+    const journal = await server.store.experimentalTeamTaskJournalStore();
+    await journal.migrate();
+    const intent: TeamTaskIntent = {
+      schemaVersion: "crewon.team-task.v1",
+      ...server.actor,
+      taskId: "atomic-admission",
+      mainMessageSequence: prepared.thread.lastMessageSequence + 1,
+      turn: {
+        threadId: prepared.thread.threadId,
+        expectedRevision: prepared.thread.revision,
+        content: originalTask,
+        plan: prepared.plan,
+        responseMode: "manager",
+        managerResponseKind: "office",
+      },
+    };
+    const thread = await threads.prepareAppendMessage(server.actor, {
+      kind: "thread.message.append",
+      idempotencyKey: "atomic-admission-message",
+      threadId: intent.turn.threadId,
+      expectedRevision: intent.turn.expectedRevision,
+      role: "user",
+      content: intent.turn.content,
+    });
+    const committed = await journal.admit({ intent, thread });
+    assert.equal(committed.disposition, "committed");
+    assert.equal(committed.thread?.disposition, "committed");
+    assert.equal(
+      committed.task.intent.mainMessageSequence,
+      intent.mainMessageSequence,
+    );
+    const current = await control.client.getThread(intent.turn.threadId);
+    assert.equal(current.thread.revision, intent.turn.expectedRevision + 1);
+    assert.equal(
+      current.thread.lastMessageSequence,
+      intent.mainMessageSequence,
+    );
+
+    const replay = await journal.admit({ intent, thread });
+    assert.equal(replay.disposition, "replayed");
+    assert.equal(replay.thread, null);
+    assert.deepEqual(replay.task.intent, committed.task.intent);
+  },
+);
+
+workflowDeploymentIntegrationTest(
+  "Team admission rolls back both reservations when the prepared Thread revision is stale",
+  async (t, fixture) => {
+    const server = await fixture(t, {});
+    const control = await server.control(null);
+    const worker = await server.worker();
+    worker.start();
+    const prepared = await prepare(control.client, true);
+    const threads = new ThreadApplicationService({
+      store: server.store,
+      authorization: server.authorization,
+      clock: server.clock,
+      ids: new UuidV7ApplicationIdGenerator(),
+      digester,
+    });
+    const journal = await server.store.experimentalTeamTaskJournalStore();
+    await journal.migrate();
+    const intent: TeamTaskIntent = {
+      schemaVersion: "crewon.team-task.v1",
+      ...server.actor,
+      taskId: "atomic-admission-stale",
+      mainMessageSequence: prepared.thread.lastMessageSequence + 1,
+      turn: {
+        threadId: prepared.thread.threadId,
+        expectedRevision: prepared.thread.revision,
+        content: originalTask,
+        plan: prepared.plan,
+        responseMode: "manager",
+        managerResponseKind: "office",
+      },
+    };
+    const thread = await threads.prepareAppendMessage(server.actor, {
+      kind: "thread.message.append",
+      idempotencyKey: "atomic-admission-stale-message",
+      threadId: intent.turn.threadId,
+      expectedRevision: intent.turn.expectedRevision,
+      role: "user",
+      content: intent.turn.content,
+    });
+    await control.client.appendThreadMessage(
+      intent.turn.threadId,
+      {
+        expectedRevision: intent.turn.expectedRevision,
+        content: "concurrent user input",
+      },
+      "atomic-admission-concurrent-input",
+    );
+    await assert.rejects(
+      journal.admit({ intent, thread }),
+      (error: unknown) =>
+        error instanceof TeamTaskJournalError &&
+        error.code === "team_task_thread_unavailable",
+    );
+    assert.equal(await journal.read(intent), null);
+    const current = await control.client.getThread(intent.turn.threadId);
+    assert.equal(
+      current.thread.lastMessageSequence,
+      intent.mainMessageSequence,
+    );
+  },
+);
 function isCode(code: string) {
   return (error: unknown) =>
     error instanceof TeamTaskJournalError && error.code === code;

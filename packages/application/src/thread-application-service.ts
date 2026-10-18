@@ -147,6 +147,19 @@ export class ThreadApplicationService {
     actor: ActorContext,
     command: AppendThreadMessageCommand,
   ): Promise<CommitThreadResult> {
+    return this.#commit(await this.prepareAppendMessage(actor, command));
+  }
+
+  /**
+   * Prepares a user-visible message commit for a compound admission
+   * transaction. Authorization and all immutable message/event values are
+   * captured before the Store opens its transaction; the Store still
+   * rechecks the expected Thread revision while committing.
+   */
+  async prepareAppendMessage(
+    actor: ActorContext,
+    command: AppendThreadMessageCommand,
+  ): Promise<CommitThreadInput> {
     validateActor(actor);
     validateAppendCommand(command);
     const state = await this.#loadAuthorizedThread(
@@ -185,7 +198,7 @@ export class ThreadApplicationService {
         ...initialThreadTitleData(state, message),
       },
     };
-    const result = await this.#commit({
+    return {
       tenantId: actor.tenantId,
       ...(command.teamTaskFence === undefined
         ? {}
@@ -214,8 +227,7 @@ export class ThreadApplicationService {
           },
         ],
       },
-    });
-    return result;
+    };
   }
 
   async forkThread(

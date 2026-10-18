@@ -1,5 +1,9 @@
 import type { Pool, PoolClient } from "pg";
 import type { RunState } from "@crewon/domain";
+import type {
+  CommitThreadInput,
+  CommitThreadResult,
+} from "@crewon/application";
 import {
   captureTeamTaskIntent,
   teamJournalJson,
@@ -14,6 +18,7 @@ import {
   type TeamTaskScope,
   type TeamTaskFence,
   type TeamTaskEffect,
+  type TeamTaskAdmissionResult,
   type TeamTaskJournalStore,
 } from "@crewon/application/team-task-journal";
 import type { ControlTeamTurnResult } from "@crewon/application/team-turn";
@@ -32,7 +37,7 @@ import {
   captureTeamResult,
   assertTeamFinalRun,
 } from "./team-task-journal-state.ts";
-import { advisoryLock } from "./postgres-thread-lock.ts";
+import { advisoryLock, threadLockKey } from "./postgres-thread-lock.ts";
 import { rollbackPostgres } from "./postgres-store-support.ts";
 
 type TeamJournalHost = {
@@ -41,6 +46,10 @@ type TeamJournalHost = {
     client: PoolClient,
     locator: { tenantId: string; runId: string },
   ): Promise<RunState | null>;
+  commitThreadWithinTransaction(
+    client: PoolClient,
+    input: CommitThreadInput,
+  ): Promise<CommitThreadResult>;
 };
 export class ExperimentalPostgresTeamTaskJournal
   implements TeamTaskJournalStore
@@ -109,6 +118,12 @@ export class ExperimentalPostgresTeamTaskJournal
       teamJournalFail("team_journal_clock_invalid");
     return now;
   }
+  async #lockThread(client: PoolClient, intent: TeamTaskIntent) {
+    await advisoryLock(
+      client,
+      threadLockKey(intent.tenantId, intent.turn.threadId),
+    );
+  }
   async migrate() {
     await this.#transaction(
       null,
@@ -166,46 +181,111 @@ export class ExperimentalPostgresTeamTaskJournal
   async create(input: TeamTaskIntent) {
     const intent = captureTeamTaskIntent(input),
       text = teamJournalJson(intent, 131072);
+    return this.#transaction(intent, (client) =>
+      this.#createInTransaction(client, intent, text),
+    );
+  }
+
+  async #createInTransaction(
+    client: PoolClient,
+    intent: TeamTaskIntent,
+    text = teamJournalJson(intent, 131072),
+  ) {
+    const prior = await this.#read(client, intent);
+    if (prior) {
+      if (teamJournalJson(prior.intent, 131072) !== text)
+        teamJournalFail("team_task_intent_conflict");
+      return prior;
+    }
+    const thread = await client.query(
+      `SELECT tenant_id,space_id,thread_id,status,revision FROM ${this.#table("threads")} WHERE tenant_id=$1 AND thread_id=$2 FOR SHARE`,
+      [intent.tenantId, intent.turn.threadId],
+    );
+    const office = await client.query(
+      `SELECT definition_json FROM ${this.#table("office_definitions")} WHERE tenant_id=$1 AND space_id=$2 AND office_version_id=$3`,
+      [intent.tenantId, intent.spaceId, intent.turn.plan.officeVersionId],
+    );
+    assertTeamTaskSource(
+      intent,
+      thread.rows[0],
+      office.rows[0]?.definition_json,
+    );
+    const busy = await client.query(
+      `SELECT 1 FROM ${this.#table("team_task_journals")} WHERE tenant_id=$1 AND space_id=$2 AND thread_id=$3 AND status='coordinating' LIMIT 1`,
+      [intent.tenantId, intent.spaceId, intent.turn.threadId],
+    );
+    if (busy.rows.length !== 0) teamJournalFail("team_task_main_busy");
+    const activeRun = await client.query(
+      `SELECT 1 FROM ${this.#table("run_snapshots")} AS snapshots JOIN ${this.#table("run_thread_bindings")} AS bindings ON bindings.tenant_id=snapshots.tenant_id AND bindings.run_id=snapshots.run_id WHERE snapshots.tenant_id=$1 AND bindings.thread_id=$2 AND (snapshots.state_json->>'status') NOT IN ('completed','failed','canceled') LIMIT 1`,
+      [intent.tenantId, intent.turn.threadId],
+    );
+    if (activeRun.rows.length !== 0) teamJournalFail("team_task_run_active");
+    await client.query(
+      `INSERT INTO ${this.#table("team_task_journals")} (tenant_id,space_id,task_id,thread_id,intent_json,status,revision,cancel_requested,lease_epoch,effect_count,journal_bytes) VALUES($1,$2,$3,$4,$5,'coordinating',1,0,0,0,$6)`,
+      [
+        ...teamTaskKeys(intent),
+        intent.turn.threadId,
+        text,
+        teamJournalBytes(text),
+      ],
+    );
+    return (await this.#read(client, intent))!;
+  }
+
+  async admit(input: {
+    intent: TeamTaskIntent;
+    thread: CommitThreadInput;
+  }): Promise<TeamTaskAdmissionResult> {
+    const intent = captureTeamTaskIntent(input.intent);
+    const text = teamJournalJson(intent, 131072);
+    if (input.thread.teamTaskFence !== undefined)
+      teamJournalFail("team_task_admission_fence_invalid");
+    const message = input.thread.messages[0];
+    if (
+      input.thread.messages.length !== 1 ||
+      intent.mainMessageSequence !== message?.sequence ||
+      message.role !== "user" ||
+      message.threadId !== intent.turn.threadId ||
+      message.content !== intent.turn.content
+    )
+      teamJournalFail("team_task_admission_message_invalid");
+    const ownerId = `admission:${intent.taskId}`;
+    const leaseId = `${ownerId}:lease`;
     return this.#transaction(intent, async (client) => {
       const prior = await this.#read(client, intent);
       if (prior) {
         if (teamJournalJson(prior.intent, 131072) !== text)
           teamJournalFail("team_task_intent_conflict");
-        return prior;
+        return { disposition: "replayed", task: prior, thread: null };
       }
-      const thread = await client.query(
-        `SELECT tenant_id,space_id,thread_id,status,revision FROM ${this.#table("threads")} WHERE tenant_id=$1 AND thread_id=$2 FOR SHARE`,
-        [intent.tenantId, intent.turn.threadId],
-      );
-      const office = await client.query(
-        `SELECT definition_json FROM ${this.#table("office_definitions")} WHERE tenant_id=$1 AND space_id=$2 AND office_version_id=$3`,
-        [intent.tenantId, intent.spaceId, intent.turn.plan.officeVersionId],
-      );
-      assertTeamTaskSource(
-        intent,
-        thread.rows[0],
-        office.rows[0]?.definition_json,
-      );
-      const busy = await client.query(
-        `SELECT 1 FROM ${this.#table("team_task_journals")} WHERE tenant_id=$1 AND space_id=$2 AND thread_id=$3 AND status='coordinating' LIMIT 1`,
-        [intent.tenantId, intent.spaceId, intent.turn.threadId],
-      );
-      if (busy.rows.length !== 0) teamJournalFail("team_task_main_busy");
-      const activeRun = await client.query(
-        `SELECT 1 FROM ${this.#table("run_snapshots")} AS snapshots JOIN ${this.#table("run_thread_bindings")} AS bindings ON bindings.tenant_id=snapshots.tenant_id AND bindings.run_id=snapshots.run_id WHERE snapshots.tenant_id=$1 AND bindings.thread_id=$2 AND (snapshots.state_json->>'status') NOT IN ('completed','failed','canceled') LIMIT 1`,
-        [intent.tenantId, intent.turn.threadId],
-      );
-      if (activeRun.rows.length !== 0) teamJournalFail("team_task_run_active");
+      await this.#lockThread(client, intent);
+      const task = await this.#createInTransaction(client, intent, text);
+      const now = await this.#now(client);
+      const expiresAt = now + 30_000;
       await client.query(
-        `INSERT INTO ${this.#table("team_task_journals")} (tenant_id,space_id,task_id,thread_id,intent_json,status,revision,cancel_requested,lease_epoch,effect_count,journal_bytes) VALUES($1,$2,$3,$4,$5,'coordinating',1,0,0,0,$6)`,
-        [
-          ...teamTaskKeys(intent),
-          intent.turn.threadId,
-          text,
-          teamJournalBytes(text),
-        ],
+        `UPDATE ${this.#table("team_task_journals")} SET lease_owner=$1,lease_id=$2,lease_epoch=1,lease_expires_at=$3,revision=revision+1 WHERE tenant_id=$4 AND space_id=$5 AND task_id=$6`,
+        [ownerId, leaseId, expiresAt, ...teamTaskKeys(intent)],
       );
-      return (await this.#read(client, intent))!;
+      const fence = {
+        tenantId: intent.tenantId,
+        spaceId: intent.spaceId,
+        taskId: intent.taskId,
+        ownerId,
+        leaseId,
+        epoch: 1,
+      } as const;
+      const thread = await this.host.commitThreadWithinTransaction(client, {
+        ...input.thread,
+        teamTaskFence: fence,
+      });
+      if (thread.disposition !== "committed")
+        teamJournalFail("team_task_admission_thread_replay");
+      await client.query(
+        `UPDATE ${this.#table("team_task_journals")} SET lease_owner=NULL,lease_id=NULL,lease_expires_at=NULL,revision=revision+1 WHERE tenant_id=$1 AND space_id=$2 AND task_id=$3`,
+        teamTaskKeys(intent),
+      );
+      const committed = (await this.#read(client, intent))!;
+      return { disposition: "committed", task: committed, thread };
     });
   }
   async claim(

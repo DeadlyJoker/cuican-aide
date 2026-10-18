@@ -1,4 +1,5 @@
 import type { ContentDigester } from "./application-runtime-ports.ts";
+import { formatMessageCursor } from "@crewon/contracts";
 import type { ActorContext } from "./authorization-port.ts";
 import { startControlTeamTurn } from "./team-turn.ts";
 import type {
@@ -275,6 +276,38 @@ export async function executeTeamTask(input: {
       fencedOperations.authorizeOfficeRun(id, body),
   };
   try {
+    const acceptedMessage =
+      task.intent.mainMessageSequence === undefined
+        ? undefined
+        : await checkpoint("mainMessage", async () => {
+            const sequence = task.intent.mainMessageSequence!;
+            const messages = await fencedOperations.listThreadMessages(
+              task.intent.turn.threadId,
+              {
+                cursor: sequence > 1 ? formatMessageCursor(sequence - 1) : null,
+                limit: 1,
+              },
+            );
+            const message = messages.data[0];
+            if (
+              message === undefined ||
+              message.sequence !== sequence ||
+              message.threadId !== task.intent.turn.threadId ||
+              message.role !== "user" ||
+              message.content !== task.intent.turn.content
+            )
+              teamJournalFail("team_task_main_message_missing");
+            const thread = await fencedOperations.getThread(
+              task.intent.turn.threadId,
+            );
+            if (thread.thread.threadId !== task.intent.turn.threadId)
+              teamJournalFail("team_task_main_thread_invalid");
+            return {
+              disposition: "replayed" as const,
+              thread: thread.thread,
+              message,
+            };
+          });
     try {
       const result = await startControlTeamTurn({
         ...task.intent.turn,
@@ -287,6 +320,7 @@ export async function executeTeamTask(input: {
         ...(input.runDeadlineMs === undefined
           ? {}
           : { runDeadlineMs: input.runDeadlineMs }),
+        ...(acceptedMessage === undefined ? {} : { acceptedMessage }),
         ...(input.signal === undefined ? {} : { signal: input.signal }),
       });
       guard();

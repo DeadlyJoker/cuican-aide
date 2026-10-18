@@ -3,6 +3,10 @@ import type {
   StartControlTeamTurnInput,
   ControlTeamTurnResult,
 } from "./team-turn-types.ts";
+import type {
+  CommitThreadInput,
+  CommitThreadResult,
+} from "./thread-store-port.ts";
 import { canonicalJson } from "./canonical-json.ts";
 
 export type TeamTaskTurn = Pick<
@@ -28,6 +32,8 @@ export type TeamTaskIntent = TeamTaskLocator &
     schemaVersion: "crewon.team-task.v1";
     actorId: string;
     principalId: string;
+    /** Sequence of the atomically admitted user message, when present. */
+    mainMessageSequence?: number;
     turn: TeamTaskTurn;
   }>;
 export type TeamTaskFence = TeamTaskLocator &
@@ -57,12 +63,27 @@ export type TeamTaskEffect = Readonly<{
   settled: boolean;
   response: JsonValue | null;
 }>;
+export type TeamTaskAdmissionResult = Readonly<{
+  disposition: "committed" | "replayed";
+  task: TeamTaskRecord;
+  /** Present only for a newly committed admission. */
+  thread: CommitThreadResult | null;
+}>;
 export interface TeamTaskJournalStore {
   migrate(): Promise<void>;
   listRunnable(
     scope: TeamTaskScope & { limit: number },
   ): Promise<readonly TeamTaskLocator[]>;
   create(intent: TeamTaskIntent): Promise<TeamTaskRecord>;
+  /**
+   * Atomically reserves the main Thread, appends its user message and creates
+   * the durable Team journal. The Store implementation supplies the
+   * transaction-bound Thread commit; no network or model call may occur here.
+   */
+  admit(input: {
+    intent: TeamTaskIntent;
+    thread: CommitThreadInput;
+  }): Promise<TeamTaskAdmissionResult>;
   read(locator: TeamTaskLocator): Promise<TeamTaskRecord | null>;
   claim(
     input: TeamTaskLocator & {
@@ -213,6 +234,9 @@ export function captureTeamTaskIntent(input: TeamTaskIntent): TeamTaskIntent {
     Object.keys(value).sort().join() !==
       [
         "actorId",
+        ...(value.mainMessageSequence === undefined
+          ? []
+          : ["mainMessageSequence"]),
         "principalId",
         "schemaVersion",
         "spaceId",
@@ -223,6 +247,12 @@ export function captureTeamTaskIntent(input: TeamTaskIntent): TeamTaskIntent {
         .sort()
         .join() ||
     value.schemaVersion !== "crewon.team-task.v1"
+  )
+    teamJournalFail("team_task_intent_invalid");
+  if (
+    value.mainMessageSequence !== undefined &&
+    (!Number.isSafeInteger(value.mainMessageSequence) ||
+      value.mainMessageSequence < 1)
   )
     teamJournalFail("team_task_intent_invalid");
   const turn = value.turn;

@@ -7,6 +7,7 @@
     ".": "./src/index.ts",
     "./team-turn": "./src/team-turn.ts",
     "./team-task-journal": "./src/team-task-journal.ts",
+    "./team-task-admission": "./src/team-task-admission-application-service.ts",
     "./team-task-execution": "./src/team-task-execution.ts",
     "./team-task-scheduler": "./src/team-task-scheduler.ts",
     "./host-project-workspaces": "./src/host-project-workspaces.ts"

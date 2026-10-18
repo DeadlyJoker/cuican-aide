@@ -1002,6 +1002,8 @@ export class SqliteRunStore implements DomainStore {
       assertOpen: () => this.#assertOpen(),
       now: () => readLeaseClock(this.#clock),
       loadRun: (locator) => this.#loadRun(locator),
+      commitThreadWithinTransaction: (input) =>
+        this.#commitThread(input, { withinTransaction: true }),
     });
   }
 

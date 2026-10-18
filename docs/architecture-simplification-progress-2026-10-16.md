@@ -743,3 +743,11 @@ Node 24 真实 SQLite Control/Worker/合成模型回归通过：创建 durable T
 当前 UI 的 `controlTeamRuntime.ts` 仍在 renderer 直接推进 Team：它执行 `forkThread`、`createRun`、`startTurn`、成员轮询和最终汇总。新 standalone scheduler、application operations adapter 和 Control operations facade 尚未接入 UI 提交路径，因此不能把后端底座的完成称为 Team 前端执行权迁移。
 
 迁移前还缺一个正式的 Team task admission/intent HTTP contract：页面需要提交不可变 Team intent，服务端原子写入主会话输入、journal 和初始回执，再通过 SSE/快照读取结果；旧 renderer 推进必须在新入口具备恢复、取消、审批和结果回流后才退出。下一步先定义并测试这个 admission contract，再改 UI，不在现有 `controlTeamRuntime` 上继续叠加后台恢复分支。
+
+## 第六十一批：Team admission 原子提交基础（2026-10-19）
+
+本批先实现 admission contract 的存储边界，不开放 HTTP 或修改 renderer。`ThreadApplicationService` 增加只准备、不提交的主消息路径；SQLite/PostgreSQL Team journal 增加同一事务内的 admission：先验证原 Thread revision、office 定义和现有 Run，再短暂取得内部 admission lease，在同一事务中提交主用户消息和 Team journal，最后释放 lease。任一步失败都会回滚两者，避免用两次独立提交拼出“已接受”的任务。
+
+Team intent 记录原子提交后的主消息 sequence。执行恢复时可以按固定 sequence 重新读取并校验消息，再把已接受消息传给 Team coordinator，旧的无 admission sequence 任务继续使用兼容的追加路径。重复 taskId 先读取 journal 并比较去掉派生 sequence 后的完整意图；匹配请求直接重放，不再以旧 Thread revision 重新准备消息，输入变化返回冲突。
+
+Node 24 验证：应用层 admission service 的准备、重放和冲突单测 3/3 通过；真实 SQLite Control/Worker 组合的原子提交、重放和过期 revision 回滚专项 3/3 通过。Store、Application、Control API typecheck 通过；PostgreSQL 专项仍因当前环境没有 `CREWON_TEST_POSTGRES_URL` 跳过。当前没有新增 HTTP 路由、公开凭据、schema version 或 UI 入口；下一批先为这个原子边界补受控的 Control contract 和结果读取，再接 standalone async composition。

@@ -126,14 +126,16 @@ export async function startControlTeamTurn(
   ) {
     throw new Error("control_team_fork_response_invalid");
   }
-  const appended = await input.client.appendThreadMessage(
-    input.threadId,
-    {
-      expectedRevision: goalPause?.threadRevision ?? input.expectedRevision,
-      content: input.content,
-    },
-    input.idempotencyKey("team.message.append"),
-  );
+  const appended =
+    input.acceptedMessage ??
+    (await input.client.appendThreadMessage(
+      input.threadId,
+      {
+        expectedRevision: goalPause?.threadRevision ?? input.expectedRevision,
+        content: input.content,
+      },
+      input.idempotencyKey("team.message.append"),
+    ));
   if (
     appended.thread.threadId !== input.threadId ||
     appended.message.threadId !== input.threadId ||

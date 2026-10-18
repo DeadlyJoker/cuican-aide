@@ -137,6 +137,8 @@ export type StartControlTeamTurnInput = Readonly<{
   idempotencyKey: (operation: string) => string;
   executionIntent?: "none" | "goal" | "plan";
   toolPermissionMode?: ToolPermissionMode;
+  /** Main user message already committed by durable Team admission. */
+  acceptedMessage?: AppendThreadMessageResponse;
   onRunStarted?: (run: RunView) => void;
   onTaskAccepted?: (message: MessageView) => void;
   onTeamRunAccepted?: (

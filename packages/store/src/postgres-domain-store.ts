@@ -523,10 +523,16 @@ export class PostgresDomainStore
       "./postgres-team-task-journal.ts"
     );
     this.assertOpen();
-    return new ExperimentalPostgresTeamTaskJournal(this.pool, this.schemaSql(), {
-      assertOpen: () => this.assertOpen(),
-      loadRun: (client, locator) => this.loadRunWithin(client, locator),
-    });
+    return new ExperimentalPostgresTeamTaskJournal(
+      this.pool,
+      this.schemaSql(),
+      {
+        assertOpen: () => this.assertOpen(),
+        loadRun: (client, locator) => this.loadRunWithin(client, locator),
+        commitThreadWithinTransaction: (client, input) =>
+          this.commitThreadWithin(client, input),
+      },
+    );
   }
 
   /** Admission foundation only. Neither construction nor migration enables a scheduler. */

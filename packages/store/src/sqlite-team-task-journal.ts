@@ -1,5 +1,9 @@
 import type { DatabaseSync } from "node:sqlite";
 import type { RunState } from "@crewon/domain";
+import type {
+  CommitThreadInput,
+  CommitThreadResult,
+} from "@crewon/application";
 import {
   captureTeamTaskIntent,
   teamJournalJson,
@@ -14,6 +18,7 @@ import {
   type TeamTaskScope,
   type TeamTaskFence,
   type TeamTaskEffect,
+  type TeamTaskAdmissionResult,
   type TeamTaskJournalStore,
 } from "@crewon/application/team-task-journal";
 import type { ControlTeamTurnResult } from "@crewon/application/team-turn";
@@ -37,6 +42,7 @@ type TeamJournalHost = {
   assertOpen(): void;
   now(): number;
   loadRun(locator: { tenantId: string; runId: string }): RunState | null;
+  commitThreadWithinTransaction(input: CommitThreadInput): CommitThreadResult;
 };
 /** Explicit experimental storage; no network/async callback runs in its transaction. */
 export class ExperimentalSqliteTeamTaskJournal implements TeamTaskJournalStore {
@@ -139,52 +145,125 @@ export class ExperimentalSqliteTeamTaskJournal implements TeamTaskJournalStore {
   async create(input: TeamTaskIntent) {
     const intent = captureTeamTaskIntent(input),
       text = teamJournalJson(intent, 131072);
-    return this.#transaction(() => {
+    return this.#transaction(() => this.#createInTransaction(intent, text));
+  }
+
+  #createInTransaction(
+    intent: TeamTaskIntent,
+    text = teamJournalJson(intent, 131072),
+  ) {
+    const prior = this.#read(intent);
+    if (prior) {
+      if (teamJournalJson(prior.intent, 131072) !== text)
+        teamJournalFail("team_task_intent_conflict");
+      return prior;
+    }
+    const thread = this.database
+      .prepare(
+        "SELECT tenant_id,space_id,thread_id,status,revision FROM threads WHERE tenant_id=? AND thread_id=?",
+      )
+      .get(intent.tenantId, intent.turn.threadId);
+    const office = this.database
+      .prepare(
+        "SELECT definition_json FROM office_definitions WHERE tenant_id=? AND space_id=? AND office_version_id=?",
+      )
+      .get(intent.tenantId, intent.spaceId, intent.turn.plan.officeVersionId);
+    assertTeamTaskSource(intent, thread, office?.definition_json);
+    if (
+      this.database
+        .prepare(
+          "SELECT 1 FROM team_task_journals WHERE tenant_id=? AND space_id=? AND thread_id=? AND status='coordinating' LIMIT 1",
+        )
+        .get(intent.tenantId, intent.spaceId, intent.turn.threadId)
+    )
+      teamJournalFail("team_task_main_busy");
+    if (
+      this.database
+        .prepare(
+          `SELECT 1 FROM run_snapshots AS snapshots JOIN run_thread_bindings AS bindings ON bindings.tenant_id=snapshots.tenant_id AND bindings.run_id=snapshots.run_id WHERE snapshots.tenant_id=? AND bindings.thread_id=? AND json_extract(snapshots.state_json,'$.status') NOT IN ('completed','failed','canceled') LIMIT 1`,
+        )
+        .get(intent.tenantId, intent.turn.threadId)
+    )
+      teamJournalFail("team_task_run_active");
+    this.database
+      .prepare(
+        `INSERT INTO team_task_journals (tenant_id,space_id,task_id,thread_id,intent_json,status,revision,cancel_requested,lease_epoch,effect_count,journal_bytes) VALUES(?,?,?,?,?,'coordinating',1,0,0,0,?)`,
+      )
+      .run(
+        ...teamTaskKeys(intent),
+        intent.turn.threadId,
+        text,
+        teamJournalBytes(text),
+      );
+    return this.#read(intent)!;
+  }
+
+  async admit(input: {
+    intent: TeamTaskIntent;
+    thread: CommitThreadInput;
+  }): Promise<TeamTaskAdmissionResult> {
+    const intent = captureTeamTaskIntent(input.intent);
+    const text = teamJournalJson(intent, 131072);
+    if (input.thread.teamTaskFence !== undefined)
+      teamJournalFail("team_task_admission_fence_invalid");
+    const message = input.thread.messages[0];
+    if (
+      input.thread.messages.length !== 1 ||
+      intent.mainMessageSequence !== message?.sequence ||
+      message.role !== "user" ||
+      message.threadId !== intent.turn.threadId ||
+      message.content !== intent.turn.content
+    )
+      teamJournalFail("team_task_admission_message_invalid");
+    this.host.assertOpen();
+    this.#schema();
+    this.database.exec("BEGIN IMMEDIATE");
+    try {
       const prior = this.#read(intent);
       if (prior) {
         if (teamJournalJson(prior.intent, 131072) !== text)
           teamJournalFail("team_task_intent_conflict");
-        return prior;
+        this.database.exec("COMMIT");
+        return { disposition: "replayed", task: prior, thread: null };
       }
-      const thread = this.database
-        .prepare(
-          "SELECT tenant_id,space_id,thread_id,status,revision FROM threads WHERE tenant_id=? AND thread_id=?",
-        )
-        .get(intent.tenantId, intent.turn.threadId);
-      const office = this.database
-        .prepare(
-          "SELECT definition_json FROM office_definitions WHERE tenant_id=? AND space_id=? AND office_version_id=?",
-        )
-        .get(intent.tenantId, intent.spaceId, intent.turn.plan.officeVersionId);
-      assertTeamTaskSource(intent, thread, office?.definition_json);
-      if (
-        this.database
-          .prepare(
-            "SELECT 1 FROM team_task_journals WHERE tenant_id=? AND space_id=? AND thread_id=? AND status='coordinating' LIMIT 1",
-          )
-          .get(intent.tenantId, intent.spaceId, intent.turn.threadId)
-      )
-        teamJournalFail("team_task_main_busy");
-      if (
-        this.database
-          .prepare(
-            `SELECT 1 FROM run_snapshots AS snapshots JOIN run_thread_bindings AS bindings ON bindings.tenant_id=snapshots.tenant_id AND bindings.run_id=snapshots.run_id WHERE snapshots.tenant_id=? AND bindings.thread_id=? AND json_extract(snapshots.state_json,'$.status') NOT IN ('completed','failed','canceled') LIMIT 1`,
-          )
-          .get(intent.tenantId, intent.turn.threadId)
-      )
-        teamJournalFail("team_task_run_active");
+      const task = this.#createInTransaction(intent, text);
+      const now = this.host.now();
+      const ownerId = `admission:${intent.taskId}`;
+      const leaseId = `${ownerId}:lease`;
+      const epoch = 1;
+      const expiresAt = now + 30_000;
       this.database
         .prepare(
-          `INSERT INTO team_task_journals (tenant_id,space_id,task_id,thread_id,intent_json,status,revision,cancel_requested,lease_epoch,effect_count,journal_bytes) VALUES(?,?,?,?,?,'coordinating',1,0,0,0,?)`,
+          "UPDATE team_task_journals SET lease_owner=?,lease_id=?,lease_epoch=?,lease_expires_at=?,revision=revision+1 WHERE tenant_id=? AND space_id=? AND task_id=?",
         )
-        .run(
-          ...teamTaskKeys(intent),
-          intent.turn.threadId,
-          text,
-          teamJournalBytes(text),
-        );
-      return this.#read(intent)!;
-    });
+        .run(ownerId, leaseId, epoch, expiresAt, ...teamTaskKeys(intent));
+      const thread = this.host.commitThreadWithinTransaction({
+        ...input.thread,
+        teamTaskFence: {
+          tenantId: intent.tenantId,
+          spaceId: intent.spaceId,
+          taskId: intent.taskId,
+          ownerId,
+          leaseId,
+          epoch,
+        },
+      });
+      if (thread.disposition !== "committed")
+        teamJournalFail("team_task_admission_thread_replay");
+      this.database
+        .prepare(
+          "UPDATE team_task_journals SET lease_owner=NULL,lease_id=NULL,lease_expires_at=NULL,revision=revision+1 WHERE tenant_id=? AND space_id=? AND task_id=?",
+        )
+        .run(...teamTaskKeys(intent));
+      const committed = this.#read(intent)!;
+      this.database.exec("COMMIT");
+      return { disposition: "committed", task: committed, thread };
+    } catch (error) {
+      try {
+        this.database.exec("ROLLBACK");
+      } catch {}
+      throw error;
+    }
   }
   async claim(
     input: TeamTaskLocator & {
