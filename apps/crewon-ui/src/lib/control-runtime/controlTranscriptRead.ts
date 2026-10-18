@@ -50,6 +50,7 @@ export async function readControlTranscript(input: {
     ),
   );
   return {
+    thread: snapshot.thread ?? null,
     window,
     cursor,
     activeRun,

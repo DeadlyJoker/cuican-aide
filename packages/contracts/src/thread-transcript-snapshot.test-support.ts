@@ -28,6 +28,20 @@ export function transcriptSnapshotFixture() {
         { messageId: "message-1", runId: "run-1", source: "turnStartReceipt" },
       ],
     },
+    thread: {
+      threadId: "thread-1",
+      title: "source",
+      workspaceId: null,
+      status: "active",
+      revision: 2,
+      lastMessageSequence: 1,
+      forkedFromThreadId: null,
+      forkedThroughHistorySequence: null,
+      createdAt: "2026-09-11T00:00:00Z",
+      updatedAt: "2026-09-11T00:00:00Z",
+      archivedAt: null,
+      deletedAt: null,
+    },
     activeRunId: "run-1" as string | null,
     runs: [
       {

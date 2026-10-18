@@ -284,6 +284,8 @@ const MAX_SANDBOX_GIT_SUMMARY_BYTES = 16 * 1024;
 const MAX_GIT_BRANCH_BYTES = 1_024;
 
 export class ControlApiClient {
+  /** Current Control API snapshots may carry the Thread head from the same read transaction. */
+  readonly supportsTranscriptThreadSnapshot = true;
   readonly #baseUrl: URL;
   readonly #accessToken: string | null;
   readonly #csrfToken: string | null;

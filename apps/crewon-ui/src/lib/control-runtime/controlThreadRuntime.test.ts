@@ -320,6 +320,7 @@ function fakeClient({
       },
     }),
     {
+      supportsTranscriptThreadSnapshot: false,
       getThreadCatalog: vi.fn<ControlApiClient["getThreadCatalog"]>(
         async () => ({
           schemaVersion: "crewon.thread-catalog.v0",
@@ -2951,6 +2952,31 @@ describe("Control thread runtime", () => {
     await Promise.all([headStarted.promise, transcriptStarted.promise]);
     releaseHead.resolve();
     await read;
+    runtime.close();
+  });
+
+  it("uses the same-snapshot Thread head when the current client advertises it", async () => {
+    const client = fakeClient({ messages: [], runs: [] });
+    Object.defineProperty(client, "supportsTranscriptThreadSnapshot", {
+      value: true,
+    });
+    const snapshot = await client.getThreadTranscriptSnapshot("thread-1", {
+      limit: 50,
+    });
+    vi.mocked(client.getThreadTranscriptSnapshot).mockResolvedValueOnce({
+      ...snapshot,
+      thread: threadView({
+        revision: snapshot.transcriptWindow.messageWindow.threadRevision,
+      }),
+    });
+    const runtime = new ControlThreadRuntime(
+      { client, threadEventStream: idleThreadEventStream },
+      callbacks(),
+    );
+
+    await runtime.readThread("thread-1", { toolHistoryMode: "skip" });
+
+    expect(client.getThread).toHaveBeenCalledTimes(2);
     runtime.close();
   });
 

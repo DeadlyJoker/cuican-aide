@@ -3097,6 +3097,8 @@ export interface components {
       /** @constant */
       schemaVersion: "crewon.transcript-snapshot.v0";
       transcriptWindow: components["schemas"]["GetThreadTranscriptWindowResponse"];
+      /** @description The Thread summary captured in the same storage snapshot as transcriptWindow. Older servers may omit this field. */
+      thread?: components["schemas"]["ThreadView"];
       runs: components["schemas"]["RunView"][];
       activeRunId: string | null;
     };

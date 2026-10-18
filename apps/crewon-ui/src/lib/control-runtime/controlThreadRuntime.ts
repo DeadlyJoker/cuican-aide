@@ -1070,7 +1070,11 @@ export class ControlThreadRuntime {
     // overlap the independent Thread head and transcript snapshot reads. An
     // older cursor still waits for the head first so it can be rebound to the
     // current revision before the server validates the request.
-    const snapshotPromise = this.#getThreadSnapshot(threadId, signal);
+    const snapshotPromise =
+      transcriptCursor === null &&
+      this.#client.supportsTranscriptThreadSnapshot === true
+        ? Promise.resolve<GetThreadResponse | null>(null)
+        : this.#getThreadSnapshot(threadId, signal);
     const transcriptPromise =
       transcriptCursor === null
         ? readControlTranscript({
@@ -1080,21 +1084,35 @@ export class ControlThreadRuntime {
             signal,
           })
         : snapshotPromise.then((snapshot) =>
-            readControlTranscript({
-              client: this.#client,
-              threadId,
-              threadRevision: snapshot.thread.revision,
-              cursor: transcriptCursor,
-              signal,
-            }),
+            snapshot === null
+              ? Promise.reject(
+                  new Error("control_thread_cursor_snapshot_missing"),
+                )
+              : readControlTranscript({
+                  client: this.#client,
+                  threadId,
+                  threadRevision: snapshot.thread.revision,
+                  cursor: transcriptCursor,
+                  signal,
+                }),
           );
-    const [snapshot, transcript, taskChangeLedgerResult] = await Promise.all([
-      snapshotPromise,
-      transcriptPromise,
-      includeTaskChanges
-        ? this.#loadThreadTaskChangeLedger(threadId, signal)
-        : Promise.resolve(null),
-    ]);
+    const [headSnapshot, transcript, taskChangeLedgerResult] =
+      await Promise.all([
+        snapshotPromise,
+        transcriptPromise,
+        includeTaskChanges
+          ? this.#loadThreadTaskChangeLedger(threadId, signal)
+          : Promise.resolve(null),
+      ]);
+    read.assertCurrent();
+    const snapshot =
+      headSnapshot ??
+      (transcript.thread === null
+        ? await this.#getThreadSnapshot(threadId, signal)
+        : {
+            thread: transcript.thread,
+            eventSequence: transcript.window.messageWindow.eventSequence,
+          });
     read.assertCurrent();
     if (
       transcript.window.messageWindow.threadRevision !==

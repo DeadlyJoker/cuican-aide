@@ -823,3 +823,9 @@ legacy Team 的 renderer coordinator、Run cancel 和默认 feature gate 未改�
 本批新增 `@crewon/application/task-lineage-policy`：提供不可变、严格拒绝 getter/原型/未知字段的 lineage、deadline/depth/child/token/output budget 和 capability snapshot 校验，并保证 child capability 不跨 tenant/space/actor/principal/authority/runtime/policy/workspace，也不能提升 tool permission。该模块尚未接入 TeamTaskIntent、HTTP、数据库或默认 scheduler，不改变现有数据形状和执行路径。
 
 Node 24 验证：Application 全量 933 项中 895 项通过、38 项既有条件跳过；新增纯契约 5/5 通过；Application typecheck、边界检查、Prettier 和 diff 检查通过。下一步才是设计 SQLite/PostgreSQL 的一等 task-edge 存储和原子 child admission；在其完成前不开放模型自主 spawn。
+
+## 第七十二批：Transcript snapshot 回流 Thread head，减少首屏重复读取（2026-10-19）
+
+复核发现 `ThreadMessageWindowStore.readWindow()` 已在同一 SQLite/PostgreSQL 快照中捕获完整 `ThreadState`，但原 Control transcript-snapshot 路由只返回 message window、Run bindings 和 Run 摘要，renderer 因此仍要额外读取 Thread head。现在响应增加可选 `thread` 字段，旧服务响应仍可被解析；当前 `ControlApiClient` 宣布该能力后，首次无 cursor 的 UI hydration 使用同一 snapshot 的 Thread head，保留旧 cursor 先读 revision、hydration 后最终 head 校验和旧客户端 fallback。
+
+真实 Control route 测试确认同一 HTTP 响应带回 Thread identity/revision，snapshot parser 仍接受没有 `thread` 的旧响应。Node 24 下 UI ControlThreadRuntime/TranscriptRead 121/121、contracts parser 3/3、Control route 1/1 通过；Control API、Control Client、UI、Contracts typecheck 和 OpenAPI generate check 通过。新增 runtime 回归证明当前协议路径把 hydration 前的 Thread head 请求从 1 次降为 0 次；旧 fixture/client 路径保持原行为。尚未把最终 hydration head 校验删除，也没有把 cursor 分页改成无 head 读取。

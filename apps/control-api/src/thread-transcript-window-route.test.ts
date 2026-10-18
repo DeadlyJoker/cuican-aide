@@ -166,6 +166,8 @@ test("transcript HTTP uses durable associations, authorizes each Run and rejects
     }),
   );
   assert.deepEqual(snapshot.transcriptWindow, latest);
+  assert.equal(snapshot.thread?.threadId, threadId);
+  assert.equal(snapshot.thread?.revision, latest.messageWindow.threadRevision);
   assert.equal(snapshot.activeRunId, started.runState.runId);
   assert.deepEqual(
     snapshot.runs.map((run) => [run.runId, run.cancelRequested]),

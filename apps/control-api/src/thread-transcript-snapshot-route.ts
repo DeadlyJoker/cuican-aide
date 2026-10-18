@@ -8,6 +8,7 @@ import {
 import type { ControlApiIdentityPort } from "./control-api-ports.ts";
 import { requestContext } from "./request-context.ts";
 import { projectThreadMessageWindow } from "./thread-message-window-projection.ts";
+import { projectThread } from "./thread-projection.ts";
 
 export function registerThreadTranscriptSnapshotRoute(
   app: FastifyInstance,
@@ -36,6 +37,7 @@ export function registerThreadTranscriptSnapshotRoute(
         messageWindow: projectThreadMessageWindow(window),
         runBindings: [...window.runBindings],
       },
+      thread: projectThread(window.thread),
       runs: [...window.runSnapshot!.runs],
       activeRunId: window.runSnapshot!.activeRunId,
     };

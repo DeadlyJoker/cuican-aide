@@ -12225,6 +12225,10 @@
           "transcriptWindow": {
             "$ref": "#/components/schemas/GetThreadTranscriptWindowResponse"
           },
+          "thread": {
+            "$ref": "#/components/schemas/ThreadView",
+            "description": "The Thread summary captured in the same storage snapshot as transcriptWindow. Older servers may omit this field."
+          },
           "runs": {
             "type": "array",
             "maxItems": 101,
