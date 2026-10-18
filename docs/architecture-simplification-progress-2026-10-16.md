@@ -637,3 +637,9 @@ SQLite 场景通过；本轮环境没有 `CREWON_TEST_POSTGRES_URL`，因此新�
 在 Node 24.18.1 下，用真实 `ControlThreadRuntime.readThread` 配合受控客户端桩执行 5 次对照：Thread head、transcript snapshot 和最终 head 各注入 40ms 延迟。当前并行路径中位数为 84.3ms，三次等待串行基线中位数为 123.9ms，调度部分下降约 32%。原始样本和限制见 `docs/evidence/control-transcript-parallel-benchmark-2026-10-19.json`。
 
 该结果只证明当前调度结构在受控延迟下减少串行等待，不代表生产网络、数据库或用户端首屏耗时下降同样比例；下一步仍需在实际 Control API/SSE 链路上采样。
+
+## 第四十六批：真实 SQLite Control HTTP transcript 对照（2026-10-19）
+
+Node 24.18.1 下启动真实 standalone Control API、真实 SQLite Store 和 loopback HTTP，通过 `ControlApiClient` 对同一个 Thread 执行 5 次对照。当前路径把 `getThread` 与 `transcript-snapshot` 并行，再执行必须保留的最终 `getThread` 校验，中位数为 6.6ms；相同三次 HTTP 请求串行中位数为 7.7ms，当前 loopback 样本下降约 14%。原始样本和边界见 `docs/evidence/control-transcript-real-http-benchmark-2026-10-19.json`。
+
+该结果确认并行化收益在真实 HTTP/SQLite 链路上仍存在，但幅度小于受控延迟测试；它不包含模型、SSE、hydration、浏览器绘制或公网网络耗时，不能直接当作用户首屏提速比例。

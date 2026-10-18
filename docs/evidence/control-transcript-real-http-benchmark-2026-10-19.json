@@ -1,0 +1,28 @@
+{
+  "schemaVersion": "crewon.evidence.v0",
+  "kind": "control-transcript-real-http-benchmark",
+  "date": "2026-10-19",
+  "branch": "codex/runtime-concurrency-result-streaming",
+  "commit": "1b20ecb52",
+  "runtime": "Node v24.18.1",
+  "storage": "real SQLite Store",
+  "transport": "loopback Fastify HTTP through ControlApiClient",
+  "scenario": {
+    "samples": 5,
+    "current": "getThread and transcript-snapshot in parallel, followed by the required final getThread consistency check",
+    "serialBaseline": "the same three HTTP requests awaited in sequence",
+    "model": "none"
+  },
+  "results": {
+    "currentMs": [13.9, 7.6, 6.6, 5.3, 5.7],
+    "currentMedianMs": 6.6,
+    "serialMs": [10.8, 8.6, 7.6, 7.7, 7.7],
+    "serialMedianMs": 7.7,
+    "reductionPercent": 14.0
+  },
+  "limitations": [
+    "The server and database run on the same machine over loopback; this is not a public network or production deployment measurement.",
+    "The sample uses an empty Thread and warm SQLite reads, so it does not represent tool-history hydration or a large transcript.",
+    "Startup time, model time, SSE streaming and renderer paint time are excluded."
+  ]
+}
