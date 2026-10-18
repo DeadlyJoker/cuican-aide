@@ -729,3 +729,9 @@ Node 24 验证：Control Client 与 Control API typecheck 通过；facade 单测
 尝试把 Team scheduler 直接接入现有 `composeControlApi` 时发现该 composition root 是同步构造，而 Team journal `migrate()` 及 Store factory 是异步操作。直接改成 async 会影响现有 standalone、PostgreSQL、extension/plugin 和同步创建入口，扩大变更面并改变启动错误与资源清理时序。
 
 本次未保留该接线尝试。已验证的 application operations adapter 保持独立；后续应新增明确的 async standalone scheduler composition/启动入口，在完成 journal migration、pump close 和失败清理后再由显式部署调用，不改写现有同步 Control composition，也不提前启用 scheduler。
+
+## 第五十九批：Standalone async Team scheduler composition（2026-10-19）
+
+新增独立 `createStandaloneTeamTaskScheduler` async composition：它打开专用 SQLite Store，迁移 Team journal，绑定 standalone Control application operations，构造 immutable Host 和 bounded scheduler pump，并通过显式 `close()` 按 pump→Store 顺序收尾。现有同步 `createStandaloneControlApi` 未改写，Production composition 未接入，默认仍不迁移 Team journal。
+
+Node 24 真实 SQLite Control/Worker/合成模型回归通过：创建 durable Team task 后由 async scheduler pump 发现、claim、执行 Producer/Verifier/Final，并收敛到唯一 `finalAccepted` 结果；Control API typecheck、Prettier 和 diff 检查通过。
