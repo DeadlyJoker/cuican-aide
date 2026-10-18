@@ -835,3 +835,17 @@ Node 24 验证：Application 全量 933 项中 895 项通过、38 项既有条�
 新增独立 `AutonomousTaskEdgeStore` port 及 SQLite/PostgreSQL 实现。它只在显式调用 `migrate()` 后创建自己的 schema，记录 root/parent/child、depth、child ordinal 和创建时间；同一 parent ordinal 或 child 的重复 link 只能 replay 完全相同的 edge，冲突会拒绝。children 和 descendants 查询均有 32 条上限与深度上限，递归查询按 root、scope 和稳定顺序读取。
 
 该 store 当前没有接入 Team admission、Run、HTTP 或 scheduler；因此没有把非原子 edge link 冒充为 child spawn，也没有改变默认数据库启动。SQLite 真实测试覆盖显式迁移、幂等 replay、冲突、后代查询和列表预算；Application/Store typecheck 通过。PostgreSQL 实现已完成相同 port/事务/advisory-lock 结构，但当前环境没有测试库，尚未声称 PostgreSQL runtime 验收。下一步是在同一事务中把 parent effect、child task、edge 和 wake item 原子提交。
+
+## 第七十四批：原子 child admission 事务边界审计（2026-10-19）
+
+复核当前实现后确认，`ExperimentalSqliteTeamTaskJournal` 和 `ExperimentalSqliteAutonomousTaskEdgeStore` 都把事务封装在私有方法中；PostgreSQL 版本同样各自持有连接、事务和 advisory lock。应用层不能安全地先调用 edge `link()` 再调用 Team `create()`：中途崩溃会留下没有 child journal 的 edge，反向顺序则会留下无法枚举的 child task。
+
+因此下一批不能只加一个组合 service 转发两个 Store。真正的 admission 入口必须由 SQLite/PostgreSQL 的同一物理 Store 事务实现，至少同时写入：
+
+1. parent 的 idempotent spawn effect/receipt；
+2. child task record；
+3. parent/child edge；
+4. frozen lineage、budget、capability snapshot；
+5. 可重放的 child wake/queue marker。
+
+当前 edge 表只保存关系和创建时间，暂不承载这些 admission 元数据；在没有确定 schema version、旧 edge 迁移和 child Team intent 兼容策略前，不扩展公开 HTTP 或模型触发入口。该审计没有修改执行代码，避免把两个独立事务误报成原子能力。下一步先定义 Store 内部的事务组合 port，并用 SQLite 故障注入证明“全写入或全回滚”。
