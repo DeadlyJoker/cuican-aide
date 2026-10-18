@@ -1,0 +1,57 @@
+{
+  "schemaVersion": "crewon.evidence.v0",
+  "kind": "team-task-hard-reservation",
+  "date": "2026-10-19",
+  "branch": "codex/runtime-concurrency-result-streaming",
+  "baseCommit": "665e02749",
+  "scope": "trusted Team task context propagation and transactional main-thread reservation",
+  "changes": [
+    "Control routes parse four task fence headers as an untrusted locator.",
+    "ControlApiClient.withTeamTaskFence clones the client and emits task, owner, lease and epoch headers.",
+    "Application command and Store input shapes carry an optional TeamTaskWriteFence without changing ordinary input shape when absent.",
+    "SQLite and PostgreSQL Thread, Run, Turn and Goal writes validate the fence inside the write transaction.",
+    "Unscoped writes to a coordinating main Thread fail with team_task_main_reserved; valid fenced Team writes are accepted.",
+    "Idempotency fingerprints exclude the lease context so lease takeover does not change the semantic request."
+  ],
+  "verification": {
+    "teamBothBackends": {
+      "tests": 32,
+      "passed": 32,
+      "failed": 0,
+      "skipped": 0
+    },
+    "sqliteFocused": { "tests": 12, "passed": 12, "failed": 0, "skipped": 0 },
+    "applicationTests": {
+      "tests": 918,
+      "passed": 918,
+      "failed": 0,
+      "skipped": 0
+    },
+    "controlClientTests": {
+      "tests": 284,
+      "passed": 284,
+      "failed": 0,
+      "skipped": 0
+    },
+    "typechecks": [
+      "application",
+      "store",
+      "control-api",
+      "runtime-worker",
+      "control-client"
+    ],
+    "boundaryCheck": "passed",
+    "gitDiffCheck": "passed",
+    "postgresCleanup": "stopped and socket rejected a follow-up connection"
+  },
+  "knownUnrelatedFailures": [
+    "Store full legacy fixture suite still has a legacy relative-path failure in project-foundation-legacy-snapshot; it does not enter the Team fence call path.",
+    "Store full legacy fixture suite still has a project metadata owner fixture conflict in project-text-plan-legacy-access; it does not enter the Team fence call path."
+  ],
+  "limitations": [
+    "The journal remains explicitly experimental and is not enabled by the production desktop scheduler.",
+    "Routes or direct Store callers that do not carry the trusted context are only protected when the journal table is installed.",
+    "This does not complete durable Team parking/wakeup, full subtree cancellation, or autonomous sub-agent scheduling.",
+    "Synthetic model and headless integration tests do not prove installed desktop UI or real provider behavior."
+  ]
+}

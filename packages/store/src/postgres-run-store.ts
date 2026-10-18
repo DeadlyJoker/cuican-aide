@@ -2,6 +2,7 @@ import { signalPostgresWorkflowCancellationRequest } from "./postgres-workflow-c
 import { readPostgresActiveRun } from "./postgres-active-run-read.ts";
 import { validateWorkflowSchedulerWorkItems } from "./workflow-run-admission-validation.ts";
 import { assertPostgresOrdinaryTurnProjectScope } from "./project-conversation-ordinary-turn-fence.ts";
+import { assertPostgresTeamTaskWriteFence } from "./team-task-write-fence.ts";
 import { RECONCILIATION_CANCEL_WAKE } from "./reconciliation-cancellation-wake.ts";
 import {
   RunStoreError,
@@ -503,6 +504,13 @@ export class PostgresRunStore extends PostgresThreadStore implements RunStore {
         client,
         `idempotency:${input.idempotency.scope}:${input.idempotency.key}`,
       );
+      await assertPostgresTeamTaskWriteFence(
+        client,
+        this.schemaSql(),
+        input.teamTaskFence,
+        input.threadId,
+        Date.now(),
+      );
       const receipt = await client.query<ThreadGoalMutationReceiptRow>(
         `SELECT tenant_id, thread_id, fingerprint, result_json
          FROM ${this.schemaSql()}.thread_idempotency_receipts
@@ -930,6 +938,13 @@ export class PostgresRunStore extends PostgresThreadStore implements RunStore {
   ): Promise<CommitTurnStartResult> {
     this.assertOpen();
     const { runId, threadId } = validateTurnStartInput(input);
+    await assertPostgresTeamTaskWriteFence(
+      client,
+      this.schemaSql(),
+      input.teamTaskFence,
+      threadId,
+      Date.now(),
+    );
     await advisoryLock(
       client,
       `idempotency:${input.idempotency.scope}:${input.idempotency.key}`,
@@ -1179,6 +1194,14 @@ export class PostgresRunStore extends PostgresThreadStore implements RunStore {
     }> = {},
   ): Promise<CommitRunResult> {
     const runId = validateCommitInput(input);
+    await assertPostgresTeamTaskWriteFence(
+      client,
+      this.schemaSql(),
+      input.teamTaskFence,
+      input.events.find((event) => event.type === "run.created")?.data
+        .threadId ?? "",
+      Date.now(),
+    );
     await advisoryLock(
       client,
       `idempotency:${input.idempotency.scope}:${input.idempotency.key}`,

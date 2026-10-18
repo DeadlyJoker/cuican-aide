@@ -13,6 +13,7 @@ import type {
 } from "@crewon/application";
 import { assertOfficeThreadReplay, officeThreadLockKey } from "./office-thread-binding.ts";
 import { advisoryLock, threadLockKey } from "./postgres-thread-lock.ts";
+import { assertPostgresTeamTaskWriteFence } from "./team-task-write-fence.ts";
 import type { BindOfficeThreadInput, OfficeThreadLocator } from "@crewon/application";
 import { PostgresThreadMessageWindowStore } from "./postgres-thread-message-window.ts";
 import type { ThreadMessageWindowStore } from "@crewon/application";
@@ -465,6 +466,13 @@ export class PostgresThreadStore
   ): Promise<CommitThreadResult> {
     this.assertOpen();
     const threadId = validateThreadCommitInput(input);
+    await assertPostgresTeamTaskWriteFence(
+      client,
+      this.schema,
+      input.teamTaskFence,
+      threadId,
+      Date.now(),
+    );
     await this.#lockCommit(client, input, threadId);
     await assertPostgresPluginProjectWorkspaceThread(
       client,

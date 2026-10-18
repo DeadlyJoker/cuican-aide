@@ -5,6 +5,7 @@ export type RunRoute = Readonly<{
   policySnapshotId: string;
   workspaceBindingId: string | null;
 }>;
+import type { TeamTaskWriteFence } from "./team-task-journal.ts";
 
 export interface RunRouteResolverPort {
   resolveRoute(input: {
@@ -20,6 +21,7 @@ export type CreateRunCommand = Readonly<{
   threadId: string;
   route: RunRoute;
   toolPermissionMode?: import("@crewon/domain").RunToolPermissionMode;
+  teamTaskFence?: TeamTaskWriteFence;
 }>;
 
 type RunTransitionCommandBase = Readonly<{

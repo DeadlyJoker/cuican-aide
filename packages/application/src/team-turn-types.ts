@@ -1,4 +1,5 @@
 import type { TeamMemberRuntimeProfile } from "@crewon/domain/team-prompts";
+import type { TeamTaskWriteFence } from "./team-task-journal.ts";
 export type {
   TeamMemberRuntimeCapability,
   TeamMemberRuntimeProfile,
@@ -34,6 +35,7 @@ import type {
  * A saved profile contributes prompt guidance only, never tool permissions.
  */
 export interface ControlTeamRuntimeClient {
+  withTeamTaskFence?(fence: TeamTaskWriteFence): ControlTeamRuntimeClient;
   appendThreadMessage(
     threadId: string,
     body: AppendThreadMessageRequest,

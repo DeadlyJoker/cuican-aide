@@ -10,6 +10,7 @@ import type { IdempotencyDescriptor } from "./run-store-port.ts";
 import type { ModelHistoryAppend } from "./model-history-store-port.ts";
 import type { ThreadMessageWindowStore } from "./thread-message-window-store-port.ts";
 import type { OfficeThreadBinding } from "./office-thread-store-port.ts";
+import type { TeamTaskWriteFence } from "./team-task-journal.ts";
 
 export type ThreadLocator = Readonly<{
   tenantId: string;
@@ -72,6 +73,7 @@ export type CommitThreadInput = Readonly<{
   /** Creation only: commit this unique association in the same transaction as the Thread. */
   officeBinding?: OfficeThreadBinding;
   tenantId: string;
+  teamTaskFence?: TeamTaskWriteFence;
   idempotency: IdempotencyDescriptor;
   expectedRevision: number;
   events: readonly ThreadLifecycleEvent[];

@@ -525,3 +525,13 @@ Application 新增独立 `team-turn` 入口，通过显式宿主操作端口调�
 两库 Team 专项 32 项全部通过、无跳过；包括 admission 冲突、主会话并发写入、主管规划/成员/最终 Turn 回执恢复、Goal 暂停恢复和取消。相邻 Run/Thread/Goal/Worker 池回归 191 项通过、2 项既有环境条件跳过；架构 37 项、Application/Store/Control/Worker 类型检查、入口边界、格式和 diff 检查通过。测试数据库使用独立 Unix socket，结束时核对 data directory、无 TCP 监听、无其他客户端和用户 schema 后停止。详细证据见 [Team 主会话栅栏](evidence/team-main-thread-fence-2026-10-18.json)。
 
 **Team 仍未切换生产 UI 执行权。** 下一步需要把 task identity/lease 作为受信 Control 请求上下文传到普通 Thread/Run/Goal admission，再实现硬 reservation、持久停放/唤醒、完整子树取消和任务进度投影；在此之前不自动打开后台 Team。
+
+## 第三十二批：受信 Team task context 与主会话硬 reservation（2026-10-19）
+
+基线为 `665e02749`。本批把 Team 的 task、owner、lease、epoch 作为受信请求上下文从协调器传到 Control HTTP，再传入普通 Thread、Run、Turn 和 Goal 的 Store 提交事务。请求头只承担不可信定位；SQLite/PostgreSQL 在同一写事务内重新读取 journal 并校验租户/空间、任务状态、owner、lease、epoch 和未过期时间。没有 fence 的普通写入命中 coordinating 主 Thread 时直接返回 `team_task_main_reserved`；带有效 fence 的 Team 主/子 Thread 写入允许通过。journal 表尚未安装的旧数据库保持原行为。
+
+幂等指纹显式排除 lease 上下文，避免租约接管后同一业务命令因 owner/epoch 改变而产生幂等冲突。普通命令在没有 fence 时不写入 `undefined` 字段，保持既有 Store input 形状。Control client 用克隆实例携带 fence，不污染基础会话；Team 读取继续使用同一 fenced client，写入和读取的身份来源一致。
+
+最终两库 Team 专项 32 项全部通过、无跳过，覆盖主会话无上下文并发 append 被拒绝、带 fence 的协调器完成、SQLite/PostgreSQL、journal 回执恢复、租约接管、Goal 暂停恢复、取消和完整 Team 应用路径。Application 单元套件 918/918 通过；Control client 284/284 通过；Application、Store、Control、Worker、Control client 类型检查、入口边界和新增/相关文件格式检查通过。Store 全量历史套件本轮仍有两项与 fence 无关的 legacy fixture 条件失败：一个是独立进程 fixture 的错误相对路径，另一个是 project metadata owner fixture 冲突，均未进入 Team fence 调用栈；未用本批改动掩盖或放宽断言。
+
+独立 PostgreSQL 使用临时 Unix socket，结束时确认 data directory、无监听、无其他客户端和用户 schema 后停止。没有启用生产 Team 调度、没有修改 HTTP/事件/持久 schema 版本，也没有把 task header 暴露为普通用户可伪造的授权；生产请求级身份、桌面默认入口、后台停放/唤醒、完整子树取消和自主子 Agent 仍未完成。

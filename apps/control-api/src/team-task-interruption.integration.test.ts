@@ -80,7 +80,7 @@ workflowDeploymentIntegrationTest(
       digester: new NodeSha256ContentDigester(),
       pollIntervalMs: 10,
       runDeadlineMs: 20_000,
-      leaseDurationMs: 1000,
+      leaseDurationMs: 5000,
     }).then(
       () => null,
       (error: unknown) => error,
@@ -148,7 +148,7 @@ workflowDeploymentIntegrationTest(
 );
 
 workflowDeploymentIntegrationTest(
-  "Team main-thread revision fence fails closed when another window appends after child work, preserving the new user input",
+  "Team main-thread reservation rejects an unscoped concurrent append while the fenced coordinator completes",
   async (t, fixture) => {
     let getThreadCalls = 0;
     const f = await fixture(t, {
@@ -187,43 +187,42 @@ workflowDeploymentIntegrationTest(
       getThreadCalls++;
       if (getThreadCalls === 2) {
         const current = await server.client.getThread(threadId);
-        await server.client.appendThreadMessage(
-          threadId,
-          {
-            expectedRevision: current.thread.revision,
-            content: "CONCURRENT_USER_INPUT",
-          },
-          "concurrent-user-input",
+        await assert.rejects(
+          server.client.appendThreadMessage(
+            threadId,
+            {
+              expectedRevision: current.thread.revision,
+              content: "CONCURRENT_USER_INPUT",
+            },
+            "concurrent-user-input",
+          ),
+          (error: unknown) =>
+            error instanceof Error &&
+            error.message === "team_task_main_reserved",
         );
       }
       return originalGetThread(threadId);
     };
-    await assert.rejects(
-      executeTeamTask({
-        actor: f.actor,
-        store: journal,
-        fence,
-        operations,
-        digester: new NodeSha256ContentDigester(),
-        pollIntervalMs: 10,
-        runDeadlineMs: 20_000,
-      }),
-      isCode("team_task_main_thread_changed"),
-    );
+    const result = await executeTeamTask({
+      actor: f.actor,
+      store: journal,
+      fence,
+      operations,
+      digester: new NodeSha256ContentDigester(),
+      pollIntervalMs: 10,
+      runDeadlineMs: 20_000,
+    });
     const messages = (await server.client.listThreadMessages(thread.threadId))
       .data;
     assert.equal(
       messages.filter((message) => message.content === "CONCURRENT_USER_INPUT")
         .length,
-      1,
-    );
-    assert.equal(
-      messages.filter(
-        (message) =>
-          message.content === "TEAM_FINAL: journal retained one original task.",
-      ).length,
       0,
     );
-    assert.equal((await journal.read(intent))!.status, "coordinating");
+    assert.equal((await journal.read(intent))!.status, "finalAccepted");
+    assert.equal(
+      (await journal.read(intent))!.result?.run.runId,
+      result.run.runId,
+    );
   },
 );

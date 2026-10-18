@@ -7,6 +7,7 @@ import type {
 } from "@crewon/domain";
 
 import type { ModelHistoryAppend } from "./model-history-store-port.ts";
+import type { TeamTaskWriteFence } from "./team-task-journal.ts";
 import type {
   IdempotencyDescriptor,
   OutboxMessage,
@@ -74,6 +75,7 @@ export type ThreadGoalContinuation = Readonly<{
 export type CommitThreadGoalMutationInput = Readonly<{
   tenantId: string;
   threadId: string;
+  teamTaskFence?: TeamTaskWriteFence;
   idempotency: IdempotencyDescriptor;
   goal: TurnStartGoalMutation;
   expectedActiveRun: ThreadGoalActiveRunFence;

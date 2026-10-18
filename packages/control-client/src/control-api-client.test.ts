@@ -131,6 +131,36 @@ test("reads the execution-intent deployment capability through an authenticated 
   );
 });
 
+test("scopes cloned writes and reads with a Team task fence without mutating the base client", async () => {
+  const requests: { input: string; init: RequestInit }[] = [];
+  const client = new ControlApiClient({
+    baseUrl: "https://control.example/",
+    fetch: async (input, init = {}) => {
+      requests.push({ input: String(input), init });
+      return jsonResponse(200, { version: "v1" });
+    },
+  });
+  const fenced = client.withTeamTaskFence({
+    tenantId: "tenant-1",
+    spaceId: "space-1",
+    taskId: "task-1",
+    ownerId: "owner-1",
+    leaseId: "lease-1",
+    epoch: 3,
+  });
+
+  await fenced.getExecutionIntentCapability();
+  await client.getExecutionIntentCapability();
+
+  const fencedHeaders = new Headers(requests[0]?.init.headers);
+  assert.equal(fencedHeaders.get("x-crewon-team-task-id"), "task-1");
+  assert.equal(fencedHeaders.get("x-crewon-team-task-owner"), "owner-1");
+  assert.equal(fencedHeaders.get("x-crewon-team-task-lease"), "lease-1");
+  assert.equal(fencedHeaders.get("x-crewon-team-task-epoch"), "3");
+  const baseHeaders = new Headers(requests[1]?.init.headers);
+  assert.equal(baseHeaders.get("x-crewon-team-task-id"), null);
+});
+
 test("sends a typed selected-version Run without client-owned route fields", async () => {
   const requests: { input: string; init: RequestInit }[] = [];
   const client = new ControlApiClient({

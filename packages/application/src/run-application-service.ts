@@ -96,6 +96,9 @@ export class RunApplicationService {
 
     return this.#commit({
       tenantId: actor.tenantId,
+      ...(command.teamTaskFence === undefined
+        ? {}
+        : { teamTaskFence: command.teamTaskFence }),
       idempotency: idempotencyDescriptor(actor, command),
       expectedRevision: 0,
       events: [event],
@@ -420,6 +423,9 @@ function idempotencyDescriptor(
   command: CreateRunCommand | RunTransitionCommand,
 ): IdempotencyDescriptor {
   const { idempotencyKey: _idempotencyKey, ...semanticCommand } = command;
+  if ("teamTaskFence" in semanticCommand) {
+    delete (semanticCommand as { teamTaskFence?: unknown }).teamTaskFence;
+  }
   return {
     scope: canonicalJson({
       schemaVersion: "crewon.idempotency-scope.v0",
@@ -686,7 +692,9 @@ function mapApplicationError(error: unknown): ApplicationError {
       error.code === "event_id_conflict" ||
       error.code === "outbox_message_conflict" ||
       error.code === "work_item_conflict" ||
-      error.code === "thread_not_active"
+      error.code === "thread_not_active" ||
+      error.code === "team_task_main_reserved" ||
+      error.code === "team_task_reservation_lost"
     ) {
       return new ApplicationError("conflict", error.code, { cause: error });
     }

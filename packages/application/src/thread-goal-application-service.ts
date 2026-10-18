@@ -25,6 +25,7 @@ import type {
   ContentDigester,
 } from "./application-runtime-ports.ts";
 import type { ActorContext, AuthorizationPort } from "./authorization-port.ts";
+import type { TeamTaskWriteFence } from "./team-task-journal.ts";
 import { canonicalJson } from "./canonical-json.ts";
 import type { ModelHistoryStore } from "./model-history-store-port.ts";
 import type { RunRoute, RunRouteResolverPort } from "./run-commands.ts";
@@ -59,6 +60,7 @@ export type SetThreadGoalCommand = Readonly<{
   objective: string | null;
   status: UserSettableThreadGoalStatus | null;
   tokenBudget: ThreadGoalTokenBudgetUpdate;
+  teamTaskFence?: TeamTaskWriteFence;
 }>;
 
 export type ClearThreadGoalCommand = Readonly<{
@@ -66,6 +68,7 @@ export type ClearThreadGoalCommand = Readonly<{
   threadId: string;
   idempotencyKey: string;
   expectedRevision: number | null;
+  teamTaskFence?: TeamTaskWriteFence;
 }>;
 
 type GoalCommand = SetThreadGoalCommand | ClearThreadGoalCommand;
@@ -264,6 +267,9 @@ export class ThreadGoalApplicationService {
     const input: CommitThreadGoalMutationInput = {
       tenantId: actor.tenantId,
       threadId: thread.threadId,
+      ...(command.teamTaskFence === undefined
+        ? {}
+        : { teamTaskFence: command.teamTaskFence }),
       idempotency,
       goal: mutation,
       expectedActiveRun:
@@ -817,7 +823,11 @@ function idempotencyDescriptor(
   actor: ActorContext,
   command: GoalCommand,
 ): CommitThreadGoalMutationInput["idempotency"] {
-  const { idempotencyKey: _key, ...semantic } = command;
+  const {
+    idempotencyKey: _key,
+    teamTaskFence: _teamTaskFence,
+    ...semantic
+  } = command;
   return {
     scope: canonicalJson({
       schemaVersion: "crewon.idempotency-scope.v0",

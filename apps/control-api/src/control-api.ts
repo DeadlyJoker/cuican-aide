@@ -17,6 +17,7 @@ import type { ProjectMediaInputStageControlOwner } from "./project-media-input-s
 import { registerProjectAssetStageRoutes } from "./project-asset-stage-route.ts";
 import type { ProjectAssetStageControlOwner } from "./project-asset-stage-control-owner.ts";
 import { ApplicationError } from "@crewon/application";
+import { readTeamTaskWriteFence } from "./team-task-request-fence.ts";
 import {
   registerProjectConversationRoutes,
   projectConversationUnavailable,
@@ -1147,6 +1148,7 @@ export function buildControlApi(
           requestContext(request),
         );
         const body = parseSetThreadGoalRequest(request.body);
+        const teamTaskFence = readTeamTaskWriteFence(request, actor);
         const result = await dependencies.goals.setGoal(actor, {
           kind: "thread.goal.set",
           threadId: parseThreadId(request.params.threadId),
@@ -1160,6 +1162,7 @@ export function buildControlApi(
           objective: body.objective,
           status: body.status,
           tokenBudget: body.tokenBudget,
+          ...(teamTaskFence === undefined ? {} : { teamTaskFence }),
         });
         wakeOutbox(dependencies.outboxWakeup);
         return reply
@@ -1176,11 +1179,13 @@ export function buildControlApi(
         requestContext(request),
       );
       const body = parseClearThreadGoalRequest(request.body);
+      const teamTaskFence = readTeamTaskWriteFence(request, actor);
       const result = await dependencies.goals.clearGoal(actor, {
         kind: "thread.goal.clear",
         threadId: parseThreadId(request.params.threadId),
         idempotencyKey: parseIdempotencyKey(request.headers["idempotency-key"]),
         expectedRevision: body.expectedRevision,
+        ...(teamTaskFence === undefined ? {} : { teamTaskFence }),
       });
       wakeOutbox(dependencies.outboxWakeup);
       return reply.code(200).send(projectThreadGoalMutation(result));
@@ -1216,6 +1221,7 @@ export function buildControlApi(
         requestContext(request),
       );
       const body = parseAppendThreadMessageRequest(request.body);
+      const teamTaskFence = readTeamTaskWriteFence(request, actor);
       const result = await dependencies.threads.appendMessage(actor, {
         kind: "thread.message.append",
         idempotencyKey: parseIdempotencyKey(request.headers["idempotency-key"]),
@@ -1223,6 +1229,7 @@ export function buildControlApi(
         expectedRevision: body.expectedRevision,
         role: "user",
         content: body.content,
+        ...(teamTaskFence === undefined ? {} : { teamTaskFence }),
       });
       const message = result.messages[0];
       if (message === undefined || result.messages.length !== 1) {
@@ -1289,6 +1296,7 @@ export function buildControlApi(
     );
     const threadId = parseThreadId(request.params.threadId);
     const body = parseStartTurnRequest(request.body);
+    const teamTaskFence = readTeamTaskWriteFence(request, actor);
     const idempotencyKey = parseIdempotencyKey(
       request.headers["idempotency-key"],
     );
@@ -1304,6 +1312,7 @@ export function buildControlApi(
       requestedAgentVersionId: body.agentVersionId,
       executionIntent: body.executionIntent,
       toolPermissionMode: body.toolPermissionMode ?? "requestApproval",
+      ...(teamTaskFence === undefined ? {} : { teamTaskFence }),
     };
     if (
       dependencies.projectConversationRouting != null &&
@@ -1490,12 +1499,14 @@ export function buildControlApi(
         requestContext(request),
       );
       const body = parseForkThreadRequest(request.body);
+      const teamTaskFence = readTeamTaskWriteFence(request, actor);
       const result = await dependencies.threads.forkThread(actor, {
         kind: "thread.fork",
         idempotencyKey: parseIdempotencyKey(request.headers["idempotency-key"]),
         sourceThreadId: parseThreadId(request.params.threadId),
         expectedSourceRevision: body.expectedRevision,
         throughHistorySequence: body.throughHistorySequence,
+        ...(teamTaskFence === undefined ? {} : { teamTaskFence }),
       });
       const response: ThreadMutationResponse = {
         disposition: result.disposition,
@@ -1515,6 +1526,7 @@ export function buildControlApi(
     const idempotencyKey = parseIdempotencyKey(
       request.headers["idempotency-key"],
     );
+    const teamTaskFence = readTeamTaskWriteFence(request, actor);
     const route = await dependencies.routeResolver.resolveRoute({
       actor,
       threadId: body.threadId,
@@ -1526,6 +1538,7 @@ export function buildControlApi(
       threadId: body.threadId,
       route,
       toolPermissionMode: body.toolPermissionMode ?? "requestApproval",
+      ...(teamTaskFence === undefined ? {} : { teamTaskFence }),
     });
     wakeOutbox(dependencies.outboxWakeup);
     const response: RunMutationResponse = {

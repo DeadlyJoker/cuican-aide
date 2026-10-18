@@ -141,7 +141,7 @@ for (const drop of ["planner", "worker", "final", "member"] as const)
           digester,
           pollIntervalMs: 10,
           runDeadlineMs: 20_000,
-          leaseDurationMs: 1000,
+          leaseDurationMs: 5000,
         }),
         isCode("test_process_stopped_after_commit"),
       );
@@ -215,7 +215,7 @@ for (const drop of ["planner", "worker", "final", "member"] as const)
         digester,
         pollIntervalMs: 10,
         runDeadlineMs: 20_000,
-        leaseDurationMs: 1000,
+        leaseDurationMs: 5000,
       });
       if (drop === "planner") {
         assert.deepEqual(replays[0], lostRequest);
@@ -351,7 +351,7 @@ workflowDeploymentIntegrationTest(
         operations: first,
         digester,
         pollIntervalMs: 10,
-        leaseDurationMs: 1000,
+        leaseDurationMs: 5000,
       }),
       isCode("test_process_stopped_after_goal_commit"),
     );
@@ -398,7 +398,7 @@ workflowDeploymentIntegrationTest(
       operations: resumed,
       digester,
       pollIntervalMs: 10,
-      leaseDurationMs: 1000,
+      leaseDurationMs: 5000,
     });
     assert.equal(liveInitialReads, 0);
     assert.equal(pauseReplays, 1);

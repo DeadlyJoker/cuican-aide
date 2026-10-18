@@ -45,6 +45,9 @@ export async function executeTeamTask(input: {
     teamJournalFail("team_task_issuer_mismatch");
   if (task.cancelRequested) teamJournalFail("team_task_cancel_requested");
   if (task.status === "finalAccepted") return task.result!;
+  const fencedOperations = operations.withTeamTaskFence
+    ? operations.withTeamTaskFence(fence)
+    : operations;
   let stopped = false;
   const pending = new Set<Promise<unknown>>();
   let mainThreadRevision: number | null = null;
@@ -143,7 +146,7 @@ export async function executeTeamTask(input: {
           "appendThreadMessage",
           [threadId, body, id],
           id,
-          () => operations.appendThreadMessage(threadId, body, id),
+          () => fencedOperations.appendThreadMessage(threadId, body, id),
         );
         if (
           threadId === task.intent.turn.threadId &&
@@ -160,13 +163,13 @@ export async function executeTeamTask(input: {
     forkThread: (threadId, body, id) =>
       track(() =>
         command("forkThread", [threadId, body, id], id, () =>
-          operations.forkThread(threadId, body, id),
+          fencedOperations.forkThread(threadId, body, id),
         ),
       ),
     createRun: (body, id) =>
       track(() =>
         command("createRun", [body, id], id, () =>
-          operations.createRun(body, id),
+          fencedOperations.createRun(body, id),
         ),
       ),
     startTurn: (threadId, body, id) =>
@@ -175,7 +178,7 @@ export async function executeTeamTask(input: {
           "startTurn",
           [threadId, body, id],
           id,
-          () => operations.startTurn(threadId, body, id),
+          () => fencedOperations.startTurn(threadId, body, id),
         );
         if (threadId === task.intent.turn.threadId) {
           const revision = (result as { thread?: { revision?: number } }).thread
@@ -193,7 +196,11 @@ export async function executeTeamTask(input: {
           [threadId, body, id],
           id,
           () =>
-            operations.setThreadGoalWithExecutionIntentV1(threadId, body, id),
+            fencedOperations.setThreadGoalWithExecutionIntentV1(
+              threadId,
+              body,
+              id,
+            ),
         ),
       ),
     getRun: (runId) =>
@@ -201,7 +208,7 @@ export async function executeTeamTask(input: {
         observation(
           `run.${runId}`,
           async () => {
-            const result = await operations.getRun(runId);
+            const result = await fencedOperations.getRun(runId);
             if (result.run.runId !== runId)
               teamJournalFail("team_journal_run_identity_invalid");
             return result;
@@ -210,13 +217,15 @@ export async function executeTeamTask(input: {
             ["completed", "failed", "canceled"].includes(result.run.status),
         ),
       ),
-    getThread: (id) => operations.getThread(id),
-    getThreadGoal: (id) => operations.getThreadGoal(id),
-    listThreadMessages: (id, query) => operations.listThreadMessages(id, query),
+    getThread: (id) => fencedOperations.getThread(id),
+    getThreadGoal: (id) => fencedOperations.getThreadGoal(id),
+    listThreadMessages: (id, query) =>
+      fencedOperations.listThreadMessages(id, query),
     getExecutionIntentCapability: () =>
-      operations.getExecutionIntentCapability(),
-    getOffice: (id) => operations.getOffice(id),
-    authorizeOfficeRun: (id, body) => operations.authorizeOfficeRun(id, body),
+      fencedOperations.getExecutionIntentCapability(),
+    getOffice: (id) => fencedOperations.getOffice(id),
+    authorizeOfficeRun: (id, body) =>
+      fencedOperations.authorizeOfficeRun(id, body),
   };
   try {
     const result = await startControlTeamTurn({

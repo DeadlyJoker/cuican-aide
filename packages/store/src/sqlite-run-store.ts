@@ -1,4 +1,5 @@
 import { normalizeSqliteError } from "./sqlite-errors.ts";
+import { assertSqliteTeamTaskWriteFence } from "./team-task-write-fence.ts";
 import { SqliteWorkflowRunQueryStore } from "./sqlite-workflow-run-query.ts";
 import { readSqliteOrdinaryThreadList } from "./ordinary-thread-list-snapshot.ts";
 import { SqliteProjectAssetV2RecoveryStore } from "./project-asset-vtwo-recovery-store.ts";
@@ -1939,6 +1940,12 @@ export class SqliteRunStore implements DomainStore {
     validateThreadGoalMutationInput(input);
     try {
       this.#database.exec("BEGIN IMMEDIATE");
+      assertSqliteTeamTaskWriteFence(
+        this.#database,
+        input.teamTaskFence,
+        input.threadId,
+        readLeaseClock(this.#clock),
+      );
       const prior = this.#loadThreadReceipt(
         input.idempotency.scope,
         input.idempotency.key,
@@ -2378,6 +2385,12 @@ export class SqliteRunStore implements DomainStore {
 
     try {
       if (!options.withinTransaction) this.#database.exec("BEGIN IMMEDIATE");
+      assertSqliteTeamTaskWriteFence(
+        this.#database,
+        input.teamTaskFence,
+        threadId,
+        readLeaseClock(this.#clock),
+      );
       assertSqlitePluginProjectWorkspaceThread(
         this.#database,
         input,
@@ -2853,6 +2866,12 @@ export class SqliteRunStore implements DomainStore {
     const { runId, threadId } = validateTurnStartInput(input);
     try {
       if (!options.withinTransaction) this.#database.exec("BEGIN IMMEDIATE");
+      assertSqliteTeamTaskWriteFence(
+        this.#database,
+        input.teamTaskFence,
+        input.thread.events[0]?.identity.threadId ?? "",
+        readLeaseClock(this.#clock),
+      );
       const prior = this.#loadReceipt(
         input.idempotency.scope,
         input.idempotency.key,
@@ -4594,6 +4613,13 @@ export class SqliteRunStore implements DomainStore {
       if (!withinTransaction) {
         this.#database.exec("BEGIN IMMEDIATE");
       }
+      assertSqliteTeamTaskWriteFence(
+        this.#database,
+        input.teamTaskFence,
+        input.events.find((event) => event.type === "run.created")?.data
+          .threadId ?? "",
+        readLeaseClock(this.#clock),
+      );
       if (executionLease !== null) {
         this.#validateExecutionLease(
           input.tenantId,

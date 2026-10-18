@@ -100,20 +100,26 @@ export async function prepare(client: ControlApiClient, roleDirected: boolean) {
 export function teamOperations(
   client: ControlApiClient,
 ): ControlTeamRuntimeClient {
-  return {
-    appendThreadMessage: client.appendThreadMessage.bind(client),
-    authorizeOfficeRun: client.authorizeOfficeRun.bind(client),
-    createRun: client.createRun.bind(client),
-    forkThread: client.forkThread.bind(client),
-    getExecutionIntentCapability:
-      client.getExecutionIntentCapability.bind(client),
-    getOffice: client.getOffice.bind(client),
-    getRun: client.getRun.bind(client),
-    getThread: client.getThread.bind(client),
-    getThreadGoal: client.getThreadGoal.bind(client),
-    listThreadMessages: client.listThreadMessages.bind(client),
-    setThreadGoalWithExecutionIntentV1:
-      client.setThreadGoalWithExecutionIntentV1.bind(client),
-    startTurn: client.startTurn.bind(client),
+  let active = client;
+  const result: ControlTeamRuntimeClient = {
+    withTeamTaskFence: (fence) => {
+      active = client.withTeamTaskFence(fence);
+      return result;
+    },
+    appendThreadMessage: (...args) => active.appendThreadMessage(...args),
+    authorizeOfficeRun: (...args) => active.authorizeOfficeRun(...args),
+    createRun: (...args) => active.createRun(...args),
+    forkThread: (...args) => active.forkThread(...args),
+    getExecutionIntentCapability: (...args) =>
+      active.getExecutionIntentCapability(...args),
+    getOffice: (...args) => active.getOffice(...args),
+    getRun: (...args) => active.getRun(...args),
+    getThread: (...args) => active.getThread(...args),
+    getThreadGoal: (...args) => active.getThreadGoal(...args),
+    listThreadMessages: (...args) => active.listThreadMessages(...args),
+    setThreadGoalWithExecutionIntentV1: (...args) =>
+      active.setThreadGoalWithExecutionIntentV1(...args),
+    startTurn: (...args) => active.startTurn(...args),
   };
+  return result;
 }

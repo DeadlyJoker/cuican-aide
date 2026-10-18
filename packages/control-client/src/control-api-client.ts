@@ -32,6 +32,14 @@ import {
   ControlApiProtocolError,
   ControlApiTransportError,
 } from "./control-api-errors.ts";
+export type ControlApiTeamTaskFence = Readonly<{
+  tenantId: string;
+  spaceId: string;
+  taskId: string;
+  ownerId: string;
+  leaseId: string;
+  epoch: number;
+}>;
 export {
   ControlApiClientError,
   ControlApiProtocolError,
@@ -194,6 +202,7 @@ export type ControlApiClientConfig = Readonly<{
   csrfToken?: string | null;
   origin?: string | null;
   fetch?: typeof globalThis.fetch;
+  teamTaskFence?: ControlApiTeamTaskFence;
 }>;
 
 export type ControlApiRequestOptions = Readonly<{
@@ -272,6 +281,7 @@ export class ControlApiClient {
   readonly #csrfToken: string | null;
   readonly #origin: string | null;
   readonly #fetch: typeof globalThis.fetch;
+  readonly #teamTaskFence: ControlApiTeamTaskFence | null;
   #pluginClient: PluginControlClient | null = null;
   #pluginCreditClient: PluginCreditControlClient | null = null;
   #creativeProjectClient: CreativeProjectControlClient | null = null;
@@ -300,6 +310,18 @@ export class ControlApiClient {
     );
     this.#origin = optionalOrigin(config.origin);
     this.#fetch = config.fetch ?? globalThis.fetch.bind(globalThis);
+    this.#teamTaskFence = config.teamTaskFence ?? null;
+  }
+
+  withTeamTaskFence(fence: ControlApiTeamTaskFence): ControlApiClient {
+    return new ControlApiClient({
+      baseUrl: this.#baseUrl.toString(),
+      accessToken: this.#accessToken,
+      csrfToken: this.#csrfToken,
+      origin: this.#origin,
+      fetch: this.#fetch,
+      teamTaskFence: fence,
+    });
   }
 
   /** The validated HTTP request origin, without session secrets or a configurable asset URL. */
@@ -1973,6 +1995,15 @@ export class ControlApiClient {
     }
     if (this.#origin !== null) {
       headers.set("origin", this.#origin);
+    }
+    if (this.#teamTaskFence !== null) {
+      headers.set("x-crewon-team-task-id", this.#teamTaskFence.taskId);
+      headers.set("x-crewon-team-task-owner", this.#teamTaskFence.ownerId);
+      headers.set("x-crewon-team-task-lease", this.#teamTaskFence.leaseId);
+      headers.set(
+        "x-crewon-team-task-epoch",
+        String(this.#teamTaskFence.epoch),
+      );
     }
     return headers;
   }

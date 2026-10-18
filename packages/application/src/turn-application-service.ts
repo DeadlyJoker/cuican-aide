@@ -167,6 +167,9 @@ export class TurnApplicationService {
     };
     const input: CommitTurnStartInput = {
       tenantId: actor.tenantId,
+      ...(command.teamTaskFence === undefined
+        ? {}
+        : { teamTaskFence: command.teamTaskFence }),
       idempotency: idempotencyDescriptor(actor, command),
       goal: goal.mutation,
       thread: {
@@ -643,7 +646,9 @@ function mapApplicationError(error: unknown): ApplicationError {
     }
     if (
       error.code.endsWith("_conflict") ||
-      error.code === "thread_not_active"
+      error.code === "thread_not_active" ||
+      error.code === "team_task_main_reserved" ||
+      error.code === "team_task_reservation_lost"
     ) {
       return new ApplicationError("conflict", error.code, { cause: error });
     }

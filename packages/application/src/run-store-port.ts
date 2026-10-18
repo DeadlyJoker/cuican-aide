@@ -1,5 +1,6 @@
 import type { RunLifecycleEvent, RunState } from "@crewon/domain";
 import type { ThreadScopedLocator } from "./thread-store-port.ts";
+import type { TeamTaskWriteFence } from "./team-task-journal.ts";
 
 import type {
   DurableQueueStore,
@@ -54,6 +55,7 @@ export type ManualCompactionAdmission = Readonly<{
 
 export type CommitRunInput = Readonly<{
   tenantId: string;
+  teamTaskFence?: TeamTaskWriteFence;
   idempotency: IdempotencyDescriptor;
   expectedRevision: number;
   events: readonly RunLifecycleEvent[];

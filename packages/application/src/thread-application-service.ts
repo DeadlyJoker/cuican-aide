@@ -187,6 +187,9 @@ export class ThreadApplicationService {
     };
     const result = await this.#commit({
       tenantId: actor.tenantId,
+      ...(command.teamTaskFence === undefined
+        ? {}
+        : { teamTaskFence: command.teamTaskFence }),
       idempotency: idempotencyDescriptor(actor, command),
       expectedRevision: command.expectedRevision,
       events: [event],
@@ -314,6 +317,9 @@ export class ThreadApplicationService {
     });
     return this.#commit({
       tenantId: actor.tenantId,
+      ...(command.teamTaskFence === undefined
+        ? {}
+        : { teamTaskFence: command.teamTaskFence }),
       idempotency: idempotencyDescriptor(actor, command),
       expectedRevision: 0,
       events: [createdEvent, ...messageEvents, forkedEvent],
@@ -934,6 +940,9 @@ function idempotencyDescriptor(
     | DeleteThreadCommand,
 ): IdempotencyDescriptor {
   const { idempotencyKey: _idempotencyKey, ...semanticCommand } = command;
+  if ("teamTaskFence" in semanticCommand) {
+    delete (semanticCommand as { teamTaskFence?: unknown }).teamTaskFence;
+  }
   return {
     scope: canonicalJson({
       schemaVersion: "crewon.idempotency-scope.v0",
@@ -1215,7 +1224,9 @@ function mapThreadApplicationError(error: unknown): ApplicationError {
       error.code === "thread_event_id_conflict" ||
       error.code === "message_id_conflict" ||
       error.code === "message_sequence_conflict" ||
-      error.code.endsWith("_conflict")
+      error.code.endsWith("_conflict") ||
+      error.code === "team_task_main_reserved" ||
+      error.code === "team_task_reservation_lost"
     ) {
       return new ApplicationError("conflict", error.code, { cause: error });
     }

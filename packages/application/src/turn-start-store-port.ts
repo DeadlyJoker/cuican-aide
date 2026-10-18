@@ -14,6 +14,7 @@ import type {
 } from "./run-store-port.ts";
 import type { MessageRecord } from "./thread-store-port.ts";
 import type { TurnStartGoalMutation } from "./thread-goal-store-port.ts";
+import type { TeamTaskWriteFence } from "./team-task-journal.ts";
 
 export type TurnStartReceiptQuery = Readonly<{
   tenantId: string;
@@ -23,6 +24,7 @@ export type TurnStartReceiptQuery = Readonly<{
 
 export type CommitTurnStartInput = Readonly<{
   tenantId: string;
+  teamTaskFence?: TeamTaskWriteFence;
   idempotency: IdempotencyDescriptor;
   goal: TurnStartGoalMutation;
   thread: Readonly<{

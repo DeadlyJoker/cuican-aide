@@ -28,6 +28,9 @@ export type TeamTaskIntent = TeamTaskLocator &
   }>;
 export type TeamTaskFence = TeamTaskLocator &
   Readonly<{ ownerId: string; leaseId: string; epoch: number }>;
+
+/** Write authorization passed through internal Store transactions. */
+export type TeamTaskWriteFence = TeamTaskFence;
 export type TeamTaskRecord = Readonly<{
   intent: TeamTaskIntent;
   status: "coordinating" | "finalAccepted";

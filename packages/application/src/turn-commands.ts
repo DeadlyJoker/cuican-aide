@@ -1,4 +1,5 @@
 import type { RunRoute } from "./run-commands.ts";
+import type { TeamTaskWriteFence } from "./team-task-journal.ts";
 
 export type StartTurnRequestCommand = Readonly<{
   kind: "turn.start";
@@ -10,6 +11,7 @@ export type StartTurnRequestCommand = Readonly<{
   requestedAgentVersionId: string | null;
   executionIntent: "none" | "goal" | "plan" | "resumeGoal";
   toolPermissionMode?: import("@crewon/domain").RunToolPermissionMode;
+  teamTaskFence?: TeamTaskWriteFence;
 }>;
 
 export type StartTurnCommand = StartTurnRequestCommand &
