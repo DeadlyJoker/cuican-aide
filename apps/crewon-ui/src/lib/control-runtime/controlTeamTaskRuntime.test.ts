@@ -119,4 +119,104 @@ describe("durable Team task runtime", () => {
     expect(client.getTeamTask).toHaveBeenCalledTimes(2);
     expect(events).toHaveLength(1);
   });
+
+  it("stops waiting when the durable task has been canceled", async () => {
+    const client = {
+      admitTeamTask: vi.fn(async () => ({
+        schemaVersion: "crewon.team-task-admission.v1" as const,
+        disposition: "committed" as const,
+        task: {
+          taskId: "task-canceled",
+          threadId: "thread-1",
+          status: "coordinating" as const,
+          revision: 2,
+          cancelRequested: false,
+          mainMessageSequence: 4,
+        },
+      })),
+      getTeamTask: vi.fn(async () => ({
+        schemaVersion: "crewon.team-task-snapshot.v1" as const,
+        task: {
+          taskId: "task-canceled",
+          threadId: "thread-1",
+          status: "coordinating" as const,
+          revision: 3,
+          cancelRequested: true,
+          mainMessageSequence: 4,
+          resultRunId: null,
+        },
+      })),
+      listThreadMessages: vi.fn(async () => ({
+        data: [message],
+        nextCursor: null,
+      })),
+      getRun: vi.fn(),
+      openRunEventStream: vi.fn(),
+    };
+
+    await expect(
+      startControlTeamTask({
+        client,
+        threadId: "thread-1",
+        expectedRevision: 3,
+        content: message.content,
+        plan,
+        idempotencyKey: (operation) => `client:${operation}`,
+        responseMode: "manager",
+        pollDelayMs: 20,
+      }),
+    ).rejects.toThrow("control_team_task_cancel_requested");
+    expect(client.getTeamTask).toHaveBeenCalledOnce();
+    expect(client.getRun).not.toHaveBeenCalled();
+  });
+
+  it("bounds a task that remains coordinating after its deadline", async () => {
+    const client = {
+      admitTeamTask: vi.fn(async () => ({
+        schemaVersion: "crewon.team-task-admission.v1" as const,
+        disposition: "committed" as const,
+        task: {
+          taskId: "task-stalled",
+          threadId: "thread-1",
+          status: "coordinating" as const,
+          revision: 2,
+          cancelRequested: false,
+          mainMessageSequence: 4,
+        },
+      })),
+      getTeamTask: vi.fn(async () => ({
+        schemaVersion: "crewon.team-task-snapshot.v1" as const,
+        task: {
+          taskId: "task-stalled",
+          threadId: "thread-1",
+          status: "coordinating" as const,
+          revision: 3,
+          cancelRequested: false,
+          mainMessageSequence: 4,
+          resultRunId: null,
+        },
+      })),
+      listThreadMessages: vi.fn(async () => ({
+        data: [message],
+        nextCursor: null,
+      })),
+      getRun: vi.fn(),
+      openRunEventStream: vi.fn(),
+    };
+
+    await expect(
+      startControlTeamTask({
+        client,
+        threadId: "thread-1",
+        expectedRevision: 3,
+        content: message.content,
+        plan,
+        idempotencyKey: (operation) => `client:${operation}`,
+        responseMode: "manager",
+        pollDelayMs: 20,
+        taskDeadlineMs: 1,
+      }),
+    ).rejects.toThrow("control_team_task_deadline_exceeded");
+    expect(client.getRun).not.toHaveBeenCalled();
+  });
 });

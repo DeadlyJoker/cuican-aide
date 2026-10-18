@@ -771,3 +771,9 @@ Node 24 验证：应用层 admission service 的准备、重放和冲突单测 3
 本批没有默认切换现有 `controlTeamRuntime`，而是新增 `controlTeamTaskRuntime.ts` 和 `ControlThreadRuntimeConfig.teamExecutionMode` feature gate：默认 `legacy`，只有宿主显式设置 `durableTask` 才提交 admission、轮询 bounded snapshot，恢复到 `finalAccepted` 时取得 `resultRunId`，再复用既有 `streamRunEvents` 读取最终 Run 的 SSE；主消息通过 Thread message page 重新校验。适配层不伪造 manager/worker/member 阶段事件，因为 Run SSE 不携带 Team phase ownership；旧 presentation 仍保留原阶段进度路径。
 
 Node 24 下 UI tsc 和 durable adapter 单测通过。当前 adapter 已证明“提交 → snapshot 恢复 → 最终 Run SSE → canonical result”链路可以不增加 Team 专属事件协议；下一步先把它接到一个显式 feature gate/桌面实验入口，完成真实 UI 可见验收后再退役 renderer coordinator。
+
+## 第六十五批：Durable Team UI 等待边界（2026-10-19）
+
+durable Team UI 适配层原先在 `coordinating` snapshot 下无限轮询；即使后台已经收到取消请求，页面仍可能长期等待。现为 admission 前校验一个默认 15 分钟、可显式覆盖的 task deadline，deadline 覆盖从提交到最终结果的等待；发现 `cancelRequested` 时立即结束等待并返回明确错误。超时只结束当前 UI 等待，不取消或删除服务端持久任务，页面可通过后续读取恢复状态。
+
+新增取消和超时单测。Node 24 UI typecheck 与 durable Team gate/adapter 共 4 项测试通过；默认 `legacy` feature gate、HTTP contract 和后台 scheduler 均未改变。

@@ -22,6 +22,8 @@ type DurableTeamClient = Pick<
   | "openRunEventStream"
 >;
 
+const DEFAULT_TEAM_TASK_DEADLINE_MS = 15 * 60 * 1_000;
+
 export type StartControlTeamTaskInput = Readonly<{
   client: DurableTeamClient;
   threadId: string;
@@ -43,6 +45,8 @@ export type StartControlTeamTaskInput = Readonly<{
   }) => AsyncIterable<RunEventView>;
   signal?: AbortSignal;
   pollDelayMs?: number;
+  /** Bounds the admission-to-final-result wait; the server remains durable after expiry. */
+  taskDeadlineMs?: number;
 }>;
 
 /**
@@ -53,6 +57,10 @@ export type StartControlTeamTaskInput = Readonly<{
 export async function startControlTeamTask(
   input: StartControlTeamTaskInput,
 ): Promise<ControlTeamTurnResult> {
+  const taskDeadlineMs = input.taskDeadlineMs ?? DEFAULT_TEAM_TASK_DEADLINE_MS;
+  if (!Number.isSafeInteger(taskDeadlineMs) || taskDeadlineMs < 1)
+    throw new Error("control_team_task_deadline_invalid");
+  const taskDeadlineAt = Date.now() + taskDeadlineMs;
   const accepted = await input.client.admitTeamTask(
     {
       threadId: input.threadId,
@@ -81,6 +89,7 @@ export async function startControlTeamTask(
 
   const snapshot = await waitForFinalTask(input.client, accepted.task.taskId, {
     delayMs: input.pollDelayMs ?? 200,
+    deadlineAt: taskDeadlineAt,
     signal: input.signal,
   });
   if (snapshot.task.resultRunId === null)
@@ -126,14 +135,20 @@ async function readAcceptedMessage(
 async function waitForFinalTask(
   client: DurableTeamClient,
   taskId: string,
-  input: { delayMs: number; signal?: AbortSignal },
+  input: { delayMs: number; deadlineAt: number; signal?: AbortSignal },
 ) {
   let delayMs = Math.max(20, Math.min(input.delayMs, 5_000));
   for (;;) {
     throwIfAborted(input.signal);
     const snapshot = await client.getTeamTask(taskId);
     if (snapshot.task.status === "finalAccepted") return snapshot;
+    if (snapshot.task.cancelRequested)
+      throw new Error("control_team_task_cancel_requested");
+    if (Date.now() >= input.deadlineAt)
+      throw new Error("control_team_task_deadline_exceeded");
     await sleep(delayMs, input.signal);
+    if (Date.now() >= input.deadlineAt)
+      throw new Error("control_team_task_deadline_exceeded");
     delayMs = Math.min(2_000, Math.round(delayMs * 1.5));
   }
 }
