@@ -1,0 +1,39 @@
+{
+  "schemaVersion": "crewon.evidence.v0",
+  "kind": "team-task-runtime-worker-cancellation",
+  "date": "2026-10-19",
+  "branch": "codex/runtime-concurrency-result-streaming",
+  "baseCommit": "a07caf882",
+  "scope": "durable cancellation through Runtime Worker scheduler and executeTeamTask",
+  "flow": [
+    "Runtime Worker scheduler claims a Team task and starts fenced executeTeamTask.",
+    "The test host records active child work and calls durable journal requestCancel.",
+    "Scheduler observes cancelRequested and aborts the executor signal.",
+    "Team Run waits stop and executeTeamTask maps AbortError to team_task_cancel_requested.",
+    "No final main Turn is submitted; already-created child Runs are explicitly cleaned up."
+  ],
+  "verification": {
+    "teamRelatedBothBackends": {
+      "tests": 38,
+      "passed": 38,
+      "failed": 0,
+      "skipped": 0
+    },
+    "newCancellationScenario": { "sqlite": "passed", "postgres": "passed" },
+    "applicationTests": {
+      "tests": 923,
+      "passed": 885,
+      "failed": 0,
+      "skipped": 38
+    },
+    "typechecks": ["application", "store", "control-api", "runtime-worker"],
+    "boundaryCheck": "passed",
+    "format": "passed",
+    "gitDiffCheck": "passed"
+  },
+  "limitations": [
+    "Cancellation does not undo an already dispatched external side effect.",
+    "The tested actor/authorization host is explicit test composition, not the default desktop production path.",
+    "OS kill plus cancellation plus unknown external side effects still require a later combined production-host audit."
+  ]
+}

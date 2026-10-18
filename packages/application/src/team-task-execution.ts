@@ -234,22 +234,31 @@ export async function executeTeamTask(input: {
       fencedOperations.authorizeOfficeRun(id, body),
   };
   try {
-    const result = await startControlTeamTurn({
-      ...task.intent.turn,
-      client,
-      checkpoint,
-      idempotencyKey: key,
-      ...(input.pollIntervalMs === undefined
-        ? {}
-        : { pollIntervalMs: input.pollIntervalMs }),
-      ...(input.runDeadlineMs === undefined
-        ? {}
-        : { runDeadlineMs: input.runDeadlineMs }),
-      ...(input.signal === undefined ? {} : { signal: input.signal }),
-    });
-    guard();
-    await store.finalAccepted(fence, result);
-    return result;
+    try {
+      const result = await startControlTeamTurn({
+        ...task.intent.turn,
+        client,
+        checkpoint,
+        idempotencyKey: key,
+        ...(input.pollIntervalMs === undefined
+          ? {}
+          : { pollIntervalMs: input.pollIntervalMs }),
+        ...(input.runDeadlineMs === undefined
+          ? {}
+          : { runDeadlineMs: input.runDeadlineMs }),
+        ...(input.signal === undefined ? {} : { signal: input.signal }),
+      });
+      guard();
+      await store.finalAccepted(fence, result);
+      return result;
+    } catch (error) {
+      if (input.signal?.aborted) {
+        const reason = input.signal.reason;
+        if (reason instanceof TeamTaskJournalError) throw reason;
+        teamJournalFail("team_task_cancel_requested");
+      }
+      throw error;
+    }
   } finally {
     stopped = true;
     await Promise.allSettled([...pending]);

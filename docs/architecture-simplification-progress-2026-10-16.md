@@ -585,3 +585,11 @@ SQLite 与 PostgreSQL 各验证一次，最终主 Thread 保留一份原始用�
 scheduler 单测 5/5 通过，覆盖 durable cancellation abort、失败回调和 close；Application 全量 922 项中 884 项通过、38 项既有条件跳过；SQLite/PostgreSQL Team 相关回归 36/36 通过。Application、Store、Control API、Runtime Worker 类型检查、边界、格式和 diff 检查通过。
 
 取消监控仍是显式 Team scheduler 配置的一部分，默认桌面入口不启用；HTTP/工具未知副作用不会被 signal 假定为已撤销，仍由 journal receipt 和 lease recovery 处理。自主子 Agent 仍需在这条取消和恢复边界上继续接入。
+
+## 第三十九批：Runtime Worker scheduler 的 durable cancellation 真实闭环（2026-10-19）
+
+基线为 `a07caf882`。本批在双库真实 Runtime Worker scheduler 场景中发出 durable `requestCancel`：scheduler 观察 journal 后 abort executor，`executeTeamTask` 将 AbortError 统一收敛为 `team_task_cancel_requested`，Run/Goal 等待停止继续提交，最终主 Turn 不会写入。已启动的子 Run 仍按未知副作用边界显式清理，不把取消误称为回滚外部执行。
+
+SQLite/PostgreSQL 取消场景均通过；最终 Team 相关回归 38/38 通过。Application 全量 923 项中 885 项通过、38 项既有条件跳过；Application、Store、Control API、Runtime Worker 类型检查、边界、格式和 diff 检查通过。
+
+取消监控、executor signal 和 Worker close 仍只在显式 Team scheduler 配置下启用；默认桌面 Team 与自主子 Agent 保持关闭。下一阶段可在真实生产 actor/authorization host 上做 OS 强杀、取消与未知副作用的综合验收。

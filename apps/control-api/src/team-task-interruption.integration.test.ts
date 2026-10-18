@@ -403,3 +403,118 @@ workflowDeploymentIntegrationTest(
     await secondWorker.close();
   },
 );
+
+workflowDeploymentIntegrationTest(
+  "Runtime Worker scheduler propagates durable Team cancellation into a live executor",
+  async (t, fixture) => {
+    let release!: () => void;
+    const gate = new Promise<void>((resolve) => {
+      release = resolve;
+    });
+    t.after(() => release());
+    let calls = 0;
+    const f = await fixture(t, {
+      beforeModel: async () => {
+        if (++calls > 1) await gate;
+      },
+      output: (request) =>
+        lastUser(request) === priorContext ? "PRIOR_REPLY" : "MEMBER_REPORT",
+    });
+    const server = await f.control(null);
+    const journal = await f.store.experimentalTeamTaskJournalStore();
+    await journal.migrate();
+    let operations: ReturnType<typeof teamOperations> | null = null;
+    const errors: unknown[] = [];
+    const worker = await f.worker(f.workflow, 2, {
+      scope: { tenantId: f.actor.tenantId, spaceId: f.actor.spaceId },
+      concurrency: 1,
+      listLimit: 1,
+      leaseDurationMs: 5_000,
+      cancellationPollIntervalMs: 10,
+      scanIntervalMs: null,
+      execute: (fence, signal) =>
+        executeTeamTask({
+          actor: f.actor,
+          store: journal,
+          fence,
+          operations: operations!,
+          digester: new NodeSha256ContentDigester(),
+          pollIntervalMs: 10,
+          runDeadlineMs: 20_000,
+          leaseDurationMs: 5_000,
+          signal,
+        }).then(() => undefined),
+      onError: (_fence, error) => {
+        errors.push(error);
+      },
+    });
+    worker.start();
+    const { thread, plan } = await prepare(server.client, true);
+    const intent: TeamTaskIntent = {
+      schemaVersion: "crewon.team-task.v1",
+      ...f.actor,
+      taskId: "runtime-worker-team-cancel",
+      turn: {
+        threadId: thread.threadId,
+        expectedRevision: thread.revision,
+        content: originalTask,
+        plan,
+        responseMode: "manager",
+        managerResponseKind: "office",
+      },
+    };
+    await journal.create(intent);
+    operations = teamOperations(server.client);
+    worker.teamTaskScheduler!.notify();
+    const deadline = Date.now() + 20_000;
+    while (calls < 3) {
+      assert.ok(Date.now() < deadline, "Team child work did not start");
+      await setTimeout(10);
+    }
+    await journal.requestCancel(intent);
+    while (errors.length === 0) {
+      assert.ok(
+        Date.now() < deadline,
+        "scheduler did not observe cancellation",
+      );
+      await setTimeout(10);
+    }
+    assert.equal(
+      errors[0] instanceof TeamTaskJournalError
+        ? errors[0].code
+        : errors[0] instanceof Error
+          ? errors[0].message
+          : "unknown",
+      "team_task_cancel_requested",
+    );
+    const effects = await journal.effects(intent);
+    assert.equal(
+      effects.some(
+        (effect) =>
+          effect.kind === "command" &&
+          (effect.request as { method?: string }).method === "startTurn",
+      ),
+      false,
+    );
+    const childRunIds = effects
+      .filter(
+        (effect) =>
+          effect.kind === "command" &&
+          (effect.request as { method?: string }).method === "createRun",
+      )
+      .map(
+        (effect) => (effect.response as { run: { runId: string } }).run.runId,
+      );
+    for (const runId of childRunIds) {
+      const { run } = await server.client.getRun(runId);
+      if (!["completed", "failed", "canceled"].includes(run.status))
+        await server.client.cancelRun(
+          runId,
+          { expectedRevision: run.revision },
+          `cleanup:${runId}`,
+        );
+    }
+    release();
+    await worker.close();
+  },
+);
