@@ -1657,6 +1657,13 @@ export class ControlThreadRuntime {
             executionIntent: settings?.executionIntent ?? "none",
             toolPermissionMode,
             signal: this.#teamProgressController.signal,
+            eventStream: ({ runId, afterSequence, signal }) =>
+              this.#eventStream(this.#client, {
+                runId,
+                afterSequence,
+                view: "client",
+                signal,
+              }),
           });
           const turn = projectedTurn(
             started.message,
