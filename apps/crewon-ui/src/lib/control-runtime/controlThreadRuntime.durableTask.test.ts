@@ -191,3 +191,102 @@ it("runs the durable Team path behind an explicit runtime gate", async () => {
   expect(startTurn).not.toHaveBeenCalled();
   runtime.close();
 });
+
+it("cancels an admitted durable Team task before a final Run exists", async () => {
+  let canceled = false;
+  const client = Object.assign(
+    new ControlApiClient({
+      baseUrl: "http://127.0.0.1:3210",
+      fetch: async () => {
+        throw new Error("unexpected network request");
+      },
+    }),
+    {
+      getThread: vi.fn(async () => ({ thread, eventSequence: 1 })),
+      getActiveAgentVersionCatalog: vi.fn(async () => catalog),
+      getThreadGoal: vi.fn(async () => ({ goal: null, eventSequence: 1 })),
+      getOffice: vi.fn(async () => ({ office })),
+      listOffices: vi.fn(async () => ({ data: [office], nextCursor: null })),
+      authorizeOfficeRun: vi.fn(
+        async (_officeVersionId: string, body: { targetId: string }) => ({
+          target: office.executionTargets.find(
+            (target) => target.targetId === body.targetId,
+          )!,
+        }),
+      ),
+      admitTeamTask: vi.fn(async () => ({
+        schemaVersion: "crewon.team-task-admission.v1" as const,
+        disposition: "committed" as const,
+        task: {
+          taskId: "task-cancel",
+          threadId: "thread-1",
+          status: "coordinating" as const,
+          revision: 2,
+          cancelRequested: false,
+          mainMessageSequence: 1,
+        },
+      })),
+      getTeamTask: vi.fn(async () => ({
+        schemaVersion: "crewon.team-task-snapshot.v1" as const,
+        task: {
+          taskId: "task-cancel",
+          threadId: "thread-1",
+          status: "coordinating" as const,
+          revision: canceled ? 4 : 3,
+          cancelRequested: canceled,
+          mainMessageSequence: 1,
+          resultRunId: null,
+        },
+      })),
+      cancelTeamTask: vi.fn(async () => {
+        canceled = true;
+        return {
+          schemaVersion: "crewon.team-task-snapshot.v1" as const,
+          task: {
+            taskId: "task-cancel",
+            threadId: "thread-1",
+            status: "coordinating" as const,
+            revision: 4,
+            cancelRequested: true,
+            mainMessageSequence: 1,
+            resultRunId: null,
+          },
+        };
+      }),
+      listThreadMessages: vi.fn(async () => ({
+        data: [message],
+        nextCursor: null,
+      })),
+      getRun: vi.fn(),
+    },
+  );
+  const runtime = new ControlThreadRuntime(
+    {
+      client,
+      teamExecutionMode: "durableTask",
+      eventStream: async function* () {},
+    },
+    {
+      onThread() {},
+      onTextDelta() {},
+      onToolItem() {},
+      onRunSettled() {},
+      onStreamError() {},
+    },
+  );
+  const started = runtime.startTurn("thread-1", message.content, [], {
+    scene: {
+      sceneId: "office",
+      mode: "coordinate",
+      executionTarget: { kind: "team", id: office.officeVersionId },
+    },
+  });
+  await vi.waitFor(() =>
+    expect(client.listThreadMessages).toHaveBeenCalledOnce(),
+  );
+  await expect(runtime.cancelDurableTeamTask("thread-1")).resolves.toBe(true);
+  expect(client.cancelTeamTask).toHaveBeenCalledOnce();
+  await expect(started).rejects.toThrow("control_team_task_cancel_requested");
+  await expect(runtime.cancelDurableTeamTask("thread-1")).resolves.toBe(false);
+  runtime.close();
+});

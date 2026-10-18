@@ -35,7 +35,7 @@ export type StartControlTeamTaskInput = Readonly<{
   toolPermissionMode?: TeamTaskAdmissionRequest["toolPermissionMode"];
   responseMode: ControlTeamResponseMode;
   managerResponseKind?: ControlTeamManagerResponseKind;
-  onTaskAccepted?: (message: MessageView) => void;
+  onTaskAccepted?: (message: MessageView, taskId: string) => void;
   onFinalTurnStarted?: (started: ControlTeamTurnResult) => void;
   onRunEvent?: (event: RunEventView) => void;
   eventStream?: (input: {
@@ -90,7 +90,7 @@ export async function startControlTeamTask(
     deadlineAt: taskDeadlineAt,
     signal: input.signal,
   });
-  input.onTaskAccepted?.(message);
+  input.onTaskAccepted?.(message, accepted.task.taskId);
 
   const snapshot = await waitForFinalTask(input.client, accepted.task.taskId, {
     delayMs: input.pollDelayMs ?? 200,

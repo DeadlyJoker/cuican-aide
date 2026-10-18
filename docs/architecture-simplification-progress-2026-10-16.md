@@ -809,3 +809,9 @@ Node 24 下该真实 harness 通过 1/1（约 1.3 秒），UI typecheck 和 dura
 使用本地合成 Responses HTTP 服务和 `CREWON_EXPERIMENTAL_DURABLE_TEAM_TASKS=1` 启动真实 Node 24 Control、Worker、Vite UI。Control/Worker/Vite 均进入 ready，浏览器真实打开开发 UI 并到达 CrewON 登录界面；期间只观察到未配置 Agent Platform 时 `/api/v1/auth/wecom/config` 的预期连接失败，未影响页面加载。
 
 当前环境没有 Agent Platform 登录凭据，因此没有绕过认证或伪造用户会话进入工作台，不能把这次结果称为页面内 Team 提交/刷新/取消验收。真实 durable UI runtime 的 HTTP/SSE harness 已通过；桌面可见工作台验收仍需受信测试账号或用户已授权的登录环境。
+
+## 第七十批：Durable Team 协调阶段取消入口（2026-10-19）
+
+durable Team 在 final Run 创建前现在会发布 bounded `preparing/working` Team progress，并在 Runtime 内保存 actor-scoped taskId。停止按钮在没有 active Run 时调用既有 `cancelTeamTask`；有 active Run 后继续调用原 `cancelRun`。任务完成、失败、取消或 Runtime close 都清理 task handle，不能跨 Thread 或跨 Runtime 复用。
+
+legacy Team 的 renderer coordinator、Run cancel 和默认 feature gate 未改变。Node 24 下 UI typecheck、durable Team/runtime/Control Office 相关测试 27 项通过；真实 standalone HTTP cancellation 回归仍为 2/2。

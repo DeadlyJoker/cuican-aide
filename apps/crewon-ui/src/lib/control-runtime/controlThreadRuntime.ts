@@ -291,6 +291,7 @@ export class ControlThreadRuntime {
   readonly #toolHistoryTimeoutMs: number;
   readonly #canonicalSyncRetryDelay: ControlCanonicalSyncRetryDelay | undefined;
   readonly #teamExecutionMode: "legacy" | "durableTask";
+  readonly #durableTeamTaskIds = new Map<string, string>();
   readonly #toolStatesByRun = new Map<string, ControlToolProjectionState>();
   readonly #toolCoverageByRun = new Map<string, ControlToolHistoryCoverage>();
   readonly #pendingReplyDrafts = new ControlRunPendingReplyDrafts();
@@ -427,6 +428,7 @@ export class ControlThreadRuntime {
     this.#goals.close();
     this.#toolHistoryReaders.close();
     this.#teamProgressController.abort();
+    this.#durableTeamTaskIds.clear();
     for (const controller of this.#readControllers) {
       controller.abort();
     }
@@ -1644,28 +1646,54 @@ export class ControlThreadRuntime {
         });
         let started: ControlTeamTurnResult;
         if (this.#teamExecutionMode === "durableTask") {
-          started = await startControlTeamTask({
-            client: this.#client,
-            threadId,
-            expectedRevision: current.thread.revision,
-            content,
-            plan,
-            responseMode: "manager",
-            managerResponseKind:
-              target.kind === "experts" ? "experts" : "office",
-            idempotencyKey: this.#idempotencyKey,
-            executionIntent: settings?.executionIntent ?? "none",
-            toolPermissionMode,
-            consumeFinalRun: false,
-            signal: this.#teamProgressController.signal,
-            eventStream: ({ runId, afterSequence, signal }) =>
-              this.#eventStream(this.#client, {
-                runId,
-                afterSequence,
-                view: "client",
-                signal,
-              }),
-          });
+          const progress = (
+            phase: "preparing" | "working" | "failed",
+            messageId: string | null,
+          ) =>
+            this.#callbacks.onTeamProgress?.(threadId, {
+              threadId,
+              content: visibleControlUserContent(content),
+              messageId,
+              phase,
+              runs: [],
+            });
+          progress("preparing", null);
+          try {
+            started = await startControlTeamTask({
+              client: this.#client,
+              threadId,
+              expectedRevision: current.thread.revision,
+              content,
+              plan,
+              responseMode: "manager",
+              managerResponseKind:
+                target.kind === "experts" ? "experts" : "office",
+              idempotencyKey: this.#idempotencyKey,
+              executionIntent: settings?.executionIntent ?? "none",
+              toolPermissionMode,
+              consumeFinalRun: false,
+              onTaskAccepted: (message, taskId) => {
+                this.#durableTeamTaskIds.set(threadId, taskId);
+                progress("working", message.messageId);
+              },
+              onFinalTurnStarted: () => {
+                this.#callbacks.onTeamProgress?.(threadId, null);
+              },
+              signal: this.#teamProgressController.signal,
+              eventStream: ({ runId, afterSequence, signal }) =>
+                this.#eventStream(this.#client, {
+                  runId,
+                  afterSequence,
+                  view: "client",
+                  signal,
+                }),
+            });
+          } catch (error) {
+            progress("failed", null);
+            throw error;
+          } finally {
+            this.#durableTeamTaskIds.delete(threadId);
+          }
           const turn = projectedTurn(
             started.message,
             null,
@@ -1930,6 +1958,16 @@ export class ControlThreadRuntime {
       { expectedRevision: current.run.revision },
       this.#idempotencyKey("run.cancel"),
     );
+  }
+
+  async cancelDurableTeamTask(threadId: string): Promise<boolean> {
+    const taskId = this.#durableTeamTaskIds.get(threadId);
+    if (taskId === undefined) return false;
+    await this.#client.cancelTeamTask(
+      taskId,
+      this.#idempotencyKey("team.cancel"),
+    );
+    return true;
   }
 
   #ensureEventStream(

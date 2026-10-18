@@ -78,6 +78,7 @@ describe("durable Team task runtime", () => {
       },
     ];
     const events: RunEventView[] = [];
+    const taskAccepted = vi.fn();
     const client = {
       admitTeamTask: vi.fn(async () => ({
         schemaVersion: "crewon.team-task-admission.v1" as const,
@@ -104,6 +105,7 @@ describe("durable Team task runtime", () => {
       plan,
       idempotencyKey: (operation) => `client:${operation}`,
       responseMode: "manager",
+      onTaskAccepted: taskAccepted,
       eventStream: async function* () {
         const event = {
           type: "run.completed",
@@ -116,6 +118,7 @@ describe("durable Team task runtime", () => {
     });
     expect(result).toEqual({ message, run });
     expect(client.admitTeamTask).toHaveBeenCalledOnce();
+    expect(taskAccepted).toHaveBeenCalledWith(message, "task-1");
     expect(client.getTeamTask).toHaveBeenCalledTimes(2);
     expect(events).toHaveLength(1);
   });

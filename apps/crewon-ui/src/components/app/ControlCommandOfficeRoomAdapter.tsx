@@ -122,7 +122,12 @@ type ControlOfficeThreadRuntime = Pick<
   ControlThreadRuntime,
   "interruptTurn" | "readThread" | "startTurn"
 > &
-  Partial<Pick<ControlThreadRuntime, "replayMessage" | "turnUpdates">>;
+  Partial<
+    Pick<
+      ControlThreadRuntime,
+      "cancelDurableTeamTask" | "replayMessage" | "turnUpdates"
+    >
+  >;
 
 function createIdempotencyKey(operation: string) {
   const randomId = globalThis.crypto?.randomUUID?.() ?? `${Date.now()}`;
@@ -606,11 +611,26 @@ function ControlOfficeChatRoom({
   }
 
   async function stopActiveTurn() {
-    if (!threadId || submitting) return;
+    if (!threadId) return;
     const activeTurn = [...(visibleThread?.turns ?? [])]
       .reverse()
       .find((turn) => turn.status === "inProgress");
-    if (!activeTurn) return;
+    if (!activeTurn) {
+      if (!runtime.cancelDurableTeamTask) return;
+      setSubmitting(true);
+      setError(null);
+      try {
+        if (await runtime.cancelDurableTeamTask(threadId)) {
+          await refreshThread(threadId);
+        }
+      } catch (reason) {
+        setError(controlOfficeChatErrorMessage(reason, locale));
+      } finally {
+        setSubmitting(false);
+      }
+      return;
+    }
+    if (submitting) return;
     setSubmitting(true);
     setError(null);
     try {
