@@ -1,0 +1,26 @@
+{
+  "schemaVersion": "crewon.evidence.v0",
+  "kind": "control-transcript-scheduling-benchmark",
+  "date": "2026-10-19",
+  "branch": "codex/runtime-concurrency-result-streaming",
+  "commit": "0c4a2b340",
+  "runtime": "Node v24.18.1",
+  "scenario": {
+    "delayMsPerRead": 40,
+    "samples": 5,
+    "currentRead": "real ControlThreadRuntime.readThread with controlled getThread/getThreadTranscriptSnapshot clients",
+    "serialBaseline": "the same three 40ms waits executed sequentially"
+  },
+  "results": {
+    "currentMs": [86.0, 84.3, 84.3, 82.9, 85.7],
+    "currentMedianMs": 84.3,
+    "serialMs": [126.6, 123.9, 122.6, 123.9, 124.6],
+    "serialMedianMs": 123.9,
+    "reductionPercent": 32.0
+  },
+  "limitations": [
+    "The client reads use controlled in-process delays, not production network or database latency.",
+    "The baseline isolates scheduling cost and does not claim an end-to-end user-perceived improvement of 32 percent.",
+    "Hydration and tool history are skipped in this first-page scheduling benchmark."
+  ]
+}

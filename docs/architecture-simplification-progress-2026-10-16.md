@@ -631,3 +631,9 @@ SQLite 场景通过；本轮环境没有 `CREWON_TEST_POSTGRES_URL`，因此新�
 验证：`controlTranscriptRead` 与 `controlThreadRuntime` 共 120 个 UI 测试通过，UI typecheck、Electron host lint、格式和 diff 检查通过。新增测试同时证明首次两路读取确实并行，并保持并行响应的 `threadRevision/eventSequence` identity 校验。该批只减少串行等待，未宣称减少请求数量；工具历史、Run plan 和 hydration 后 Thread head 校验仍保留。
 
 复核结论：hydration 前的第二次 Thread head 读取不能直接删除。它在发布基础投影前阻止混合 revision；若只依赖 hydration 后检查，可能先把过期基础状态发布到 UI。后续若要继续减少该读取，必须先改变发布边界或让服务端快照同时承担 Thread summary 与最终一致性证明，再补流式期间和 hydration 竞态验收。
+
+## 第四十五批：首次 transcript 调度 wall-clock 对照（2026-10-19）
+
+在 Node 24.18.1 下，用真实 `ControlThreadRuntime.readThread` 配合受控客户端桩执行 5 次对照：Thread head、transcript snapshot 和最终 head 各注入 40ms 延迟。当前并行路径中位数为 84.3ms，三次等待串行基线中位数为 123.9ms，调度部分下降约 32%。原始样本和限制见 `docs/evidence/control-transcript-parallel-benchmark-2026-10-19.json`。
+
+该结果只证明当前调度结构在受控延迟下减少串行等待，不代表生产网络、数据库或用户端首屏耗时下降同样比例；下一步仍需在实际 Control API/SSE 链路上采样。
