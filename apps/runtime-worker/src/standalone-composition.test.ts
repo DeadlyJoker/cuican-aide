@@ -179,6 +179,35 @@ test("explicit Team scheduler migration is owned by Runtime Worker lifecycle", a
   );
 });
 
+test("rejects an ambiguous Team executor before migrating its journal", async (context) => {
+  const databasePath = temporaryDatabasePath(context);
+  const config = runtimeConfig();
+  await activateRelease(databasePath, config);
+  await assert.rejects(
+    createStandaloneRuntimeWorker({
+      ...config,
+      databasePath,
+      scanIntervalMs: null,
+      teamTaskScheduler: {
+        scope: { tenantId: config.runtimeTenantId, spaceId: "space-1" },
+        scanIntervalMs: null,
+      },
+    }),
+    /team_task_executor_configuration_invalid/u,
+  );
+  const store = new SqliteRunStore(databasePath);
+  context.after(() => store.close());
+  const journal = await store.experimentalTeamTaskJournalStore();
+  await assert.rejects(
+    journal.read({
+      tenantId: config.runtimeTenantId,
+      spaceId: "space-1",
+      taskId: "team-task-ambiguous-executor",
+    }),
+    /team_journal_schema_unavailable/u,
+  );
+});
+
 test("metadata-only extension host migrates its scheduling records before the first claim", async (context) => {
   const databasePath = temporaryDatabasePath(context);
   const config = runtimeConfig();

@@ -15,6 +15,47 @@ import {
   type TeamTaskJournalStore,
 } from "./team-task-journal.ts";
 
+/** Explicit host identity and operations required by a durable Team executor. */
+export type TeamTaskExecutionHost = Readonly<{
+  actor: ActorContext;
+  operations: ControlTeamRuntimeClient;
+  digester: ContentDigester;
+  leaseDurationMs?: number;
+  pollIntervalMs?: number;
+  runDeadlineMs?: number;
+}>;
+
+/** Binds one explicit host to the scheduler's durable journal. */
+export function createTeamTaskExecutor(input: {
+  store: TeamTaskJournalStore;
+  host: TeamTaskExecutionHost;
+}): (fence: TeamTaskFence, signal: AbortSignal) => Promise<void> {
+  return async (fence, signal) => {
+    if (
+      input.host.actor.tenantId !== fence.tenantId ||
+      input.host.actor.spaceId !== fence.spaceId
+    )
+      teamJournalFail("team_task_host_scope_mismatch");
+    await executeTeamTask({
+      store: input.store,
+      actor: input.host.actor,
+      fence,
+      operations: input.host.operations,
+      digester: input.host.digester,
+      ...(input.host.leaseDurationMs === undefined
+        ? {}
+        : { leaseDurationMs: input.host.leaseDurationMs }),
+      ...(input.host.pollIntervalMs === undefined
+        ? {}
+        : { pollIntervalMs: input.host.pollIntervalMs }),
+      ...(input.host.runDeadlineMs === undefined
+        ? {}
+        : { runDeadlineMs: input.host.runDeadlineMs }),
+      signal,
+    });
+  };
+}
+
 /**
  * Experimental, explicitly leased Team continuation. Host must separately
  * provide current authorization and main-Thread reservation before enabling

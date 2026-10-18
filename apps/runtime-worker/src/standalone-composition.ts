@@ -36,6 +36,10 @@ import {
   TeamTaskSchedulerPump,
   type TeamTaskSchedulerInput,
 } from "@crewon/application/team-task-scheduler";
+import {
+  createTeamTaskExecutor,
+  type TeamTaskExecutionHost,
+} from "@crewon/application/team-task-execution";
 import type {
   TeamTaskJournalStore,
   TeamTaskScope,
@@ -238,7 +242,10 @@ export type RuntimeTeamTaskSchedulerConfig = Readonly<{
   leaseDurationMs?: number;
   cancellationPollIntervalMs?: number | null;
   scanIntervalMs?: number | null;
-  execute: TeamTaskSchedulerInput["execute"];
+  /** Experimental host callback; production should prefer the explicit host below. */
+  execute?: TeamTaskSchedulerInput["execute"];
+  /** Explicit actor/operations/digester boundary for a durable Team executor. */
+  host?: TeamTaskExecutionHost;
   onError?: TeamTaskSchedulerInput["onError"];
 }>;
 
@@ -754,6 +761,14 @@ async function composeRuntimeWorker(
     const teamConfig = config.teamTaskScheduler;
     if (teamConfig.scope.tenantId !== config.runtimeTenantId)
       throw new Error("team_task_runtime_tenant_mismatch");
+    if ((teamConfig.execute === undefined) === (teamConfig.host === undefined))
+      throw new Error("team_task_executor_configuration_invalid");
+    if (
+      teamConfig.host !== undefined &&
+      (teamConfig.host.actor.tenantId !== teamConfig.scope.tenantId ||
+        teamConfig.host.actor.spaceId !== teamConfig.scope.spaceId)
+    )
+      throw new Error("team_task_host_scope_mismatch");
     const journalFactory = (
       store as unknown as {
         experimentalTeamTaskJournalStore?: () => Promise<TeamTaskJournalStore>;
@@ -777,7 +792,10 @@ async function composeRuntimeWorker(
           ? 250
           : teamConfig.cancellationPollIntervalMs,
       createLeaseId: () => ids.nextId("outboxLease"),
-      execute: teamConfig.execute,
+      execute:
+        teamConfig.host === undefined
+          ? teamConfig.execute!
+          : createTeamTaskExecutor({ store: journal, host: teamConfig.host }),
       ...(teamConfig.onError === undefined
         ? {}
         : { onError: teamConfig.onError }),

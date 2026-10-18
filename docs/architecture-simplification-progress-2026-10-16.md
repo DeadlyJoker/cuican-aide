@@ -685,3 +685,11 @@ Node 24 串行定向复核：Runtime Worker standalone composition、SQLite Team
 本批让每个 watcher 使用绑定其 claim AbortController 的可取消等待，并把 watcher Promise 纳入 `idle()`。执行器完成或 scheduler close 会 abort watcher；若 watcher 已经进入 Store read，close 会等待该读取返回后再释放 scheduler。没有改变 discovery、claim、lease、cancelRequested 或 effect 语义，也没有把取消当作外部副作用已回滚。
 
 Node 24 的 Application scheduler 定向测试 6/6 通过，新增用例验证 close 在取消观察读取未返回前不会完成；Application typecheck、Prettier 和 diff 检查通过。
+
+## 第五十三批：Team executor 显式 Host 边界（2026-10-19）
+
+为后续接入真实 Control operations，新增 `TeamTaskExecutionHost` 组合边界，明确携带 `ActorContext`、`ControlTeamRuntimeClient` 和 `ContentDigester`，由 `createTeamTaskExecutor` 绑定到具体 journal。Host 的 tenant/space 必须与 scheduler scope 一致；不匹配会在读取任务前失败。Runtime Worker composition 现在在 journal migration 前拒绝“既没有 host 也没有 execute”或同时提供两者的模糊配置。
+
+旧的 `execute(fence, signal)` 仍保留为实验/测试宿主兼容入口，没有把任意回调误升为生产授权。生产 `main.ts` 仍未构造 Host，因此默认 Team scheduler 继续关闭；下一步可以在明确的 Control service identity 和 operations adapter 验收后，替换实验回调，而不再扩张 scheduler 本身。
+
+Node 24 定向回归：Application execution-host、scheduler 和 Runtime Worker composition 共 25 项通过；Application、Runtime Worker typecheck、Prettier 和 diff 检查通过。新增测试还证明 scope 错误不会访问 journal，模糊配置不会先迁移 Team schema。
