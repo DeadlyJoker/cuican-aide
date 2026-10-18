@@ -677,3 +677,11 @@ Node 24 定向验证：`scripts/local-workspace-reads.test.mts` 与 Runtime Work
 Runtime Worker `main.ts` 当前没有构造这些 Team host 依赖，也没有把任意环境变量转换成 Actor 或权限，因此不能把 scheduler 配置从测试宿主直接移入生产 bootstrap。Control API standalone/production composition 才同时拥有 Standalone/生产授权、Thread/Run/Turn/Office application services；两者之间仍缺少经过审查的本地 Team operations adapter 或受信服务身份。继续保持默认关闭，避免把测试 executor、固定 actor 或 HTTP 客户端凭据误当成生产授权。
 
 Node 24 串行定向复核：Runtime Worker standalone composition、SQLite Team journal、scheduler 成功/租约接管/取消、SIGKILL claim recovery、未知 effect recovery 及 Team interruption 共 51 项，其中 34 项通过、17 项 PostgreSQL 场景因当前环境未提供测试库而跳过；没有启用生产 Team scheduler，也没有改变 schema、HTTP 或 actor 语义。下一步先设计并测试明确的 `ActorContext + AuthorizationPort + ControlTeamRuntimeClient` 组合边界，再接入真实部署配置。
+
+## 第五十二批：Team scheduler cancellation watcher 生命周期收敛（2026-10-19）
+
+发现 `TeamTaskScheduler` 的 durable cancellation watcher 由 `void` 启动，既不计入 `idle()`，也没有可取消的等待。执行器结束或 Worker close 后，watcher 仍可能持有下一次 poll 的定时器；如果 Store 同时开始关闭，观察任务的收尾顺序也没有由 scheduler 统一等待。
+
+本批让每个 watcher 使用绑定其 claim AbortController 的可取消等待，并把 watcher Promise 纳入 `idle()`。执行器完成或 scheduler close 会 abort watcher；若 watcher 已经进入 Store read，close 会等待该读取返回后再释放 scheduler。没有改变 discovery、claim、lease、cancelRequested 或 effect 语义，也没有把取消当作外部副作用已回滚。
+
+Node 24 的 Application scheduler 定向测试 6/6 通过，新增用例验证 close 在取消观察读取未返回前不会完成；Application typecheck、Prettier 和 diff 检查通过。

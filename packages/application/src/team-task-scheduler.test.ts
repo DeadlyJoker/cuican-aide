@@ -231,3 +231,54 @@ test("polls durable cancellation and aborts the claimed executor", async () => {
   assert.equal(errors, 1);
   await scheduler.close();
 });
+
+test("close waits for an in-flight cancellation observer before releasing the scheduler", async () => {
+  const fake = fakeStore([locators[0]!]);
+  const readStarted = deferred<void>();
+  const releaseRead = deferred<void>();
+  const scheduler = new TeamTaskScheduler(
+    schedulerInput({
+      store: {
+        ...fake.store,
+        read: async () => {
+          readStarted.resolve();
+          await releaseRead.promise;
+          return {
+            intent: {} as never,
+            status: "coordinating" as const,
+            revision: 1,
+            cancelRequested: false,
+            lease: null,
+            result: null,
+            effectCount: 0,
+            journalBytes: 1,
+          };
+        },
+      },
+      cancellationPollIntervalMs: 1,
+      execute: async (_fence, signal) =>
+        new Promise<void>((resolve) =>
+          signal.addEventListener("abort", () => resolve(), { once: true }),
+        ),
+    }),
+  );
+  await scheduler.wake();
+  await readStarted.promise;
+  let closed = false;
+  const closing = scheduler.close().then(() => {
+    closed = true;
+  });
+  await Promise.resolve();
+  assert.equal(closed, false);
+  releaseRead.resolve();
+  await closing;
+  assert.equal(closed, true);
+});
+
+function deferred<T>() {
+  let resolve!: (value: T | PromiseLike<T>) => void;
+  const promise = new Promise<T>((resolvePromise) => {
+    resolve = resolvePromise;
+  });
+  return { promise, resolve };
+}

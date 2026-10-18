@@ -56,6 +56,7 @@ export class TeamTaskScheduler {
   readonly #onError: TeamTaskSchedulerInput["onError"];
   readonly #inFlight = new Map<string, Promise<void>>();
   readonly #controllers = new Map<string, AbortController>();
+  readonly #cancellationWatchers = new Map<string, Promise<void>>();
   #wakeInProgress: Promise<TeamTaskSchedulerWake> | null = null;
   #sequence = 0;
   #closed = false;
@@ -111,10 +112,15 @@ export class TeamTaskScheduler {
   }
 
   async idle(): Promise<void> {
-    while (this.#inFlight.size !== 0 || this.#wakeInProgress !== null) {
+    while (
+      this.#inFlight.size !== 0 ||
+      this.#cancellationWatchers.size !== 0 ||
+      this.#wakeInProgress !== null
+    ) {
       const wake = this.#wakeInProgress;
       await Promise.all([
         ...this.#inFlight.values(),
+        ...this.#cancellationWatchers.values(),
         ...(wake === null ? [] : [wake.then(() => undefined)]),
       ]);
     }
@@ -161,12 +167,18 @@ export class TeamTaskScheduler {
       if (
         this.#cancellationPollIntervalMs !== null &&
         this.#store.read !== undefined
-      )
-        void this.#watchCancellation(
+      ) {
+        const watcher = this.#watchCancellation(
           locator,
           controller,
           this.#cancellationPollIntervalMs,
         );
+        const trackedWatcher = watcher.finally(() => {
+          if (this.#cancellationWatchers.get(key) === trackedWatcher)
+            this.#cancellationWatchers.delete(key);
+        });
+        this.#cancellationWatchers.set(key, trackedWatcher);
+      }
       const execution = this.#execute(fence, controller.signal)
         .catch(async (error: unknown) => {
           try {
@@ -193,7 +205,7 @@ export class TeamTaskScheduler {
     intervalMs: number,
   ): Promise<void> {
     while (!this.#closed && !controller.signal.aborted) {
-      await new Promise((resolve) => setTimeout(resolve, intervalMs));
+      await waitForCancellationPoll(intervalMs, controller.signal);
       if (this.#closed || controller.signal.aborted) return;
       try {
         const task = await this.#store.read!(locator);
@@ -207,6 +219,23 @@ export class TeamTaskScheduler {
       }
     }
   }
+}
+
+function waitForCancellationPoll(
+  intervalMs: number,
+  signal: AbortSignal,
+): Promise<void> {
+  if (signal.aborted) return Promise.resolve();
+  return new Promise((resolve) => {
+    const timer = setTimeout(finish, intervalMs);
+    const onAbort = () => finish();
+    signal.addEventListener("abort", onAbort, { once: true });
+    function finish() {
+      clearTimeout(timer);
+      signal.removeEventListener("abort", onAbort);
+      resolve();
+    }
+  });
 }
 
 /** Lifecycle wrapper used by a host that wants scan fallback plus explicit wake notifications. */
