@@ -669,3 +669,11 @@ UI 的 Thread focus 只限制长期 Thread SSE，Run SSE 仍按 Run 独立维护
 因此没有新增第三条 `workspace_read_file` 直读工具，也没有让它绕过已有 Run/Thread、租约、设备绑定或回执权威。这样做会产生同名 catalog 冲突，并把本地读取、远程读取和 mutation command 的权限语义拆成互相不一致的实现。后续性能优化应分别测量 MCP `read_file`、Native Workspace `read_file` 和串行 `workspace_run_command`，按实际部署选择路径；不能只因 shell 子进程较慢就把 mutation 工具改成并行或复制一套本地授权。
 
 Node 24 定向验证：`scripts/local-workspace-reads.test.mts` 与 Runtime Worker Workspace read composition/tool/adapter 测试共 23 项全部通过，无新增代码、schema 或 HTTP 形状变化。该验证证明边界和安全行为，不代表已完成安装版、真实设备或公网 Gateway 性能验收。
+
+## 第五十一批：Team 生产执行权边界复核（2026-10-19）
+
+复核 Runtime Worker 的 Team scheduler composition 与真实 `executeTeamTask` 的依赖后，确认当前 scheduler 仍只能作为显式 host 原语使用。`RuntimeTeamTaskSchedulerConfig` 接收宿主注入的 `execute(fence, signal)`；Worker composition 只校验 scheduler scope 与 runtime tenant 一致、journal 可用并负责生命周期，不取得 Actor、AuthorizationPort、ControlTeamRuntimeClient 或 ContentDigester。真正的 `executeTeamTask` 还必须校验 task issuer、使用带 fence 的 Control operations，并把 command/observation effect 写入 journal。
+
+Runtime Worker `main.ts` 当前没有构造这些 Team host 依赖，也没有把任意环境变量转换成 Actor 或权限，因此不能把 scheduler 配置从测试宿主直接移入生产 bootstrap。Control API standalone/production composition 才同时拥有 Standalone/生产授权、Thread/Run/Turn/Office application services；两者之间仍缺少经过审查的本地 Team operations adapter 或受信服务身份。继续保持默认关闭，避免把测试 executor、固定 actor 或 HTTP 客户端凭据误当成生产授权。
+
+Node 24 串行定向复核：Runtime Worker standalone composition、SQLite Team journal、scheduler 成功/租约接管/取消、SIGKILL claim recovery、未知 effect recovery 及 Team interruption 共 51 项，其中 34 项通过、17 项 PostgreSQL 场景因当前环境未提供测试库而跳过；没有启用生产 Team scheduler，也没有改变 schema、HTTP 或 actor 语义。下一步先设计并测试明确的 `ActorContext + AuthorizationPort + ControlTeamRuntimeClient` 组合边界，再接入真实部署配置。
