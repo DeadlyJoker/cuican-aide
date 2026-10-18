@@ -701,3 +701,11 @@ Node 24 定向回归：Application execution-host、scheduler 和 Runtime Worker
 本批没有新增 HTTP、认证或凭据，ControlApiClient 的请求和 fence header 行为保持不变。该 facade 只是未来显式 Team Host 的 transport adapter，尚未把 Worker scheduler 接入生产身份，也没有改变默认关闭策略。
 
 Node 24 验证：Control Client 与 Control API typecheck 通过；facade 单测及 SQLite Team journal recovery/unknown effect/admission 共 21 项通过，10 项 PostgreSQL 场景因环境未提供测试库而跳过；Prettier 和 diff 检查通过。
+
+## 第五十五批：Control 身份配置与后台 Team Host 边界（2026-10-19）
+
+复核 Control API 的实际身份组合后，排除了直接复用现有浏览器/桌面凭据的方案：Standalone 的 `CREWON_CONTROL_SESSION_TOKEN` 固定解析为该进程配置的单一 Actor/Tenant/Space，并要求 Origin 与 mutation CSRF；Production 则从每个请求的短期用户 Control token 和外部策略 authority 派生 actor，不能把用户 token 变成常驻 Worker 身份。`CREWON_CONTROL_BFF_TOKEN` 也只证明 BFF peer，不是 Team actor。
+
+因此 Runtime Worker 的 Team Host 暂不接入 `CREWON_CONTROL_SESSION_TOKEN`、CSRF 或 BFF token 作为后台授权。未来需要单独的受信 service identity/operations adapter，明确允许的 tenant/space、Actor 生命周期、策略调用和撤权行为；在该边界完成前，默认 scheduler 和自主子 agent 保持关闭。现有 Control operations facade 只复用 HTTP/fence 语义，不改变身份模型。
+
+本批为只读架构复核，没有代码或凭据变化；依据 `apps/control-api/src/standalone-adapters.ts`、`apps/control-api/src/production-security-adapters.ts`、`apps/control-api/src/main.ts` 和 Control API README 的当前组合。
