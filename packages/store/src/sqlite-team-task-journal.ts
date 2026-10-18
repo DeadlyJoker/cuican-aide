@@ -128,6 +128,22 @@ export class ExperimentalSqliteTeamTaskJournal implements TeamTaskJournalStore {
         )
         .get(intent.tenantId, intent.spaceId, intent.turn.plan.officeVersionId);
       assertTeamTaskSource(intent, thread, office?.definition_json);
+      if (
+        this.database
+          .prepare(
+            "SELECT 1 FROM team_task_journals WHERE tenant_id=? AND space_id=? AND thread_id=? AND status='coordinating' LIMIT 1",
+          )
+          .get(intent.tenantId, intent.spaceId, intent.turn.threadId)
+      )
+        teamJournalFail("team_task_main_busy");
+      if (
+        this.database
+          .prepare(
+            `SELECT 1 FROM run_snapshots AS snapshots JOIN run_thread_bindings AS bindings ON bindings.tenant_id=snapshots.tenant_id AND bindings.run_id=snapshots.run_id WHERE snapshots.tenant_id=? AND bindings.thread_id=? AND json_extract(snapshots.state_json,'$.status') NOT IN ('completed','failed','canceled') LIMIT 1`,
+          )
+          .get(intent.tenantId, intent.turn.threadId)
+      )
+        teamJournalFail("team_task_run_active");
       this.database
         .prepare(
           `INSERT INTO team_task_journals (tenant_id,space_id,task_id,thread_id,intent_json,status,revision,cancel_requested,lease_epoch,effect_count,journal_bytes) VALUES(?,?,?,?,?,'coordinating',1,0,0,0,?)`,

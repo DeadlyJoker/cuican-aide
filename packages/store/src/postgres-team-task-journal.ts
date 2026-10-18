@@ -162,6 +162,16 @@ export class ExperimentalPostgresTeamTaskJournal
         thread.rows[0],
         office.rows[0]?.definition_json,
       );
+      const busy = await client.query(
+        `SELECT 1 FROM ${this.#table("team_task_journals")} WHERE tenant_id=$1 AND space_id=$2 AND thread_id=$3 AND status='coordinating' LIMIT 1`,
+        [intent.tenantId, intent.spaceId, intent.turn.threadId],
+      );
+      if (busy.rows.length !== 0) teamJournalFail("team_task_main_busy");
+      const activeRun = await client.query(
+        `SELECT 1 FROM ${this.#table("run_snapshots")} AS snapshots JOIN ${this.#table("run_thread_bindings")} AS bindings ON bindings.tenant_id=snapshots.tenant_id AND bindings.run_id=snapshots.run_id WHERE snapshots.tenant_id=$1 AND bindings.thread_id=$2 AND (snapshots.state_json->>'status') NOT IN ('completed','failed','canceled') LIMIT 1`,
+        [intent.tenantId, intent.turn.threadId],
+      );
+      if (activeRun.rows.length !== 0) teamJournalFail("team_task_run_active");
       await client.query(
         `INSERT INTO ${this.#table("team_task_journals")} (tenant_id,space_id,task_id,thread_id,intent_json,status,revision,cancel_requested,lease_epoch,effect_count,journal_bytes) VALUES($1,$2,$3,$4,$5,'coordinating',1,0,0,0,$6)`,
         [

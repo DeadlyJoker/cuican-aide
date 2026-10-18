@@ -16,6 +16,11 @@ import {
   teamOperations,
 } from "./team-turn-application.test-support.ts";
 
+function isCode(code: string) {
+  return (error: unknown) =>
+    error instanceof TeamTaskJournalError && error.code === code;
+}
+
 workflowDeploymentIntegrationTest(
   "Team cancellation interrupts live Run waiting without transient-read retries, final submission, or freezing a nonterminal response",
   async (t, fixture) => {
@@ -139,5 +144,86 @@ workflowDeploymentIntegrationTest(
       3,
       "journal cancellation has not been misrepresented as child Run propagation",
     );
+  },
+);
+
+workflowDeploymentIntegrationTest(
+  "Team main-thread revision fence fails closed when another window appends after child work, preserving the new user input",
+  async (t, fixture) => {
+    let getThreadCalls = 0;
+    const f = await fixture(t, {
+      output: (request) =>
+        lastUser(request) === priorContext ? "PRIOR_REPLY" : "MEMBER_REPORT",
+    });
+    const server = await f.control(null);
+    const worker = await f.worker();
+    worker.start();
+    const { thread, plan } = await prepare(server.client, true);
+    const journal = await f.store.experimentalTeamTaskJournalStore();
+    await journal.migrate();
+    const intent = {
+      schemaVersion: "crewon.team-task.v1" as const,
+      ...f.actor,
+      taskId: "main-revision-fence",
+      turn: {
+        threadId: thread.threadId,
+        expectedRevision: thread.revision,
+        content: originalTask,
+        plan,
+        responseMode: "manager" as const,
+        managerResponseKind: "office" as const,
+      },
+    };
+    await journal.create(intent);
+    const fence = (await journal.claim({
+      ...intent,
+      ownerId: "fence-owner",
+      leaseId: "fence-lease",
+      durationMs: 30_000,
+    }))!;
+    const operations = teamOperations(server.client);
+    const originalGetThread = operations.getThread;
+    operations.getThread = async (threadId) => {
+      getThreadCalls++;
+      if (getThreadCalls === 2) {
+        const current = await server.client.getThread(threadId);
+        await server.client.appendThreadMessage(
+          threadId,
+          {
+            expectedRevision: current.thread.revision,
+            content: "CONCURRENT_USER_INPUT",
+          },
+          "concurrent-user-input",
+        );
+      }
+      return originalGetThread(threadId);
+    };
+    await assert.rejects(
+      executeTeamTask({
+        actor: f.actor,
+        store: journal,
+        fence,
+        operations,
+        digester: new NodeSha256ContentDigester(),
+        pollIntervalMs: 10,
+        runDeadlineMs: 20_000,
+      }),
+      isCode("team_task_main_thread_changed"),
+    );
+    const messages = (await server.client.listThreadMessages(thread.threadId))
+      .data;
+    assert.equal(
+      messages.filter((message) => message.content === "CONCURRENT_USER_INPUT")
+        .length,
+      1,
+    );
+    assert.equal(
+      messages.filter(
+        (message) =>
+          message.content === "TEAM_FINAL: journal retained one original task.",
+      ).length,
+      0,
+    );
+    assert.equal((await journal.read(intent))!.status, "coordinating");
   },
 );

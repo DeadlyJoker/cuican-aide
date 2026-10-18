@@ -47,6 +47,7 @@ export async function executeTeamTask(input: {
   if (task.status === "finalAccepted") return task.result!;
   let stopped = false;
   const pending = new Set<Promise<unknown>>();
+  let mainThreadRevision: number | null = null;
   const labels = new Map<string, string>();
   const key = (label: string) => {
     const digest = input.digester.sha256(
@@ -121,14 +122,41 @@ export async function executeTeamTask(input: {
     ).response as T;
   }
   const checkpoint: TeamTurnCheckpoint = (label, read) =>
-    track(() => observation(label, read));
+    track(async () => {
+      const value = await observation(label, read);
+      if (label === "managerFinalThread" && mainThreadRevision !== null) {
+        const thread = value as {
+          thread?: { threadId?: string; revision?: number };
+        };
+        if (
+          thread.thread?.threadId !== task.intent.turn.threadId ||
+          thread.thread.revision !== mainThreadRevision
+        )
+          teamJournalFail("team_task_main_thread_changed");
+      }
+      return value;
+    });
   const client: ControlTeamRuntimeClient = {
     appendThreadMessage: (threadId, body, id) =>
-      track(() =>
-        command("appendThreadMessage", [threadId, body, id], id, () =>
-          operations.appendThreadMessage(threadId, body, id),
-        ),
-      ),
+      track(async () => {
+        const result = await command(
+          "appendThreadMessage",
+          [threadId, body, id],
+          id,
+          () => operations.appendThreadMessage(threadId, body, id),
+        );
+        if (
+          threadId === task.intent.turn.threadId &&
+          body.content === task.intent.turn.content
+        ) {
+          const revision = (result as { thread?: { revision?: number } }).thread
+            ?.revision;
+          if (!Number.isSafeInteger(revision))
+            teamJournalFail("team_task_main_thread_revision_invalid");
+          mainThreadRevision = revision as number;
+        }
+        return result;
+      }),
     forkThread: (threadId, body, id) =>
       track(() =>
         command("forkThread", [threadId, body, id], id, () =>
@@ -142,11 +170,22 @@ export async function executeTeamTask(input: {
         ),
       ),
     startTurn: (threadId, body, id) =>
-      track(() =>
-        command("startTurn", [threadId, body, id], id, () =>
-          operations.startTurn(threadId, body, id),
-        ),
-      ),
+      track(async () => {
+        const result = await command(
+          "startTurn",
+          [threadId, body, id],
+          id,
+          () => operations.startTurn(threadId, body, id),
+        );
+        if (threadId === task.intent.turn.threadId) {
+          const revision = (result as { thread?: { revision?: number } }).thread
+            ?.revision;
+          if (!Number.isSafeInteger(revision))
+            teamJournalFail("team_task_main_thread_revision_invalid");
+          mainThreadRevision = revision as number;
+        }
+        return result;
+      }),
     setThreadGoalWithExecutionIntentV1: (threadId, body, id) =>
       track(() =>
         command(

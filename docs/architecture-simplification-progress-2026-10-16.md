@@ -515,3 +515,13 @@ Application 新增独立 `team-turn` 入口，通过显式宿主操作端口调�
 普通 Run、Thread、Goal、Worker 池相邻回归 248 项及架构/生产类型图 37 项通过，均无跳过；Application、Store、Control、Worker 的完整类型检查、TypeScript 入口、格式及 diff 检查通过。初始校验还发现 Node strip-only 不接受参数属性，以及普通 Run 的 purpose 可以按既有兼容规则省略；已分别采用原生可剥离字段写法、沿用 `purpose ?? "turn"`，没有加入构建变换或放宽 Workflow 目的校验。具体范围、容量/版本拒绝、调用者快照、身份与清理证据见 [Team journal 证据](evidence/team-task-journal-2026-10-18.json)。
 
 **生产 Team 尚未接管，原目标继续进行。** 后续须完成受信准入/当前授权和保留部署绑定、主会话占用及 fork/Goal 上下文控制、持久停放/终态唤醒与有界发现、未知命令取消收敛和子树传播，再接实际任务投影/UI并删除旧 renderer 推进。现有 journal 的租约不撤回已发出的 HTTP 请求；不能跳过这些条件而直接打开后台自动执行。默认桌面 Workflow、production 身份、资源/生命周期、自主子 Agent、安装式插件及安装版验收继续保留在完整目标中。
+
+## 第三十一批：Team 主会话 admission 与 revision 栅栏（2026-10-18）
+
+基线为 `046f71c6c`。本批在实验性 Team journal admission 时检查同一租户/空间/主 Thread 是否已有协调任务或非终态普通 Run；同一主 Thread 只能有一个 coordinating 任务，活动普通 Run 会拒绝 Team。父 Store 工厂仍按需加载、显式迁移，不改变默认生产装配。
+
+协调器记录主会话原始输入/最终 Turn 的持久命令回执，并在主管最终采样前重读主 Thread；若其他窗口插入用户消息，revision 不再匹配，任务以 `team_task_main_thread_changed` 失败，保留并显示新用户输入，不覆盖主会话。成员直答沿用当前主 Thread revision CAS。当前普通 HTTP 写入口不会被 UI 忙碌标志硬阻塞；没有可信 task-context/reservation token 时直接硬阻塞会连后台自身一起拒绝，因此本批采用可恢复的 fail-closed 栅栏，后续再接带租约的受信请求上下文。
+
+两库 Team 专项 32 项全部通过、无跳过；包括 admission 冲突、主会话并发写入、主管规划/成员/最终 Turn 回执恢复、Goal 暂停恢复和取消。相邻 Run/Thread/Goal/Worker 池回归 191 项通过、2 项既有环境条件跳过；架构 37 项、Application/Store/Control/Worker 类型检查、入口边界、格式和 diff 检查通过。测试数据库使用独立 Unix socket，结束时核对 data directory、无 TCP 监听、无其他客户端和用户 schema 后停止。详细证据见 [Team 主会话栅栏](evidence/team-main-thread-fence-2026-10-18.json)。
+
+**Team 仍未切换生产 UI 执行权。** 下一步需要把 task identity/lease 作为受信 Control 请求上下文传到普通 Thread/Run/Goal admission，再实现硬 reservation、持久停放/唤醒、完整子树取消和任务进度投影；在此之前不自动打开后台 Team。

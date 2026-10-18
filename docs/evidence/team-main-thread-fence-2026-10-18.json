@@ -1,0 +1,124 @@
+{
+  "schemaVersion": "crewon.team-main-thread-fence-evidence.v1",
+  "date": "2026-10-18",
+  "baselineCommit": "046f71c6c568f73adf5331ba10d03bea13b62cab",
+  "branch": "codex/runtime-concurrency-result-streaming",
+  "scope": "Main-thread admission and revision fence for the explicit experimental Team journal. No production UI cutover.",
+  "changes": [
+    "Task creation now fails closed if the same tenant/space/thread already has another coordinating Team task or a nonterminal ordinary Run. Existing finalAccepted tasks do not block a later task.",
+    "The leased coordinator captures the main message/Turn response revision. Before manager final sampling it compares the current main Thread revision to the captured revision. A concurrent window/user message yields team_task_main_thread_changed and is preserved; the Team does not overwrite it.",
+    "Member final sampling uses the current main Thread revision returned after the manager delegation and the normal expectedRevision CAS. A race after that read is rejected by the existing Control/Store revision fence.",
+    "Parent Store factories lazily import journal implementations and never migrate them during construction. Journal admission is explicit and remains outside production routing."
+  ],
+  "semantics": {
+    "ordinaryWritesDuringCoordination": "Not silently blocked by a UI flag. A concurrent main write is detected at the final fence and fails Team safely; this is deliberate until a trusted HTTP task context and reservation token are added.",
+    "childThreads": "Worker forks remain independent and may continue; main fence applies only to the original user-facing Thread.",
+    "cancellation": "Existing journal cancellation behavior is unchanged: new work is blocked, already-dispatched side effects are not retracted."
+  },
+  "verification": {
+    "teamIntegration": {
+      "tests": 32,
+      "passed": 32,
+      "failed": 0,
+      "skipped": 0,
+      "backends": ["sqlite", "postgres"],
+      "files": [
+        "apps/control-api/src/team-task-journal.integration.test.ts",
+        "apps/control-api/src/team-task-interruption.integration.test.ts",
+        "apps/control-api/src/team-turn-application.integration.test.ts"
+      ]
+    },
+    "teamFocusedSqlite": {
+      "tests": 12,
+      "passed": 12,
+      "failed": 0,
+      "skipped": 0
+    },
+    "adjacentRegression": {
+      "tests": 191,
+      "passed": 191,
+      "failed": 0,
+      "skipped": 2,
+      "note": "The two skips are existing environment/provider conditions from the selected adjacent suite."
+    },
+    "architecture": {
+      "tests": 37,
+      "passed": 37,
+      "failed": 0,
+      "skipped": 0
+    },
+    "typechecks": {
+      "application": "passed",
+      "store": "passed",
+      "controlApi": "passed",
+      "runtimeWorker": "passed"
+    },
+    "entryBoundary": "passed",
+    "format": "passed",
+    "diffWhitespace": "passed"
+  },
+  "testCases": [
+    "Both SQLite and PostgreSQL reject a second coordinating task on one main Thread and reject admission when an ordinary queued Run is already active.",
+    "After child work, another window appends CONCURRENT_USER_INPUT; Team stops with main-thread-changed, leaves the new message, and produces no final Team answer.",
+    "Manager-planned and role-directed plans, manager/member/final accepted response loss, Goal pause recovery, cancellation and storage-version rejection remain green.",
+    "The ordinary Run/Thread/Goal/Worker pool adjacent suite remains green after adding the fence."
+  ],
+  "cleanup": {
+    "dataDirectory": "/tmp/crewon-wf-pg-ai1hte94/data",
+    "listenAddresses": "",
+    "otherClients": 0,
+    "userSchemas": [],
+    "stoppedStatus": 3
+  },
+  "limitations": [
+    "No hard block is exposed to ordinary HTTP append/start routes yet; without a trusted task-context token, hard blocking would also block the Team coordinator itself. The revision fence is fail-closed and prevents overwrite.",
+    "No process kill, installed desktop, browser, real provider or performance acceptance.",
+    "Production Team admission, task projection/UI, persistent wake, full child cancellation propagation and autonomous subagent limits remain incomplete."
+  ],
+  "logs": {
+    "fullTeam": {
+      "localPath": "/tmp/crewon-team-reservation-full.log",
+      "sha256": "5eb21143cef05394c7fe258d43ecd4ad59b69e9f2967efe01d1a4d5bfd6c1362"
+    },
+    "sqliteTeam": {
+      "localPath": "/tmp/crewon-team-reservation-sqlite.log",
+      "sha256": "b144d7916d42164d89ac1e6f57e9435ce7b1525ada2c077e8dd438091375bc55"
+    },
+    "adjacent": {
+      "localPath": "/tmp/crewon-team-reservation-adjacent.log",
+      "sha256": "e077614aed7936be21e7e507c0f5dccbc74031a6c62b45e032354a2db42ba347"
+    },
+    "appTypecheck": {
+      "localPath": "/tmp/crewon-team-reservation-app-types.log",
+      "sha256": "0ee11f85fba473fec0c9429ea5bf06407fb083b06737b651a28cd517e11e63c3"
+    },
+    "storeTypecheck": {
+      "localPath": "/tmp/crewon-team-reservation-store-types.log",
+      "sha256": "5c9efc29dccf168531c61ed16f7a65111b113efc2e1e81fae43c3b40a67d55c1"
+    },
+    "controlTypecheck": {
+      "localPath": "/tmp/crewon-team-reservation-control-types.log",
+      "sha256": "4156428d53b3f97d9de611b4b2841dec260918eb4571ed5fa9c63ac97398aea0"
+    },
+    "workerTypecheck": {
+      "localPath": "/tmp/crewon-team-reservation-worker-types.log",
+      "sha256": "0723f9ec69a95cba4021c8ac79718e054ce8ef53bf58180f15f25974ce2ec6a6"
+    },
+    "boundaries": {
+      "localPath": "/tmp/crewon-team-reservation-boundaries.log",
+      "sha256": "0fbe8affac0dfc2a8083617c4f0fb474b34815d1b00222c41109b01677c4829d"
+    },
+    "entryBoundary": {
+      "localPath": "/tmp/crewon-team-reservation-entry-boundary.log",
+      "sha256": "bc758e5932a9f2268662d8f0b3ea26cd6c729eac0eb2bc610fd806b55f7bbc6c"
+    },
+    "format": {
+      "localPath": "/tmp/crewon-team-reservation-format-check.log",
+      "sha256": "9a2087ae12e6c8e06db131d1a71ef265a99f59c07e6dc1be48db2a0c00371a20"
+    },
+    "cleanup": {
+      "localPath": "/tmp/crewon-team-phase31-cleanup.json",
+      "sha256": "9741de9ad4161a7a8ae27c15bb01d405ba127ae6b12c057d84a1f13aacf875ec"
+    }
+  }
+}

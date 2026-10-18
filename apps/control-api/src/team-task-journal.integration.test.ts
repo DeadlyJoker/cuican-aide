@@ -752,3 +752,65 @@ for (const fault of ["partial", "future"] as const)
         );
     },
   );
+
+workflowDeploymentIntegrationTest(
+  "Team admission reserves one main thread and rejects a second coordinating task or an already-active ordinary Run",
+  async (t, fixture) => {
+    const f = await fixture(t);
+    const server = await f.control(null);
+    const worker = await f.worker();
+    worker.start();
+    const { thread, plan } = await prepare(server.client, true);
+    await worker.close();
+    const journal = await f.store.experimentalTeamTaskJournalStore();
+    await journal.migrate();
+    const base: TeamTaskIntent = {
+      schemaVersion: "crewon.team-task.v1",
+      ...f.actor,
+      taskId: "main-admission",
+      turn: {
+        threadId: thread.threadId,
+        expectedRevision: thread.revision,
+        content: originalTask,
+        plan,
+        responseMode: "manager",
+        managerResponseKind: "office",
+      },
+    };
+    await journal.create(base);
+    await assert.rejects(
+      journal.create({ ...base, taskId: "second-main-admission" }),
+      isCode("team_task_main_busy"),
+    );
+    const other = await server.client.createThread(
+      { title: "Active ordinary Run" },
+      "active-ordinary-thread",
+    );
+    const active = await server.client.createRun(
+      {
+        threadId: other.thread.threadId,
+        agentVersionId: plan.manager.agentVersionId,
+      },
+      "active-ordinary-run",
+    );
+    const activeIntent: TeamTaskIntent = {
+      ...base,
+      taskId: "active-run-admission",
+      turn: {
+        ...base.turn,
+        threadId: other.thread.threadId,
+        expectedRevision: other.thread.revision,
+      },
+    };
+    await assert.rejects(
+      journal.create(activeIntent),
+      isCode("team_task_run_active"),
+    );
+    const { run } = await server.client.getRun(active.run.runId);
+    await server.client.cancelRun(
+      active.run.runId,
+      { expectedRevision: run.revision },
+      "cleanup-active-run",
+    );
+  },
+);
