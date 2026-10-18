@@ -154,3 +154,13 @@ Foundation、Outline、Asset、MediaInput 和通用 Project 的 ServiceOwner 都
 4. **收敛插件 Owner 的重复机制和工作台页面状态。** 每次只迁移一个领域，证明代码及依赖减少，保留原始权限、故障恢复和视觉行为。
 
 本轮验证包括源码和调用链检查、AST 计数、实际 Vite 构建、现有启动预算检查、tsc 文件图、模块导入测量与会话读取调用计数。没有进行删代码实验、浏览器运行时 profile 或生产压力测试，因此不承诺可删除比例、提速百分比或内存收益。
+
+## 当前 HEAD 复核（2026-10-19）
+
+上文的部分请求计数绑定于旧基线 `24d7a6343100bc98f53594765fec923a4bf53271`，不能直接套用到当前 HEAD。当前代码已经具备有界的 `GET /api/v1/threads/:threadId/transcript-snapshot`：
+
+- `apps/control-api/src/thread-transcript-snapshot-route.ts` 在一次授权读取中返回消息窗口、Run 绑定、必要 Run 摘要和 authoritative active Run；
+- `apps/crewon-ui/src/lib/control-runtime/controlTranscriptRead.ts` 通过 `ControlApiClient.getThreadTranscriptSnapshot` 完成基础 transcript 读取；
+- `apps/crewon-ui/src/lib/control-runtime/controlTranscriptRead.test.ts` 明确断言历史 Run 和页外 active Run 只触发一个 HTTP 快照请求。
+
+因此“一个 transcript 读取必然发出消息窗口 + active Run + 每个历史 Run 的 12 次调用”不再是当前实现的事实，不能作为本分支的性能基线。当前 `controlThreadRuntime.#readThreadProjection` 仍会在快照前后读取 Thread head，并按配置读取 task-change ledger、工具历史和 Run plan；这些校验保留了 revision、eventSequence 和 hydration 期间一致性的实际价值。下一步如果减少 Thread head 请求，应以 `transcriptWindow.messageWindow.threadRevision/eventSequence` 为依据设计快照复用，并补充流式期间刷新、工具 hydration 竞态和旧 cursor 重绑定测试，不能只删除一次 `getThread`。
