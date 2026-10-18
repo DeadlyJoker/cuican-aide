@@ -815,3 +815,11 @@ Node 24 下该真实 harness 通过 1/1（约 1.3 秒），UI typecheck 和 dura
 durable Team 在 final Run 创建前现在会发布 bounded `preparing/working` Team progress，并在 Runtime 内保存 actor-scoped taskId。停止按钮在没有 active Run 时调用既有 `cancelTeamTask`；有 active Run 后继续调用原 `cancelRun`。任务完成、失败、取消或 Runtime close 都清理 task handle，不能跨 Thread 或跨 Runtime 复用。
 
 legacy Team 的 renderer coordinator、Run cancel 和默认 feature gate 未改变。Node 24 下 UI typecheck、durable Team/runtime/Control Office 相关测试 27 项通过；真实 standalone HTTP cancellation 回归仍为 2/2。
+
+## 第七十一批：自主子 agent 的 lineage/budget/capability 纯契约（2026-10-19）
+
+在继续接入自主触发前，先核对了现有 Workflow 与 Team 的关系边界。Workflow 的 `workflow_node_children` 绑定冻结 WorkflowVersion 和 DAG claim，Team journal 的 effect 记录 command/observation 回执；两者都不是可查询、可授权、可限额的通用 parent/child task graph。当前 RunState 也没有通用 `parentRunId`，因此没有直接扩展 Run 或把 effect JSON 当作子任务关系。
+
+本批新增 `@crewon/application/task-lineage-policy`：提供不可变、严格拒绝 getter/原型/未知字段的 lineage、deadline/depth/child/token/output budget 和 capability snapshot 校验，并保证 child capability 不跨 tenant/space/actor/principal/authority/runtime/policy/workspace，也不能提升 tool permission。该模块尚未接入 TeamTaskIntent、HTTP、数据库或默认 scheduler，不改变现有数据形状和执行路径。
+
+Node 24 验证：Application 全量 933 项中 895 项通过、38 项既有条件跳过；新增纯契约 5/5 通过；Application typecheck、边界检查、Prettier 和 diff 检查通过。下一步才是设计 SQLite/PostgreSQL 的一等 task-edge 存储和原子 child admission；在其完成前不开放模型自主 spawn。

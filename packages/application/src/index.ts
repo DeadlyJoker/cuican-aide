@@ -96,6 +96,7 @@ export * from "./workflow-execution-planning.ts";
 export * from "./workflow-child-run-preparation.ts";
 export * from "./workflow-run-composition-port.ts";
 export * from "./workflow-run-scheduler-port.ts";
+export * from "./task-lineage-policy.ts";
 export * from "./workflow-run-admission-store-port.ts";
 export * from "./workflow-run-application-service.ts";
 export * from "./tool-approval-store-port.ts";
