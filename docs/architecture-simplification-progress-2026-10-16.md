@@ -777,3 +777,17 @@ Node 24 下 UI tsc 和 durable adapter 单测通过。当前 adapter 已证明�
 durable Team UI 适配层原先在 `coordinating` snapshot 下无限轮询；即使后台已经收到取消请求，页面仍可能长期等待。现为 admission 前校验一个默认 15 分钟、可显式覆盖的 task deadline，deadline 覆盖从提交到最终结果的等待；发现 `cancelRequested` 时立即结束等待并返回明确错误。超时只结束当前 UI 等待，不取消或删除服务端持久任务，页面可通过后续读取恢复状态。
 
 新增取消和超时单测。Node 24 UI typecheck 与 durable Team gate/adapter 共 4 项测试通过；默认 `legacy` feature gate、HTTP contract 和后台 scheduler 均未改变。
+
+## 第六十六批：Standalone durable Team 实验入口（2026-10-19）
+
+为完成真实 UI 验收增加了一个默认关闭的实验入口 `CREWON_EXPERIMENTAL_DURABLE_TEAM_TASKS=1`。Control API 只有在 plain standalone SQLite 组合下才接受该 flag，并改用已有 `createStandaloneTeamTaskControlApi`；Production、PostgreSQL、桌面插件和扩展组合全部 fail closed。Vite 将同一环境值传给 renderer，UI 仅对精确值 `1` 设置 `teamExecutionMode: "durableTask"`，缺省和 `0` 继续走 legacy，其他值拒绝。
+
+本地显式验收入口为：
+
+```bash
+CREWON_EXPERIMENTAL_DURABLE_TEAM_TASKS=1 pnpm crewon:dev
+```
+
+该命令只适用于 standalone SQLite 开发数据目录，不能用于生产或已有插件/扩展组合。
+
+该入口没有新增协议、身份或执行引擎，仍复用已有 Team admission、scheduler、Worker Run 和 Run SSE。Node 24 下 Control API/UI typecheck 通过，UI durable mode/adapter 共 7 项通过；真实 standalone SQLite HTTP admission/cancel 与 scheduler 回归 2/2 通过。当前仍需在实际桌面页面中用该 flag 验收提交、刷新、最终消息显示和取消按钮，未默认启用。

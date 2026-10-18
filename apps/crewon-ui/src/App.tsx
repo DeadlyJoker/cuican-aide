@@ -115,6 +115,7 @@ import { useLocalPluginSourceImportSettingsRecovery } from "./lib/plugins/useLoc
 import { useLocalPluginExecutionSetupSettingsRecovery } from "./lib/plugins/useLocalPluginExecutionSetupSettingsRecovery";
 import type { CapabilityEditorDraft } from "./lib/capability/capabilityCatalog";
 import { useControlThreadRuntime } from "./lib/control-runtime/useControlThreadRuntime";
+import { readControlTeamExecutionMode } from "./lib/control-runtime/controlTeamExecutionMode";
 import { TranscriptNavigationScope } from "./components/TranscriptWindowControls";
 import { selectThreadRunPlanProjection } from "./lib/control-runtime/controlRunPlanProjection";
 import type { ControlToolApprovalRequest } from "./lib/control-runtime/controlToolApprovalPresentation";
@@ -266,6 +267,7 @@ export function App({
     appendStreamingTextDelta: threadState.appendStreamingTextDelta,
     client: controlClient,
     manageThreads: true,
+    teamExecutionMode: readControlTeamExecutionMode(),
     onExecutionIntentMismatch: () => {
       setNotice({
         text:

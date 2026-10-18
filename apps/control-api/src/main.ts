@@ -35,6 +35,7 @@ import {
   createStandaloneControlApiWithExtensions,
   createStandaloneControlApiWithPlugins,
 } from "./standalone-composition.ts";
+import { createStandaloneTeamTaskControlApi } from "./standalone-team-task-control-api.ts";
 import { loadDesktopPluginConfiguration } from "./desktop-plugin-configuration.ts";
 import { composeDesktopProjectStartup } from "./desktop-project-startup.ts";
 import { createDesktopNativeProjectWorkspaceRuntime } from "./desktop-native-project-workspace-runtime.ts";
@@ -118,6 +119,18 @@ const desktopEnvironment = desktopTaskEnvironment ?? process.env;
 const connectionString = desktopEnvironment.CREWON_CONTROL_DATABASE_URL?.trim();
 const desktopPluginBootstrapPath =
   desktopEnvironment.CREWON_DESKTOP_PLUGIN_BOOTSTRAP_PATH;
+const experimentalDurableTeamTasks = parseExperimentalDurableTeamTasks(
+  process.env.CREWON_EXPERIMENTAL_DURABLE_TEAM_TASKS,
+);
+if (
+  experimentalDurableTeamTasks &&
+  (securityMode !== "standalone" ||
+    connectionString ||
+    desktopTaskEnvironment !== undefined ||
+    desktopPluginBootstrapPath !== undefined ||
+    extensionEnvironment !== undefined)
+)
+  throw new Error("experimental_durable_team_tasks_requires_plain_standalone");
 if (
   desktopTaskEnvironment !== undefined &&
   (securityMode !== "standalone" || connectionString)
@@ -483,10 +496,15 @@ try {
                 : { extensionWorker: extensionEnvironment.extensionWorker }),
             })
           : extensionEnvironment === undefined
-            ? createStandaloneControlApi({
-                ...standaloneConfig,
-                databasePath,
-              })
+            ? experimentalDurableTeamTasks
+              ? await createStandaloneTeamTaskControlApi({
+                  ...standaloneConfig,
+                  databasePath,
+                })
+              : createStandaloneControlApi({
+                  ...standaloneConfig,
+                  databasePath,
+                })
             : await createStandaloneControlApiWithExtensions({
                 ...standaloneConfig,
                 databasePath,
@@ -633,6 +651,12 @@ function parseNonNegativeInteger(value: string, code: string): number {
     throw new Error(code);
   }
   return parsed;
+}
+
+function parseExperimentalDurableTeamTasks(value: string | undefined): boolean {
+  if (value === undefined || value === "0" || value === "") return false;
+  if (value === "1") return true;
+  throw new Error("CREWON_EXPERIMENTAL_DURABLE_TEAM_TASKS_invalid");
 }
 
 function configuredPimSandbox(

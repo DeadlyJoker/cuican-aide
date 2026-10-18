@@ -204,6 +204,8 @@ export default defineConfig(({ mode }) => {
       "import.meta.env.VITE_AGENT_PLATFORM_RUNTIME_BASE_URL": JSON.stringify(
         agentPlatformRuntimeBaseUrl.replace(/\/+$/, ""),
       ),
+      "import.meta.env.VITE_CREWON_EXPERIMENTAL_DURABLE_TEAM_TASKS":
+        JSON.stringify(env.CREWON_EXPERIMENTAL_DURABLE_TEAM_TASKS ?? ""),
     },
     resolve: {
       alias: {
