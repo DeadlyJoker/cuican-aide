@@ -66,6 +66,8 @@ export * from "./workflow-recovery-context.ts";
 
 export * from "./workflow-human-gate-review-contract.ts";
 
+export * from "./team-task-control-contract.ts";
+
 export * from "./workflow-catalog-contract.ts";
 
 export * from "./workflow-run-list-contract.ts";

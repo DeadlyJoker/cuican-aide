@@ -751,3 +751,11 @@ Node 24 真实 SQLite Control/Worker/合成模型回归通过：创建 durable T
 Team intent 记录原子提交后的主消息 sequence。执行恢复时可以按固定 sequence 重新读取并校验消息，再把已接受消息传给 Team coordinator，旧的无 admission sequence 任务继续使用兼容的追加路径。重复 taskId 先读取 journal 并比较去掉派生 sequence 后的完整意图；匹配请求直接重放，不再以旧 Thread revision 重新准备消息，输入变化返回冲突。
 
 Node 24 验证：应用层 admission service 的准备、重放和冲突单测 3/3 通过；真实 SQLite Control/Worker 组合的原子提交、重放和过期 revision 回滚专项 3/3 通过。Store、Application、Control API typecheck 通过；PostgreSQL 专项仍因当前环境没有 `CREWON_TEST_POSTGRES_URL` 跳过。当前没有新增 HTTP 路由、公开凭据、schema version 或 UI 入口；下一批先为这个原子边界补受控的 Control contract 和结果读取，再接 standalone async composition。
+
+## 第六十二批：Team admission Control contract 与 standalone async composition（2026-10-19）
+
+本批为 admission 原子边界增加显式 Control contract：`POST /api/v1/team-tasks:admit-v1` 使用 actor-scoped `Idempotency-Key` 作为 taskId，body 只包含 Thread CAS、用户输入、冻结 Team plan、响应模式和工具权限；服务端不接受 actor、tenant、principal 或 scheduler lease。请求和响应均做有界、精确字段复制，拒绝 getter、循环对象、重复成员/target 和 manager-only 字段越界。
+
+新增 `createStandaloneTeamTaskControlApi` async composition，明确迁移顺序为：同库 admission Store → Control application operations → durable Team scheduler。同步 `createStandaloneControlApi` 和 Production composition 未改变；Team scheduler 仍只有这个显式 standalone composition 才会迁移 journal、启动 pump 和响应 admission wake。应用关闭时先停止 scheduler 和 admission Store，再关闭 Control 自有资源，避免后台执行使用已关闭的 application services。
+
+真实 SQLite HTTP/Worker/Team scheduler 回归通过：admission 返回 201，scheduler 被 wake 后完成 Producer/Verifier/Final，主 Thread 中原始用户输入只出现一次。Contracts parser 4/4、Control/Store/Application typecheck 通过；PostgreSQL 仍按环境未配置而跳过。当前仍未增加 Team snapshot/SSE、取消/审批路由，也未接入 renderer；下一步先补只读结果快照和取消语义，再让 UI 从旧 coordinator 切换到这个入口。

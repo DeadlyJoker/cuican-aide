@@ -89,7 +89,8 @@ export async function startControlTeamTurn(
             input.threadId,
             {
               expectedRevision: forkSource.thread.revision,
-              throughHistorySequence: null,
+              throughHistorySequence:
+                input.acceptedThroughHistorySequence ?? null,
             },
             input.idempotencyKey("team.manager.plan.fork"),
           ),
@@ -100,7 +101,7 @@ export async function startControlTeamTurn(
         input.threadId,
         {
           expectedRevision: forkSource.thread.revision,
-          throughHistorySequence: null,
+          throughHistorySequence: input.acceptedThroughHistorySequence ?? null,
         },
         input.idempotencyKey(`team.fork.${worker.memberId}`),
       ),

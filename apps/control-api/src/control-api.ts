@@ -1,6 +1,7 @@
 import { registerRunCancellationRoutes } from "./run-cancellation-routes.ts";
 import { registerWorkflowCatalogRoutes } from "./workflow-catalog-routes.ts";
 import { registerWorkflowStartRoute } from "./workflow-start-route.ts";
+import { registerTeamTaskAdmissionRoute } from "./team-task-admission-route.ts";
 import {
   registerWorkflowControlRoutes,
   type WorkflowControlServices,
@@ -332,6 +333,8 @@ export type ControlApiDependencies = Readonly<WorkflowControlServices & {
   heartbeatIntervalMs?: number | null;
   activationGate?: ProcessLocalActivationGate;
   storageAdmission?: StorageAdmissionPort;
+  teamTaskAdmission?: import("@crewon/application/team-task-admission").TeamTaskAdmissionApplicationService | null;
+  teamTaskAdmissionWakeup?: () => void;
 }>;
 
 const MANUAL_ONLY_AUTOMATION_SCHEDULE = {
@@ -1478,6 +1481,11 @@ export function buildControlApi(
   registerThreadTranscriptSnapshotRoute(app, dependencies);
   registerWorkflowCatalogRoutes(app, dependencies);
   registerWorkflowStartRoute(app, dependencies);
+  registerTeamTaskAdmissionRoute(app, {
+    identity: dependencies.identity,
+    service: dependencies.teamTaskAdmission,
+    wake: dependencies.teamTaskAdmissionWakeup,
+  });
   registerRunCancellationRoutes(app, dependencies);
   registerWorkflowControlRoutes(app, {
     ...dependencies,

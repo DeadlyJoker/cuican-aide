@@ -73,9 +73,17 @@ export class TeamTaskAdmissionApplicationService {
       );
     }
     const message = prepared.messages[0]!;
+    const history = prepared.history.items;
+    if (history.length !== 1 || history[0]?.sequence === undefined) {
+      throw new ApplicationError(
+        "internal",
+        "team_task_main_history_preparation_invalid",
+      );
+    }
     const intent = captureTeamTaskIntent({
       ...base,
       mainMessageSequence: message.sequence,
+      mainHistorySequence: history[0].sequence - 1,
     });
     return this.#journal.admit({ intent, thread: prepared });
   }
@@ -120,8 +128,10 @@ function assertReplayIntent(
   const strip = (value: TeamTaskIntent) => {
     const copy = structuredClone(value) as {
       mainMessageSequence?: number;
+      mainHistorySequence?: number;
     };
     delete copy.mainMessageSequence;
+    delete copy.mainHistorySequence;
     return canonicalJson(copy);
   };
   if (strip(actual) !== strip(expected)) {

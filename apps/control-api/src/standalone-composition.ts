@@ -173,6 +173,10 @@ type ControlApiCompositionConfig = Readonly<{
   /** Borrowed authority port, supplied explicitly by its installed historical runtime owner. */
   pluginQueryHost?: PluginQueryHostPort;
   creativeProjects?: CreativeProjectCompositionConfig;
+  /** Explicit standalone-only Team admission service; production remains opt-in. */
+  teamTaskAdmission?: import("@crewon/application/team-task-admission").TeamTaskAdmissionApplicationService;
+  teamTaskAdmissionWakeup?: () => void;
+  teamTaskAdmissionClose?: () => void | Promise<void>;
 }>;
 
 export type StandaloneControlApiConfig = ControlApiCompositionConfig &
@@ -980,12 +984,15 @@ function composeControlApi(
       heartbeatIntervalMs: config.heartbeatIntervalMs,
       activationGate: config.activationGate,
       storageAdmission: storageCapacity.admission,
+      teamTaskAdmission: config.teamTaskAdmission,
+      teamTaskAdmissionWakeup: config.teamTaskAdmissionWakeup,
     });
     outboxDispatcher.start();
     preparedPlugins?.runtime.startProjectTextPlans?.();
     automationScheduler.start();
     artifactMaintenance.start();
     app.addHook("onClose", async () => {
+      await config.teamTaskAdmissionClose?.();
       if (
         preparedExtensions !== undefined ||
         preparedPlugins !== undefined ||

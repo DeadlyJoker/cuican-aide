@@ -72,7 +72,7 @@ function preparedThread() {
         proposedPlan: null,
       },
     ],
-    history: { expectedLastSequence: 6, items: [] },
+    history: { expectedLastSequence: 6, items: [{ sequence: 7 }] },
   } as never;
 }
 

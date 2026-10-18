@@ -321,6 +321,11 @@ export async function executeTeamTask(input: {
           ? {}
           : { runDeadlineMs: input.runDeadlineMs }),
         ...(acceptedMessage === undefined ? {} : { acceptedMessage }),
+        ...(task.intent.mainHistorySequence === undefined
+          ? {}
+          : {
+              acceptedThroughHistorySequence: task.intent.mainHistorySequence,
+            }),
         ...(input.signal === undefined ? {} : { signal: input.signal }),
       });
       guard();

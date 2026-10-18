@@ -54,6 +54,12 @@ import {
   normalizeThreadViewWorkspace,
 } from "@crewon/contracts";
 import {
+  parseTeamTaskAdmissionRequest,
+  parseTeamTaskAdmissionResponse,
+  type TeamTaskAdmissionRequest,
+  type TeamTaskAdmissionResponse,
+} from "@crewon/contracts";
+import {
   MAX_OFFICE_THREAD_RESPONSE_BYTES,
   parseOfficeThreadResponse,
   parseOfficeThreadMutationResponse,
@@ -1056,7 +1062,10 @@ export class ControlApiClient {
     const parsedQuery = parseThreadMessageWindowQuery(query, threadId);
     const response = await this.#json<unknown>(
       "GET",
-      withQuery(`/api/v1/threads/${resourceId(threadId)}/transcript-snapshot`, query),
+      withQuery(
+        `/api/v1/threads/${resourceId(threadId)}/transcript-snapshot`,
+        query,
+      ),
       null,
       {
         ...options,
@@ -1065,9 +1074,15 @@ export class ControlApiClient {
       },
     );
     try {
-      return parseThreadTranscriptSnapshotResponse(response, threadId, parsedQuery);
+      return parseThreadTranscriptSnapshotResponse(
+        response,
+        threadId,
+        parsedQuery,
+      );
     } catch {
-      throw new ControlApiProtocolError("control_client_transcript_snapshot_invalid");
+      throw new ControlApiProtocolError(
+        "control_client_transcript_snapshot_invalid",
+      );
     }
   }
 
@@ -1368,6 +1383,33 @@ export class ControlApiClient {
         expectedStatuses: [200, 201],
       },
     );
+  }
+
+  async admitTeamTask(
+    body: TeamTaskAdmissionRequest,
+    idempotencyKey: string,
+    options: ControlApiRequestOptions = {},
+  ): Promise<TeamTaskAdmissionResponse> {
+    const parsed = parseTeamTaskAdmissionRequest(body);
+    const response = await this.#json<unknown>(
+      "POST",
+      "/api/v1/team-tasks:admit-v1",
+      parsed,
+      {
+        ...options,
+        idempotencyKey,
+        requireCsrf: true,
+        requireIdempotency: true,
+        expectedStatuses: [200, 201],
+      },
+    );
+    try {
+      return parseTeamTaskAdmissionResponse(response);
+    } catch {
+      throw new ControlApiProtocolError(
+        "control_client_team_task_admission_invalid",
+      );
+    }
   }
 
   listWorkflowRuns(

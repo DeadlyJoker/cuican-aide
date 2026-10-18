@@ -34,6 +34,8 @@ export type TeamTaskIntent = TeamTaskLocator &
     principalId: string;
     /** Sequence of the atomically admitted user message, when present. */
     mainMessageSequence?: number;
+    /** Model-history boundary immediately before the atomically admitted message. */
+    mainHistorySequence?: number;
     turn: TeamTaskTurn;
   }>;
 export type TeamTaskFence = TeamTaskLocator &
@@ -234,6 +236,9 @@ export function captureTeamTaskIntent(input: TeamTaskIntent): TeamTaskIntent {
     Object.keys(value).sort().join() !==
       [
         "actorId",
+        ...(value.mainHistorySequence === undefined
+          ? []
+          : ["mainHistorySequence"]),
         ...(value.mainMessageSequence === undefined
           ? []
           : ["mainMessageSequence"]),
@@ -253,6 +258,12 @@ export function captureTeamTaskIntent(input: TeamTaskIntent): TeamTaskIntent {
     value.mainMessageSequence !== undefined &&
     (!Number.isSafeInteger(value.mainMessageSequence) ||
       value.mainMessageSequence < 1)
+  )
+    teamJournalFail("team_task_intent_invalid");
+  if (
+    value.mainHistorySequence !== undefined &&
+    (!Number.isSafeInteger(value.mainHistorySequence) ||
+      value.mainHistorySequence < 0)
   )
     teamJournalFail("team_task_intent_invalid");
   const turn = value.turn;

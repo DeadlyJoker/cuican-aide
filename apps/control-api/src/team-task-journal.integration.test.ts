@@ -42,11 +42,20 @@ workflowDeploymentIntegrationTest(
     });
     const journal = await server.store.experimentalTeamTaskJournalStore();
     await journal.migrate();
+    const thread = await threads.prepareAppendMessage(server.actor, {
+      kind: "thread.message.append",
+      idempotencyKey: "atomic-admission-message",
+      threadId: prepared.thread.threadId,
+      expectedRevision: prepared.thread.revision,
+      role: "user",
+      content: originalTask,
+    });
     const intent: TeamTaskIntent = {
       schemaVersion: "crewon.team-task.v1",
       ...server.actor,
       taskId: "atomic-admission",
       mainMessageSequence: prepared.thread.lastMessageSequence + 1,
+      mainHistorySequence: thread.history.items[0]!.sequence - 1,
       turn: {
         threadId: prepared.thread.threadId,
         expectedRevision: prepared.thread.revision,
@@ -56,14 +65,6 @@ workflowDeploymentIntegrationTest(
         managerResponseKind: "office",
       },
     };
-    const thread = await threads.prepareAppendMessage(server.actor, {
-      kind: "thread.message.append",
-      idempotencyKey: "atomic-admission-message",
-      threadId: intent.turn.threadId,
-      expectedRevision: intent.turn.expectedRevision,
-      role: "user",
-      content: intent.turn.content,
-    });
     const committed = await journal.admit({ intent, thread });
     assert.equal(committed.disposition, "committed");
     assert.equal(committed.thread?.disposition, "committed");
@@ -102,11 +103,20 @@ workflowDeploymentIntegrationTest(
     });
     const journal = await server.store.experimentalTeamTaskJournalStore();
     await journal.migrate();
+    const thread = await threads.prepareAppendMessage(server.actor, {
+      kind: "thread.message.append",
+      idempotencyKey: "atomic-admission-stale-message",
+      threadId: prepared.thread.threadId,
+      expectedRevision: prepared.thread.revision,
+      role: "user",
+      content: originalTask,
+    });
     const intent: TeamTaskIntent = {
       schemaVersion: "crewon.team-task.v1",
       ...server.actor,
       taskId: "atomic-admission-stale",
       mainMessageSequence: prepared.thread.lastMessageSequence + 1,
+      mainHistorySequence: thread.history.items[0]!.sequence - 1,
       turn: {
         threadId: prepared.thread.threadId,
         expectedRevision: prepared.thread.revision,
@@ -116,14 +126,6 @@ workflowDeploymentIntegrationTest(
         managerResponseKind: "office",
       },
     };
-    const thread = await threads.prepareAppendMessage(server.actor, {
-      kind: "thread.message.append",
-      idempotencyKey: "atomic-admission-stale-message",
-      threadId: intent.turn.threadId,
-      expectedRevision: intent.turn.expectedRevision,
-      role: "user",
-      content: intent.turn.content,
-    });
     await control.client.appendThreadMessage(
       intent.turn.threadId,
       {

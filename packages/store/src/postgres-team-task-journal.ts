@@ -241,9 +241,12 @@ export class ExperimentalPostgresTeamTaskJournal
     if (input.thread.teamTaskFence !== undefined)
       teamJournalFail("team_task_admission_fence_invalid");
     const message = input.thread.messages[0];
+    const history = input.thread.history.items[0];
     if (
       input.thread.messages.length !== 1 ||
       intent.mainMessageSequence !== message?.sequence ||
+      input.thread.history.items.length !== 1 ||
+      intent.mainHistorySequence !== (history?.sequence ?? 0) - 1 ||
       message.role !== "user" ||
       message.threadId !== intent.turn.threadId ||
       message.content !== intent.turn.content

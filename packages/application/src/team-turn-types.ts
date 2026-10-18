@@ -139,6 +139,8 @@ export type StartControlTeamTurnInput = Readonly<{
   toolPermissionMode?: ToolPermissionMode;
   /** Main user message already committed by durable Team admission. */
   acceptedMessage?: AppendThreadMessageResponse;
+  /** History boundary before the admitted message, for fork creation. */
+  acceptedThroughHistorySequence?: number;
   onRunStarted?: (run: RunView) => void;
   onTaskAccepted?: (message: MessageView) => void;
   onTeamRunAccepted?: (
