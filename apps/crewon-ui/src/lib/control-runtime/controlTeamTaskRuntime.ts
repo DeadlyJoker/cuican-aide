@@ -79,11 +79,14 @@ export async function startControlTeamTask(
         : {}),
     },
     input.idempotencyKey("team.admit"),
+    input.signal ? { signal: input.signal } : {},
   );
   const message = await readAcceptedMessage(input.client, {
     threadId: accepted.task.threadId,
     sequence: accepted.task.mainMessageSequence,
     content: input.content,
+    deadlineAt: taskDeadlineAt,
+    signal: input.signal,
   });
   input.onTaskAccepted?.(message);
 
@@ -94,27 +97,49 @@ export async function startControlTeamTask(
   });
   if (snapshot.task.resultRunId === null)
     throw new Error("control_team_task_result_missing");
-  const run = await input.client.getRun(snapshot.task.resultRunId);
+  const run = await input.client.getRun(
+    snapshot.task.resultRunId,
+    input.signal ? { signal: input.signal } : {},
+  );
   const started = { message, run: run.run } satisfies ControlTeamTurnResult;
   input.onFinalTurnStarted?.(started);
   await consumeFinalRun(input, run.run);
   return {
     message,
-    run: (await input.client.getRun(run.run.runId)).run,
+    run: (
+      await input.client.getRun(
+        run.run.runId,
+        input.signal ? { signal: input.signal } : {},
+      )
+    ).run,
   };
 }
 
 async function readAcceptedMessage(
   client: DurableTeamClient,
-  input: { threadId: string; sequence: number; content: string },
+  input: {
+    threadId: string;
+    sequence: number;
+    content: string;
+    deadlineAt: number;
+    signal?: AbortSignal;
+  },
 ): Promise<MessageView> {
   let cursor: string | null = null;
   let message: MessageView | undefined;
   for (let page = 0; page < 100 && message === undefined; page += 1) {
-    const response = await client.listThreadMessages(input.threadId, {
-      cursor,
-      limit: 100,
-    });
+    throwIfAborted(input.signal);
+    throwIfDeadlineExceeded(input.deadlineAt);
+    const response = await client.listThreadMessages(
+      input.threadId,
+      {
+        cursor,
+        limit: 100,
+      },
+      input.signal ? { signal: input.signal } : {},
+    );
+    throwIfAborted(input.signal);
+    throwIfDeadlineExceeded(input.deadlineAt);
     message = response.data.find(
       (candidate) => candidate.sequence === input.sequence,
     );
@@ -140,7 +165,10 @@ async function waitForFinalTask(
   let delayMs = Math.max(20, Math.min(input.delayMs, 5_000));
   for (;;) {
     throwIfAborted(input.signal);
-    const snapshot = await client.getTeamTask(taskId);
+    const snapshot = await client.getTeamTask(
+      taskId,
+      input.signal ? { signal: input.signal } : {},
+    );
     if (snapshot.task.status === "finalAccepted") return snapshot;
     if (snapshot.task.cancelRequested)
       throw new Error("control_team_task_cancel_requested");
@@ -191,6 +219,11 @@ async function consumeFinalRun(
 function throwIfAborted(signal?: AbortSignal): void {
   if (!signal?.aborted) return;
   throw signal.reason ?? new DOMException("Aborted", "AbortError");
+}
+
+function throwIfDeadlineExceeded(deadlineAt: number): void {
+  if (Date.now() >= deadlineAt)
+    throw new Error("control_team_task_deadline_exceeded");
 }
 
 function sleep(delayMs: number, signal?: AbortSignal): Promise<void> {

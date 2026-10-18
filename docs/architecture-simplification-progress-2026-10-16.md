@@ -791,3 +791,7 @@ CREWON_EXPERIMENTAL_DURABLE_TEAM_TASKS=1 pnpm crewon:dev
 该命令只适用于 standalone SQLite 开发数据目录，不能用于生产或已有插件/扩展组合。
 
 该入口没有新增协议、身份或执行引擎，仍复用已有 Team admission、scheduler、Worker Run 和 Run SSE。Node 24 下 Control API/UI typecheck 通过，UI durable mode/adapter 共 7 项通过；真实 standalone SQLite HTTP admission/cancel 与 scheduler 回归 2/2 通过。当前仍需在实际桌面页面中用该 flag 验收提交、刷新、最终消息显示和取消按钮，未默认启用。
+
+## 第六十七批：Durable Team 请求取消边界（2026-10-19）
+
+将 UI 适配层的关闭 signal 继续传入 admission、消息分页、Team snapshot 和最终 Run 查询，并在消息分页前后检查同一 task deadline，避免网络请求或历史分页成为无界等待点。Node 24 下 durable Team 相关 UI 测试仍为 7/7 通过。
