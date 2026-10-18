@@ -7,7 +7,8 @@ import {
 } from "@crewon/control-client";
 import { resolveControlTeamPlan } from "@crewon/application/team-turn";
 
-export const teamOperations = createControlApiTeamOperations;
+export const teamOperations = (client: ControlApiClient) =>
+  createControlApiTeamOperations(client, { preserveIdentity: true });
 
 export const originalTask =
   "TEAM_ORIGINAL: verify the release, preserve conflicting evidence.";

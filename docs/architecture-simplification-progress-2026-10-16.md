@@ -700,7 +700,9 @@ Node 24 定向回归：Application execution-host、scheduler 和 Runtime Worker
 
 本批没有新增 HTTP、认证或凭据，ControlApiClient 的请求和 fence header 行为保持不变。该 facade 只是未来显式 Team Host 的 transport adapter，尚未把 Worker scheduler 接入生产身份，也没有改变默认关闭策略。
 
-Node 24 验证：Control Client 与 Control API typecheck 通过；facade 单测及 SQLite Team journal recovery/unknown effect/admission 共 21 项通过，10 项 PostgreSQL 场景因环境未提供测试库而跳过；Prettier 和 diff 检查通过。
+默认 facade 现为不可变 fence 绑定：每次 `withTeamTaskFence` 返回独立 transport，避免 scheduler 并发多个 Team task 时互相覆盖 fence。仅测试故障注入使用显式 `preserveIdentity` 模式，以保留提交后进程退出等恢复场景的 operation 替换能力。
+
+Node 24 验证：Control Client 与 Control API typecheck 通过；facade 单测及 SQLite Team journal recovery/unknown effect/admission 共 22 项，其中 12 项通过、10 项 PostgreSQL 场景因环境未提供测试库而跳过；Prettier 和 diff 检查通过。
 
 ## 第五十五批：Control 身份配置与后台 Team Host 边界（2026-10-19）
 

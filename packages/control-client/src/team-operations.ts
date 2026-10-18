@@ -17,11 +17,7 @@ type TeamOperationNames =
   | "setThreadGoalWithExecutionIntentV1"
   | "startTurn";
 
-/**
- * Control operations used by a durable Team host. The facade keeps its own
- * identity when a fence is attached so recovery tests and hosts can retain
- * operation-level instrumentation across the rebinding.
- */
+/** Control operations used by a durable Team host. */
 export type ControlApiTeamOperations = Pick<
   ControlApiClient,
   TeamOperationNames
@@ -31,7 +27,9 @@ export type ControlApiTeamOperations = Pick<
 
 export function createControlApiTeamOperations(
   client: ControlApiClient,
+  options: Readonly<{ preserveIdentity?: boolean }> = {},
 ): ControlApiTeamOperations {
+  if (!options.preserveIdentity) return immutableFacade(client);
   let active = client;
   const result: ControlApiTeamOperations = {
     withTeamTaskFence: (fence: ControlApiTeamTaskFence) => {
@@ -71,4 +69,26 @@ export function createControlApiTeamOperations(
       active.startTurn(...args),
   };
   return result;
+}
+
+/** Returns a fence-bound facade without mutating another Team's transport. */
+function immutableFacade(client: ControlApiClient): ControlApiTeamOperations {
+  return {
+    withTeamTaskFence: (fence) =>
+      immutableFacade(client.withTeamTaskFence(fence)),
+    appendThreadMessage: (...args) => client.appendThreadMessage(...args),
+    authorizeOfficeRun: (...args) => client.authorizeOfficeRun(...args),
+    createRun: (...args) => client.createRun(...args),
+    forkThread: (...args) => client.forkThread(...args),
+    getExecutionIntentCapability: (...args) =>
+      client.getExecutionIntentCapability(...args),
+    getOffice: (...args) => client.getOffice(...args),
+    getRun: (...args) => client.getRun(...args),
+    getThread: (...args) => client.getThread(...args),
+    getThreadGoal: (...args) => client.getThreadGoal(...args),
+    listThreadMessages: (...args) => client.listThreadMessages(...args),
+    setThreadGoalWithExecutionIntentV1: (...args) =>
+      client.setThreadGoalWithExecutionIntentV1(...args),
+    startTurn: (...args) => client.startTurn(...args),
+  };
 }
