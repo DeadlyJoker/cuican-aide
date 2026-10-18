@@ -1,9 +1,13 @@
 import assert from "node:assert/strict";
 import { setTimeout } from "node:timers/promises";
 import type { ModelRequest } from "@crewon/agent-kernel";
-import type { ControlApiClient } from "@crewon/control-client";
-import type { ControlTeamRuntimeClient } from "@crewon/application/team-turn";
+import {
+  createControlApiTeamOperations,
+  type ControlApiClient,
+} from "@crewon/control-client";
 import { resolveControlTeamPlan } from "@crewon/application/team-turn";
+
+export const teamOperations = createControlApiTeamOperations;
 
 export const originalTask =
   "TEAM_ORIGINAL: verify the release, preserve conflicting evidence.";
@@ -95,31 +99,4 @@ export async function prepare(client: ControlApiClient, roleDirected: boolean) {
     thread: (await client.getThread(history.thread.threadId)).thread,
     plan,
   };
-}
-
-export function teamOperations(
-  client: ControlApiClient,
-): ControlTeamRuntimeClient {
-  let active = client;
-  const result: ControlTeamRuntimeClient = {
-    withTeamTaskFence: (fence) => {
-      active = client.withTeamTaskFence(fence);
-      return result;
-    },
-    appendThreadMessage: (...args) => active.appendThreadMessage(...args),
-    authorizeOfficeRun: (...args) => active.authorizeOfficeRun(...args),
-    createRun: (...args) => active.createRun(...args),
-    forkThread: (...args) => active.forkThread(...args),
-    getExecutionIntentCapability: (...args) =>
-      active.getExecutionIntentCapability(...args),
-    getOffice: (...args) => active.getOffice(...args),
-    getRun: (...args) => active.getRun(...args),
-    getThread: (...args) => active.getThread(...args),
-    getThreadGoal: (...args) => active.getThreadGoal(...args),
-    listThreadMessages: (...args) => active.listThreadMessages(...args),
-    setThreadGoalWithExecutionIntentV1: (...args) =>
-      active.setThreadGoalWithExecutionIntentV1(...args),
-    startTurn: (...args) => active.startTurn(...args),
-  };
-  return result;
 }

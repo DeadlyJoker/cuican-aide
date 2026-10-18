@@ -693,3 +693,11 @@ Node 24 的 Application scheduler 定向测试 6/6 通过，新增用例验证 c
 旧的 `execute(fence, signal)` 仍保留为实验/测试宿主兼容入口，没有把任意回调误升为生产授权。生产 `main.ts` 仍未构造 Host，因此默认 Team scheduler 继续关闭；下一步可以在明确的 Control service identity 和 operations adapter 验收后，替换实验回调，而不再扩张 scheduler 本身。
 
 Node 24 定向回归：Application execution-host、scheduler 和 Runtime Worker composition 共 25 项通过；Application、Runtime Worker typecheck、Prettier 和 diff 检查通过。新增测试还证明 scope 错误不会访问 journal，模糊配置不会先迁移 Team schema。
+
+## 第五十四批：Control Team operations facade 收敛（2026-10-19）
+
+将原先只存在于 Control 集成测试 support 中的 Team operations 转发器提取为 `@crewon/control-client` 的 `createControlApiTeamOperations`。它统一转发 Team 所需的 Control API 方法，并在绑定 `teamTaskFence` 后返回同一个 facade，保留 operation 级故障注入和恢复测试所需的可替换方法；直接返回新 `ControlApiClient` 会丢失这些替换，不能作为等价简化。
+
+本批没有新增 HTTP、认证或凭据，ControlApiClient 的请求和 fence header 行为保持不变。该 facade 只是未来显式 Team Host 的 transport adapter，尚未把 Worker scheduler 接入生产身份，也没有改变默认关闭策略。
+
+Node 24 验证：Control Client 与 Control API typecheck 通过；facade 单测及 SQLite Team journal recovery/unknown effect/admission 共 21 项通过，10 项 PostgreSQL 场景因环境未提供测试库而跳过；Prettier 和 diff 检查通过。
