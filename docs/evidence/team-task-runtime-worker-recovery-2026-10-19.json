@@ -1,0 +1,36 @@
+{
+  "schemaVersion": "crewon.evidence.v0",
+  "kind": "team-task-runtime-worker-recovery",
+  "date": "2026-10-19",
+  "branch": "codex/runtime-concurrency-result-streaming",
+  "baseCommit": "bda446b01",
+  "scope": "lease-expiry recovery after Runtime Worker Team executor owner failure",
+  "scenario": [
+    "Worker A discovers and claims a durable Team task.",
+    "Worker A executor fails under controlled injection and Worker A closes.",
+    "The claim lease expires without changing the durable task intent.",
+    "Worker B discovers and claims the same task with a new lease epoch.",
+    "Worker B completes fenced executeTeamTask and the journal reaches finalAccepted."
+  ],
+  "verification": {
+    "teamRelatedBothBackends": {
+      "tests": 36,
+      "passed": 36,
+      "failed": 0,
+      "skipped": 0
+    },
+    "newRecoveryScenario": { "sqlite": "passed", "postgres": "passed" },
+    "typechecks": ["application", "store", "control-api", "runtime-worker"],
+    "boundaryCheck": "passed",
+    "format": "passed",
+    "gitDiffCheck": "passed",
+    "postgresCleanup": "stopped and socket rejected a follow-up connection",
+    "transientFailureHandling": "one initial PG terminal-wait timing failure isolated and rerun; final full rerun passed"
+  },
+  "limitations": [
+    "Failure injection is controlled executor failure, not an OS kill or production deployment restart.",
+    "Actor/authorization and operations remain explicit host inputs.",
+    "Unknown external side effects and cancellation signal propagation require a later production host audit.",
+    "No default desktop Team or autonomous sub-agent activation is claimed."
+  ]
+}

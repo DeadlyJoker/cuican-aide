@@ -311,3 +311,95 @@ workflowDeploymentIntegrationTest(
     await worker.close();
   },
 );
+
+workflowDeploymentIntegrationTest(
+  "Runtime Worker scheduler reclaims a Team task after owner failure and lease expiry",
+  async (t, fixture) => {
+    const f = await fixture(t, {
+      output: (request) =>
+        lastUser(request) === priorContext ? "PRIOR_REPLY" : "MEMBER_REPORT",
+    });
+    const server = await f.control(null);
+    const journal = await f.store.experimentalTeamTaskJournalStore();
+    await journal.migrate();
+    const firstErrors: unknown[] = [];
+    const firstWorker = await f.worker(f.workflow, 2, {
+      scope: { tenantId: f.actor.tenantId, spaceId: f.actor.spaceId },
+      concurrency: 1,
+      listLimit: 1,
+      leaseDurationMs: 200,
+      scanIntervalMs: null,
+      execute: async () => {
+        throw new Error("simulated_team_worker_owner_failure");
+      },
+      onError: (_fence, error) => {
+        firstErrors.push(error);
+      },
+    });
+    firstWorker.start();
+    const { thread, plan } = await prepare(server.client, true);
+    const intent: TeamTaskIntent = {
+      schemaVersion: "crewon.team-task.v1",
+      ...f.actor,
+      taskId: "runtime-worker-lease-recovery",
+      turn: {
+        threadId: thread.threadId,
+        expectedRevision: thread.revision,
+        content: originalTask,
+        plan,
+        responseMode: "manager",
+        managerResponseKind: "office",
+      },
+    };
+    await journal.create(intent);
+    firstWorker.teamTaskScheduler!.notify();
+    const claimDeadline = Date.now() + 10_000;
+    let claimed = await journal.read(intent);
+    while (firstErrors.length === 0 || claimed?.lease === null) {
+      assert.ok(Date.now() < claimDeadline, "first scheduler did not claim");
+      await setTimeout(10);
+      claimed = await journal.read(intent);
+    }
+    assert.equal(firstErrors.length, 1);
+    assert.ok(claimed?.lease !== null && claimed !== null);
+    const expiry = claimed.lease.expiresAt;
+    await firstWorker.close();
+    while (Date.now() <= expiry) await setTimeout(10);
+
+    const operations = teamOperations(server.client);
+    const secondErrors: unknown[] = [];
+    const secondWorker = await f.worker(f.workflow, 2, {
+      scope: { tenantId: f.actor.tenantId, spaceId: f.actor.spaceId },
+      concurrency: 1,
+      listLimit: 1,
+      leaseDurationMs: 5_000,
+      scanIntervalMs: null,
+      execute: (fence) =>
+        executeTeamTask({
+          actor: f.actor,
+          store: journal,
+          fence,
+          operations,
+          digester: new NodeSha256ContentDigester(),
+          pollIntervalMs: 10,
+          runDeadlineMs: 20_000,
+          leaseDurationMs: 5_000,
+        }).then(() => undefined),
+      onError: (_fence, error) => {
+        secondErrors.push(error);
+      },
+    });
+    secondWorker.start();
+    secondWorker.teamTaskScheduler!.notify();
+    const deadline = Date.now() + 30_000;
+    let record = await journal.read(intent);
+    while (record?.status !== "finalAccepted") {
+      assert.ok(Date.now() < deadline, "reclaimed Team task did not finish");
+      await setTimeout(10);
+      record = await journal.read(intent);
+    }
+    assert.deepEqual(secondErrors, []);
+    assert.equal(record.result?.message.content, originalTask);
+    await secondWorker.close();
+  },
+);

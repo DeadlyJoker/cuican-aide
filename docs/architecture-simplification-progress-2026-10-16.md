@@ -569,3 +569,11 @@ SQLite 与 PostgreSQL 共用相同的 scope/limit 校验和结果身份形状；
 SQLite 与 PostgreSQL 各验证一次，最终主 Thread 保留一份原始用户输入并出现最终助手消息；executor error 为空，lease/fence 仍由 Store 事务校验。完整 Team journal、interruption 和 Team application 回归共 34 项全部通过，覆盖原有 lease takeover、取消、Goal、主会话 reservation 和新 Worker scheduler 路径。Application、Store、Control API、Runtime Worker 类型检查、入口边界、相关格式和 diff 检查通过。
 
 当前真实 executor 仍是测试宿主注入的受信组合，不代表默认 Runtime Worker 已经具备 production actor/authorization、取消 signal、未知副作用恢复或进程强杀重启接管。默认配置仍不迁移 journal、不启动 Team scheduler；自主子 Agent 仍需在这些边界完成后接入。
+
+## 第三十七批：Runtime Worker owner failure 后的 Team lease recovery（2026-10-19）
+
+基线为 `bda446b01`。本批新增双库真实恢复场景：第一代 Runtime Worker scheduler claim 持久 Team task 后 executor 故意失败并关闭；等待 lease 过期后，第二代 Worker 使用同一 journal 重新 discovery/claim，通过 fenced `executeTeamTask` 完成子 Run、最终主 Run 和 `finalAccepted`。这验证了 owner 失效后的持久恢复路径，而不是只验证进程内一次成功。
+
+最终串行 Team 相关回归 36/36 通过，包含原有 journal 回执恢复、取消、Goal、主会话 reservation、Worker scheduler 成功路径和本批 lease recovery；SQLite/PostgreSQL 新恢复场景均通过。Application、Store、Control API、Runtime Worker 类型检查、边界、格式和 diff 检查通过。第一次扩大回归有一项既有 PostgreSQL 前序 Run terminal 等待时序失败，单独重跑和最终完整重跑均通过；没有修改超时或放宽断言。
+
+本批仍未宣称 OS 强杀、真实部署多实例身份、取消 signal 的完整传播或未知外部副作用的自动恢复；第一代 executor 是受控失败注入，第二代由显式宿主提供 actor/operations。默认桌面 Team 和自主子 Agent 继续保持关闭。
