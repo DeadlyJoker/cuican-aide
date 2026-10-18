@@ -709,3 +709,9 @@ Node 24 验证：Control Client 与 Control API typecheck 通过；facade 单测
 因此 Runtime Worker 的 Team Host 暂不接入 `CREWON_CONTROL_SESSION_TOKEN`、CSRF 或 BFF token 作为后台授权。未来需要单独的受信 service identity/operations adapter，明确允许的 tenant/space、Actor 生命周期、策略调用和撤权行为；在该边界完成前，默认 scheduler 和自主子 agent 保持关闭。现有 Control operations facade 只复用 HTTP/fence 语义，不改变身份模型。
 
 本批为只读架构复核，没有代码或凭据变化；依据 `apps/control-api/src/standalone-adapters.ts`、`apps/control-api/src/production-security-adapters.ts`、`apps/control-api/src/main.ts` 和 Control API README 的当前组合。
+
+## 第五十六批：Team Host 接入顺序确定（2026-10-19）
+
+结合 `ControlApiDependencies` 和两个 Control composition root，Team Host 的接入顺序确定为：先在 standalone Control 进程内复用已有 `actor`、`AuthorizationPort`、Thread/Run/Turn/Office services 和同一 Store，验证本地持久 scheduler 的完整 operations adapter；再为 Production/Cloud 单独设计 service identity、策略调用和撤权。不要先让 Runtime Worker 使用 session token 反向调用 Control HTTP，也不要把 request-scoped user actor 固定进后台 scheduler。
+
+该顺序保留现有架构边界：Control 负责会话/授权编排，Worker 负责 Run/模型/工具执行；本地 standalone 可以共享进程内权威，生产多租户则必须经过显式机器身份。当前没有开启任何 scheduler 或新增凭据，下一步实现只读 application operations adapter 和 standalone 专项验收。
