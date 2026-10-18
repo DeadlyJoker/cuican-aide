@@ -655,3 +655,9 @@ UI 的 Thread focus 只限制长期 Thread SSE，Run SSE 仍按 Run 独立维护
 进一步核对生产入口和 UI 运行时：Worker Main 默认两槽；standalone library 的单槽只影响未显式配置的库调用；Thread focus 只阻止非当前会话的长期 Thread SSE，Run SSE 仍按 Run 独立创建、续读和收敛。现有 6 项 Worker pool 回归全部通过，包含双 Run 同时进入模型、独立取消、关闭等待和队列补位。
 
 这批没有修改代码，因为当前证据不支持把 Worker 或 Thread focus 作为并行根因。若用户仍看到后台会话结果迟到，下一步应针对实际桌面入口记录 `CREWON_WORKER_CONCURRENCY`、Run SSE 建立时间、IPC 请求排队和 renderer 是否触发 `readThread`；不能直接放开所有 Thread SSE，避免重新占满浏览器连接池。
+
+## 第四十九批：本地命令与子进程边界复核（2026-10-19）
+
+重新核对本地执行代码和既有阶段证据：`local-workspace-command-tool-runtime.ts` 对共享工作区命令使用一个有界串行队列；Electron `localWorkspaceProcesses.ts` 为每次调用创建真实子进程，并保留输出、进程组清理和 admission lease。既有隔离测量中，独立 `cat` 约 35.4ms，排在约 300ms sleep 后约 347.5ms；完整子进程调用约 464.6ms，而进程内文件读取约 8.4ms。
+
+本批没有放宽队列，因为该工具声明为 mutation/reconcilable，不能根据 shell 文本猜测只读并行安全性。后续若要降低本地命令等待，应新增显式只读 workspace operation、独立并发上限和授权/能力契约，再与现有串行 mutation path 对照；证据见 `docs/evidence/local-execution-boundary-revalidation-2026-10-19.json`。

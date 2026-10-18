@@ -1,0 +1,27 @@
+{
+  "schemaVersion": "crewon.evidence.v0",
+  "kind": "local-execution-boundary-revalidation",
+  "date": "2026-10-19",
+  "branch": "codex/runtime-concurrency-result-streaming",
+  "commit": "889f926e2",
+  "findings": {
+    "workspaceCommandQueue": {
+      "location": "apps/runtime-worker/src/local-workspace-command-tool-runtime.ts",
+      "behavior": "one shared promise queue serializes the configured workspace command runtime",
+      "measuredCatMs": 35.4,
+      "measuredQueuedBehindSleepMs": 347.5
+    },
+    "childProcessBoundary": {
+      "location": "apps/crewon-ui/electron/localWorkspaceProcesses.ts",
+      "behavior": "each workspace process uses a real child_process with bounded output, process-group cleanup and an admission lease",
+      "measuredCompleteCallMs": 464.6,
+      "measuredInProcessReadMs": 8.4
+    }
+  },
+  "decision": "No queue relaxation in this slice: command effects share a workspace and the policy is mutation/reconcilable, so text-based read-only inference would be unsafe.",
+  "nextSafeDirection": "Add an explicit read-only workspace operation with its own bounded concurrency and capability/authorization contract, then compare it against the serial mutation command path.",
+  "limitations": [
+    "The timings are inherited from the isolated 2026-10-16 latency evidence, not a new packaged desktop run.",
+    "The child-process total includes spawn, scheduling, pipes and cleanup; it is not file I/O time alone."
+  ]
+}
