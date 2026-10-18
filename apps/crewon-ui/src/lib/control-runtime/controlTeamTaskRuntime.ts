@@ -47,6 +47,8 @@ export type StartControlTeamTaskInput = Readonly<{
   pollDelayMs?: number;
   /** Bounds the admission-to-final-result wait; the server remains durable after expiry. */
   taskDeadlineMs?: number;
+  /** The owning runtime may consume the final Run stream itself. */
+  consumeFinalRun?: boolean;
 }>;
 
 /**
@@ -103,7 +105,8 @@ export async function startControlTeamTask(
   );
   const started = { message, run: run.run } satisfies ControlTeamTurnResult;
   input.onFinalTurnStarted?.(started);
-  await consumeFinalRun(input, run.run);
+  if (input.consumeFinalRun !== false) await consumeFinalRun(input, run.run);
+  if (input.consumeFinalRun === false) return started;
   return {
     message,
     run: (

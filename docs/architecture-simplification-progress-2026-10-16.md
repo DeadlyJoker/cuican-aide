@@ -795,3 +795,11 @@ CREWON_EXPERIMENTAL_DURABLE_TEAM_TASKS=1 pnpm crewon:dev
 ## 第六十七批：Durable Team 请求取消边界（2026-10-19）
 
 将 UI 适配层的关闭 signal 继续传入 admission、消息分页、Team snapshot 和最终 Run 查询，并在消息分页前后检查同一 task deadline，避免网络请求或历史分页成为无界等待点。Node 24 下 durable Team 相关 UI 测试仍为 7/7 通过。
+
+## 第六十八批：真实 durable Team UI 回流验收（2026-10-19）
+
+新增仓库级 `test:durable-team-ui` harness，放在 Control API 的 scripts 目录，仅作为跨应用 Node 测试，不把后端依赖带入 renderer 包。它复用真实 standalone SQLite Control/Worker fixture，通过真实 `ControlApiClient` 调用 `ControlThreadRuntime` durable 分支，验证 admission HTTP、Team scheduler、Worker Run、Run SSE 和最终 Thread 回流；断言用户输入只出现一次、存在 assistant 消息并收到 `run.completed`。
+
+真实链路首次暴露了一个执行权竞态：durable adapter 自己消费最终 Run SSE 后，`ControlThreadRuntime` 又为同一 Run 打开 SSE，terminal canonical projection 会互相 supersede。现在 adapter 支持由拥有 Runtime 的调用方跳过内部消费，durable Runtime 复用唯一的 Run SSE owner；同时跳过 terminal Run 的即时 Thread 读取，交由该 owner 负责 settlement，legacy 路径不变。
+
+Node 24 下该真实 harness 通过 1/1（约 1.3 秒），UI typecheck 和 durable Team 相关单测 7/7 通过。此前的 standalone HTTP admission/cancel 回归仍为 2/2；默认 feature gate 仍关闭。

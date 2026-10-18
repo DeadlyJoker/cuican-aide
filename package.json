@@ -20,6 +20,7 @@
     "runtime-worker:test": "pnpm --filter @crewon/runtime-worker test",
     "device-gateway:start": "pnpm --filter @crewon/device-gateway start",
     "device-gateway:test": "pnpm --filter @crewon/device-gateway test",
+    "test:durable-team-ui": "node node_modules/jiti/lib/jiti-cli.mjs apps/control-api/scripts/durable-team-ui.integration.test.ts",
     "format": "prettier --check *.json *.md docs/*.md .github/workflows/*.yml **/*.js",
     "format:fix": "prettier --write *.json *.md docs/*.md .github/workflows/*.yml **/*.js"
   },

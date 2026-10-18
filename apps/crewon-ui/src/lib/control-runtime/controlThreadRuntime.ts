@@ -1656,6 +1656,7 @@ export class ControlThreadRuntime {
             idempotencyKey: this.#idempotencyKey,
             executionIntent: settings?.executionIntent ?? "none",
             toolPermissionMode,
+            consumeFinalRun: false,
             signal: this.#teamProgressController.signal,
             eventStream: ({ runId, afterSequence, signal }) =>
               this.#eventStream(this.#client, {
@@ -1729,7 +1730,10 @@ export class ControlThreadRuntime {
           },
           );
         }
-        if (isTerminalRun(started.run)) {
+        if (
+          this.#teamExecutionMode !== "durableTask" &&
+          isTerminalRun(started.run)
+        ) {
           const presentation = this.#runStreams.get(started.run.runId);
           if (
             presentation?.presentsThread ??
