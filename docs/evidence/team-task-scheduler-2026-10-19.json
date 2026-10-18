@@ -1,0 +1,40 @@
+{
+  "schemaVersion": "crewon.evidence.v0",
+  "kind": "team-task-scheduler",
+  "date": "2026-10-19",
+  "branch": "codex/runtime-concurrency-result-streaming",
+  "baseCommit": "796166aba",
+  "scope": "application-level bounded wake and claim primitive",
+  "contract": {
+    "discovery": "bounded TeamTaskJournalStore.listRunnable",
+    "claim": "transactional owner/lease/epoch claim",
+    "deduplication": "one in-flight executor per tenant/space/task",
+    "failure": "callback only; retry waits for lease expiry and a later wake",
+    "shutdown": "close waits for in-flight executors and rejects later wake calls"
+  },
+  "verification": {
+    "schedulerTests": { "tests": 3, "passed": 3, "failed": 0 },
+    "applicationTests": {
+      "tests": 921,
+      "passed": 883,
+      "failed": 0,
+      "skipped": 38
+    },
+    "applicationTypecheck": "passed",
+    "boundaryCheck": "passed",
+    "format": "passed",
+    "gitDiffCheck": "passed",
+    "storageDiscoveryRegression": {
+      "tests": 32,
+      "passed": 32,
+      "failed": 0,
+      "skipped": 0
+    }
+  },
+  "limitations": [
+    "The primitive is not wired into Runtime Worker production composition.",
+    "It does not choose authorization, owner identity, cancellation policy or executor implementation.",
+    "Executor failure is not auto-replayed; durable recovery remains lease-expiry based.",
+    "No installed desktop UI or real provider behavior is claimed."
+  ]
+}

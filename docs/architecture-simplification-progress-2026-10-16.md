@@ -543,3 +543,11 @@ Application 新增独立 `team-turn` 入口，通过显式宿主操作端口调�
 SQLite 与 PostgreSQL 共用相同的 scope/limit 校验和结果身份形状；查询不执行外部回调、不认领、不推进任务。两库 Team 32 项完整集成仍全部通过，新增 admission 场景明确验证新建→发现、活动 lease 隐藏、过期后恢复发现、取消后不再发现。Application、Store、Control API 类型检查和相关格式/diff 检查通过。
 
 本批没有增加生产扫描器、没有自动迁移 journal、没有启用桌面 Team，也没有把 list 结果当成执行授权。下一步可在 Runtime Worker 中接入有界 wake/scan 调度器：每次发现后 claim，再由持久 command/effect 回执恢复 `executeTeamTask`；仍需先完成 executor 身份、取消传播和停机收尾验收，再开放生产入口。
+
+## 第三十四批：可关闭的 Team bounded wake/claim 调度原语（2026-10-19）
+
+基线为 `796166aba`。本批在 Application 增加与 HTTP、SQLite、PostgreSQL 无关的 `TeamTaskScheduler`：`wake()` 对 runnable discovery 做并发上限和列表上限，随后逐项执行 Store claim；同一 task 在途去重，claim 竞争失败不执行，slot 释放后再补位。executor 失败只通过受控回调报告，不在同一 wake 中立即重试；恢复由过期 lease 的下一次 discovery 负责。`close()` 等待所有已 claim executor 完成，并拒绝后续 wake。
+
+新增 3 项纯调度测试覆盖 wake 合并、并发上限、释放槽位补位、claim 竞争、失败不立即重试和关闭等待。Application 全量 921 项中 883 项通过、38 项为既有条件跳过；Application 类型检查、TypeScript 入口边界和新增文件格式检查通过。此前双库 Team 32 项回归继续作为 journal discovery/claim 的存储证据，本批未修改生产 Worker 装配。
+
+本批仍不创建生产 Team scheduler、不生成 owner 身份、不自动迁移 journal，也不把 executor 失败当成可安全重放。下一步必须把真实 executor、当前授权、取消信号和 stop/restart 恢复接到这个原语上，再验证 Worker 进程级停机和多实例竞争后，才考虑生产启用。
