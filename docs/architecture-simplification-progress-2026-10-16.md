@@ -803,3 +803,9 @@ CREWON_EXPERIMENTAL_DURABLE_TEAM_TASKS=1 pnpm crewon:dev
 真实链路首次暴露了一个执行权竞态：durable adapter 自己消费最终 Run SSE 后，`ControlThreadRuntime` 又为同一 Run 打开 SSE，terminal canonical projection 会互相 supersede。现在 adapter 支持由拥有 Runtime 的调用方跳过内部消费，durable Runtime 复用唯一的 Run SSE owner；同时跳过 terminal Run 的即时 Thread 读取，交由该 owner 负责 settlement，legacy 路径不变。
 
 Node 24 下该真实 harness 通过 1/1（约 1.3 秒），UI typecheck 和 durable Team 相关单测 7/7 通过。此前的 standalone HTTP admission/cancel 回归仍为 2/2；默认 feature gate 仍关闭。
+
+## 第六十九批：Standalone 桌面启动与认证边界实测（2026-10-19）
+
+使用本地合成 Responses HTTP 服务和 `CREWON_EXPERIMENTAL_DURABLE_TEAM_TASKS=1` 启动真实 Node 24 Control、Worker、Vite UI。Control/Worker/Vite 均进入 ready，浏览器真实打开开发 UI 并到达 CrewON 登录界面；期间只观察到未配置 Agent Platform 时 `/api/v1/auth/wecom/config` 的预期连接失败，未影响页面加载。
+
+当前环境没有 Agent Platform 登录凭据，因此没有绕过认证或伪造用户会话进入工作台，不能把这次结果称为页面内 Team 提交/刷新/取消验收。真实 durable UI runtime 的 HTTP/SSE harness 已通过；桌面可见工作台验收仍需受信测试账号或用户已授权的登录环境。
