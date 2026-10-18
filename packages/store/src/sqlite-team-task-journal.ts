@@ -7,8 +7,11 @@ import {
   teamJournalFail,
   validateTeamLeaseDuration,
   teamJournalId,
+  validateTeamTaskListLimit,
+  validateTeamTaskScope,
   type TeamTaskIntent,
   type TeamTaskLocator,
+  type TeamTaskScope,
   type TeamTaskFence,
   type TeamTaskEffect,
   type TeamTaskJournalStore,
@@ -91,6 +94,32 @@ export class ExperimentalSqliteTeamTaskJournal implements TeamTaskJournalStore {
         CREATE TABLE team_task_effects (${TEAM_EFFECT_COLUMNS}, FOREIGN KEY(tenant_id,space_id,task_id) REFERENCES team_task_journals(tenant_id,space_id,task_id)) STRICT;
         CREATE INDEX team_task_thread_lookup ON team_task_journals(tenant_id,space_id,thread_id);`);
     }, false);
+  }
+  async listRunnable(input: TeamTaskScope & { limit: number }) {
+    validateTeamTaskScope(input);
+    validateTeamTaskListLimit(input.limit);
+    this.host.assertOpen();
+    this.#schema();
+    const rows = this.database
+      .prepare(
+        `SELECT tenant_id,space_id,task_id
+         FROM team_task_journals
+         WHERE tenant_id=? AND space_id=? AND status='coordinating'
+           AND cancel_requested=0
+           AND (lease_expires_at IS NULL OR lease_expires_at<=?)
+         ORDER BY revision,task_id
+         LIMIT ?`,
+      )
+      .all(input.tenantId, input.spaceId, this.host.now(), input.limit) as {
+      tenant_id: string;
+      space_id: string;
+      task_id: string;
+    }[];
+    return rows.map((row) => ({
+      tenantId: row.tenant_id,
+      spaceId: row.space_id,
+      taskId: row.task_id,
+    }));
   }
   #read(locator: TeamTaskLocator) {
     return decodeTeamTask(

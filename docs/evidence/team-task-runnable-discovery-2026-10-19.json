@@ -1,0 +1,36 @@
+{
+  "schemaVersion": "crewon.evidence.v0",
+  "kind": "team-task-runnable-discovery",
+  "date": "2026-10-19",
+  "branch": "codex/runtime-concurrency-result-streaming",
+  "baseCommit": "b8e2e3b53",
+  "scope": "bounded Team journal discovery for lease recovery",
+  "contract": {
+    "scope": "tenant and space",
+    "limit": { "minimum": 1, "maximum": 100 },
+    "eligible": [
+      "coordinating",
+      "cancelRequested=false",
+      "no active lease or expired lease"
+    ],
+    "ordering": ["revision", "taskId"],
+    "claimAuthority": "existing transactional owner/lease/epoch claim"
+  },
+  "verification": {
+    "teamBothBackends": {
+      "tests": 32,
+      "passed": 32,
+      "failed": 0,
+      "skipped": 0
+    },
+    "typechecks": ["application", "store", "control-api"],
+    "format": "passed",
+    "gitDiffCheck": "passed",
+    "postgresCleanup": "stopped and socket rejected a follow-up connection"
+  },
+  "limitations": [
+    "Discovery is not a production scheduler and does not execute or claim tasks.",
+    "The journal remains explicitly experimental and is not enabled by the desktop runtime.",
+    "A future worker must pair discovery with claim, executor identity, cancellation propagation and shutdown recovery."
+  ]
+}

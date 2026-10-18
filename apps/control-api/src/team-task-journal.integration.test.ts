@@ -778,6 +778,28 @@ workflowDeploymentIntegrationTest(
       },
     };
     await journal.create(base);
+    const locator = {
+      tenantId: base.tenantId,
+      spaceId: base.spaceId,
+      taskId: base.taskId,
+    } as const;
+    assert.deepEqual(await journal.listRunnable({ ...locator, limit: 10 }), [
+      locator,
+    ]);
+    const claimed = await journal.claim({
+      ...locator,
+      ownerId: "runnable-owner",
+      leaseId: "runnable-lease",
+      durationMs: 100,
+    });
+    assert.ok(claimed);
+    assert.deepEqual(await journal.listRunnable({ ...locator, limit: 10 }), []);
+    await setTimeout(125);
+    assert.deepEqual(await journal.listRunnable({ ...locator, limit: 10 }), [
+      locator,
+    ]);
+    await journal.requestCancel(locator);
+    assert.deepEqual(await journal.listRunnable({ ...locator, limit: 10 }), []);
     await assert.rejects(
       journal.create({ ...base, taskId: "second-main-admission" }),
       isCode("team_task_main_busy"),

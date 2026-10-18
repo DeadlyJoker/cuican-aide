@@ -7,8 +7,11 @@ import {
   teamJournalFail,
   validateTeamLeaseDuration,
   teamJournalId,
+  validateTeamTaskListLimit,
+  validateTeamTaskScope,
   type TeamTaskIntent,
   type TeamTaskLocator,
+  type TeamTaskScope,
   type TeamTaskFence,
   type TeamTaskEffect,
   type TeamTaskJournalStore,
@@ -122,6 +125,27 @@ export class ExperimentalPostgresTeamTaskJournal
       },
       false,
     );
+  }
+  async listRunnable(input: TeamTaskScope & { limit: number }) {
+    validateTeamTaskScope(input);
+    validateTeamTaskListLimit(input.limit);
+    this.host.assertOpen();
+    await this.#schema(this.pool);
+    const { rows } = await this.pool.query(
+      `SELECT tenant_id,space_id,task_id
+       FROM ${this.#table("team_task_journals")}
+       WHERE tenant_id=$1 AND space_id=$2 AND status='coordinating'
+         AND cancel_requested=0
+         AND (lease_expires_at IS NULL OR lease_expires_at<=floor(extract(epoch FROM clock_timestamp())*1000)::bigint)
+       ORDER BY revision,task_id
+       LIMIT $3`,
+      [input.tenantId, input.spaceId, input.limit],
+    );
+    return rows.map((row) => ({
+      tenantId: row.tenant_id as string,
+      spaceId: row.space_id as string,
+      taskId: row.task_id as string,
+    }));
   }
   async #read(
     client: PoolClient | Pool,

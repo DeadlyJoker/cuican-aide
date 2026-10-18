@@ -19,6 +19,10 @@ export type TeamTaskLocator = Readonly<{
   spaceId: string;
   taskId: string;
 }>;
+export type TeamTaskScope = Readonly<{
+  tenantId: string;
+  spaceId: string;
+}>;
 export type TeamTaskIntent = TeamTaskLocator &
   Readonly<{
     schemaVersion: "crewon.team-task.v1";
@@ -55,6 +59,9 @@ export type TeamTaskEffect = Readonly<{
 }>;
 export interface TeamTaskJournalStore {
   migrate(): Promise<void>;
+  listRunnable(
+    scope: TeamTaskScope & { limit: number },
+  ): Promise<readonly TeamTaskLocator[]>;
   create(intent: TeamTaskIntent): Promise<TeamTaskRecord>;
   read(locator: TeamTaskLocator): Promise<TeamTaskRecord | null>;
   claim(
@@ -113,6 +120,14 @@ export function teamJournalId(value: unknown): asserts value is string {
 export function validateTeamTaskLocator(input: TeamTaskLocator): void {
   for (const value of [input.tenantId, input.spaceId, input.taskId])
     teamJournalId(value);
+}
+export function validateTeamTaskScope(input: TeamTaskScope): void {
+  teamJournalId(input.tenantId);
+  teamJournalId(input.spaceId);
+}
+export function validateTeamTaskListLimit(value: number): void {
+  if (!Number.isSafeInteger(value) || value < 1 || value > 100)
+    teamJournalFail("team_journal_limit_invalid");
 }
 export function validateTeamTaskFence(input: TeamTaskFence): void {
   validateTeamTaskLocator(input);

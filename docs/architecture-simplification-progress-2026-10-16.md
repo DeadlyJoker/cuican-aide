@@ -535,3 +535,11 @@ Application 新增独立 `team-turn` 入口，通过显式宿主操作端口调�
 最终两库 Team 专项 32 项全部通过、无跳过，覆盖主会话无上下文并发 append 被拒绝、带 fence 的协调器完成、SQLite/PostgreSQL、journal 回执恢复、租约接管、Goal 暂停恢复、取消和完整 Team 应用路径。Application 单元套件 918/918 通过；Control client 284/284 通过；Application、Store、Control、Worker、Control client 类型检查、入口边界和新增/相关文件格式检查通过。Store 全量历史套件本轮仍有两项与 fence 无关的 legacy fixture 条件失败：一个是独立进程 fixture 的错误相对路径，另一个是 project metadata owner fixture 冲突，均未进入 Team fence 调用栈；未用本批改动掩盖或放宽断言。
 
 独立 PostgreSQL 使用临时 Unix socket，结束时确认 data directory、无监听、无其他客户端和用户 schema 后停止。没有启用生产 Team 调度、没有修改 HTTP/事件/持久 schema 版本，也没有把 task header 暴露为普通用户可伪造的授权；生产请求级身份、桌面默认入口、后台停放/唤醒、完整子树取消和自主子 Agent 仍未完成。
+
+## 第三十三批：Team runnable task 的有界发现与 lease 恢复入口（2026-10-19）
+
+基线为 `b8e2e3b53`。本批为 Team journal 增加按租户/空间限定的 `listRunnable` 入口，查询只返回 `coordinating`、未取消且没有有效 lease 的 task，按 journal revision 和 task ID 排序并限制最多 100 条。过期 lease 会重新进入发现结果；活动 lease、`finalAccepted` 和 `cancelRequested` task 不会进入结果。发现只是提示，实际 owner/epoch 仍由现有事务 `claim` 原子裁决，避免多个 worker 因同一页面重复执行。
+
+SQLite 与 PostgreSQL 共用相同的 scope/limit 校验和结果身份形状；查询不执行外部回调、不认领、不推进任务。两库 Team 32 项完整集成仍全部通过，新增 admission 场景明确验证新建→发现、活动 lease 隐藏、过期后恢复发现、取消后不再发现。Application、Store、Control API 类型检查和相关格式/diff 检查通过。
+
+本批没有增加生产扫描器、没有自动迁移 journal、没有启用桌面 Team，也没有把 list 结果当成执行授权。下一步可在 Runtime Worker 中接入有界 wake/scan 调度器：每次发现后 claim，再由持久 command/effect 回执恢复 `executeTeamTask`；仍需先完成 executor 身份、取消传播和停机收尾验收，再开放生产入口。
