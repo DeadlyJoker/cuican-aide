@@ -1,16 +1,16 @@
 import assert from "node:assert/strict";
-import { appendFileSync, readFileSync } from "node:fs";
+import { appendFileSync, mkdtempSync, readFileSync, rmSync } from "node:fs";
 import { spawn } from "node:child_process";
+import { tmpdir } from "node:os";
+import { join } from "node:path";
 import { setTimeout } from "node:timers/promises";
 import { fileURLToPath } from "node:url";
-import test, { type TestContext } from "node:test";
 import { executeTeamTask } from "@crewon/application/team-task-execution";
 import {
   TeamTaskJournalError,
   type TeamTaskIntent,
 } from "@crewon/application/team-task-journal";
 import { workflowDeploymentIntegrationTest } from "./workflow-deployment-integration.test-support.ts";
-import { sqliteWorkflowDeploymentFixture } from "./sqlite-workflow-deployment.test-support.ts";
 import { NodeSha256ContentDigester } from "./standalone-adapters.ts";
 import {
   originalTask,
@@ -22,7 +22,10 @@ import {
 } from "./team-turn-application.test-support.ts";
 
 function spawnTeamClaimProcess(input: {
+  backend?: "sqlite" | "postgres";
   databasePath: string;
+  connectionString?: string;
+  schema?: string;
   markerPath: string;
   tenantId: string;
   spaceId: string;
@@ -46,7 +49,10 @@ function spawnTeamClaimProcess(input: {
         PATH: fileURLToPath(
           new URL("../../../node_modules/.bin/", import.meta.url),
         ),
+        CREWON_TEAM_PROCESS_BACKEND: input.backend ?? "sqlite",
         CREWON_TEAM_PROCESS_DATABASE: input.databasePath,
+        CREWON_TEAM_PROCESS_CONNECTION: input.connectionString ?? "",
+        CREWON_TEAM_PROCESS_SCHEMA: input.schema ?? "",
         CREWON_TEAM_PROCESS_MARKER: input.markerPath,
         CREWON_TEAM_PROCESS_TENANT: input.tenantId,
         CREWON_TEAM_PROCESS_SPACE: input.spaceId,
@@ -586,11 +592,10 @@ workflowDeploymentIntegrationTest(
   },
 );
 
-test(
-  "SQLite Team scheduler reclaims a task after an actual owner process SIGKILL",
-  { timeout: 30_000 },
-  async (t: TestContext) => {
-    const f = await sqliteWorkflowDeploymentFixture(t, {
+workflowDeploymentIntegrationTest(
+  "Team scheduler reclaims a task after an actual owner process SIGKILL",
+  async (t, fixture) => {
+    const f = await fixture(t, {
       output: (request) =>
         lastUser(request) === priorContext ? "PRIOR_REPLY" : "MEMBER_REPORT",
     });
@@ -615,10 +620,24 @@ test(
       },
     };
     await journal.create(intent);
-    const markerPath = `${f.databasePath}.team-claim-markers`;
+    const markerDirectory = mkdtempSync(join(tmpdir(), "crewon-team-process-"));
+    t.after(() => rmSync(markerDirectory, { recursive: true, force: true }));
+    const markerPath = join(markerDirectory, "claim-markers");
+    const processBackend =
+      "databasePath" in f
+        ? {
+            backend: "sqlite" as const,
+            databasePath: f.databasePath,
+          }
+        : {
+            backend: "postgres" as const,
+            databasePath: "",
+            connectionString: f.connectionString,
+            schema: f.schema,
+          };
     appendFileSync(markerPath, "", { mode: 0o600 });
     const first = spawnTeamClaimProcess({
-      databasePath: f.databasePath,
+      ...processBackend,
       markerPath,
       tenantId: f.actor.tenantId,
       spaceId: f.actor.spaceId,
@@ -639,7 +658,7 @@ test(
     while (Date.now() <= expiry) await setTimeout(10);
 
     const second = spawnTeamClaimProcess({
-      databasePath: f.databasePath,
+      ...processBackend,
       markerPath,
       tenantId: f.actor.tenantId,
       spaceId: f.actor.spaceId,

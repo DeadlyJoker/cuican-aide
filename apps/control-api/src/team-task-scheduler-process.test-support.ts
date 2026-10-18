@@ -1,18 +1,24 @@
 import { appendFileSync } from "node:fs";
-import { SqliteRunStore } from "@crewon/store";
+import { PostgresDomainStore, SqliteRunStore } from "@crewon/store";
 import {
   TeamTaskScheduler,
   TeamTaskSchedulerPump,
 } from "@crewon/application/team-task-scheduler";
 
 const databasePath = process.env.CREWON_TEAM_PROCESS_DATABASE!;
+const backend = process.env.CREWON_TEAM_PROCESS_BACKEND ?? "sqlite";
+const connectionString = process.env.CREWON_TEAM_PROCESS_CONNECTION ?? "";
+const schema = process.env.CREWON_TEAM_PROCESS_SCHEMA ?? "";
 const tenantId = process.env.CREWON_TEAM_PROCESS_TENANT!;
 const spaceId = process.env.CREWON_TEAM_PROCESS_SPACE!;
 const ownerId = process.env.CREWON_TEAM_PROCESS_OWNER!;
 const markerPath = process.env.CREWON_TEAM_PROCESS_MARKER!;
 const leaseDurationMs = Number(process.env.CREWON_TEAM_PROCESS_LEASE_MS);
 
-const store = new SqliteRunStore(databasePath);
+const store =
+  backend === "postgres"
+    ? await PostgresDomainStore.open({ connectionString, schema })
+    : new SqliteRunStore(databasePath);
 const journal = await store.experimentalTeamTaskJournalStore();
 await journal.migrate();
 const scheduler = new TeamTaskScheduler({

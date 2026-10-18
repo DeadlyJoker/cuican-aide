@@ -3,30 +3,31 @@
   "kind": "team-task-scheduler-process-recovery",
   "date": "2026-10-19",
   "branch": "codex/runtime-concurrency-result-streaming",
-  "baseCommit": "10d839c0b",
-  "scope": "SQLite child-process SIGKILL and durable Team claim recovery",
+  "baseCommit": "b750d3552",
+  "scope": "SQLite and PostgreSQL child-process SIGKILL and durable Team claim recovery",
   "scenario": [
-    "Child process A opens the real SQLite journal and claims the task.",
-    "The test sends SIGKILL without invoking scheduler close or cleanup.",
-    "The original lease expires in the shared database.",
-    "Child process B opens the same journal and claims with a new owner/epoch.",
-    "The marker and journal row prove owner A epoch 1 then owner B epoch 2."
+    "Child process A opens the real Store journal and claims the task.",
+    "The test sends SIGKILL without invoking scheduler close or journal cleanup.",
+    "The original lease expires in the shared database or schema.",
+    "Child process B opens the same Store and claims with a new owner/epoch.",
+    "The journal row and marker prove owner A epoch 1 then owner B epoch 2."
   ],
   "verification": {
-    "processRecoveryTest": "passed",
+    "processRecovery": { "sqlite": "passed", "postgres": "passed" },
+    "teamBothBackends": {
+      "tests": 40,
+      "passed": 40,
+      "failed": 0,
+      "skipped": 0
+    },
     "controlApiTypecheck": "passed",
     "format": "passed",
     "gitDiffCheck": "passed",
-    "existingTeamBothBackends": {
-      "tests": 38,
-      "passed": 38,
-      "failed": 0,
-      "skipped": 0
-    }
+    "postgresCleanup": "stopped and socket rejected a follow-up connection"
   },
   "limitations": [
     "This slice proves durable claim recovery, not rollback of an already dispatched external side effect.",
-    "The child-process scenario is SQLite-only; PostgreSQL multi-instance process recovery remains to be run separately.",
+    "The child processes intentionally stop after claim; full executeTeamTask unknown-outcome recovery remains a separate audit.",
     "No default desktop Team or autonomous sub-agent activation is claimed."
   ]
 }

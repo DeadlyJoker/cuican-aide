@@ -601,3 +601,11 @@ SQLite/PostgreSQL 取消场景均通过；最终 Team 相关回归 38/38 通过�
 该测试只验证 scheduler claim/recovery，不把未完成 executor 的外部副作用伪造成已回滚；第二进程同样在 claim 后由测试结束。Control API 类型检查、进程测试、diff/格式检查通过；已有双库 Team 38/38 回归继续作为业务路径证据。
 
 PG/生产多实例和 OS 强杀后的完整 `executeTeamTask` 外部副作用恢复仍待独立验证；默认桌面 Team 与自主子 Agent 继续关闭。
+
+## 第四十一批：SQLite/PostgreSQL 双 backend 子进程 SIGKILL recovery（2026-10-19）
+
+基线为 `b750d3552`。本批将子进程 claim helper 泛化为 SQLite 和 PostgreSQL 两种真实 Store：子进程 A 在共享数据库/schema 中 claim 后被 `SIGKILL`，lease 过期后子进程 B 重新 claim，分别核对 owner 和 epoch 变化。测试只验证 durable claim recovery，不把未完成 executor 的外部副作用当作已回滚。
+
+双 backend process recovery 均通过；完整 Team journal、interruption 和 application 回归扩大到 40/40 全部通过。Control API 类型检查、入口边界、格式和 diff 检查通过；PostgreSQL 测试库停止后无残留连接。
+
+生产级 OS 强杀后的完整 `executeTeamTask` 未知副作用恢复、actor/authorization 多实例配置仍需独立审计；默认 Team 与自主子 Agent 继续关闭。
