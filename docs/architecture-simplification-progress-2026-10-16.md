@@ -617,3 +617,9 @@ PG/生产多实例和 OS 强杀后的完整 `executeTeamTask` 外部副作用恢
 SQLite 场景通过；本轮环境没有 `CREWON_TEST_POSTGRES_URL`，因此新增未知 effect 场景的 PostgreSQL 版本未运行。既有双 backend claim recovery 和此前已完成的 Team 回归证据保持不变。该场景没有联系真实外部供应商，marker 只证明 journal 的跨进程单次派发/回执边界，不证明供应商本身支持幂等或可查询未知结果。
 
 默认 Runtime Worker、桌面 Team 和自主子 Agent 仍未启用；下一步应在提供 PostgreSQL 测试库后重跑该场景，再把同一 effect journal 接到真实 actor/authorization 的生产 executor，随后才评估默认启用。
+
+## 第四十三批：Store 物理实现子入口收敛（2026-10-19）
+
+基线为 `515b6a9ce`。本批为 Store 增加 PostgreSQL domain、PostgreSQL workspace-read、SQLite run 和 SQLite workspace-read 的公开子入口，并把 Control/Runtime 的两个 standalone composition root 从 `@crewon/store` 聚合入口迁移到这些明确入口。根入口保持兼容，未改变 Store 行为、数据库 schema 或 HTTP 形状。
+
+验证：Control API 与 Runtime Worker production typecheck、Store typecheck、入口边界检查、四个子入口实际导入和格式检查均通过。Node 24 冷导入样本波动较大，本批只确认依赖边界变窄，不把导入耗时下降宣称为已证实收益；后续应在稳定基准中继续测量。

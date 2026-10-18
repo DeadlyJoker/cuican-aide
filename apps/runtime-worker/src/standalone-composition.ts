@@ -40,12 +40,10 @@ import type {
   TeamTaskJournalStore,
   TeamTaskScope,
 } from "@crewon/application/team-task-journal";
-import {
-  PostgresDomainStore,
-  PostgresWorkspaceReadFileStore,
-  SqliteRunStore,
-  SqliteWorkspaceReadFileStore,
-} from "@crewon/store";
+import { PostgresDomainStore } from "@crewon/store/postgres-domain-store";
+import { PostgresWorkspaceReadFileStore } from "@crewon/store/postgres-workspace-read-file-store";
+import { SqliteRunStore } from "@crewon/store/sqlite-run-store";
+import { SqliteWorkspaceReadFileStore } from "@crewon/store/sqlite-workspace-read-file-store";
 import type { GovernedContextBundle } from "@crewon/context";
 import type {
   DeviceWorkspaceListCommandSignerPort,

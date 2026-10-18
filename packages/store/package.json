@@ -8,7 +8,10 @@
     "./extension-recovery": "./src/extension-recovery-reader.ts",
     "./host-project-workspaces": "./src/native-project-workspace-state-reader.ts",
     "./host-workspace-management": "./src/host-workspace-management.ts",
+    "./postgres-domain-store": "./src/postgres-domain-store.ts",
+    "./postgres-workspace-read-file-store": "./src/postgres-workspace-read-file-store.ts",
     "./sqlite-run-store": "./src/sqlite-run-store.ts",
+    "./sqlite-workspace-read-file-store": "./src/sqlite-workspace-read-file-store.ts",
     "./sqlite-availability": "./src/sqlite-availability.ts",
     "./filesystem-storage-admission": "./src/filesystem-storage-admission.ts",
     "./control-snapshot-postgres-migration": "./src/control-snapshot-postgres-migration.ts"

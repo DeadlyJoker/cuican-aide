@@ -49,7 +49,8 @@ import {
   type ExternalOperationQueryStore,
   type PluginQueryHostPort,
 } from "@crewon/application";
-import { PostgresDomainStore, SqliteRunStore } from "@crewon/store";
+import { PostgresDomainStore } from "@crewon/store/postgres-domain-store";
+import { SqliteRunStore } from "@crewon/store/sqlite-run-store";
 import {
   composeProjectGenerationReadService,
   prepareProjectGenerationReadStore,
