@@ -649,3 +649,9 @@ Node 24.18.1 下启动真实 standalone Control API、真实 SQLite Store 和 lo
 在 Node 24.18.1 下重跑 `runtime-worker-pool.integration.test.ts` 的真实 SQLite 生产组合：6/6 通过，最大活动 Run 为 2；本轮诊断样本中空闲队列入槽约 35.3ms，释放槽补入下一 Run 约 22.0ms。该结果确认生产 Worker Main 默认 `CREWON_WORKER_CONCURRENCY=2`，多会话 Run 执行和取消/关闭收尾均已并行；库级 standalone composition 省略配置时仍保留单槽默认，避免无意增加资源占用。
 
 UI 的 Thread focus 只限制长期 Thread SSE，Run SSE 仍按 Run 独立维护。因此当前“多会话不能并行”不能再归因于 Worker 默认单槽；若实际用户仍观察到串行，应继续采样模型 transport、工具执行、桌面 IPC 或具体启动入口的环境变量。证据见 `docs/evidence/runtime-worker-parallel-revalidation-2026-10-19.json`。
+
+## 第四十八批：Worker/Run SSE/Thread focus 边界复核（2026-10-19）
+
+进一步核对生产入口和 UI 运行时：Worker Main 默认两槽；standalone library 的单槽只影响未显式配置的库调用；Thread focus 只阻止非当前会话的长期 Thread SSE，Run SSE 仍按 Run 独立创建、续读和收敛。现有 6 项 Worker pool 回归全部通过，包含双 Run 同时进入模型、独立取消、关闭等待和队列补位。
+
+这批没有修改代码，因为当前证据不支持把 Worker 或 Thread focus 作为并行根因。若用户仍看到后台会话结果迟到，下一步应针对实际桌面入口记录 `CREWON_WORKER_CONCURRENCY`、Run SSE 建立时间、IPC 请求排队和 renderer 是否触发 `readThread`；不能直接放开所有 Thread SSE，避免重新占满浏览器连接池。

@@ -1,0 +1,24 @@
+{
+  "schemaVersion": "crewon.evidence.v0",
+  "kind": "runtime-worker-sse-focus-revalidation",
+  "date": "2026-10-19",
+  "branch": "codex/runtime-concurrency-result-streaming",
+  "commit": "933fd7a96",
+  "verification": {
+    "runtimeWorkerPoolTests": { "tests": 6, "passed": 6, "failed": 0 },
+    "productionWorkerConcurrencyDefault": 2,
+    "libraryCompositionDefault": 1,
+    "runStreamsIndependentAcrossThreads": true,
+    "threadFocusScopesLongLivedThreadSse": true
+  },
+  "evidence": [
+    "apps/runtime-worker/src/main.ts parses CREWON_WORKER_CONCURRENCY with default 2 unless CREWON_WORKER_ONCE is set.",
+    "apps/crewon-ui/src/lib/control-runtime/controlThreadRuntime.ts applies focus only in #ensureThreadEventStream; #ensureEventStream maintains Run streams independently.",
+    "apps/runtime-worker/src/runtime-worker-pool.integration.test.ts covers two active Runs, sibling cancellation, close join and queue refill."
+  ],
+  "limitations": [
+    "The verification uses controlled model transport and isolated SQLite.",
+    "It does not measure a packaged desktop renderer or a real provider.",
+    "It does not prove that every UI surface renders background completion without a refresh."
+  ]
+}
