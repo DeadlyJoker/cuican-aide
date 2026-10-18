@@ -129,9 +129,11 @@ import {
   requireControlExecutionIntentCapability,
   resolveControlTeamPlan,
   type ControlTeamRunAcceptedEvent,
+  type ControlTeamTurnResult,
 } from "./controlTeamRuntime";
 import type { ControlToolApprovalRequest } from "./controlToolApprovalPresentation";
 import { startPresentedControlTeamTurn } from "./controlTeamTurnPresentation";
+import { startControlTeamTask } from "./controlTeamTaskRuntime";
 import type { ControlTeamProgress } from "./controlTeamProgress";
 import {
   replayControlMessage,
@@ -247,6 +249,8 @@ export type ControlThreadRuntimeConfig = Readonly<{
   runStatusPollDelay?: (signal: AbortSignal) => Promise<void>;
   toolHistoryTimeoutMs?: number;
   canonicalSyncRetryDelay?: ControlCanonicalSyncRetryDelay;
+  /** Legacy is default; durableTask must be explicitly enabled by the host. */
+  teamExecutionMode?: "legacy" | "durableTask";
 }>;
 
 export type ControlProjectedThread = Thread &
@@ -286,6 +290,7 @@ export class ControlThreadRuntime {
   readonly #toolHistoryLoadsByRun = new Map<string, ControlToolHistoryLoad>();
   readonly #toolHistoryTimeoutMs: number;
   readonly #canonicalSyncRetryDelay: ControlCanonicalSyncRetryDelay | undefined;
+  readonly #teamExecutionMode: "legacy" | "durableTask";
   readonly #toolStatesByRun = new Map<string, ControlToolProjectionState>();
   readonly #toolCoverageByRun = new Map<string, ControlToolHistoryCoverage>();
   readonly #pendingReplyDrafts = new ControlRunPendingReplyDrafts();
@@ -339,6 +344,12 @@ export class ControlThreadRuntime {
     this.#reconnectDelay = config.reconnectDelay ?? defaultReconnectDelay;
     this.#runStatusPollDelay = config.runStatusPollDelay;
     this.#canonicalSyncRetryDelay = config.canonicalSyncRetryDelay;
+    this.#teamExecutionMode = config.teamExecutionMode ?? "legacy";
+    if (
+      this.#teamExecutionMode !== "legacy" &&
+      this.#teamExecutionMode !== "durableTask"
+    )
+      throw new Error("control_team_execution_mode_invalid");
     this.#toolHistoryTimeoutMs =
       config.toolHistoryTimeoutMs ?? DEFAULT_CONTROL_TOOL_HISTORY_TIMEOUT_MS;
     if (
@@ -1631,7 +1642,37 @@ export class ControlThreadRuntime {
           office,
           memberProfiles: settings?.teamMemberProfiles,
         });
-        const started = await startPresentedControlTeamTurn(
+        let started: ControlTeamTurnResult;
+        if (this.#teamExecutionMode === "durableTask") {
+          started = await startControlTeamTask({
+            client: this.#client,
+            threadId,
+            expectedRevision: current.thread.revision,
+            content,
+            plan,
+            responseMode: "manager",
+            managerResponseKind:
+              target.kind === "experts" ? "experts" : "office",
+            idempotencyKey: this.#idempotencyKey,
+            executionIntent: settings?.executionIntent ?? "none",
+            toolPermissionMode,
+            signal: this.#teamProgressController.signal,
+          });
+          const turn = projectedTurn(
+            started.message,
+            null,
+            started.run,
+            [],
+            false,
+          );
+          this.#callbacks.onTurnStarted?.(threadId, turn);
+          this.#ensureEventStream(
+            threadId,
+            started.run.runId,
+            started.run.collaborationMode,
+          );
+        } else {
+          started = await startPresentedControlTeamTurn(
           {
             client: this.#client,
             threadId,
@@ -1679,7 +1720,8 @@ export class ControlThreadRuntime {
                   this.#callbacks.onTeamProgress?.(threadId, progress)
               : undefined,
           },
-        );
+          );
+        }
         if (isTerminalRun(started.run)) {
           const presentation = this.#runStreams.get(started.run.runId);
           if (
