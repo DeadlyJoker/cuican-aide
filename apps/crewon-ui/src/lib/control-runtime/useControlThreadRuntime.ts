@@ -60,6 +60,8 @@ export function useControlThreadRuntime(params: {
   setThreads: ThreadSetter;
   showArchivedThreadsRef: MutableRefObject<boolean>;
   waitForStreamingTextDrain: (threadId: string) => Promise<void>;
+  /** Explicit host gate; omission keeps the legacy renderer coordinator. */
+  teamExecutionMode?: "legacy" | "durableTask";
 }): Readonly<{
   automationRuntime: ControlAutomationRuntime | null;
   connected: boolean;
@@ -108,7 +110,12 @@ export function useControlThreadRuntime(params: {
     const synchronizingRuns = new Map<string, Set<string>>();
     let control: ControlThreadRuntime;
     control = new ControlThreadRuntime(
-      { client: params.client },
+      {
+        client: params.client,
+        ...(params.teamExecutionMode === undefined
+          ? {}
+          : { teamExecutionMode: params.teamExecutionMode }),
+      },
       {
         onProjectConversationRequestChanged: (threadId) => {
           onProjectConversationRequestChangedRef.current?.(threadId);
