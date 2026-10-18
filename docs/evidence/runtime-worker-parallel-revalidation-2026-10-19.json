@@ -1,0 +1,27 @@
+{
+  "schemaVersion": "crewon.evidence.v0",
+  "kind": "runtime-worker-parallel-revalidation",
+  "date": "2026-10-19",
+  "branch": "codex/runtime-concurrency-result-streaming",
+  "commit": "4d4a83a25",
+  "runtime": "Node v24.18.1",
+  "scenario": "runtime-worker-pool.integration.test.ts",
+  "verification": {
+    "tests": 6,
+    "passed": 6,
+    "failed": 0,
+    "skipped": 0,
+    "maximumActiveRuns": 2,
+    "enqueueToModelEntryMs": 35.2883,
+    "releasedLaneToNextModelEntryMs": 22.0063
+  },
+  "findings": [
+    "Production Runtime Worker main defaults CREWON_WORKER_CONCURRENCY to 2 unless CREWON_WORKER_ONCE is enabled.",
+    "The library composition intentionally defaults to one lane when workerConcurrency is omitted.",
+    "Run event streams remain independent across sessions; Thread focus only limits long-lived Thread SSE subscriptions."
+  ],
+  "limitations": [
+    "The test uses a controlled model transport and isolated SQLite; it is not a public network or real provider load test.",
+    "PostgreSQL was not configured in this run."
+  ]
+}

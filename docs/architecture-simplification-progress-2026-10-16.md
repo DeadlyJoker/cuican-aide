@@ -643,3 +643,9 @@ SQLite 场景通过；本轮环境没有 `CREWON_TEST_POSTGRES_URL`，因此新�
 Node 24.18.1 下启动真实 standalone Control API、真实 SQLite Store 和 loopback HTTP，通过 `ControlApiClient` 对同一个 Thread 执行 5 次对照。当前路径把 `getThread` 与 `transcript-snapshot` 并行，再执行必须保留的最终 `getThread` 校验，中位数为 6.6ms；相同三次 HTTP 请求串行中位数为 7.7ms，当前 loopback 样本下降约 14%。原始样本和边界见 `docs/evidence/control-transcript-real-http-benchmark-2026-10-19.json`。
 
 该结果确认并行化收益在真实 HTTP/SQLite 链路上仍存在，但幅度小于受控延迟测试；它不包含模型、SSE、hydration、浏览器绘制或公网网络耗时，不能直接当作用户首屏提速比例。
+
+## 第四十七批：Runtime Worker 双会话并行复核（2026-10-19）
+
+在 Node 24.18.1 下重跑 `runtime-worker-pool.integration.test.ts` 的真实 SQLite 生产组合：6/6 通过，最大活动 Run 为 2；本轮诊断样本中空闲队列入槽约 35.3ms，释放槽补入下一 Run 约 22.0ms。该结果确认生产 Worker Main 默认 `CREWON_WORKER_CONCURRENCY=2`，多会话 Run 执行和取消/关闭收尾均已并行；库级 standalone composition 省略配置时仍保留单槽默认，避免无意增加资源占用。
+
+UI 的 Thread focus 只限制长期 Thread SSE，Run SSE 仍按 Run 独立维护。因此当前“多会话不能并行”不能再归因于 Worker 默认单槽；若实际用户仍观察到串行，应继续采样模型 transport、工具执行、桌面 IPC 或具体启动入口的环境变量。证据见 `docs/evidence/runtime-worker-parallel-revalidation-2026-10-19.json`。
