@@ -661,3 +661,11 @@ UI 的 Thread focus 只限制长期 Thread SSE，Run SSE 仍按 Run 独立维护
 重新核对本地执行代码和既有阶段证据：`local-workspace-command-tool-runtime.ts` 对共享工作区命令使用一个有界串行队列；Electron `localWorkspaceProcesses.ts` 为每次调用创建真实子进程，并保留输出、进程组清理和 admission lease。既有隔离测量中，独立 `cat` 约 35.4ms，排在约 300ms sleep 后约 347.5ms；完整子进程调用约 464.6ms，而进程内文件读取约 8.4ms。
 
 本批没有放宽队列，因为该工具声明为 mutation/reconcilable，不能根据 shell 文本猜测只读并行安全性。后续若要降低本地命令等待，应新增显式只读 workspace operation、独立并发上限和授权/能力契约，再与现有串行 mutation path 对照；证据见 `docs/evidence/local-execution-boundary-revalidation-2026-10-19.json`。
+
+## 第五十批：复核现有 Workspace read 路径，拒绝重复直读链（2026-10-19）
+
+在开始新增显式本地直读 ToolBroker runtime 前，先核对当前代码。仓库已经有两条职责不同的 `read_file` 路径：桌面本地 MCP `scripts/local-workspace-checks-mcp.mjs` 通过常驻 stdio 进程调用 `scripts/local-workspace-reads.mts`，使用 `O_NOFOLLOW`、有限前缀读取、目录扫描预算和 workspace 路径校验；Native Workspace 则通过 `RuntimeWorkspaceReadToolRuntime`、SQLite/PostgreSQL operation store、Device Gateway、签名命令、receipt、reconcile/cancel 和未知结果恢复，服务跨设备或需要 durable authority 的场景。
+
+因此没有新增第三条 `workspace_read_file` 直读工具，也没有让它绕过已有 Run/Thread、租约、设备绑定或回执权威。这样做会产生同名 catalog 冲突，并把本地读取、远程读取和 mutation command 的权限语义拆成互相不一致的实现。后续性能优化应分别测量 MCP `read_file`、Native Workspace `read_file` 和串行 `workspace_run_command`，按实际部署选择路径；不能只因 shell 子进程较慢就把 mutation 工具改成并行或复制一套本地授权。
+
+Node 24 定向验证：`scripts/local-workspace-reads.test.mts` 与 Runtime Worker Workspace read composition/tool/adapter 测试共 23 项全部通过，无新增代码、schema 或 HTTP 形状变化。该验证证明边界和安全行为，不代表已完成安装版、真实设备或公网 Gateway 性能验收。
