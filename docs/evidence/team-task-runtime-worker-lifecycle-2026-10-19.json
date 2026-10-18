@@ -1,0 +1,43 @@
+{
+  "schemaVersion": "crewon.evidence.v0",
+  "kind": "team-task-runtime-worker-lifecycle",
+  "date": "2026-10-19",
+  "branch": "codex/runtime-concurrency-result-streaming",
+  "baseCommit": "f826e73f5",
+  "scope": "explicit Runtime Worker composition boundary for Team scheduler",
+  "defaultBehavior": {
+    "journalMigration": false,
+    "schedulerPump": false,
+    "timer": false
+  },
+  "explicitBehavior": [
+    "Validate Team scope tenant against runtime tenant.",
+    "Acquire and migrate the experimental journal only when configured.",
+    "Create bounded scheduler and optional scan pump.",
+    "Own pump start/stop through Runtime Worker lifecycle."
+  ],
+  "verification": {
+    "applicationTests": {
+      "tests": 922,
+      "passed": 884,
+      "failed": 0,
+      "skipped": 38
+    },
+    "runtimeStandaloneCompositionTests": {
+      "tests": 17,
+      "passed": 17,
+      "failed": 0,
+      "skipped": 0
+    },
+    "newLifecycleTests": { "tests": 2, "passed": 2, "failed": 0 },
+    "runtimeWorkerTypecheck": "passed",
+    "boundaryCheck": "passed",
+    "format": "passed",
+    "gitDiffCheck": "passed"
+  },
+  "limitations": [
+    "The executor is injected and is not yet the production executeTeamTask host.",
+    "Current actor authorization, cancellation propagation and process-level restart recovery remain to be wired.",
+    "No production desktop default or autonomous sub-agent activation is claimed."
+  ]
+}

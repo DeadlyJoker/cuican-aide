@@ -125,6 +125,60 @@ test("requires an externally activated bootstrap release before execution", asyn
   );
 });
 
+test("does not install the experimental Team journal unless explicitly configured", async (context) => {
+  const databasePath = temporaryDatabasePath(context);
+  const config = runtimeConfig();
+  await activateRelease(databasePath, config);
+  const runtime = await createStandaloneRuntimeWorker({
+    ...config,
+    databasePath,
+    scanIntervalMs: null,
+  });
+  await runtime.close();
+  const store = new SqliteRunStore(databasePath);
+  context.after(() => store.close());
+  const journal = await store.experimentalTeamTaskJournalStore();
+  await assert.rejects(
+    journal.read({
+      tenantId: config.runtimeTenantId,
+      spaceId: "space-1",
+      taskId: "team-task-default-off",
+    }),
+    /team_journal_schema_unavailable/u,
+  );
+});
+
+test("explicit Team scheduler migration is owned by Runtime Worker lifecycle", async (context) => {
+  const databasePath = temporaryDatabasePath(context);
+  const config = runtimeConfig();
+  await activateRelease(databasePath, config);
+  const runtime = await createStandaloneRuntimeWorker({
+    ...config,
+    databasePath,
+    scanIntervalMs: null,
+    teamTaskScheduler: {
+      scope: { tenantId: config.runtimeTenantId, spaceId: "space-1" },
+      scanIntervalMs: null,
+      execute: async () => {},
+    },
+  });
+  assert.ok(runtime.teamTaskScheduler !== null);
+  runtime.start();
+  runtime.teamTaskScheduler!.notify();
+  await runtime.close();
+  const store = new SqliteRunStore(databasePath);
+  context.after(() => store.close());
+  const journal = await store.experimentalTeamTaskJournalStore();
+  assert.equal(
+    await journal.read({
+      tenantId: config.runtimeTenantId,
+      spaceId: "space-1",
+      taskId: "team-task-explicit-on",
+    }),
+    null,
+  );
+});
+
 test("metadata-only extension host migrates its scheduling records before the first claim", async (context) => {
   const databasePath = temporaryDatabasePath(context);
   const config = runtimeConfig();

@@ -2,6 +2,7 @@ import assert from "node:assert/strict";
 import test from "node:test";
 import {
   TeamTaskScheduler,
+  TeamTaskSchedulerPump,
   type TeamTaskSchedulerInput,
 } from "./team-task-scheduler.ts";
 import type { TeamTaskFence, TeamTaskLocator } from "./team-task-journal.ts";
@@ -164,4 +165,29 @@ test("close waits for an in-flight executor and rejects later wakes", async () =
   await closing;
   assert.equal(closed, true);
   await assert.rejects(scheduler.wake(), /team_scheduler_closed/);
+});
+
+test("pump coalesces explicit notifications, supports scan fallback, and closes its timer", async () => {
+  const fake = fakeStore([locators[0]!]);
+  let executions = 0;
+  const scheduler = new TeamTaskScheduler(
+    schedulerInput({
+      store: fake.store,
+      concurrency: 1,
+      execute: async () => {
+        executions++;
+      },
+    }),
+  );
+  const pump = new TeamTaskSchedulerPump({
+    scheduler,
+    scanIntervalMs: 10,
+  });
+  pump.start();
+  pump.notify();
+  await scheduler.idle();
+  assert.equal(executions, 1);
+  await pump.close();
+  pump.notify();
+  assert.equal(executions, 1);
 });

@@ -32,6 +32,15 @@ import {
   type ProjectPlanningRuntimePort,
 } from "@crewon/application";
 import {
+  TeamTaskScheduler,
+  TeamTaskSchedulerPump,
+  type TeamTaskSchedulerInput,
+} from "@crewon/application/team-task-scheduler";
+import type {
+  TeamTaskJournalStore,
+  TeamTaskScope,
+} from "@crewon/application/team-task-journal";
+import {
   PostgresDomainStore,
   PostgresWorkspaceReadFileStore,
   SqliteRunStore,
@@ -159,6 +168,8 @@ export type RuntimeWorkerCompositionConfig = Readonly<{
   artifactStore?: ArtifactStorePort;
   artifactEncryptionKeyId?: string;
   ownerId?: string;
+  /** Explicit opt-in Team host; absent means no Team journal migration or scheduler. */
+  teamTaskScheduler?: RuntimeTeamTaskSchedulerConfig;
   /** Independent Run execution lanes; library callers retain one lane by default. */
   workerConcurrency?: number;
   leaseDurationMs?: number;
@@ -221,6 +232,17 @@ export type RuntimeWorkerCompositionConfig = Readonly<{
   nativeWorkspaceReadCatalog?: NativeWorkspaceReadCatalog;
 }>;
 
+export type RuntimeTeamTaskSchedulerConfig = Readonly<{
+  scope: TeamTaskScope;
+  ownerId?: string;
+  concurrency?: number;
+  listLimit?: number;
+  leaseDurationMs?: number;
+  scanIntervalMs?: number | null;
+  execute: TeamTaskSchedulerInput["execute"];
+  onError?: TeamTaskSchedulerInput["onError"];
+}>;
+
 export type StandaloneRuntimeWorkerConfig = RuntimeWorkerCompositionConfig &
   Readonly<{ databasePath: string }>;
 
@@ -245,6 +267,7 @@ export type StandaloneRuntimeWorker = Readonly<{
   pluginQueryHost: InstalledPluginQueryHost | null;
   /** Borrowed by the admission Host; close that Host before closing this Worker. */
   pluginExecutionReadiness: InstalledPluginExecutionReadinessPort | null;
+  teamTaskScheduler: TeamTaskSchedulerPump | null;
   close(): Promise<void>;
 }>;
 
@@ -727,6 +750,44 @@ async function composeRuntimeWorker(
     route: config.route,
     digester,
   });
+  let teamTaskSchedulerPump: TeamTaskSchedulerPump | null = null;
+  if (config.teamTaskScheduler !== undefined) {
+    const teamConfig = config.teamTaskScheduler;
+    if (teamConfig.scope.tenantId !== config.runtimeTenantId)
+      throw new Error("team_task_runtime_tenant_mismatch");
+    const journalFactory = (
+      store as unknown as {
+        experimentalTeamTaskJournalStore?: () => Promise<TeamTaskJournalStore>;
+      }
+    ).experimentalTeamTaskJournalStore;
+    if (journalFactory === undefined)
+      throw new Error("team_task_runtime_store_unavailable");
+    const journal = await journalFactory.call(store);
+    await journal.migrate();
+    const scheduler = new TeamTaskScheduler({
+      store: journal,
+      scope: teamConfig.scope,
+      ownerId: teamConfig.ownerId ?? `team-task:${ids.nextId("outboxLease")}`,
+      concurrency: teamConfig.concurrency ?? 1,
+      listLimit:
+        teamConfig.listLimit ?? Math.max(1, teamConfig.concurrency ?? 1),
+      leaseDurationMs:
+        teamConfig.leaseDurationMs ?? config.leaseDurationMs ?? 30_000,
+      createLeaseId: () => ids.nextId("outboxLease"),
+      execute: teamConfig.execute,
+      ...(teamConfig.onError === undefined
+        ? {}
+        : { onError: teamConfig.onError }),
+    });
+    teamTaskSchedulerPump = new TeamTaskSchedulerPump({
+      scheduler,
+      scanIntervalMs:
+        teamConfig.scanIntervalMs === undefined
+          ? (config.scanIntervalMs ?? 1_000)
+          : teamConfig.scanIntervalMs,
+    });
+    lifetime.own(teamTaskSchedulerPump, { phase: "stop" });
+  }
   const pool = createRuntimeWorkerPool({
     concurrency: config.workerConcurrency ?? 1,
     own: (worker) => {
@@ -858,10 +919,14 @@ async function composeRuntimeWorker(
   }
   if (workspacePrivateServer !== null)
     lifetime.own(workspacePrivateServer, { phase: "stop" });
+  const start = () => {
+    pool.start();
+    teamTaskSchedulerPump?.start();
+  };
   return {
     worker: pool.workers[0]!,
     workers: pool.workers,
-    start: pool.start,
+    start,
     agentVersion,
     agentVersionRegistry,
     providerProbeOrigin: providerProbeServer?.origin ?? null,
@@ -876,6 +941,7 @@ async function composeRuntimeWorker(
             assertReady:
               executionReadiness.assertReady.bind(executionReadiness),
           }),
+    teamTaskScheduler: teamTaskSchedulerPump,
     close: () => lifetime.close(),
   };
 }

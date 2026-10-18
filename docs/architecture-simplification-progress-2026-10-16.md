@@ -551,3 +551,13 @@ SQLite 与 PostgreSQL 共用相同的 scope/limit 校验和结果身份形状；
 新增 3 项纯调度测试覆盖 wake 合并、并发上限、释放槽位补位、claim 竞争、失败不立即重试和关闭等待。Application 全量 921 项中 883 项通过、38 项为既有条件跳过；Application 类型检查、TypeScript 入口边界和新增文件格式检查通过。此前双库 Team 32 项回归继续作为 journal discovery/claim 的存储证据，本批未修改生产 Worker 装配。
 
 本批仍不创建生产 Team scheduler、不生成 owner 身份、不自动迁移 journal，也不把 executor 失败当成可安全重放。下一步必须把真实 executor、当前授权、取消信号和 stop/restart 恢复接到这个原语上，再验证 Worker 进程级停机和多实例竞争后，才考虑生产启用。
+
+## 第三十五批：Runtime Worker 的显式 Team scheduler lifecycle 接线（2026-10-19）
+
+基线为 `f826e73f5`。本批把 Team scheduler pump 接入 Runtime Worker composition，但保持严格 opt-in：默认配置不访问 Team journal、不迁移 schema、不创建 timer。只有显式提供 `teamTaskScheduler`（scope、executor、并发/lease/扫描参数）时，composition 才取得 concrete Store 的实验 journal、执行显式 `migrate()`、创建 bounded scheduler/pump，并由 Runtime Worker 的 `start()` / lifetime `close()` 管理。
+
+配置校验拒绝跨 runtime tenant 的 Team scope；scheduler executor 仍由宿主注入，composition 不自行取得 HTTP、身份或工具权限。pump 支持显式 `notify()` 和可选 scan fallback；关闭会先停 timer，再等待已 claim executor。默认 Worker 行为保持原路径。
+
+验证：Application 全量 922 项中 884 项通过、38 项既有条件跳过；Runtime Worker standalone composition 17/17；新增默认关闭和显式开启的 SQLite lifecycle 用例 2/2；Runtime Worker 类型检查、TypeScript 入口边界和相关格式/diff 检查通过。没有启用生产 Team、没有为默认部署自动迁移 journal，也没有声称 executor 的真实 Team 业务执行已经完成。
+
+下一步需要把受信 actor/current authorization、`executeTeamTask` 的 Control operations、取消 signal、未知副作用恢复和多进程 stop/restart 接到这个可选入口；完成这些验证前继续保持默认关闭。

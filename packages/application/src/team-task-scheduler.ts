@@ -30,6 +30,11 @@ export type TeamTaskSchedulerWake = Readonly<{
   capacity: number;
 }>;
 
+export type TeamTaskSchedulerPumpInput = Readonly<{
+  scheduler: TeamTaskScheduler;
+  scanIntervalMs: number | null;
+}>;
+
 /**
  * Bounded, lease-first scheduling primitive for a future durable Team host.
  * Discovery is advisory; only the Store claim decides ownership. A failed
@@ -153,5 +158,49 @@ export class TeamTaskScheduler {
       started++;
     }
     return { started, skipped, capacity };
+  }
+}
+
+/** Lifecycle wrapper used by a host that wants scan fallback plus explicit wake notifications. */
+export class TeamTaskSchedulerPump {
+  readonly #scheduler: TeamTaskScheduler;
+  readonly #scanIntervalMs: number | null;
+  #timer: ReturnType<typeof setInterval> | null = null;
+  #closed = false;
+
+  constructor(input: TeamTaskSchedulerPumpInput) {
+    if (
+      input.scanIntervalMs !== null &&
+      (!Number.isSafeInteger(input.scanIntervalMs) || input.scanIntervalMs < 1)
+    )
+      teamJournalFail("team_scheduler_scan_interval_invalid");
+    this.#scheduler = input.scheduler;
+    this.#scanIntervalMs = input.scanIntervalMs;
+  }
+
+  start(): void {
+    if (this.#closed || this.#timer !== null) return;
+    void this.#scheduler.wake().catch(() => undefined);
+    if (this.#scanIntervalMs === null) return;
+    this.#timer = setInterval(
+      () => void this.#scheduler.wake().catch(() => undefined),
+      this.#scanIntervalMs,
+    );
+    this.#timer.unref?.();
+  }
+
+  notify(): void {
+    if (this.#closed) return;
+    void this.#scheduler.wake().catch(() => undefined);
+  }
+
+  async close(): Promise<void> {
+    if (this.#closed) return;
+    this.#closed = true;
+    if (this.#timer !== null) {
+      clearInterval(this.#timer);
+      this.#timer = null;
+    }
+    await this.#scheduler.close();
   }
 }
