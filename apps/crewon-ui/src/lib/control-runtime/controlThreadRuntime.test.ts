@@ -2920,6 +2920,40 @@ describe("Control thread runtime", () => {
     runtime.close();
   });
 
+  it("starts the first-page Thread head and transcript snapshot reads together", async () => {
+    const client = fakeClient({ messages: [], runs: [] });
+    const headStarted = deferred<void>();
+    const transcriptStarted = deferred<void>();
+    const releaseHead = deferred<void>();
+    const snapshotImplementation = vi
+      .mocked(client.getThreadTranscriptSnapshot)
+      .getMockImplementation() as (
+      threadId: string,
+      query?: Parameters<ControlApiClient["getThreadTranscriptSnapshot"]>[1],
+      options?: Parameters<ControlApiClient["getThreadTranscriptSnapshot"]>[2],
+    ) => ReturnType<ControlApiClient["getThreadTranscriptSnapshot"]>;
+    vi.mocked(client.getThread).mockImplementation(async () => {
+      headStarted.resolve();
+      await releaseHead.promise;
+      return { thread: threadView({ revision: 4 }), eventSequence: 4 };
+    });
+    vi.mocked(client.getThreadTranscriptSnapshot).mockImplementation(
+      async (threadId, query, options) => {
+        transcriptStarted.resolve();
+        return snapshotImplementation(threadId, query, options);
+      },
+    );
+    const runtime = new ControlThreadRuntime(
+      { client, threadEventStream: idleThreadEventStream },
+      callbacks(),
+    );
+    const read = runtime.readThread("thread-1", { toolHistoryMode: "skip" });
+    await Promise.all([headStarted.promise, transcriptStarted.promise]);
+    releaseHead.resolve();
+    await read;
+    runtime.close();
+  });
+
   it("does not replay a Thread event already included in the snapshot", async () => {
     const client = fakeClient({ messages: [], runs: [] });
     vi.mocked(client.getThread).mockResolvedValue({
