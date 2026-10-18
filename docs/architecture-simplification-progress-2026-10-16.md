@@ -765,3 +765,9 @@ Node 24 验证：应用层 admission service 的准备、重放和冲突单测 3
 本批增加 `GET /api/v1/team-tasks/:taskId` 和 `POST /api/v1/team-tasks/:taskId:cancel`。读取和取消都重新解析当前 actor，并由 journal 校验 task 所属 actor/principal；取消是空 body、必须带 Idempotency-Key 的幂等状态转换，已完成任务不会被重新标记取消。快照只返回 bounded task metadata 和最终 `resultRunId`，不把完整 journal effect、租约 owner 或 actor 身份暴露给浏览器；最终内容继续通过既有 Thread/Run 读取和 Run SSE 获取。
 
 真实 standalone SQLite HTTP/Worker/Team scheduler 回归现在覆盖 admission 后的初始 snapshot、最终 snapshot、resultRunId、完成后的重复 cancel，以及模型调用进行中由 HTTP cancel 设置 journal 标记并唤醒 scheduler。Contracts、Control Client、Application、Control API typecheck 通过。当前仍没有把 Run SSE 包装成 Team 专属事件流；下一步评估 UI 订阅是否只需复用现有 Run SSE，并补充取消后子 Run 真正 terminal 的断言。
+
+## 第六十四批：UI durable Team task 适配层（2026-10-19）
+
+本批没有切换现有 `controlTeamRuntime`，而是新增 `controlTeamTaskRuntime.ts` 作为受控适配层：提交 admission 后轮询 bounded snapshot，恢复到 `finalAccepted` 时取得 `resultRunId`，再复用既有 `streamRunEvents` 读取最终 Run 的 SSE；主消息通过 Thread message page 重新校验。适配层不伪造 manager/worker/member 阶段事件，因为 Run SSE 不携带 Team phase ownership；旧 presentation 仍保留原阶段进度路径。
+
+Node 24 下 UI tsc 和 durable adapter 单测通过。当前 adapter 已证明“提交 → snapshot 恢复 → 最终 Run SSE → canonical result”链路可以不增加 Team 专属事件协议；下一步先把它接到一个显式 feature gate/桌面实验入口，完成真实 UI 可见验收后再退役 renderer coordinator。
