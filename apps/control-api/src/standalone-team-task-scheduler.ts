@@ -1,3 +1,4 @@
+import { randomUUID } from "node:crypto";
 import type { ActorContext, ContentDigester } from "@crewon/application";
 import {
   createTeamTaskExecutor,
@@ -38,10 +39,11 @@ export async function createStandaloneTeamTaskScheduler(
   try {
     const journal = await store.experimentalTeamTaskJournalStore();
     await journal.migrate();
+    const ownerId = config.ownerId ?? `team-task:standalone:${randomUUID()}`;
     const scheduler = new TeamTaskScheduler({
       store: journal,
       scope: { tenantId: config.actor.tenantId, spaceId: config.actor.spaceId },
-      ownerId: config.ownerId ?? "team-task:standalone",
+      ownerId,
       concurrency: config.concurrency ?? 1,
       listLimit: config.listLimit ?? Math.max(1, config.concurrency ?? 1),
       leaseDurationMs: config.leaseDurationMs ?? 30_000,
@@ -49,7 +51,7 @@ export async function createStandaloneTeamTaskScheduler(
         config.cancellationPollIntervalMs === undefined
           ? 250
           : config.cancellationPollIntervalMs,
-      createLeaseId: ({ sequence }) => `team-task:lease:${sequence}`,
+      createLeaseId: ({ sequence }) => `${ownerId}:lease:${sequence}`,
       execute: createTeamTaskExecutor({
         store: journal,
         host: {

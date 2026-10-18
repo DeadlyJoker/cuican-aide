@@ -734,4 +734,6 @@ Node 24 验证：Control Client 与 Control API typecheck 通过；facade 单测
 
 新增独立 `createStandaloneTeamTaskScheduler` async composition：它打开专用 SQLite Store，迁移 Team journal，绑定 standalone Control application operations，构造 immutable Host 和 bounded scheduler pump，并通过显式 `close()` 按 pump→Store 顺序收尾。现有同步 `createStandaloneControlApi` 未改写，Production composition 未接入，默认仍不迁移 Team journal。
 
+未提供 owner 时，composition 为每个 runtime 实例生成唯一 owner/lease 前缀，避免多个 standalone scheduler 进程复用固定 lease identity；部署可显式提供稳定 owner 以便运维追踪。
+
 Node 24 真实 SQLite Control/Worker/合成模型回归通过：创建 durable Team task 后由 async scheduler pump 发现、claim、执行 Producer/Verifier/Final，并收敛到唯一 `finalAccepted` 结果；Control API typecheck、Prettier 和 diff 检查通过。
