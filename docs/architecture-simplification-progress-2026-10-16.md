@@ -737,3 +737,9 @@ Node 24 验证：Control Client 与 Control API typecheck 通过；facade 单测
 未提供 owner 时，composition 为每个 runtime 实例生成唯一 owner/lease 前缀，避免多个 standalone scheduler 进程复用固定 lease identity；部署可显式提供稳定 owner 以便运维追踪。
 
 Node 24 真实 SQLite Control/Worker/合成模型回归通过：创建 durable Team task 后由 async scheduler pump 发现、claim、执行 Producer/Verifier/Final，并收敛到唯一 `finalAccepted` 结果；Control API typecheck、Prettier 和 diff 检查通过。
+
+## 第六十批：Team renderer 迁移边界复核（2026-10-19）
+
+当前 UI 的 `controlTeamRuntime.ts` 仍在 renderer 直接推进 Team：它执行 `forkThread`、`createRun`、`startTurn`、成员轮询和最终汇总。新 standalone scheduler、application operations adapter 和 Control operations facade 尚未接入 UI 提交路径，因此不能把后端底座的完成称为 Team 前端执行权迁移。
+
+迁移前还缺一个正式的 Team task admission/intent HTTP contract：页面需要提交不可变 Team intent，服务端原子写入主会话输入、journal 和初始回执，再通过 SSE/快照读取结果；旧 renderer 推进必须在新入口具备恢复、取消、审批和结果回流后才退出。下一步先定义并测试这个 admission contract，再改 UI，不在现有 `controlTeamRuntime` 上继续叠加后台恢复分支。
