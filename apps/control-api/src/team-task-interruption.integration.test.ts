@@ -76,6 +76,62 @@ function spawnTeamClaimProcess(input: {
   return { child, completion, stdout: () => stdout, stderr: () => stderr };
 }
 
+function spawnTeamEffectProcess(input: {
+  backend?: "sqlite" | "postgres";
+  databasePath: string;
+  connectionString?: string;
+  schema?: string;
+  markerPath: string;
+  tenantId: string;
+  spaceId: string;
+  taskId: string;
+  ownerId: string;
+  leaseDurationMs: number;
+  mode: "prepare" | "recover";
+}) {
+  const child = spawn(
+    process.execPath,
+    [
+      "--experimental-strip-types",
+      fileURLToPath(
+        new URL("./team-task-effect-process.test-support.ts", import.meta.url),
+      ),
+    ],
+    {
+      cwd: process.cwd(),
+      env: {
+        PATH: fileURLToPath(
+          new URL("../../../node_modules/.bin/", import.meta.url),
+        ),
+        CREWON_TEAM_PROCESS_BACKEND: input.backend ?? "sqlite",
+        CREWON_TEAM_PROCESS_DATABASE: input.databasePath,
+        CREWON_TEAM_PROCESS_CONNECTION: input.connectionString ?? "",
+        CREWON_TEAM_PROCESS_SCHEMA: input.schema ?? "",
+        CREWON_TEAM_PROCESS_MARKER: input.markerPath,
+        CREWON_TEAM_PROCESS_TENANT: input.tenantId,
+        CREWON_TEAM_PROCESS_SPACE: input.spaceId,
+        CREWON_TEAM_PROCESS_TASK: input.taskId,
+        CREWON_TEAM_PROCESS_OWNER: input.ownerId,
+        CREWON_TEAM_PROCESS_LEASE_MS: String(input.leaseDurationMs),
+        CREWON_TEAM_PROCESS_MODE: input.mode,
+      },
+      stdio: ["ignore", "pipe", "pipe"],
+    },
+  );
+  let stdout = "";
+  let stderr = "";
+  child.stdout.on("data", (chunk) => (stdout += String(chunk)));
+  child.stderr.on("data", (chunk) => (stderr += String(chunk)));
+  const completion = new Promise<{
+    code: number | null;
+    signal: NodeJS.Signals | null;
+  }>((resolve, reject) => {
+    child.once("error", reject);
+    child.once("close", (code, signal) => resolve({ code, signal }));
+  });
+  return { child, completion, stdout: () => stdout, stderr: () => stderr };
+}
+
 async function waitForClaimProcess(
   processHandle: ReturnType<typeof spawnTeamClaimProcess>,
 ): Promise<void> {
@@ -84,6 +140,20 @@ async function waitForClaimProcess(
     assert.ok(
       Date.now() < deadline,
       `claim process did not start: ${processHandle.stderr()}`,
+    );
+    await setTimeout(10);
+  }
+}
+
+async function waitForEffectProcess(
+  processHandle: ReturnType<typeof spawnTeamEffectProcess>,
+  marker: "prepared" | "settled",
+): Promise<void> {
+  const deadline = Date.now() + 10_000;
+  while (!processHandle.stdout().includes(`${marker}\n`)) {
+    assert.ok(
+      Date.now() < deadline,
+      `effect process did not reach ${marker}: ${processHandle.stderr()}`,
     );
     await setTimeout(10);
   }
@@ -683,5 +753,108 @@ workflowDeploymentIntegrationTest(
     );
     second.child.kill("SIGKILL");
     assert.equal((await second.completion).signal, "SIGKILL");
+  },
+);
+
+workflowDeploymentIntegrationTest(
+  "Team journal recovers one unknown external effect after an owner process SIGKILL",
+  async (t, fixture) => {
+    const f = await fixture(t, {
+      output: (request) =>
+        lastUser(request) === priorContext ? "PRIOR_REPLY" : "MEMBER_REPORT",
+    });
+    const server = await f.control(null);
+    const bootstrap = await f.worker();
+    bootstrap.start();
+    const { thread, plan } = await prepare(server.client, true);
+    await bootstrap.close();
+    const journal = await f.store.experimentalTeamTaskJournalStore();
+    await journal.migrate();
+    const intent: TeamTaskIntent = {
+      schemaVersion: "crewon.team-task.v1",
+      ...f.actor,
+      taskId: "process-unknown-effect-recovery",
+      turn: {
+        threadId: thread.threadId,
+        expectedRevision: thread.revision,
+        content: originalTask,
+        plan,
+        responseMode: "manager",
+        managerResponseKind: "office",
+      },
+    };
+    await journal.create(intent);
+    const markerDirectory = mkdtempSync(
+      join(tmpdir(), "crewon-team-effect-process-"),
+    );
+    t.after(() => rmSync(markerDirectory, { recursive: true, force: true }));
+    const markerPath = join(markerDirectory, "effect-markers");
+    const processBackend =
+      "databasePath" in f
+        ? {
+            backend: "sqlite" as const,
+            databasePath: f.databasePath,
+          }
+        : {
+            backend: "postgres" as const,
+            databasePath: "",
+            connectionString: f.connectionString,
+            schema: f.schema,
+          };
+    appendFileSync(markerPath, "", { mode: 0o600 });
+    const first = spawnTeamEffectProcess({
+      ...processBackend,
+      markerPath,
+      tenantId: f.actor.tenantId,
+      spaceId: f.actor.spaceId,
+      taskId: intent.taskId,
+      ownerId: "effect-owner-a",
+      leaseDurationMs: 200,
+      mode: "prepare",
+    });
+    t.after(async () => {
+      if (first.child.exitCode === null && first.child.signalCode === null)
+        first.child.kill("SIGKILL");
+      await first.completion;
+    });
+    await waitForEffectProcess(first, "prepared");
+    const prepared = await journal.effects(intent);
+    assert.equal(prepared.length, 1);
+    assert.equal(prepared[0]!.key, "command:process-unknown-effect");
+    assert.equal(prepared[0]!.settled, false);
+    const claimed = await journal.read(intent);
+    assert.equal(claimed?.lease?.ownerId, "effect-owner-a");
+    const expiry = claimed.lease!.expiresAt;
+    first.child.kill("SIGKILL");
+    assert.equal((await first.completion).signal, "SIGKILL");
+    while (Date.now() <= expiry) await setTimeout(10);
+
+    const second = spawnTeamEffectProcess({
+      ...processBackend,
+      markerPath,
+      tenantId: f.actor.tenantId,
+      spaceId: f.actor.spaceId,
+      taskId: intent.taskId,
+      ownerId: "effect-owner-b",
+      leaseDurationMs: 5_000,
+      mode: "recover",
+    });
+    t.after(async () => {
+      if (second.child.exitCode === null && second.child.signalCode === null)
+        second.child.kill("SIGKILL");
+      await second.completion;
+    });
+    await waitForEffectProcess(second, "settled");
+    assert.deepEqual(await second.completion, { code: 0, signal: null });
+    const recovered = await journal.effects(intent);
+    assert.equal(recovered.length, 1);
+    assert.equal(recovered[0]!.settled, true);
+    assert.deepEqual(recovered[0]!.response, {
+      providerReceiptId: "process-recovered-receipt",
+    });
+    assert.deepEqual(readFileSync(markerPath, "utf8").trim().split("\n"), [
+      "prepared:1",
+      "recovered:false:2",
+    ]);
   },
 );

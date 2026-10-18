@@ -3,22 +3,35 @@
   "kind": "team-task-scheduler-process-recovery",
   "date": "2026-10-19",
   "branch": "codex/runtime-concurrency-result-streaming",
-  "baseCommit": "b750d3552",
-  "scope": "SQLite and PostgreSQL child-process SIGKILL and durable Team claim recovery",
+  "baseCommit": "3e0d78b81",
+  "scope": "Child-process SIGKILL recovery for durable Team claims and one unknown external effect",
   "scenario": [
     "Child process A opens the real Store journal and claims the task.",
     "The test sends SIGKILL without invoking scheduler close or journal cleanup.",
     "The original lease expires in the shared database or schema.",
     "Child process B opens the same Store and claims with a new owner/epoch.",
-    "The journal row and marker prove owner A epoch 1 then owner B epoch 2."
+    "The journal row and marker prove owner A epoch 1 then owner B epoch 2.",
+    "A separate child process prepares one command effect, is SIGKILLed before settlement, and a second process reuses the same effect key before settling one receipt."
   ],
   "verification": {
     "processRecovery": { "sqlite": "passed", "postgres": "passed" },
-    "teamBothBackends": {
-      "tests": 40,
-      "passed": 40,
-      "failed": 0,
-      "skipped": 0
+    "unknownEffectRecovery": {
+      "sqlite": "passed",
+      "postgres": "not-run-no-test-database"
+    },
+    "teamRegression": {
+      "previousDualBackendTests": 40,
+      "previousDualBackendPassed": 40,
+      "currentUnknownEffectProcess": {
+        "sqlite": "passed",
+        "postgres": "not-run-no-test-database"
+      },
+      "currentCombinedLocalTeamTests": {
+        "tests": 34,
+        "passed": 17,
+        "failed": 0,
+        "skipped": 17
+      }
     },
     "controlApiTypecheck": "passed",
     "format": "passed",
@@ -26,8 +39,8 @@
     "postgresCleanup": "stopped and socket rejected a follow-up connection"
   },
   "limitations": [
-    "This slice proves durable claim recovery, not rollback of an already dispatched external side effect.",
-    "The child processes intentionally stop after claim; full executeTeamTask unknown-outcome recovery remains a separate audit.",
+    "An external provider was not contacted; the unknown-effect test uses a marker as a dispatch stand-in and proves one journal effect key and one receipt across processes.",
+    "The current environment did not provide CREWON_TEST_POSTGRES_URL, so the new unknown-effect process scenario was not run against PostgreSQL in this turn.",
     "No default desktop Team or autonomous sub-agent activation is claimed."
   ]
 }

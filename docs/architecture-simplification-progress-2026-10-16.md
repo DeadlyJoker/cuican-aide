@@ -609,3 +609,11 @@ PG/生产多实例和 OS 强杀后的完整 `executeTeamTask` 外部副作用恢
 双 backend process recovery 均通过；完整 Team journal、interruption 和 application 回归扩大到 40/40 全部通过。Control API 类型检查、入口边界、格式和 diff 检查通过；PostgreSQL 测试库停止后无残留连接。
 
 生产级 OS 强杀后的完整 `executeTeamTask` 未知副作用恢复、actor/authorization 多实例配置仍需独立审计；默认 Team 与自主子 Agent 继续关闭。
+
+## 第四十二批：跨进程未知 Team effect 的单次回执恢复（2026-10-19）
+
+基线为 `3e0d78b81`。本批新增真实 Node 子进程场景：进程 A 在共享 journal 中 claim task 并 `prepare` 一个 command effect，写入 prepared marker 后被 `SIGKILL`；原 lease 过期后，进程 B 以新 owner/epoch 打开同一 Store，使用相同 effect key 读取未结算记录，并只写入一个 recovery receipt。最终核对 effect 数量仍为 1、`settled=true`、receipt 内容和 marker 顺序 `prepared:1` → `recovered:false:2`。
+
+SQLite 场景通过；本轮环境没有 `CREWON_TEST_POSTGRES_URL`，因此新增未知 effect 场景的 PostgreSQL 版本未运行。既有双 backend claim recovery 和此前已完成的 Team 回归证据保持不变。该场景没有联系真实外部供应商，marker 只证明 journal 的跨进程单次派发/回执边界，不证明供应商本身支持幂等或可查询未知结果。
+
+默认 Runtime Worker、桌面 Team 和自主子 Agent 仍未启用；下一步应在提供 PostgreSQL 测试库后重跑该场景，再把同一 effect journal 接到真实 actor/authorization 的生产 executor，随后才评估默认启用。
