@@ -1,8 +1,10 @@
 import assert from "node:assert/strict";
 import test from "node:test";
 import {
+  parseTeamTaskCancelRequest,
   parseTeamTaskAdmissionRequest,
   parseTeamTaskAdmissionResponse,
+  parseTeamTaskSnapshotResponse,
 } from "./team-task-control-contract.ts";
 
 function request() {
@@ -74,4 +76,22 @@ test("parses the bounded admission response", () => {
     },
   });
   assert.equal(response.task.mainMessageSequence, 4);
+});
+
+test("parses task snapshots and requires an empty cancel body", () => {
+  const snapshot = parseTeamTaskSnapshotResponse({
+    schemaVersion: "crewon.team-task-snapshot.v1",
+    task: {
+      taskId: "task-1",
+      threadId: "thread-1",
+      status: "coordinating",
+      revision: 4,
+      cancelRequested: true,
+      mainMessageSequence: null,
+      resultRunId: null,
+    },
+  });
+  assert.equal(snapshot.task.mainMessageSequence, null);
+  assert.deepEqual(parseTeamTaskCancelRequest({}), {});
+  assert.throws(() => parseTeamTaskCancelRequest({ reason: "x" }));
 });

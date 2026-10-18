@@ -758,4 +758,10 @@ Node 24 验证：应用层 admission service 的准备、重放和冲突单测 3
 
 新增 `createStandaloneTeamTaskControlApi` async composition，明确迁移顺序为：同库 admission Store → Control application operations → durable Team scheduler。同步 `createStandaloneControlApi` 和 Production composition 未改变；Team scheduler 仍只有这个显式 standalone composition 才会迁移 journal、启动 pump 和响应 admission wake。应用关闭时先停止 scheduler 和 admission Store，再关闭 Control 自有资源，避免后台执行使用已关闭的 application services。
 
-真实 SQLite HTTP/Worker/Team scheduler 回归通过：admission 返回 201，scheduler 被 wake 后完成 Producer/Verifier/Final，主 Thread 中原始用户输入只出现一次。Contracts parser 4/4、Control/Store/Application typecheck 通过；PostgreSQL 仍按环境未配置而跳过。当前仍未增加 Team snapshot/SSE、取消/审批路由，也未接入 renderer；下一步先补只读结果快照和取消语义，再让 UI 从旧 coordinator 切换到这个入口。
+真实 SQLite HTTP/Worker/Team scheduler 回归通过：admission 返回 201，scheduler 被 wake 后完成 Producer/Verifier/Final，主 Thread 中原始用户输入只出现一次。Contracts parser 4/4、Control/Store/Application typecheck 通过；PostgreSQL 仍按环境未配置而跳过。本批尚未接入 renderer，也未提供 Team snapshot/SSE 和取消控制；这些边界在下一批单独补齐。
+
+## 第六十三批：Team snapshot 与取消控制边界（2026-10-19）
+
+本批增加 `GET /api/v1/team-tasks/:taskId` 和 `POST /api/v1/team-tasks/:taskId:cancel`。读取和取消都重新解析当前 actor，并由 journal 校验 task 所属 actor/principal；取消是空 body、必须带 Idempotency-Key 的幂等状态转换，已完成任务不会被重新标记取消。快照只返回 bounded task metadata 和最终 `resultRunId`，不把完整 journal effect、租约 owner 或 actor 身份暴露给浏览器；最终内容继续通过既有 Thread/Run 读取和 Run SSE 获取。
+
+真实 standalone SQLite HTTP/Worker/Team scheduler 回归现在覆盖 admission 后的初始 snapshot、最终 snapshot、resultRunId、完成后的重复 cancel，以及模型调用进行中由 HTTP cancel 设置 journal 标记并唤醒 scheduler。Contracts、Control Client、Application、Control API typecheck 通过。当前仍没有把 Run SSE 包装成 Team 专属事件流；下一步评估 UI 订阅是否只需复用现有 Run SSE，并补充取消后子 Run 真正 terminal 的断言。

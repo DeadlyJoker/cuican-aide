@@ -56,8 +56,10 @@ import {
 import {
   parseTeamTaskAdmissionRequest,
   parseTeamTaskAdmissionResponse,
+  parseTeamTaskSnapshotResponse,
   type TeamTaskAdmissionRequest,
   type TeamTaskAdmissionResponse,
+  type TeamTaskSnapshotResponse,
 } from "@crewon/contracts";
 import {
   MAX_OFFICE_THREAD_RESPONSE_BYTES,
@@ -1408,6 +1410,51 @@ export class ControlApiClient {
     } catch {
       throw new ControlApiProtocolError(
         "control_client_team_task_admission_invalid",
+      );
+    }
+  }
+
+  async getTeamTask(
+    taskId: string,
+    options: ControlApiRequestOptions = {},
+  ): Promise<TeamTaskSnapshotResponse> {
+    const response = await this.#json<unknown>(
+      "GET",
+      `/api/v1/team-tasks/${resourceId(taskId)}`,
+      null,
+      { ...options, expectedStatuses: [200] },
+    );
+    try {
+      return parseTeamTaskSnapshotResponse(response);
+    } catch {
+      throw new ControlApiProtocolError(
+        "control_client_team_task_snapshot_invalid",
+      );
+    }
+  }
+
+  async cancelTeamTask(
+    taskId: string,
+    idempotencyKey: string,
+    options: ControlApiRequestOptions = {},
+  ): Promise<TeamTaskSnapshotResponse> {
+    const response = await this.#json<unknown>(
+      "POST",
+      `/api/v1/team-tasks/${resourceId(taskId)}:cancel`,
+      {},
+      {
+        ...options,
+        idempotencyKey,
+        requireCsrf: true,
+        requireIdempotency: true,
+        expectedStatuses: [200],
+      },
+    );
+    try {
+      return parseTeamTaskSnapshotResponse(response);
+    } catch {
+      throw new ControlApiProtocolError(
+        "control_client_team_task_cancel_invalid",
       );
     }
   }

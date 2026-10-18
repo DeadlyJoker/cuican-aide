@@ -2,6 +2,7 @@ import { registerRunCancellationRoutes } from "./run-cancellation-routes.ts";
 import { registerWorkflowCatalogRoutes } from "./workflow-catalog-routes.ts";
 import { registerWorkflowStartRoute } from "./workflow-start-route.ts";
 import { registerTeamTaskAdmissionRoute } from "./team-task-admission-route.ts";
+import { registerTeamTaskControlRoutes } from "./team-task-control-route.ts";
 import {
   registerWorkflowControlRoutes,
   type WorkflowControlServices,
@@ -1482,6 +1483,11 @@ export function buildControlApi(
   registerWorkflowCatalogRoutes(app, dependencies);
   registerWorkflowStartRoute(app, dependencies);
   registerTeamTaskAdmissionRoute(app, {
+    identity: dependencies.identity,
+    service: dependencies.teamTaskAdmission,
+    wake: dependencies.teamTaskAdmissionWakeup,
+  });
+  registerTeamTaskControlRoutes(app, {
     identity: dependencies.identity,
     service: dependencies.teamTaskAdmission,
     wake: dependencies.teamTaskAdmissionWakeup,

@@ -9,6 +9,7 @@ import {
   type TeamTaskAdmissionResult,
   type TeamTaskIntent,
   type TeamTaskJournalStore,
+  type TeamTaskRecord,
 } from "./team-task-journal.ts";
 import type {
   ControlTeamManagerResponseKind,
@@ -86,6 +87,34 @@ export class TeamTaskAdmissionApplicationService {
       mainHistorySequence: history[0].sequence - 1,
     });
     return this.#journal.admit({ intent, thread: prepared });
+  }
+
+  async read(actor: ActorContext, taskId: string): Promise<TeamTaskRecord> {
+    teamJournalId(taskId);
+    const task = await this.#journal.read({
+      tenantId: actor.tenantId,
+      spaceId: actor.spaceId,
+      taskId,
+    });
+    if (
+      task === null ||
+      task.intent.actorId !== actor.actorId ||
+      task.intent.principalId !== actor.principalId
+    )
+      throw new ApplicationError("notFound", "team_task_not_found");
+    return task;
+  }
+
+  async cancel(actor: ActorContext, taskId: string): Promise<TeamTaskRecord> {
+    const current = await this.read(actor, taskId);
+    if (!current.cancelRequested && current.status !== "finalAccepted") {
+      await this.#journal.requestCancel({
+        tenantId: actor.tenantId,
+        spaceId: actor.spaceId,
+        taskId,
+      });
+    }
+    return this.read(actor, taskId);
   }
 }
 

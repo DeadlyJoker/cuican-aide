@@ -53,6 +53,18 @@ export type TeamTaskAdmissionResponse = Readonly<{
     mainMessageSequence: number;
   }>;
 }>;
+export type TeamTaskSnapshotResponse = Readonly<{
+  schemaVersion: "crewon.team-task-snapshot.v1";
+  task: Readonly<{
+    taskId: string;
+    threadId: string;
+    status: "coordinating" | "finalAccepted";
+    revision: number;
+    cancelRequested: boolean;
+    mainMessageSequence: number | null;
+    resultRunId: string | null;
+  }>;
+}>;
 
 export const MAX_TEAM_TASK_ADMISSION_REQUEST_BYTES = 128 * 1024;
 export const MAX_TEAM_TASK_ADMISSION_RESPONSE_BYTES = 32 * 1024;
@@ -270,7 +282,8 @@ export function parseTeamTaskAdmissionResponse(
   ]);
   if (
     !["coordinating", "finalAccepted"].includes(String(task.status)) ||
-    typeof task.cancelRequested !== "boolean"
+    typeof task.cancelRequested !== "boolean" ||
+    !Number.isSafeInteger(task.mainMessageSequence)
   )
     invalid();
   const result = {
@@ -291,4 +304,56 @@ export function parseTeamTaskAdmissionResponse(
   )
     invalid();
   return result;
+}
+
+export function parseTeamTaskSnapshotResponse(
+  value: unknown,
+): TeamTaskSnapshotResponse {
+  const row = exact(value, ["schemaVersion", "task"]);
+  if (row.schemaVersion !== "crewon.team-task-snapshot.v1") invalid();
+  const task = exact(row.task, [
+    "cancelRequested",
+    "mainMessageSequence",
+    "resultRunId",
+    "revision",
+    "status",
+    "taskId",
+    "threadId",
+  ]);
+  if (
+    !["coordinating", "finalAccepted"].includes(String(task.status)) ||
+    typeof task.cancelRequested !== "boolean" ||
+    (task.mainMessageSequence !== null &&
+      !Number.isSafeInteger(task.mainMessageSequence)) ||
+    (task.resultRunId !== null && typeof task.resultRunId !== "string")
+  )
+    invalid();
+  const result = {
+    schemaVersion: "crewon.team-task-snapshot.v1" as const,
+    task: {
+      taskId: text(task.taskId),
+      threadId: text(task.threadId),
+      status: task.status as "coordinating" | "finalAccepted",
+      revision: integer(task.revision),
+      cancelRequested: task.cancelRequested,
+      mainMessageSequence:
+        task.mainMessageSequence === null
+          ? null
+          : integer(task.mainMessageSequence),
+      resultRunId: task.resultRunId === null ? null : text(task.resultRunId),
+    },
+  };
+  if (
+    new TextEncoder().encode(JSON.stringify(result)).byteLength >
+    MAX_TEAM_TASK_ADMISSION_RESPONSE_BYTES
+  )
+    invalid();
+  return result;
+}
+
+export function parseTeamTaskCancelRequest(
+  value: unknown,
+): Record<string, never> {
+  const row = exact(value, []);
+  return row as Record<string, never>;
 }
