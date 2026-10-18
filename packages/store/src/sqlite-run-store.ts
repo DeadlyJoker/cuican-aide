@@ -1007,6 +1007,19 @@ export class SqliteRunStore implements DomainStore {
     });
   }
 
+  /** Explicit lineage storage foundation; does not admit or schedule child work. */
+  async experimentalAutonomousTaskEdgeStore() {
+    this.#assertOpen();
+    const { ExperimentalSqliteAutonomousTaskEdgeStore } = await import(
+      "./sqlite-autonomous-task-edge-store.ts"
+    );
+    this.#assertOpen();
+    return new ExperimentalSqliteAutonomousTaskEdgeStore(this.#database, {
+      assertOpen: () => this.#assertOpen(),
+      now: () => readLeaseClock(this.#clock),
+    });
+  }
+
   /** Internal foundation; the public deployment capability supplies trusted policy. */
   experimentalWorkflowRunAdmissionStore(
     resolveRouteWithinTransaction: SqliteWorkflowRouteResolver,

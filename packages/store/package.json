@@ -12,6 +12,8 @@
     "./postgres-workspace-read-file-store": "./src/postgres-workspace-read-file-store.ts",
     "./sqlite-run-store": "./src/sqlite-run-store.ts",
     "./sqlite-workspace-read-file-store": "./src/sqlite-workspace-read-file-store.ts",
+    "./sqlite-autonomous-task-edge-store": "./src/sqlite-autonomous-task-edge-store.ts",
+    "./postgres-autonomous-task-edge-store": "./src/postgres-autonomous-task-edge-store.ts",
     "./sqlite-availability": "./src/sqlite-availability.ts",
     "./filesystem-storage-admission": "./src/filesystem-storage-admission.ts",
     "./control-snapshot-postgres-migration": "./src/control-snapshot-postgres-migration.ts"

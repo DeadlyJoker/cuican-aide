@@ -35,6 +35,15 @@ export type AutonomousTaskCapabilitySnapshot = Readonly<{
   toolPermissionMode: ToolPermissionMode;
 }>;
 
+export type AutonomousTaskEdgeLink = Readonly<{
+  schemaVersion: "crewon.autonomous-task-edge.v0";
+  rootTaskId: string;
+  parentTaskId: string;
+  childTaskId: string;
+  depth: number;
+  childOrdinal: number;
+}>;
+
 export class AutonomousTaskPolicyError extends Error {
   readonly code = "autonomous_task_policy_invalid";
 
@@ -144,6 +153,41 @@ export function captureAutonomousTaskCapability(
     policySnapshotId: taskId(record.policySnapshotId),
     workspaceBindingId: nullableTaskId(record.workspaceBindingId),
     toolPermissionMode: permissionMode(record.toolPermissionMode),
+  });
+}
+
+/** Copies one parent/child edge. Linking it to a durable task is a separate transaction. */
+export function captureAutonomousTaskEdgeLink(
+  input: unknown,
+): AutonomousTaskEdgeLink {
+  const record = recordOf(input, [
+    "schemaVersion",
+    "rootTaskId",
+    "parentTaskId",
+    "childTaskId",
+    "depth",
+    "childOrdinal",
+  ]);
+  if (record.schemaVersion !== "crewon.autonomous-task-edge.v0")
+    invalid("edge_schema");
+  const rootTaskId = taskId(record.rootTaskId);
+  const parentTaskId = taskId(record.parentTaskId);
+  const childTaskId = taskId(record.childTaskId);
+  const depth = boundedInteger(record.depth, 1, MAX_AUTONOMOUS_TASK_DEPTH);
+  const childOrdinal = boundedInteger(
+    record.childOrdinal,
+    1,
+    MAX_AUTONOMOUS_TASK_CHILDREN,
+  );
+  if (parentTaskId === childTaskId || rootTaskId === childTaskId)
+    invalid("edge_self_reference");
+  return Object.freeze({
+    schemaVersion: "crewon.autonomous-task-edge.v0",
+    rootTaskId,
+    parentTaskId,
+    childTaskId,
+    depth,
+    childOrdinal,
   });
 }
 

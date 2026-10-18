@@ -535,6 +535,20 @@ export class PostgresDomainStore
     );
   }
 
+  /** Explicit lineage storage foundation; does not admit or schedule child work. */
+  async experimentalAutonomousTaskEdgeStore() {
+    this.assertOpen();
+    const { ExperimentalPostgresAutonomousTaskEdgeStore } = await import(
+      "./postgres-autonomous-task-edge-store.ts"
+    );
+    this.assertOpen();
+    return new ExperimentalPostgresAutonomousTaskEdgeStore(
+      this.pool,
+      this.schemaSql(),
+      () => this.assertOpen(),
+    );
+  }
+
   /** Admission foundation only. Neither construction nor migration enables a scheduler. */
   experimentalWorkflowRunAdmissionStore(
     resolveRouteWithinTransaction: PostgresWorkflowRouteResolver,

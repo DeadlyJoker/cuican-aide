@@ -829,3 +829,9 @@ Node 24 验证：Application 全量 933 项中 895 项通过、38 项既有条�
 复核发现 `ThreadMessageWindowStore.readWindow()` 已在同一 SQLite/PostgreSQL 快照中捕获完整 `ThreadState`，但原 Control transcript-snapshot 路由只返回 message window、Run bindings 和 Run 摘要，renderer 因此仍要额外读取 Thread head。现在响应增加可选 `thread` 字段，旧服务响应仍可被解析；当前 `ControlApiClient` 宣布该能力后，首次无 cursor 的 UI hydration 使用同一 snapshot 的 Thread head，保留旧 cursor 先读 revision、hydration 后最终 head 校验和旧客户端 fallback。
 
 真实 Control route 测试确认同一 HTTP 响应带回 Thread identity/revision，snapshot parser 仍接受没有 `thread` 的旧响应。Node 24 下 UI ControlThreadRuntime/TranscriptRead 121/121、contracts parser 3/3、Control route 1/1 通过；Control API、Control Client、UI、Contracts typecheck 和 OpenAPI generate check 通过。新增 runtime 回归证明当前协议路径把 hydration 前的 Thread head 请求从 1 次降为 0 次；旧 fixture/client 路径保持原行为。尚未把最终 hydration head 校验删除，也没有把 cursor 分页改成无 head 读取。
+
+## 第七十三批：SQLite/PostgreSQL task-edge 持久存储基础（2026-10-19）
+
+新增独立 `AutonomousTaskEdgeStore` port 及 SQLite/PostgreSQL 实现。它只在显式调用 `migrate()` 后创建自己的 schema，记录 root/parent/child、depth、child ordinal 和创建时间；同一 parent ordinal 或 child 的重复 link 只能 replay 完全相同的 edge，冲突会拒绝。children 和 descendants 查询均有 32 条上限与深度上限，递归查询按 root、scope 和稳定顺序读取。
+
+该 store 当前没有接入 Team admission、Run、HTTP 或 scheduler；因此没有把非原子 edge link 冒充为 child spawn，也没有改变默认数据库启动。SQLite 真实测试覆盖显式迁移、幂等 replay、冲突、后代查询和列表预算；Application/Store typecheck 通过。PostgreSQL 实现已完成相同 port/事务/advisory-lock 结构，但当前环境没有测试库，尚未声称 PostgreSQL runtime 验收。下一步是在同一事务中把 parent effect、child task、edge 和 wake item 原子提交。
