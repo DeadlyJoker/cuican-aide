@@ -717,3 +717,9 @@ Node 24 验证：Control Client 与 Control API typecheck 通过；facade 单测
 结合 `ControlApiDependencies` 和两个 Control composition root，Team Host 的接入顺序确定为：先在 standalone Control 进程内复用已有 `actor`、`AuthorizationPort`、Thread/Run/Turn/Office services 和同一 Store，验证本地持久 scheduler 的完整 operations adapter；再为 Production/Cloud 单独设计 service identity、策略调用和撤权。不要先让 Runtime Worker 使用 session token 反向调用 Control HTTP，也不要把 request-scoped user actor 固定进后台 scheduler。
 
 该顺序保留现有架构边界：Control 负责会话/授权编排，Worker 负责 Run/模型/工具执行；本地 standalone 可以共享进程内权威，生产多租户则必须经过显式机器身份。当前没有开启任何 scheduler 或新增凭据，下一步实现只读 application operations adapter 和 standalone 专项验收。
+
+## 第五十七批：Standalone application Team operations adapter（2026-10-19）
+
+新增 `createControlTeamApplicationOperations`，直接绑定 standalone Control 已有的 Actor、Thread/Run/Turn/Office/Goal application services 和 route resolver。它实现 Team 所需的读取、Office target 授权、Run/Thread/Goal/Turn 命令，并在每次 `withTeamTaskFence` 后返回独立 facade；不经过 HTTP，不读取 session/CSRF/BFF 凭据，也没有接入 scheduler。
+
+该 adapter 只在 `createStandaloneControlApi` 的返回对象暴露，Production composition 不提供固定 Team operations，避免把 request-scoped actor 变成后台身份。Node 24 真实 SQLite Control/Worker 组合验证覆盖 Thread snapshot、Office target、消息分页、execution-intent capability 和 Goal read，共 1 项通过；Control API typecheck、Prettier 和 diff 检查通过。

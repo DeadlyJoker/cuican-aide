@@ -94,6 +94,7 @@ import {
 } from "./desktop-plugin-extension-composition.ts";
 
 import { buildControlApi } from "./control-api.ts";
+import { createControlTeamApplicationOperations } from "./control-team-application-operations.ts";
 import type { DesktopProjectMaterialStorage } from "@crewon/media-runtime/desktop-project-material-archive";
 import { composePluginCreditReads } from "./plugin-credit-read-composition.ts";
 import { closeStandaloneCompositionOwners as closeOwners } from "./standalone-composition-cleanup.ts";
@@ -195,6 +196,7 @@ export type StandaloneControlApiRuntime = Readonly<{
   providerProbes: ControlProviderProbeService;
   workspaceLists: WorkspaceListApplicationService | null;
   workspaceQueries: WorkspaceOperationQueryService;
+  teamOperations?: import("@crewon/application/team-turn").ControlTeamRuntimeClient;
 }>;
 
 export function createStandaloneControlApi(
@@ -857,6 +859,15 @@ function composeControlApi(
       tasks: extensionReads,
       digester,
     });
+    const teamOperations = createControlTeamApplicationOperations({
+      actor: config.actor,
+      threads,
+      runs: application,
+      offices,
+      goals,
+      turns,
+      routeResolver,
+    });
     const app = buildControlApi({
       pluginCreditReads: composePluginCreditReads(
         store.pluginCreditStore(),
@@ -1012,6 +1023,7 @@ function composeControlApi(
       providerProbes,
       workspaceLists,
       workspaceQueries,
+      teamOperations,
     };
   } catch (error) {
     if (
