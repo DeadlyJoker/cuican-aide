@@ -1082,8 +1082,15 @@ export class ControlThreadRuntime {
         ? this.#loadThreadTaskChangeLedger(threadId, signal)
         : Promise.resolve(null),
     ]);
-    const { runs, activeRun: authoritativeActiveRun } = transcript;
     read.assertCurrent();
+    if (
+      transcript.window.messageWindow.threadRevision !==
+        snapshot.thread.revision ||
+      transcript.window.messageWindow.eventSequence !== snapshot.eventSequence
+    ) {
+      throw new Error("control_thread_projection_snapshot_changed");
+    }
+    const { runs, activeRun: authoritativeActiveRun } = transcript;
     const { thread } = snapshot;
     if (thread.threadId !== threadId) {
       throw new Error("control_thread_projection_identity_invalid");
