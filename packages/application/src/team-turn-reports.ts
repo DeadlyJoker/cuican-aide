@@ -48,6 +48,7 @@ export async function recoverWorker(input: {
   toolPermissionMode?: ToolPermissionMode;
   pollIntervalMs: number;
   runDeadlineMs: number;
+  signal?: AbortSignal;
   checkpoint?: TeamTurnCheckpoint;
 }): Promise<MemberReport> {
   const snapshot = await readTeamCheckpoint(
@@ -92,6 +93,7 @@ export async function recoverWorker(input: {
     run: started.run,
     pollIntervalMs: input.pollIntervalMs,
     runDeadlineMs: input.runDeadlineMs,
+    signal: input.signal,
   });
   const output =
     terminal.status === "completed"

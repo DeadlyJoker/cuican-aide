@@ -191,3 +191,43 @@ test("pump coalesces explicit notifications, supports scan fallback, and closes 
   pump.notify();
   assert.equal(executions, 1);
 });
+
+test("polls durable cancellation and aborts the claimed executor", async () => {
+  const fake = fakeStore([locators[0]!]);
+  let canceled = false;
+  let errors = 0;
+  const scheduler = new TeamTaskScheduler(
+    schedulerInput({
+      store: {
+        ...fake.store,
+        read: async () => ({
+          intent: {} as never,
+          status: "coordinating" as const,
+          revision: 1,
+          cancelRequested: canceled,
+          lease: null,
+          result: null,
+          effectCount: 0,
+          journalBytes: 1,
+        }),
+      },
+      cancellationPollIntervalMs: 5,
+      execute: async (_fence, signal) =>
+        new Promise<void>((_resolve, reject) => {
+          signal.addEventListener(
+            "abort",
+            () => reject(signal.reason ?? new Error("aborted")),
+            { once: true },
+          );
+        }),
+      onError: () => {
+        errors++;
+      },
+    }),
+  );
+  await scheduler.wake();
+  canceled = true;
+  await scheduler.idle();
+  assert.equal(errors, 1);
+  await scheduler.close();
+});

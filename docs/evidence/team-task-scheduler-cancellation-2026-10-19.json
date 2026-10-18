@@ -1,0 +1,39 @@
+{
+  "schemaVersion": "crewon.evidence.v0",
+  "kind": "team-task-scheduler-cancellation",
+  "date": "2026-10-19",
+  "branch": "codex/runtime-concurrency-result-streaming",
+  "baseCommit": "12b2f449e",
+  "scope": "durable Team cancellation observation and signal propagation",
+  "behavior": [
+    "Scheduler creates one AbortController per claimed task.",
+    "Configured polling observes durable cancelRequested without changing claim ownership.",
+    "executeTeamTask receives the signal and stops before new journal commands.",
+    "Run and Goal terminal waits check the signal between polling intervals.",
+    "Worker close aborts in-flight scheduler executors while lease recovery remains durable."
+  ],
+  "verification": {
+    "schedulerTests": { "tests": 5, "passed": 5, "failed": 0 },
+    "applicationTests": {
+      "tests": 922,
+      "passed": 884,
+      "failed": 0,
+      "skipped": 38
+    },
+    "teamBothBackends": {
+      "tests": 36,
+      "passed": 36,
+      "failed": 0,
+      "skipped": 0
+    },
+    "typechecks": ["application", "store", "control-api", "runtime-worker"],
+    "boundaryCheck": "passed",
+    "format": "passed",
+    "gitDiffCheck": "passed"
+  },
+  "limitations": [
+    "Cancellation does not claim that an already dispatched external side effect was undone.",
+    "The production actor/authorization host remains opt-in and explicit.",
+    "No default desktop Team or autonomous sub-agent activation is claimed."
+  ]
+}

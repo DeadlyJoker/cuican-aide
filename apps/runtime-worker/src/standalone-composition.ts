@@ -238,6 +238,7 @@ export type RuntimeTeamTaskSchedulerConfig = Readonly<{
   concurrency?: number;
   listLimit?: number;
   leaseDurationMs?: number;
+  cancellationPollIntervalMs?: number | null;
   scanIntervalMs?: number | null;
   execute: TeamTaskSchedulerInput["execute"];
   onError?: TeamTaskSchedulerInput["onError"];
@@ -773,6 +774,10 @@ async function composeRuntimeWorker(
         teamConfig.listLimit ?? Math.max(1, teamConfig.concurrency ?? 1),
       leaseDurationMs:
         teamConfig.leaseDurationMs ?? config.leaseDurationMs ?? 30_000,
+      cancellationPollIntervalMs:
+        teamConfig.cancellationPollIntervalMs === undefined
+          ? 250
+          : teamConfig.cancellationPollIntervalMs,
       createLeaseId: () => ids.nextId("outboxLease"),
       execute: teamConfig.execute,
       ...(teamConfig.onError === undefined

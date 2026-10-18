@@ -146,6 +146,7 @@ export type StartControlTeamTurnInput = Readonly<{
   onExecutionIntentMismatch?: (run: RunView) => void;
   pollIntervalMs?: number;
   runDeadlineMs?: number;
+  signal?: AbortSignal;
   /** Only the backend task host supplies immutable stage observations. */
   checkpoint?: TeamTurnCheckpoint;
 }> &

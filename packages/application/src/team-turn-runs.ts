@@ -14,15 +14,18 @@ export async function waitForTerminalRun(input: {
   run: RunView;
   pollIntervalMs: number;
   runDeadlineMs: number;
+  signal?: AbortSignal;
 }): Promise<RunView> {
   const deadline = Date.now() + input.runDeadlineMs;
   let current = input.run;
   let consecutiveReadFailures = 0;
   while (!isTerminalRun(current)) {
+    input.signal?.throwIfAborted();
     if (Date.now() >= deadline) {
       throw new Error("control_team_run_deadline_exceeded");
     }
     await new Promise((resolve) => setTimeout(resolve, input.pollIntervalMs));
+    input.signal?.throwIfAborted();
     try {
       current = (await input.client.getRun(current.runId)).run;
       consecutiveReadFailures = 0;

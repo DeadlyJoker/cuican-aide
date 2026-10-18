@@ -37,6 +37,7 @@ export async function pauseTeamGoalIfNeeded(input: {
   idempotencyKey: (operation: string) => string;
   pollIntervalMs: number;
   runDeadlineMs: number;
+  signal?: AbortSignal;
   checkpoint?: TeamTurnCheckpoint;
 }): Promise<{ threadRevision: number } | null> {
   const current = await readTeamCheckpoint(input, "goalInitial", () =>
@@ -87,6 +88,7 @@ export async function pauseTeamGoalIfNeeded(input: {
     response,
     pollIntervalMs: input.pollIntervalMs,
     runDeadlineMs: input.runDeadlineMs,
+    signal: input.signal,
   });
   const snapshot = await readTeamCheckpoint(input, "goalPausedThread", () =>
     input.client.getThread(input.threadId),
@@ -107,6 +109,7 @@ export async function startFinalTeamTurn(input: {
   idempotencyKey: string;
   pollIntervalMs: number;
   runDeadlineMs: number;
+  signal?: AbortSignal;
 }): Promise<StartTurnResponse> {
   const retryDeadline =
     Date.now() +
@@ -170,6 +173,7 @@ async function settleGoalMutationRuns(input: {
   >;
   pollIntervalMs: number;
   runDeadlineMs: number;
+  signal?: AbortSignal;
 }): Promise<void> {
   for (const run of [input.response.canceledRun, input.response.retainedRun]) {
     if (run !== null && !isTerminalRun(run)) {
@@ -178,6 +182,7 @@ async function settleGoalMutationRuns(input: {
         run,
         pollIntervalMs: input.pollIntervalMs,
         runDeadlineMs: input.runDeadlineMs,
+        signal: input.signal,
       });
     }
   }

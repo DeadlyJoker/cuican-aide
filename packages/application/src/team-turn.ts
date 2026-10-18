@@ -223,6 +223,7 @@ export async function startControlTeamTurn(
       run: managerStarted.run,
       pollIntervalMs,
       runDeadlineMs,
+      signal: input.signal,
     });
     const managerPlan =
       managerTerminal.status === "completed"
@@ -297,6 +298,7 @@ export async function startControlTeamTurn(
         run: started.run,
         pollIntervalMs,
         runDeadlineMs,
+        signal: input.signal,
       });
       const directOutput =
         terminal.status === "completed"
@@ -409,6 +411,7 @@ export async function startControlTeamTurn(
     run: finalManagerStarted.run,
     pollIntervalMs,
     runDeadlineMs,
+    signal: input.signal,
   });
   const delegation =
     finalManagerTerminal.status === "completed"

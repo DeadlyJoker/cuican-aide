@@ -29,6 +29,7 @@ export async function executeTeamTask(input: {
   leaseDurationMs?: number;
   pollIntervalMs?: number;
   runDeadlineMs?: number;
+  signal?: AbortSignal;
 }) {
   const { store, fence, operations } = input;
   validateTeamTaskFence(fence);
@@ -63,6 +64,11 @@ export async function executeTeamTask(input: {
     return result;
   };
   const guard = () => {
+    if (input.signal?.aborted) {
+      const reason = input.signal.reason;
+      if (reason instanceof TeamTaskJournalError) throw reason;
+      teamJournalFail("team_task_cancel_requested");
+    }
     if (stopped)
       throw new TeamTaskJournalError("team_journal_execution_stopped");
   };
@@ -239,6 +245,7 @@ export async function executeTeamTask(input: {
       ...(input.runDeadlineMs === undefined
         ? {}
         : { runDeadlineMs: input.runDeadlineMs }),
+      ...(input.signal === undefined ? {} : { signal: input.signal }),
     });
     guard();
     await store.finalAccepted(fence, result);

@@ -10,7 +10,8 @@ import {
   type TeamTaskScope,
 } from "./team-task-journal.ts";
 
-type RunnableTaskStore = Pick<TeamTaskJournalStore, "listRunnable" | "claim">;
+type RunnableTaskStore = Pick<TeamTaskJournalStore, "listRunnable" | "claim"> &
+  Partial<Pick<TeamTaskJournalStore, "read">>;
 
 export type TeamTaskSchedulerInput = Readonly<{
   store: RunnableTaskStore;
@@ -19,8 +20,9 @@ export type TeamTaskSchedulerInput = Readonly<{
   concurrency: number;
   listLimit: number;
   leaseDurationMs: number;
+  cancellationPollIntervalMs?: number | null;
   createLeaseId(input: { locator: TeamTaskLocator; sequence: number }): string;
-  execute(fence: TeamTaskFence): Promise<void>;
+  execute(fence: TeamTaskFence, signal: AbortSignal): Promise<void>;
   onError?(fence: TeamTaskFence, error: unknown): void | Promise<void>;
 }>;
 
@@ -48,10 +50,12 @@ export class TeamTaskScheduler {
   readonly #concurrency: number;
   readonly #listLimit: number;
   readonly #leaseDurationMs: number;
+  readonly #cancellationPollIntervalMs: number | null;
   readonly #createLeaseId: TeamTaskSchedulerInput["createLeaseId"];
   readonly #execute: TeamTaskSchedulerInput["execute"];
   readonly #onError: TeamTaskSchedulerInput["onError"];
   readonly #inFlight = new Map<string, Promise<void>>();
+  readonly #controllers = new Map<string, AbortController>();
   #wakeInProgress: Promise<TeamTaskSchedulerWake> | null = null;
   #sequence = 0;
   #closed = false;
@@ -61,6 +65,13 @@ export class TeamTaskScheduler {
     teamJournalId(input.ownerId);
     validateTeamTaskListLimit(input.listLimit);
     validateTeamLeaseDuration(input.leaseDurationMs);
+    if (
+      input.cancellationPollIntervalMs !== undefined &&
+      input.cancellationPollIntervalMs !== null &&
+      (!Number.isSafeInteger(input.cancellationPollIntervalMs) ||
+        input.cancellationPollIntervalMs < 1)
+    )
+      teamJournalFail("team_scheduler_cancel_poll_invalid");
     if (
       !Number.isSafeInteger(input.concurrency) ||
       input.concurrency < 1 ||
@@ -73,6 +84,7 @@ export class TeamTaskScheduler {
     this.#concurrency = input.concurrency;
     this.#listLimit = input.listLimit;
     this.#leaseDurationMs = input.leaseDurationMs;
+    this.#cancellationPollIntervalMs = input.cancellationPollIntervalMs ?? null;
     this.#createLeaseId = input.createLeaseId;
     this.#execute = input.execute;
     this.#onError = input.onError;
@@ -93,6 +105,8 @@ export class TeamTaskScheduler {
 
   async close(): Promise<void> {
     this.#closed = true;
+    for (const controller of this.#controllers.values())
+      controller.abort(new Error("team_scheduler_closed"));
     await this.idle();
   }
 
@@ -142,7 +156,18 @@ export class TeamTaskScheduler {
         skipped++;
         continue;
       }
-      const execution = this.#execute(fence)
+      const controller = new AbortController();
+      this.#controllers.set(key, controller);
+      if (
+        this.#cancellationPollIntervalMs !== null &&
+        this.#store.read !== undefined
+      )
+        void this.#watchCancellation(
+          locator,
+          controller,
+          this.#cancellationPollIntervalMs,
+        );
+      const execution = this.#execute(fence, controller.signal)
         .catch(async (error: unknown) => {
           try {
             await this.#onError?.(fence, error);
@@ -151,6 +176,8 @@ export class TeamTaskScheduler {
           }
         })
         .finally(() => {
+          controller.abort(new Error("team_scheduler_execution_finished"));
+          this.#controllers.delete(key);
           this.#inFlight.delete(key);
           if (!this.#closed) void this.wake().catch(() => undefined);
         });
@@ -158,6 +185,27 @@ export class TeamTaskScheduler {
       started++;
     }
     return { started, skipped, capacity };
+  }
+
+  async #watchCancellation(
+    locator: TeamTaskLocator,
+    controller: AbortController,
+    intervalMs: number,
+  ): Promise<void> {
+    while (!this.#closed && !controller.signal.aborted) {
+      await new Promise((resolve) => setTimeout(resolve, intervalMs));
+      if (this.#closed || controller.signal.aborted) return;
+      try {
+        const task = await this.#store.read!(locator);
+        if (task === null || task.cancelRequested) {
+          controller.abort();
+          return;
+        }
+        if (task.status === "finalAccepted") return;
+      } catch {
+        // A transient observation failure must not create a second execution.
+      }
+    }
   }
 }
 

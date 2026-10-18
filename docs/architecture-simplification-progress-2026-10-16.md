@@ -577,3 +577,11 @@ SQLite 与 PostgreSQL 各验证一次，最终主 Thread 保留一份原始用�
 最终串行 Team 相关回归 36/36 通过，包含原有 journal 回执恢复、取消、Goal、主会话 reservation、Worker scheduler 成功路径和本批 lease recovery；SQLite/PostgreSQL 新恢复场景均通过。Application、Store、Control API、Runtime Worker 类型检查、边界、格式和 diff 检查通过。第一次扩大回归有一项既有 PostgreSQL 前序 Run terminal 等待时序失败，单独重跑和最终完整重跑均通过；没有修改超时或放宽断言。
 
 本批仍未宣称 OS 强杀、真实部署多实例身份、取消 signal 的完整传播或未知外部副作用的自动恢复；第一代 executor 是受控失败注入，第二代由显式宿主提供 actor/operations。默认桌面 Team 和自主子 Agent 继续保持关闭。
+
+## 第三十八批：Team scheduler 的 durable cancellation signal（2026-10-19）
+
+基线为 `12b2f449e`。本批为每个 scheduler claim 建立 AbortController，并按配置周期读取 durable Team journal 的 `cancelRequested`；取消后不再启动新命令，当前 executor 收到 signal。`executeTeamTask` 将 scheduler signal 传入 Team turn，所有 manager/member/recovery/final Run 的 terminal wait 和 Goal 相关等待在下一次轮询前检查 signal。Worker close 也会 abort 在途 scheduler executor，lease 保留给后续 recovery。
+
+scheduler 单测 5/5 通过，覆盖 durable cancellation abort、失败回调和 close；Application 全量 922 项中 884 项通过、38 项既有条件跳过；SQLite/PostgreSQL Team 相关回归 36/36 通过。Application、Store、Control API、Runtime Worker 类型检查、边界、格式和 diff 检查通过。
+
+取消监控仍是显式 Team scheduler 配置的一部分，默认桌面入口不启用；HTTP/工具未知副作用不会被 signal 假定为已撤销，仍由 journal receipt 和 lease recovery 处理。自主子 Agent 仍需在这条取消和恢复边界上继续接入。
