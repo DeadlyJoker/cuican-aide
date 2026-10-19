@@ -915,3 +915,9 @@ Node 22 当前环境下 scheduler 6/6、Team interruption SQLite 8/8、Store/Con
 ## 第八十五批：scheduler 过期任务收敛调用契约（2026-10-19）
 
 补充 application scheduler 回归，明确每次 wake 必须先调用过期 autonomous task 收敛，再发现和 claim runnable work；测试证明被收敛的 locator 不会进入 executor。该测试不替代 SQLite/PostgreSQL 事务回归，双 backend runtime 仍按环境单独验证。
+
+## 第八十六批：自主 child capability 继承边界（2026-10-19）
+
+child admission 输入现在同时携带 parent capability snapshot，并在 capture 阶段调用既有 subset 校验。child 不能跨身份、authority、runtime、policy 或 workspace，也不能提升 tool permission；parent capability 纳入 parent effect request，因此同一幂等键重放时也会比较 authority 输入。新增契约回归覆盖 child 从 `requestApproval` 提升到 `fullAccess` 的拒绝。
+
+这仍是内部 admission contract，未开放模型直发或生产 scheduler；下一步接入真实 executor 时必须从当前受信 host 生成 parent snapshot，不能由模型自填。

@@ -560,6 +560,7 @@ export class ExperimentalPostgresTeamTaskJournal
         childTaskId: admission.childTaskId,
         edge: admission.edge,
         budget: admission.budget,
+        parentCapability: admission.parentCapability,
         capability: admission.capability,
       },
     });

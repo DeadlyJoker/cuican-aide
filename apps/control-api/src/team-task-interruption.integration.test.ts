@@ -284,6 +284,15 @@ workflowDeploymentIntegrationTest(
         tokenBudget: 1000,
         outputBytesBudget: 4096,
       },
+      parentCapability: {
+        schemaVersion: "crewon.autonomous-task-capability.v0" as const,
+        ...f.actor,
+        authorityId: "authority-1",
+        runtimeGeneration: "runtime-1",
+        policySnapshotId: "policy-1",
+        workspaceBindingId: null,
+        toolPermissionMode: "requestApproval" as const,
+      },
       capability: {
         schemaVersion: "crewon.autonomous-task-capability.v0" as const,
         ...f.actor,

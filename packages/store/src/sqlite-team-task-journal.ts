@@ -558,6 +558,7 @@ export class ExperimentalSqliteTeamTaskJournal implements TeamTaskJournalStore {
         childTaskId: admission.childTaskId,
         edge: admission.edge,
         budget: admission.budget,
+        parentCapability: admission.parentCapability,
         capability: admission.capability,
       },
     });

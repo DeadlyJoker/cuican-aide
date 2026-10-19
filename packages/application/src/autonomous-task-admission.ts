@@ -2,6 +2,7 @@ import {
   captureAutonomousTaskBudget,
   captureAutonomousTaskCapability,
   captureAutonomousTaskEdgeLink,
+  assertAutonomousTaskCapabilitySubset,
   type AutonomousTaskBudget,
   type AutonomousTaskCapabilitySnapshot,
   type AutonomousTaskEdgeLink,
@@ -19,6 +20,7 @@ export type AutonomousTaskChildAdmission = Readonly<{
   childTaskId: string;
   edge: AutonomousTaskEdgeLink;
   budget: AutonomousTaskBudget;
+  parentCapability: AutonomousTaskCapabilitySnapshot;
   capability: AutonomousTaskCapabilitySnapshot;
   childIntent: TeamTaskIntent;
 }>;
@@ -46,6 +48,7 @@ export function captureAutonomousTaskChildAdmission(
     "childTaskId",
     "edge",
     "budget",
+    "parentCapability",
     "capability",
     "childIntent",
   ];
@@ -75,7 +78,15 @@ export function captureAutonomousTaskChildAdmission(
   const childTaskId = requireId(record.childTaskId);
   const edge = captureAutonomousTaskEdgeLink(record.edge);
   const budget = captureAutonomousTaskBudget(record.budget);
+  const parentCapability = captureAutonomousTaskCapability(
+    record.parentCapability,
+  );
   const capability = captureAutonomousTaskCapability(record.capability);
+  try {
+    assertAutonomousTaskCapabilitySubset(parentCapability, capability);
+  } catch {
+    invalid();
+  }
   const childIntent = captureTeamTaskIntent(
     record.childIntent as TeamTaskIntent,
   );
@@ -98,6 +109,7 @@ export function captureAutonomousTaskChildAdmission(
     childTaskId,
     edge,
     budget,
+    parentCapability,
     capability,
     childIntent,
   });
