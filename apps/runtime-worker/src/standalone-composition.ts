@@ -795,7 +795,28 @@ async function composeRuntimeWorker(
       execute:
         teamConfig.host === undefined
           ? teamConfig.execute!
-          : createTeamTaskExecutor({ store: journal, host: teamConfig.host }),
+          : createTeamTaskExecutor({
+              store: journal,
+              host:
+                teamConfig.host.autonomousCapability === undefined
+                  ? {
+                      ...teamConfig.host,
+                      autonomousCapability: {
+                        schemaVersion:
+                          "crewon.autonomous-task-capability.v0" as const,
+                        tenantId: teamConfig.host.actor.tenantId,
+                        spaceId: teamConfig.host.actor.spaceId,
+                        actorId: teamConfig.host.actor.actorId,
+                        principalId: teamConfig.host.actor.principalId,
+                        authorityId: config.route.authorityId,
+                        runtimeGeneration: config.route.runtimeGeneration,
+                        policySnapshotId: config.route.policySnapshotId,
+                        workspaceBindingId: config.route.workspaceBindingId,
+                        toolPermissionMode: "requestApproval" as const,
+                      },
+                    }
+                  : teamConfig.host,
+            }),
       ...(teamConfig.onError === undefined
         ? {}
         : { onError: teamConfig.onError }),

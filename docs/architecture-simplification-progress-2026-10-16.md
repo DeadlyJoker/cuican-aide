@@ -937,3 +937,9 @@ child admission 输入现在同时携带 parent capability snapshot，并在 cap
 ## 第八十九批：standalone scheduler 传递 host capability source（2026-10-19）
 
 `StandaloneTeamTaskSchedulerConfig` 现在可以显式传递 host-generated capability snapshot，并原样交给 `TeamTaskExecutionHost`；executor composition 在 scheduler 创建时立即校验其 identity scope，错误配置不会等到首个 task 才暴露。字段仍为可选，现有 standalone Team 路径不自动生成权限，也没有开启 autonomous spawn。
+
+## 第九十批：Runtime Worker route 派生 host capability（2026-10-19）
+
+Runtime Worker 的显式 Team host 现在可从已经校验的 `config.route` 派生 capability snapshot：authority、runtime generation、policy snapshot 和 workspace binding 均来自同一运行时 route，tool permission 默认固定为 `requestApproval`。调用方显式提供 capability 时仍保留原值并由 executor 校验；Control standalone 没有 route authority，因此不做同样的自动派生。
+
+该接线只准备受信 host 输入，未开放模型 spawn 或默认 Team scheduler。
