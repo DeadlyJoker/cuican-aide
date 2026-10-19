@@ -32,6 +32,7 @@ import {
 } from "./plugin-security-validation.ts";
 import type { FastifyReply, FastifyRequest } from "fastify";
 import { requestContext } from "./request-context.ts";
+import { observePluginGenerationPhase as observe } from "./installed-plugin-invocation-diagnostics.ts";
 import type {
   InstalledPluginConfigurationMetadataPort,
   InstalledPluginMetadataPrepared,
@@ -159,12 +160,16 @@ export class InstalledPluginRequestOwner {
       resolveRegistration: (
         input: Parameters<PluginQueryHostPort["resolveRegistration"]>[0],
       ) =>
-        this.#call(input.actor, (prepared) =>
-          prepared.pluginQueryHost.resolveRegistration(input),
+        observe("query.host-resolve", () =>
+          this.#call(input.actor, (prepared) =>
+            prepared.pluginQueryHost.resolveRegistration(input),
+          ),
         ),
       evaluate: (input: Parameters<PluginQueryHostPort["evaluate"]>[0]) =>
-        this.#call(input.actor, (prepared) =>
-          prepared.pluginQueryHost.evaluate(input),
+        observe("query.host-evaluate", () =>
+          this.#call(input.actor, (prepared) =>
+            prepared.pluginQueryHost.evaluate(input),
+          ),
         ),
     });
   }
@@ -256,9 +261,11 @@ export class InstalledPluginRequestOwner {
           await this.assertCurrent();
           if (state.preparation === "execution") {
             if (this.#prepareTask === undefined) denied();
-            state.prepared = await this.#prepareTask(
-              { actor: state.actor, scope: state.scope! },
-              { signal: state.signal },
+            state.prepared = await observe("request.peer-prepare", () =>
+              this.#prepareTask!(
+                { actor: state.actor, scope: state.scope! },
+                { signal: state.signal },
+              ),
             );
             state.preparedPurpose = "task";
           }
@@ -400,9 +407,11 @@ export class InstalledPluginRequestOwner {
       return state.prepared;
     const prepare = purpose === "task" ? this.#prepareTask : this.#prepare;
     if (prepare === undefined) return null;
-    const prepared = await prepare(
-      { actor: state.actor, scope: state.scope! },
-      { signal: state.signal },
+    const prepared = await observe("request.peer-prepare", () =>
+      prepare(
+        { actor: state.actor, scope: state.scope! },
+        { signal: state.signal },
+      ),
     );
     this.#sameState(state);
     await this.assertCurrent();

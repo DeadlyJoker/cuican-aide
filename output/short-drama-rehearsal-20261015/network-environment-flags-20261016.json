@@ -1,0 +1,24 @@
+{
+  "recordedAt": "2026-10-15T16:58:05.226Z",
+  "environmentVariablePresenceOnly": {
+    "HTTP_PROXY": false,
+    "HTTPS_PROXY": false,
+    "ALL_PROXY": false,
+    "NO_PROXY": false,
+    "http_proxy": false,
+    "https_proxy": false,
+    "all_proxy": false,
+    "no_proxy": false,
+    "NODE_USE_ENV_PROXY": false,
+    "NODE_OPTIONS": false,
+    "NODE_EXTRA_CA_CERTS": false
+  },
+  "valuesReadOrPrinted": false,
+  "macSystemProxyEnabled": {
+    "http": false,
+    "https": false,
+    "pac": false,
+    "socks": false
+  },
+  "systemFlagsSource": "scutil --proxy, only Enable fields inspected; no configuration changed"
+}

@@ -1,0 +1,249 @@
+{
+  "recordedAt": "2026-10-15T16:57:34.256Z",
+  "scope": "read-only network diagnosis, not model-endpoint acceptance",
+  "groups": [
+    {
+      "file": "root-edge-timing-20261016.json",
+      "results": [
+        {
+          "address": "104.21.29.91",
+          "sample": 1,
+          "startedAt": "2026-10-15T16:44:00.545Z",
+          "tcpMs": 320,
+          "tlsMs": null,
+          "headersMs": null,
+          "status": null,
+          "error": "DIAGNOSTIC_DEADLINE",
+          "totalMs": 7025,
+          "stageOutcome": "tcp-established-tls-not-completed",
+          "deadlineAfterHandshake": false
+        },
+        {
+          "address": "104.21.29.91",
+          "sample": 2,
+          "startedAt": "2026-10-15T16:44:07.570Z",
+          "tcpMs": 301,
+          "tlsMs": null,
+          "headersMs": null,
+          "status": null,
+          "error": "DIAGNOSTIC_DEADLINE",
+          "totalMs": 7003,
+          "stageOutcome": "tcp-established-tls-not-completed",
+          "deadlineAfterHandshake": false
+        },
+        {
+          "address": "172.67.148.182",
+          "sample": 1,
+          "startedAt": "2026-10-15T16:44:00.562Z",
+          "tcpMs": 292,
+          "tlsMs": null,
+          "headersMs": null,
+          "status": null,
+          "error": "DIAGNOSTIC_DEADLINE",
+          "totalMs": 7006,
+          "stageOutcome": "tcp-established-tls-not-completed",
+          "deadlineAfterHandshake": false
+        },
+        {
+          "address": "172.67.148.182",
+          "sample": 2,
+          "startedAt": "2026-10-15T16:44:07.568Z",
+          "tcpMs": 295,
+          "tlsMs": null,
+          "headersMs": null,
+          "status": null,
+          "error": "DIAGNOSTIC_DEADLINE",
+          "totalMs": 7004,
+          "stageOutcome": "tcp-established-tls-not-completed",
+          "deadlineAfterHandshake": false
+        }
+      ]
+    },
+    {
+      "file": "tls-handshake-comparison-20261016.json",
+      "results": [
+        {
+          "address": "104.21.29.91",
+          "curve": "default",
+          "tcpMs": 228,
+          "tlsMs": 1525,
+          "protocol": "TLSv1.3",
+          "error": null,
+          "elapsedMs": 1836,
+          "stageOutcome": "tls-established",
+          "deadlineAfterHandshake": false
+        },
+        {
+          "address": "104.21.29.91",
+          "curve": "X25519",
+          "tcpMs": 267,
+          "tlsMs": 593,
+          "protocol": "TLSv1.3",
+          "error": null,
+          "elapsedMs": 899,
+          "stageOutcome": "tls-established",
+          "deadlineAfterHandshake": false
+        },
+        {
+          "address": "172.67.148.182",
+          "curve": "default",
+          "tcpMs": 297,
+          "tlsMs": 6097,
+          "protocol": "TLSv1.3",
+          "error": null,
+          "elapsedMs": 6409,
+          "stageOutcome": "tls-established",
+          "deadlineAfterHandshake": false
+        },
+        {
+          "address": "172.67.148.182",
+          "curve": "X25519",
+          "tcpMs": 290,
+          "tlsMs": 612,
+          "protocol": "TLSv1.3",
+          "error": null,
+          "elapsedMs": 917,
+          "stageOutcome": "tls-established",
+          "deadlineAfterHandshake": false
+        }
+      ]
+    },
+    {
+      "file": "tls-counterordered-comparison-20261016.json",
+      "results": [
+        {
+          "address": "104.21.29.91",
+          "round": 1,
+          "curve": "default",
+          "tcpMs": 287,
+          "tlsMs": 618,
+          "protocol": "TLSv1.3",
+          "group": null,
+          "error": null,
+          "elapsedMs": 1718,
+          "stageOutcome": "tls-established",
+          "deadlineAfterHandshake": false
+        },
+        {
+          "address": "104.21.29.91",
+          "round": 2,
+          "curve": "X25519MLKEM768",
+          "tcpMs": 289,
+          "tlsMs": null,
+          "protocol": null,
+          "group": null,
+          "error": "DIAGNOSTIC_DEADLINE",
+          "elapsedMs": 7004,
+          "stageOutcome": "tcp-established-tls-not-completed",
+          "deadlineAfterHandshake": false
+        },
+        {
+          "address": "104.21.29.91",
+          "round": 3,
+          "curve": "X25519",
+          "tcpMs": 297,
+          "tlsMs": 619,
+          "protocol": "TLSv1.3",
+          "group": "X25519",
+          "error": null,
+          "elapsedMs": 935,
+          "stageOutcome": "tls-established",
+          "deadlineAfterHandshake": false
+        },
+        {
+          "address": "104.21.29.91",
+          "round": 4,
+          "curve": "default",
+          "tcpMs": 295,
+          "tlsMs": null,
+          "protocol": null,
+          "group": null,
+          "error": "DIAGNOSTIC_DEADLINE",
+          "elapsedMs": 7003,
+          "stageOutcome": "tcp-established-tls-not-completed",
+          "deadlineAfterHandshake": false
+        },
+        {
+          "address": "172.67.148.182",
+          "round": 1,
+          "curve": "X25519MLKEM768",
+          "tcpMs": 1285,
+          "tlsMs": 1605,
+          "protocol": "TLSv1.3",
+          "group": null,
+          "error": null,
+          "elapsedMs": 1916,
+          "stageOutcome": "tls-established",
+          "deadlineAfterHandshake": false
+        },
+        {
+          "address": "172.67.148.182",
+          "round": 2,
+          "curve": "default",
+          "tcpMs": 298,
+          "tlsMs": 625,
+          "protocol": "TLSv1.3",
+          "group": null,
+          "error": "DIAGNOSTIC_DEADLINE",
+          "elapsedMs": 7003,
+          "stageOutcome": "tls-established",
+          "deadlineAfterHandshake": true
+        },
+        {
+          "address": "172.67.148.182",
+          "round": 3,
+          "curve": "X25519",
+          "tcpMs": 279,
+          "tlsMs": null,
+          "protocol": null,
+          "group": null,
+          "error": "DIAGNOSTIC_DEADLINE",
+          "elapsedMs": 7003,
+          "stageOutcome": "tcp-established-tls-not-completed",
+          "deadlineAfterHandshake": false
+        },
+        {
+          "address": "172.67.148.182",
+          "round": 4,
+          "curve": "default",
+          "tcpMs": 282,
+          "tlsMs": 2679,
+          "protocol": "TLSv1.3",
+          "group": null,
+          "error": null,
+          "elapsedMs": 3797,
+          "stageOutcome": "tls-established",
+          "deadlineAfterHandshake": false
+        }
+      ]
+    }
+  ],
+  "conclusions": {
+    "confirmed": [
+      "Two system-resolved IPv4 addresses connected TCP in about 0.3s but four instrumented HEAD attempts did not complete TLS within 7s.",
+      "Handshake-only comparisons show both successes and failures; no stable address or TLS-group workaround was established.",
+      "One counterordered handshake completed TLS before its close waited until the diagnostic deadline; that row is not a handshake failure."
+    ],
+    "notEstablished": [
+      "cause inside client, ISP/transit or Cloudflare edge",
+      "connection between handshake variability and earlier post-header SSE truncation",
+      "current origin deployment/product/version",
+      "repair or end-to-end project acceptance"
+    ]
+  },
+  "changes": {
+    "systemNetwork": false,
+    "tlsVerification": false,
+    "productionDnsOrIpPinning": false,
+    "clientModelConfiguration": false,
+    "modelRequestSubmitted": false
+  },
+  "ui": {
+    "nativeBrowserReadAttempt": "Mac locked",
+    "automaticUnlockSucceeded": false
+  },
+  "awaiting": [
+    "manual Mac unlock",
+    "existing gateway read-only SSH alias/key-file path or log entrance"
+  ]
+}

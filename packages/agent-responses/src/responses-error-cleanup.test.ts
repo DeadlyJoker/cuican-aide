@@ -14,7 +14,7 @@ import {
   type ResponsesTimerScheduler,
 } from "./direct-responses-transport.ts";
 
-const request: ModelRequest = {
+const request = {
   schemaVersion: "crewon.model-request.v0",
   runId: "error-cleanup-run",
   segmentId: "error-cleanup-segment",
@@ -26,7 +26,7 @@ const request: ModelRequest = {
   },
   tools: [],
   maxOutputBytes: 4096,
-};
+} satisfies ModelRequest;
 const contract: AgentSegmentContract = {
   schemaVersion: "crewon.agent-segment.v0",
   purpose: "agent",

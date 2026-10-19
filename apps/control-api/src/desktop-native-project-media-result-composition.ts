@@ -1,11 +1,11 @@
 import {
   ApplicationError,
-  mediaInputSame,
   type ActorContext,
   type ApplicationClock,
   type ProjectMediaResultPermission,
   type ProjectMediaResultCatalogPermission,
 } from "@crewon/application";
+import { assertNativeProjectMediaResultOutput } from "./native-project-media-result-output-approval.ts";
 import { FilesystemProjectMediaResultArchive } from "@crewon/artifacts";
 import { loadDesktopProjectResultArchive } from "@crewon/media-runtime/desktop-project-result-archive";
 import type { DesktopProjectMaterialStorage } from "@crewon/media-runtime/desktop-project-material-archive";
@@ -98,28 +98,12 @@ export function composeDesktopNativeProjectMediaResultConfiguration(
       assertCurrent: async ({ actor, source, signal }) => {
         signal.throwIfAborted();
         await current(actor);
-        const target = source.targetIdentity;
-        if (
-          !declared.purposes.includes("publish") ||
-          !reviews.some(
-            (r) =>
-              mediaInputSame(r.targetIdentity, target) &&
-              mediaInputSame(r.workflow, source.workflow),
-          ) ||
-          !input.nativeControl.authority.networkGrants.some(
-            (g) =>
-              g.pluginId === target.pluginId &&
-              g.publisherId === target.publisherId &&
-              g.version === target.version &&
-              g.packageDigest === target.packageDigest &&
-              g.baseUrlParameter === "baseUrl" &&
-              g.baseUrl === source.configuration.origin &&
-              g.paths.some(
-                (p) => p.method === "GET" && "path" in p && p.path === "/view",
-              ),
-          )
-        )
-          denied();
+        assertNativeProjectMediaResultOutput({
+          declared,
+          reviews,
+          networkGrants: input.nativeControl.authority.networkGrants,
+          source,
+        });
         signal.throwIfAborted();
         active(actor);
       },

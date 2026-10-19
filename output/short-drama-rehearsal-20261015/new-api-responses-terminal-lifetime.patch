@@ -1,0 +1,245 @@
+diff --git a/relay/channel/openai/chat_via_responses.go b/relay/channel/openai/chat_via_responses.go
+index 2c075227..972bd873 100644
+--- a/relay/channel/openai/chat_via_responses.go
++++ b/relay/channel/openai/chat_via_responses.go
+@@ -494,6 +494,7 @@ func OaiResponsesToChatStreamHandler(c *gin.Context, info *relaycommon.RelayInfo
+ 				}
+ 				sentStop = true
+ 			}
++			sr.Done()
+ 
+ 		case "response.error", "response.failed":
+ 			if streamResp.Response != nil {
+diff --git a/relay/channel/openai/relay_responses.go b/relay/channel/openai/relay_responses.go
+index 2665b8d0..27ba8e2b 100644
+--- a/relay/channel/openai/relay_responses.go
++++ b/relay/channel/openai/relay_responses.go
+@@ -112,6 +112,8 @@ func OaiResponsesStreamHandler(c *gin.Context, info *relaycommon.RelayInfo, resp
+ 					c.Set("image_generation_call_size", streamResponse.Response.GetSize())
+ 				}
+ 			}
++			// A completed Responses event is terminal; EOF/[DONE] may never follow.
++			sr.Done()
+ 		case "response.output_text.delta":
+ 			// 处理输出文本
+ 			responseTextBuilder.WriteString(streamResponse.Delta)
+diff --git a/relay/helper/stream_scanner.go b/relay/helper/stream_scanner.go
+index 1d44b804..4373b062 100644
+--- a/relay/helper/stream_scanner.go
++++ b/relay/helper/stream_scanner.go
+@@ -78,10 +78,20 @@ func StreamScannerHandler(c *gin.Context, resp *http.Response, info *relaycommon
+ 	logger.LogDebug(c, "streaming timeout seconds: %d", int64(streamingTimeout.Seconds()))
+ 	logger.LogDebug(c, "ping interval seconds: %d", int64(pingInterval.Seconds()))
+ 
++	ctx, cancel := context.WithCancel(context.Background())
++	defer cancel()
++	ctx = context.WithValue(ctx, "stop_chan", stopChan)
++
+ 	// 改进资源清理，确保所有 goroutine 正确退出
+ 	defer func() {
+ 		// 通知所有 goroutine 停止
+ 		common.SafeSendBool(stopChan, true)
++		cancel()
++		// Closing the actual body unblocks Scan before joining its goroutine.
++		// A stop signal alone cannot interrupt a blocked upstream Read.
++		if resp.Body != nil {
++			resp.Body.Close()
++		}
+ 
+ 		ticker.Stop()
+ 		if pingTicker != nil {
+@@ -108,11 +118,6 @@ func StreamScannerHandler(c *gin.Context, resp *http.Response, info *relaycommon
+ 	scanner.Split(bufio.ScanLines)
+ 	SetEventStreamHeaders(c)
+ 
+-	ctx, cancel := context.WithCancel(context.Background())
+-	defer cancel()
+-
+-	ctx = context.WithValue(ctx, "stop_chan", stopChan)
+-
+ 	// Handle ping data sending with improved error handling
+ 	if pingEnabled && pingTicker != nil {
+ 		wg.Add(1)
+@@ -260,7 +265,7 @@ func StreamScannerHandler(c *gin.Context, resp *http.Response, info *relaycommon
+ 		}
+ 
+ 		if err := scanner.Err(); err != nil {
+-			if err != io.EOF {
++			if err != io.EOF && ctx.Err() == nil {
+ 				logger.LogError(c, "scanner error: "+err.Error())
+ 				info.StreamStatus.SetEndReason(relaycommon.StreamEndReasonScannerErr, err)
+ 			}
+diff --git a/relay/channel/openai/relay_responses_terminal_test.go b/relay/channel/openai/relay_responses_terminal_test.go
+new file mode 100644
+index 00000000..a999a300
+--- /dev/null
++++ b/relay/channel/openai/relay_responses_terminal_test.go
+@@ -0,0 +1,168 @@
++package openai
++
++import (
++	"context"
++	"fmt"
++	"io"
++	"net/http"
++	"net/http/httptest"
++	"os"
++	"path/filepath"
++	"strings"
++	"testing"
++	"time"
++
++	"github.com/QuantumNous/new-api/constant"
++	"github.com/QuantumNous/new-api/dto"
++	relaycommon "github.com/QuantumNous/new-api/relay/common"
++	"github.com/QuantumNous/new-api/types"
++	"github.com/gin-gonic/gin"
++)
++
++// Actual upstream HTTP and gateway adapter, with a terminal but neither EOF nor [DONE].
++// These named response fixtures have no credentials, model calls or database writes.
++func TestResponsesTerminalClosesHeldOpenUpstream(t *testing.T) {
++	oldTimeout := constant.StreamingTimeout
++	constant.StreamingTimeout = 30
++	t.Cleanup(func() { constant.StreamingTimeout = oldTimeout })
++
++	for _, fixture := range []struct {
++		name   string
++		handle func(*gin.Context, *relaycommon.RelayInfo, *http.Response) (*dto.Usage, *types.NewAPIError)
++	}{
++		{"responses", OaiResponsesStreamHandler},
++		{"responses-to-chat", OaiResponsesToChatStreamHandler},
++	} {
++		t.Run(fixture.name, func(t *testing.T) {
++			upstreamClosed := make(chan struct{})
++			upstream := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
++				w.Header().Set("Content-Type", "text/event-stream")
++				fmt.Fprint(w, "data: {\"type\":\"response.created\",\"sequence_number\":0,\"response\":{\"id\":\"named-terminal\"}}\n\n")
++				fmt.Fprint(w, "data: {\"type\":\"response.completed\",\"sequence_number\":1,\"response\":{\"id\":\"named-terminal\",\"status\":\"completed\",\"output\":[],\"usage\":{\"input_tokens\":1,\"output_tokens\":2,\"total_tokens\":3}}}\n\n")
++				w.(http.Flusher).Flush()
++				<-r.Context().Done()
++				close(upstreamClosed)
++			}))
++			defer upstream.Close()
++			resp, err := upstream.Client().Get(upstream.URL)
++			if err != nil {
++				t.Fatal(err)
++			}
++			defer resp.Body.Close()
++			recorder := httptest.NewRecorder()
++			c, _ := gin.CreateTestContext(recorder)
++			c.Request = httptest.NewRequest(http.MethodPost, "/v1/responses", nil)
++			info := &relaycommon.RelayInfo{ChannelMeta: &relaycommon.ChannelMeta{}, DisablePing: true, RelayFormat: types.RelayFormatOpenAI}
++			var usage *dto.Usage
++			var apiErr *types.NewAPIError
++			done := make(chan struct{})
++			started := time.Now()
++			go func() { usage, apiErr = fixture.handle(c, info, resp); close(done) }()
++			select {
++			case <-done:
++			case <-time.After(time.Second):
++				t.Error("gateway waited for EOF after an already-forwarded response.completed")
++				// Release the fixture on red runs; never leave a goroutine/upstream live.
++				resp.Body.Close()
++				select {
++				case <-done:
++				case <-time.After(7 * time.Second):
++					t.Fatal("gateway did not join fixture")
++				}
++			}
++			t.Logf("gateway returned after %s, reason=%s", time.Since(started), info.StreamStatus.EndReason)
++			if apiErr != nil {
++				t.Fatalf("unexpected API error: %v", apiErr)
++			}
++			if usage == nil || usage.PromptTokens != 1 || usage.CompletionTokens != 2 || usage.TotalTokens != 3 {
++				t.Fatalf("terminal usage changed: %+v", usage)
++			}
++			if info.StreamStatus.EndReason != relaycommon.StreamEndReasonDone {
++				t.Errorf("terminal end reason: %s", info.StreamStatus.EndReason)
++			}
++			if fixture.name == "responses" && strings.Count(recorder.Body.String(), "\"type\":\"response.completed\"") != 1 {
++				t.Fatalf("completed event was lost/duplicated: %s", recorder.Body.String())
++			}
++			if dir := os.Getenv("CREWON_TEST_GATEWAY_FIXTURE_DIR"); dir != "" && !t.Failed() {
++				if err := os.WriteFile(filepath.Join(dir, fixture.name+"-terminal.sse"), recorder.Body.Bytes(), 0600); err != nil {
++					t.Fatal(err)
++				}
++			}
++			select {
++			case <-upstreamClosed:
++			case <-time.After(time.Second):
++				t.Fatal("upstream was not physically closed")
++			}
++		})
++	}
++}
++
++// A complete output item does not complete the provider response.
++func TestResponsesItemDoneDoesNotCompleteResponse(t *testing.T) {
++	oldTimeout := constant.StreamingTimeout
++	constant.StreamingTimeout = 30
++	defer func() { constant.StreamingTimeout = oldTimeout }()
++	reader, writer := io.Pipe()
++	defer reader.Close()
++	defer writer.Close()
++	recorder := httptest.NewRecorder()
++	c, _ := gin.CreateTestContext(recorder)
++	c.Request = httptest.NewRequest(http.MethodPost, "/v1/responses", nil)
++	info := &relaycommon.RelayInfo{ChannelMeta: &relaycommon.ChannelMeta{}, DisablePing: true}
++	done := make(chan struct{})
++	go func() { OaiResponsesStreamHandler(c, info, &http.Response{Body: reader}); close(done) }()
++	fmt.Fprint(writer, "data: {\"type\":\"response.output_item.done\",\"sequence_number\":0,\"item\":{\"id\":\"named-item\",\"type\":\"message\",\"role\":\"assistant\",\"content\":[]}}\n\n")
++	select {
++	case <-done:
++		t.Fatal("output_item.done completed a response without terminal")
++	case <-time.After(50 * time.Millisecond):
++	}
++	writer.Close()
++	select {
++	case <-done:
++	case <-time.After(time.Second):
++		t.Fatal("fixture EOF did not finish")
++	}
++}
++
++func TestResponsesCancellationClosesHeldOpenUpstream(t *testing.T) {
++	oldTimeout := constant.StreamingTimeout
++	constant.StreamingTimeout = 30
++	defer func() { constant.StreamingTimeout = oldTimeout }()
++	closed := make(chan struct{})
++	upstream := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
++		w.Header().Set("Content-Type", "text/event-stream")
++		w.(http.Flusher).Flush()
++		<-r.Context().Done()
++		close(closed)
++	}))
++	defer upstream.Close()
++	resp, err := upstream.Client().Get(upstream.URL)
++	if err != nil {
++		t.Fatal(err)
++	}
++	defer resp.Body.Close()
++	c, _ := gin.CreateTestContext(httptest.NewRecorder())
++	ctx, cancel := context.WithCancel(context.Background())
++	defer cancel()
++	c.Request = httptest.NewRequest(http.MethodPost, "/v1/responses", nil).WithContext(ctx)
++	info := &relaycommon.RelayInfo{ChannelMeta: &relaycommon.ChannelMeta{}, DisablePing: true}
++	done := make(chan struct{})
++	go func() { OaiResponsesStreamHandler(c, info, resp); close(done) }()
++	cancel()
++	select {
++	case <-done:
++	case <-time.After(time.Second):
++		resp.Body.Close()
++		<-done
++		t.Fatal("client cancellation did not join upstream scanner")
++	}
++	if info.StreamStatus.EndReason != relaycommon.StreamEndReasonClientGone {
++		t.Fatalf("cancellation became %s", info.StreamStatus.EndReason)
++	}
++	select {
++	case <-closed:
++	case <-time.After(time.Second):
++		t.Fatal("canceled upstream remained open")
++	}
++}

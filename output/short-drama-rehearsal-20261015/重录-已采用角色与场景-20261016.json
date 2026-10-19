@@ -1,0 +1,106 @@
+{
+  "projectId": "01a13f43-094c-767a-9414-b5622b236255",
+  "assets": [
+    {
+      "asset_id": "01a1437f-5f1e-7599-8e99-9ad1bf2a3f4d",
+      "kind": "character",
+      "latest_content_revision": 1,
+      "selected_content_revision": 1
+    },
+    {
+      "asset_id": "01a14380-46c6-727b-8dd7-121ef91e4afb",
+      "kind": "character",
+      "latest_content_revision": 1,
+      "selected_content_revision": 1
+    },
+    {
+      "asset_id": "01a143b2-2c35-77a1-957d-9da82b524ebb",
+      "kind": "scene",
+      "latest_content_revision": 1,
+      "selected_content_revision": 1
+    }
+  ],
+  "revisions": [
+    {
+      "assetId": "01a1437f-5f1e-7599-8e99-9ad1bf2a3f4d",
+      "brief": {
+        "briefRevision": 2,
+        "contentDigest": "sha256:a57e1245ec632546fc35b57e2fd2660f668b166316ddc5425a0cebd0aaadbee5"
+      },
+      "content": {
+        "name": "林夏",
+        "setting": "原创虚构成年女性，约27岁，小店员工。低束发，朴素深蓝工作衬衫，无logo；面容自然，眼下轻微疲惫，不作精致明星化妆造。今天急需拿回欠薪3200，先配合店主的虚假离职与结清录像，后承担今天没拿到钱的代价，拒绝谎言。表演以眼神落向信封、挤笑后笑容消失、吞咽和短暂停顿推进，不哭喊、不演胜利或说教。全程右手自己的手机、左手钥匙，不换手；约19秒开录，48秒整机转向周成，64秒转回，81秒停录后左手还钥匙，右手带手机离开。服装发型跨12镜一致，不新增对白情节。",
+        "visualPrompt": "原创虚构27岁成年女性，低束发，深蓝无logo工作衬衫，自然肤质与疲惫但克制的神情，右手手机、左手攥钥匙，关门小店柜台外，普通桌灯下写实质感；不仿真人或影视角色。"
+      },
+      "contentDigest": "sha256:e8a717d483281ca3a337f813ab6ac33ea77683dc0cd9a5c0eab7f8aed19f4a6c",
+      "contentRevision": 1,
+      "createdAt": "2026-10-16T06:56:23.326Z",
+      "createdByActorId": "standalone-actor",
+      "kind": "character",
+      "projectId": "01a13f43-094c-767a-9414-b5622b236255",
+      "schemaVersion": "crewon.project-asset-revision.v1",
+      "script": {
+        "artifactId": "01a142dc-664f-70a8-a2ea-bf7260762c50",
+        "contentDigest": "sha256:c2566dd8192c44f7ce16884c0f55560844916dc0fbe1ee742aada3584fe596a9",
+        "contentRevision": 2,
+        "episodeId": "ep1"
+      },
+      "spaceId": "standalone-space",
+      "tenantId": "standalone-tenant"
+    },
+    {
+      "assetId": "01a14380-46c6-727b-8dd7-121ef91e4afb",
+      "brief": {
+        "briefRevision": 2,
+        "contentDigest": "sha256:a57e1245ec632546fc35b57e2fd2660f668b166316ddc5425a0cebd0aaadbee5"
+      },
+      "content": {
+        "name": "周成",
+        "setting": "原创虚构成年男性，约43岁，小店店主，普通人相貌，短发，灰米色无logo针织外套，衣着日常，不作夸张反派脸。目标是让林夏录下自愿离职与工资结清的虚假表述，遮掩欠薪3200；用支付条件而非肢体暴力控制她。语气平直，催促简短，表演依靠压住信封、看屏幕计时、把信封收回几厘米，不咆哮、不冷笑炫耀。始终在同一柜台内，信封留在手边不交付；48秒后手机屏幕与前置镜头共同朝向他，他因入镜收回信封，最后不付款。衣着发型及信封位置跨12镜衔接，不触碰或抢夺林夏手机，不新增对白情节。",
+        "visualPrompt": "原创虚构43岁成年男性，普通面貌、短发、灰米色无logo针织外套，神态平直克制，站关门小店柜台内，手压工资信封，普通桌灯下写实质感；不夸张恶相，不仿真人或影视角色。"
+      },
+      "contentDigest": "sha256:1abeb63a391e878743e9c9f7995d51d6ea46c264b3f15e83d02fb5fa63773f10",
+      "contentRevision": 1,
+      "createdAt": "2026-10-16T06:57:22.630Z",
+      "createdByActorId": "standalone-actor",
+      "kind": "character",
+      "projectId": "01a13f43-094c-767a-9414-b5622b236255",
+      "schemaVersion": "crewon.project-asset-revision.v1",
+      "script": {
+        "artifactId": "01a142dc-664f-70a8-a2ea-bf7260762c50",
+        "contentDigest": "sha256:c2566dd8192c44f7ce16884c0f55560844916dc0fbe1ee742aada3584fe596a9",
+        "contentRevision": 2,
+        "episodeId": "ep1"
+      },
+      "spaceId": "standalone-space",
+      "tenantId": "standalone-tenant"
+    },
+    {
+      "assetId": "01a143b2-2c35-77a1-957d-9da82b524ebb",
+      "brief": {
+        "briefRevision": 2,
+        "contentDigest": "sha256:a57e1245ec632546fc35b57e2fd2660f668b166316ddc5425a0cebd0aaadbee5"
+      },
+      "content": {
+        "name": "闭店柜台",
+        "setting": "原创普通小店，夜间闭店后，复用同一柜台完成90秒12镜。空间锚点为长方形哑光柜台、内侧素墙、台面端部普通桌灯、固定台词纸与信封。林夏在外、周成在内，相对而立；摄影机限定柜台同一端、关系轴同一侧，留出手部与手机转向取角空间。桌灯为实景光，环境略暗，脸、手与道具仍可辨，无霓虹及悬疑装饰。虚假离职／结清台词纸正面朝上不翻动；写有“林夏3200”的信封靠周成手边，只收回不交付。林夏右手机左钥匙，不换手；停录后钥匙落在原台面。无镜子、路人、第三人、外景或新增情节。品牌和墙字留白；文字道具后续人工校正，生成字不作真实证据。",
+        "visualPrompt": "16:9写实空场，夜间闭店普通小店，长方形哑光柜台、内侧素墙、端部普通桌灯，台面放正面朝上的纸和内侧信封；从柜台一端同轴侧斜看，保留内外站位空间。低调实景光，台面清晰，无人无手、无镜子霓虹，品牌墙字空白，纸及信封文字待人工校正。"
+      },
+      "contentDigest": "sha256:f49f3454a52ce8a3580603bd5a1c704ef0d78a74930df74c8bb3bce1d1bb10bf",
+      "contentRevision": 1,
+      "createdAt": "2026-10-16T07:51:52.629Z",
+      "createdByActorId": "standalone-actor",
+      "kind": "scene",
+      "projectId": "01a13f43-094c-767a-9414-b5622b236255",
+      "schemaVersion": "crewon.project-asset-revision.v1",
+      "script": {
+        "artifactId": "01a142dc-664f-70a8-a2ea-bf7260762c50",
+        "contentDigest": "sha256:c2566dd8192c44f7ce16884c0f55560844916dc0fbe1ee742aada3584fe596a9",
+        "contentRevision": 2,
+        "episodeId": "ep1"
+      },
+      "spaceId": "standalone-space",
+      "tenantId": "standalone-tenant"
+    }
+  ]
+}

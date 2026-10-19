@@ -1,0 +1,10 @@
+{
+  "at": "2026-10-16T11:20:18.118338+00:00",
+  "releaseActivations": 20,
+  "workerStarts": 19,
+  "controlStarts": 19,
+  "files": {
+    "plugin-approvals.json": "f31f6fe1632b9d49a4e694b7be8dfbbbacfa8014c92b392af1b3553a9c3a3923",
+    "plugin-native-policy.json": "0ca300b81c50ac6da4c5203f413413b2d676d45dae0fd75916e6f9f224a7d595"
+  }
+}

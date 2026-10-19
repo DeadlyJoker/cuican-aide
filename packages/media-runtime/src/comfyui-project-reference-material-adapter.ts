@@ -130,7 +130,19 @@ export function createComfyUiProjectReferenceMaterialAdapter(
         subfolder: o.subfolder,
         type: "output" as const,
       });
-      const path = `/view?${new URLSearchParams(output)}`;
+      const protocol = c.parameters.serviceProtocol;
+      if (
+        protocol !== undefined &&
+        protocol !== "native" &&
+        protocol !== "workflow-panel-v1" &&
+        protocol !== "workflow-api-v1"
+      )
+        invalid();
+      const viewPath =
+        protocol === "workflow-panel-v1" || protocol === "workflow-api-v1"
+          ? "/api/comfy/view"
+          : "/view";
+      const path = `${viewPath}?${new URLSearchParams(output)}`;
       if (new URL(path, base).href !== link.image.url) invalid();
       return Object.freeze({ origin: base.href, path, output });
     },

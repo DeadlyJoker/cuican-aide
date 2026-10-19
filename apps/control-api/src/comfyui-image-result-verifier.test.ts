@@ -360,3 +360,78 @@ test("Short image verification keeps HTTPS, original base URL and original opera
       { code: "project_generation_selection_result_unavailable" },
     );
 });
+
+test("panel image results require the original saved protocol and exact service origin and view path", () => {
+  const verifier = createComfyUiProjectGenerationImageResultVerifier({
+    identities: [{ ...identity, pluginId: "crewon.short-drama" }],
+  });
+  const base = pluginFixture("crewon.short-drama");
+  const images = JSON.parse(base.operation.resultJson!).images.map(
+    (image: { url: string }) => ({
+      ...image,
+      url: image.url.replace("/view?", "/api/comfy/view?"),
+    }),
+  );
+  const panel = {
+    ...base,
+    configuration: {
+      ...base.configuration,
+      parameters: {
+        ...base.configuration.parameters,
+        serviceProtocol: "workflow-panel-v1",
+      },
+    },
+    operation: { ...base.operation, resultJson: JSON.stringify({ images }) },
+  };
+  assert.match(verifier.verifyImage(panel).url, /\/api\/comfy\/view\?/u);
+  assert.throws(() =>
+    verifier.verifyImage({ ...panel, configuration: base.configuration }),
+  );
+  assert.throws(() =>
+    verifier.verifyImage({ ...panel, operation: base.operation }),
+  );
+  for (const serviceProtocol of [null, "workflow-panel-v2", true]) {
+    assert.throws(() =>
+      verifier.verifyImage({
+        ...panel,
+        configuration: {
+          ...panel.configuration,
+          parameters: { ...panel.configuration.parameters, serviceProtocol },
+        },
+      }),
+    );
+  }
+  assert.equal(verifier.verifyImage(base).filename, "chosen.png");
+});
+
+test("saved workflow API results retain the same strict origin, path and historical protocol checks", () => {
+  const verifier = createComfyUiProjectGenerationImageResultVerifier({
+    identities: [{ ...identity, pluginId: "crewon.short-drama" }],
+  });
+  const base = pluginFixture("crewon.short-drama");
+  const images = JSON.parse(base.operation.resultJson!).images.map(
+    (image: { url: string }) => ({
+      ...image,
+      url: image.url.replace("/view?", "/api/comfy/view?"),
+    }),
+  );
+  const original = {
+    ...base,
+    configuration: {
+      ...base.configuration,
+      parameters: {
+        ...base.configuration.parameters,
+        preset: "api-c16-scene",
+        serviceProtocol: "workflow-api-v1",
+      },
+    },
+    operation: { ...base.operation, resultJson: JSON.stringify({ images }) },
+  };
+  assert.match(verifier.verifyImage(original).url, /\/api\/comfy\/view\?/u);
+  assert.throws(() =>
+    verifier.verifyImage({ ...original, configuration: base.configuration }),
+  );
+  assert.throws(() =>
+    verifier.verifyImage({ ...original, operation: base.operation }),
+  );
+});

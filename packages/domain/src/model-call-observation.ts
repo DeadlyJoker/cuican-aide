@@ -25,6 +25,8 @@ export type ModelHttpTiming = Readonly<
       | "headersMs"
       | "firstByteMs"
       | "lastByteMs"
+      | "firstSemanticMs"
+      | "lastSemanticMs"
       | "firstCompletedItemMs"
       | "terminalMs"
       | "streamEndMs"
@@ -84,11 +86,75 @@ export type ModelHttpTerminationDiagnostics = Readonly<{
   networkCode?: ModelHttpNetworkCauseCode;
 }>;
 
+/** Fixed vocabulary only: provider-supplied unknown names never enter diagnostics. */
+export const MODEL_HTTP_STREAM_EVENT_TYPES = Object.freeze([
+  "response.created",
+  "response.in_progress",
+  "response.output_item.added",
+  "response.output_item.done",
+  "response.content_part.added",
+  "response.content_part.done",
+  "response.output_text.delta",
+  "response.output_text.done",
+  "response.reasoning_text.delta",
+  "response.reasoning_summary_text.delta",
+  "response.reasoning_summary_part.added",
+  "response.function_call_arguments.delta",
+  "response.function_call_arguments.done",
+  "response.custom_tool_call_input.delta",
+  "response.custom_tool_call_input.done",
+  "response.completed",
+  "response.failed",
+  "response.incomplete",
+  "error",
+  "unknown",
+] as const);
+export type ModelHttpStreamEventType =
+  (typeof MODEL_HTTP_STREAM_EVENT_TYPES)[number];
+export const MODEL_HTTP_PENDING_JSON_STATES = Object.freeze([
+  "empty",
+  "no-data",
+  "done-marker",
+  "complete-object",
+  "complete-nonobject",
+  "not-complete-json",
+  "multiple-data-events",
+] as const);
+export type PendingJsonState = (typeof MODEL_HTTP_PENDING_JSON_STATES)[number];
+/** Classification only; a complete JSON object is never proof of a validated terminal. */
+export type ModelHttpPendingInspection = Readonly<{
+  pendingJsonState: PendingJsonState;
+  pendingEventType?: ModelHttpStreamEventType;
+}>;
+export const MODEL_HTTP_STREAM_COUNTER_LIMIT = 2_147_483_647;
+export const MODEL_HTTP_STREAM_COUNT_FIELDS = Object.freeze([
+  "chunkCount",
+  "byteCount",
+  "frameCount",
+  "commentFrameCount",
+  "dataFrameCount",
+  "unknownEventCount",
+  "textDeltaCount",
+  "reasoningDeltaCount",
+  "toolArgumentDeltaCount",
+  "completedItemCount",
+  "terminalEventCount",
+] as const);
+export type ModelHttpStreamDiagnostics = Readonly<
+  Record<(typeof MODEL_HTTP_STREAM_COUNT_FIELDS)[number], number> & {
+    pendingFrameBytes: number;
+    lastEventType?: ModelHttpStreamEventType;
+    pendingJsonState?: PendingJsonState;
+    pendingEventType?: ModelHttpStreamEventType;
+  }
+>;
+
 /** Private correlation evidence; none of these values enter model context or Run SSE. */
 export type ModelHttpDiagnostics = Readonly<{
   response?: ModelHttpResponseDiagnostics;
   termination?: ModelHttpTerminationDiagnostics;
   read?: Readonly<{ end: "eof" | "releasedBeforeEof" }>;
+  stream?: ModelHttpStreamDiagnostics;
 }>;
 
 /** Accounting evidence for a provider request, not authority to retry its effects. */
@@ -201,6 +267,8 @@ export function validateModelCallRecord(record: ModelCallRecord): void {
       "headersMs",
       "firstByteMs",
       "lastByteMs",
+      "firstSemanticMs",
+      "lastSemanticMs",
       "firstCompletedItemMs",
       "terminalMs",
       "streamEndMs",
@@ -233,7 +301,83 @@ function validateHttpDiagnostics(value: ModelHttpDiagnostics): void {
   const invalid = () => {
     throw new Error("model_call_http_diagnostics_invalid");
   };
-  if (!diagnosticObject(value, ["response", "termination", "read"])) invalid();
+  if (!diagnosticObject(value, ["response", "termination", "read", "stream"]))
+    invalid();
+  const streamDescriptor = Object.getOwnPropertyDescriptor(value, "stream");
+  if (streamDescriptor !== undefined) {
+    if (
+      !streamDescriptor.enumerable ||
+      !Object.hasOwn(streamDescriptor, "value")
+    )
+      invalid();
+    const stream = streamDescriptor.value;
+    if (
+      !diagnosticObject(stream, [
+        ...MODEL_HTTP_STREAM_COUNT_FIELDS,
+        "pendingFrameBytes",
+        "lastEventType",
+        "pendingJsonState",
+        "pendingEventType",
+      ])
+    )
+      invalid();
+    if (
+      Reflect.ownKeys(stream).some(
+        (key) =>
+          typeof key !== "string" ||
+          ![
+            ...MODEL_HTTP_STREAM_COUNT_FIELDS,
+            "pendingFrameBytes",
+            "lastEventType",
+            "pendingJsonState",
+            "pendingEventType",
+          ].includes(key as never),
+      )
+    )
+      invalid();
+    for (const descriptor of Object.values(
+      Object.getOwnPropertyDescriptors(stream),
+    ))
+      if (!descriptor.enumerable || !Object.hasOwn(descriptor, "value"))
+        invalid();
+    for (const key of [
+      ...MODEL_HTTP_STREAM_COUNT_FIELDS,
+      "pendingFrameBytes",
+    ]) {
+      const count = stream[key];
+      if (
+        !Number.isSafeInteger(count) ||
+        count < 0 ||
+        count >
+          (key === "pendingFrameBytes"
+            ? 256 * 1024
+            : MODEL_HTTP_STREAM_COUNTER_LIMIT)
+      )
+        invalid();
+    }
+    if (
+      Object.hasOwn(stream, "pendingJsonState") &&
+      !(MODEL_HTTP_PENDING_JSON_STATES as readonly unknown[]).includes(
+        stream.pendingJsonState,
+      )
+    )
+      invalid();
+    if (
+      Object.hasOwn(stream, "pendingEventType") &&
+      (stream.pendingJsonState !== "complete-object" ||
+        !(MODEL_HTTP_STREAM_EVENT_TYPES as readonly unknown[]).includes(
+          stream.pendingEventType,
+        ))
+    )
+      invalid();
+    if (
+      stream.lastEventType !== undefined &&
+      !(MODEL_HTTP_STREAM_EVENT_TYPES as readonly unknown[]).includes(
+        stream.lastEventType,
+      )
+    )
+      invalid();
+  }
   if (value.response !== undefined) {
     const response = value.response;
     if (

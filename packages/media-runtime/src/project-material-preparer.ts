@@ -6,6 +6,7 @@ import {
   parseProjectMaterialPreparationRequest,
   materialPreparationFields,
   materialPreparationOrigin,
+  materialPreparationUploadAdapter,
   assertProjectMaterialPreparationActive,
   type ActorContext,
   type ProjectMaterialPreparationRequest,
@@ -196,6 +197,7 @@ export class ProjectMaterialPreparer {
       const proposed = renderComfyMaterialUpload({
         preparationId: randomUUID(),
         targetServiceOrigin: materialPreparationOrigin(target.configuration),
+        adapter: materialPreparationUploadAdapter(target.configuration),
         content,
       });
       state = (
@@ -223,7 +225,7 @@ export class ProjectMaterialPreparer {
       await this.#grant(request, "projectMaterial:upload", state, signal);
       const destination = await this.#endpoint(
         plan,
-        "/upload/image",
+        plan.request.path,
         state,
         signal,
       );
@@ -277,9 +279,15 @@ export class ProjectMaterialPreparer {
     content: FrozenProjectReferenceMaterialContent,
   ) {
     if (!same(state.initial.source, content.record)) fail("archive_changed");
+    if (
+      state.initial.transfer.adapter !==
+      materialPreparationUploadAdapter(state.initial.target.configuration)
+    )
+      fail("transfer_protocol_mismatch");
     const plan = renderComfyMaterialUpload({
       preparationId: state.initial.transfer.preparationId,
       targetServiceOrigin: state.initial.transfer.origin,
+      adapter: state.initial.transfer.adapter,
       content,
     });
     if (

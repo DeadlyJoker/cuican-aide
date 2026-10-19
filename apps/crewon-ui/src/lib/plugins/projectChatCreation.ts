@@ -1,6 +1,11 @@
-import type { ControlApiClient } from "@crewon/control-client";
+import {
+  ControlApiClientError,
+  type ControlApiClient,
+} from "@crewon/control-client";
 import {
   PROJECT_WORKSPACE_TARGET_ACTION,
+  PROJECT_CREATION_CONTEXT_ACTION,
+  parseProjectCreationContextResponse,
   parseProjectWorkspaceTargetResponse,
 } from "@crewon/contracts/project-workspace-target";
 import {
@@ -121,6 +126,14 @@ export function createProjectChatCreation(ports: ProjectChatCreationPorts) {
         return response.output;
       };
       try {
+        const creationContext = parseProjectCreationContextResponse(
+          await invoke(PROJECT_CREATION_CONTEXT_ACTION, {}),
+        );
+        if (
+          creationContext.workspaceMode === "legacy-nullable" &&
+          intent.workspaceId !== null
+        )
+          throw new Error("project_chat_workspace_mode_changed");
         if (intent.projectId === null) {
           const request = parseProjectFoundationUiRequest({
             action: "crewon.project-foundation.v1.createProject",
@@ -154,7 +167,10 @@ export function createProjectChatCreation(ports: ProjectChatCreationPorts) {
           save();
         }
         if (intent.binding === null) {
-          if (intent.workspaceId === null) {
+          if (
+            creationContext.workspaceMode === "plugin-owned-explicit" &&
+            intent.workspaceId === null
+          ) {
             const request = { projectId: intent.projectId! };
             const target = parseProjectWorkspaceTargetResponse(
               await invoke(PROJECT_WORKSPACE_TARGET_ACTION, request),
@@ -239,7 +255,19 @@ export function createProjectChatCreation(ports: ProjectChatCreationPorts) {
         void ports.release(lease).catch(ports.diagnostic);
       }
     };
-    const result = run().finally(() => pending.delete(storageKey));
+    const result = run()
+      .catch((error: unknown) => {
+        // Validation failures prove the first-turn request was never admitted.
+        // Release the durable intent so the user can correct the model or prompt;
+        // transport loss and ambiguous acknowledgements remain retryable.
+        if (
+          error instanceof ControlApiClientError &&
+          (error.status === 400 || error.status === 422)
+        )
+          ports.storage.removeItem(storageKey);
+        throw error;
+      })
+      .finally(() => pending.delete(storageKey));
     pending.set(storageKey, { content, modelId, result });
     return result;
   };

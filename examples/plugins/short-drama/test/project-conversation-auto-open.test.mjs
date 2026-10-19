@@ -589,3 +589,42 @@ test("empty archived project and archival during workspace resolution never disp
     f.controller.dispose();
   }
 });
+
+test("nullable resolver results require the explicit legacy mode and matching actual project", async () => {
+  for (const target of [
+    { projectId: "project-one", workspaceId: null },
+    {
+      projectId: "project-one",
+      workspaceId: null,
+      workspaceMode: "plugin-owned-explicit",
+    },
+    {
+      projectId: "another-project",
+      workspaceId: null,
+      workspaceMode: "legacy-nullable",
+    },
+  ]) {
+    let creates = 0;
+    const f = fixture(
+      {
+        async listConversations() {
+          return { bindings: [], nextThreadId: null };
+        },
+        async createConversation() {
+          ++creates;
+          assert.fail("invalid nullable target must not create");
+        },
+      },
+      { resolveWorkspace: async () => target },
+    );
+    try {
+      f.controller.setWorkspace({ workspaceId: null, name: null });
+      await settled();
+      assert.equal(creates, 0);
+      assert.equal(f.controller.getSnapshot().pendingCreation, null);
+      assert.match(f.controller.getSnapshot().error, /工作空间/u);
+    } finally {
+      f.controller.dispose();
+    }
+  }
+});

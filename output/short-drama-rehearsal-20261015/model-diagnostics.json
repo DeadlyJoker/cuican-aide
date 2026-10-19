@@ -1,0 +1,793 @@
+{
+  "capturedAt": "2026-10-15T10:05:23.409865+00:00",
+  "scope": "planning attempts in the isolated real client; no generated project output",
+  "runs": [
+    {
+      "runId": "01a13eda-6495-7408-953e-31d32ef06968",
+      "observations": [
+        {
+          "adapterName": "direct-responses",
+          "adapterVersion": "1",
+          "agentVersionId": "local-desktop-ee077319ec147b028da3b23e",
+          "callId": "9b94abe4-8be2-4aa8-a185-4a52eef1bd9a",
+          "finishedAt": "2026-10-15T09:18:01.751Z",
+          "firstOutputLatencyMs": null,
+          "httpDiagnostics": {
+            "termination": {
+              "code": "responses_transport_unavailable",
+              "networkCode": "ECONNRESET",
+              "reason": "transportError"
+            }
+          },
+          "httpTiming": {
+            "admittedMs": 4,
+            "dispatchedMs": 4,
+            "finishedMs": 18799
+          },
+          "modelId": "gpt-6-astra",
+          "operation": "generate",
+          "outcome": "failed",
+          "providerResponseId": null,
+          "purpose": "agent",
+          "schemaVersion": "crewon.model-call-observation.v0",
+          "startedAt": "2026-10-15T09:17:42.952Z",
+          "transport": "http",
+          "usageEventObserved": false
+        },
+        {
+          "adapterName": "direct-responses",
+          "adapterVersion": "1",
+          "agentVersionId": "local-desktop-ee077319ec147b028da3b23e",
+          "callId": "7cc1a934-df3d-4b7e-978d-585bc0e112ec",
+          "finishedAt": "2026-10-15T09:18:12.812Z",
+          "firstOutputLatencyMs": null,
+          "httpDiagnostics": {
+            "read": {
+              "end": "releasedBeforeEof"
+            },
+            "response": {
+              "cfRay": "a4adbbf52f1c2163-LAX",
+              "contentType": "text/event-stream",
+              "oneApiRequestId": "202610150918036829098408268d9d6lFWd4Pvi",
+              "server": "cloudflare",
+              "status": 200
+            },
+            "termination": {
+              "code": "responses_event_json_invalid",
+              "reason": "protocolError"
+            }
+          },
+          "httpTiming": {
+            "admittedMs": 3,
+            "dispatchedMs": 3,
+            "finishedMs": 10859,
+            "firstByteMs": 4726,
+            "headersMs": 4712,
+            "lastByteMs": 10752,
+            "readClosedMs": 10756
+          },
+          "modelId": "gpt-6-astra",
+          "operation": "generate",
+          "outcome": "failed",
+          "providerResponseId": "resp_0de9f50217586e6a016ad09a4cf99c81918d73bf32872556eb",
+          "purpose": "agent",
+          "schemaVersion": "crewon.model-call-observation.v0",
+          "startedAt": "2026-10-15T09:18:01.954Z",
+          "transport": "http",
+          "usageEventObserved": false
+        }
+      ],
+      "events": [
+        {
+          "data": {
+            "agentVersionId": "local-desktop-ee077319ec147b028da3b23e",
+            "authorityId": "standalone-authority",
+            "collaborationMode": "default",
+            "createdByActorId": "standalone-actor",
+            "goalBinding": null,
+            "policySnapshotId": "standalone-policy-v0",
+            "runtimeGeneration": "desktop-ee077319ec147b028da3b23e3c6a43d1",
+            "spaceId": "standalone-space",
+            "tenantId": "standalone-tenant",
+            "threadId": "01a13eda-63e7-710f-b2dd-21d340974b1e",
+            "toolPermissionMode": "approveForMe",
+            "workspaceBindingId": null
+          },
+          "eventId": "01a13eda-6496-7376-83d1-8a7124bd7a64",
+          "identity": {
+            "runId": "01a13eda-6495-7408-953e-31d32ef06968"
+          },
+          "occurredAt": "2026-10-15T09:17:42.421Z",
+          "schemaVersion": "crewon.run-event.v0",
+          "sequence": 1,
+          "type": "run.created"
+        },
+        {
+          "data": {},
+          "eventId": "01a13eda-665f-726d-ab82-efc0e0e72ba4",
+          "identity": {
+            "runId": "01a13eda-6495-7408-953e-31d32ef06968"
+          },
+          "occurredAt": "2026-10-15T09:17:42.879Z",
+          "schemaVersion": "crewon.run-event.v0",
+          "sequence": 2,
+          "type": "run.started"
+        },
+        {
+          "data": {
+            "code": "responses_event_json_invalid",
+            "retryable": false
+          },
+          "eventId": "01a13eda-db54-723c-bd94-ba47663452eb",
+          "identity": {
+            "runId": "01a13eda-6495-7408-953e-31d32ef06968"
+          },
+          "occurredAt": "2026-10-15T09:18:12.820Z",
+          "schemaVersion": "crewon.run-event.v0",
+          "sequence": 6,
+          "type": "run.failed"
+        }
+      ]
+    },
+    {
+      "runId": "01a13edd-f786-769d-9845-80508a059f4b",
+      "observations": [
+        {
+          "adapterName": "direct-responses",
+          "adapterVersion": "1",
+          "agentVersionId": "local-desktop-ee077319ec147b028da3b23e:model-dedfefd51120f28386c9dba7",
+          "callId": "49ea3dc2-4c83-4c39-aa37-3206d1d071d6",
+          "finishedAt": "2026-10-15T09:22:06.600Z",
+          "firstOutputLatencyMs": null,
+          "httpDiagnostics": {
+            "read": {
+              "end": "releasedBeforeEof"
+            },
+            "response": {
+              "cfRay": "a4adc1370bc169a4-LAX",
+              "contentType": "text/event-stream",
+              "oneApiRequestId": "202610150921389212299848268d9d6WPxUFeMX",
+              "server": "cloudflare",
+              "status": 200
+            },
+            "termination": {
+              "code": "responses_provider_server_error",
+              "reason": "protocolTerminal"
+            }
+          },
+          "httpTiming": {
+            "admittedMs": 5,
+            "dispatchedMs": 5,
+            "finishedMs": 29327,
+            "firstByteMs": 3514,
+            "headersMs": 3513,
+            "lastByteMs": 29308,
+            "readClosedMs": 29315,
+            "terminalMs": 29327
+          },
+          "modelId": "gpt-6.1-sol",
+          "operation": "generate",
+          "outcome": "failed",
+          "providerResponseId": "resp_08f93f50c29b6816016ad09b2386a081919edb38b3cbb5e0ed",
+          "purpose": "agent",
+          "schemaVersion": "crewon.model-call-observation.v0",
+          "startedAt": "2026-10-15T09:21:37.273Z",
+          "transport": "http",
+          "usageEventObserved": false
+        },
+        {
+          "adapterName": "direct-responses",
+          "adapterVersion": "1",
+          "agentVersionId": "local-desktop-ee077319ec147b028da3b23e:model-dedfefd51120f28386c9dba7",
+          "callId": "1243db7f-45cb-4165-886e-b510a7ff9c62",
+          "finishedAt": "2026-10-15T09:22:21.872Z",
+          "firstOutputLatencyMs": null,
+          "httpDiagnostics": {
+            "read": {
+              "end": "releasedBeforeEof"
+            },
+            "response": {
+              "cfRay": "a4adc1fd9fcb75b7-LAX",
+              "contentType": "text/event-stream",
+              "oneApiRequestId": "202610150922106464179208268d9d6hssmc1OO",
+              "server": "cloudflare",
+              "status": 200
+            },
+            "termination": {
+              "reason": "protocolTerminal"
+            }
+          },
+          "httpTiming": {
+            "admittedMs": 8,
+            "dispatchedMs": 8,
+            "finishedMs": 15051,
+            "firstByteMs": 8422,
+            "firstCompletedItemMs": 14722,
+            "headersMs": 8421,
+            "lastByteMs": 15028,
+            "readClosedMs": 15030,
+            "streamEndMs": 15051,
+            "terminalMs": 15051
+          },
+          "modelId": "gpt-6.1-sol",
+          "operation": "generate",
+          "outcome": "completed",
+          "providerResponseId": "resp_0ea3973e78b0756e016ad09b460e8481918cfed5890bfaba67",
+          "purpose": "agent",
+          "schemaVersion": "crewon.model-call-observation.v0",
+          "startedAt": "2026-10-15T09:22:06.821Z",
+          "transport": "http",
+          "usageEventObserved": true
+        },
+        {
+          "adapterName": "direct-responses",
+          "adapterVersion": "1",
+          "agentVersionId": "local-desktop-ee077319ec147b028da3b23e:model-dedfefd51120f28386c9dba7",
+          "callId": "03fa8e21-0f67-40d4-b694-455900fa7b00",
+          "finishedAt": "2026-10-15T09:28:14.666Z",
+          "firstOutputLatencyMs": null,
+          "httpDiagnostics": {
+            "read": {
+              "end": "releasedBeforeEof"
+            },
+            "response": {
+              "cfRay": "a4adc254d8472360-LAX",
+              "contentType": "text/event-stream",
+              "oneApiRequestId": "202610150922245939829798268d9d6cPuPkQgL",
+              "server": "cloudflare",
+              "status": 200
+            },
+            "termination": {
+              "code": "segment_canceled",
+              "reason": "canceled"
+            }
+          },
+          "httpTiming": {
+            "admittedMs": 3,
+            "dispatchedMs": 3,
+            "finishedMs": 351390,
+            "firstByteMs": 2305,
+            "firstCompletedItemMs": 327253,
+            "headersMs": 2305,
+            "lastByteMs": 327247,
+            "readClosedMs": 351385
+          },
+          "modelId": "gpt-6.1-sol",
+          "operation": "generate",
+          "outcome": "canceled",
+          "providerResponseId": "resp_080708ae1f5e734e016ad09b51194c81919abac8eb865e35f4",
+          "purpose": "agent",
+          "schemaVersion": "crewon.model-call-observation.v0",
+          "startedAt": "2026-10-15T09:22:23.275Z",
+          "transport": "http",
+          "usageEventObserved": false
+        }
+      ],
+      "events": [
+        {
+          "data": {
+            "agentVersionId": "local-desktop-ee077319ec147b028da3b23e:model-dedfefd51120f28386c9dba7",
+            "authorityId": "standalone-authority",
+            "collaborationMode": "default",
+            "createdByActorId": "standalone-actor",
+            "goalBinding": null,
+            "policySnapshotId": "standalone-policy-v0",
+            "runtimeGeneration": "desktop-ee077319ec147b028da3b23e3c6a43d1",
+            "spaceId": "standalone-space",
+            "tenantId": "standalone-tenant",
+            "threadId": "01a13eda-63e7-710f-b2dd-21d340974b1e",
+            "toolPermissionMode": "approveForMe",
+            "workspaceBindingId": null
+          },
+          "eventId": "01a13edd-f787-7327-85b1-332e7f90f333",
+          "identity": {
+            "runId": "01a13edd-f786-769d-9845-80508a059f4b"
+          },
+          "occurredAt": "2026-10-15T09:21:36.646Z",
+          "schemaVersion": "crewon.run-event.v0",
+          "sequence": 1,
+          "type": "run.created"
+        },
+        {
+          "data": {},
+          "eventId": "01a13edd-f9c3-7458-8c93-7d46a419410c",
+          "identity": {
+            "runId": "01a13edd-f786-769d-9845-80508a059f4b"
+          },
+          "occurredAt": "2026-10-15T09:21:37.219Z",
+          "schemaVersion": "crewon.run-event.v0",
+          "sequence": 2,
+          "type": "run.started"
+        },
+        {
+          "data": {
+            "callId": "call_a29cf23326de44559b554a28c01ce2a6",
+            "input": "{}",
+            "kind": "function",
+            "name": "crewon_project_capabilities",
+            "segmentId": "segment:01a13edd-f9e7-766d-99fe-76ad2f6f8feb",
+            "segmentSequence": 4
+          },
+          "eventId": "01a13ede-a83d-706d-88fb-5cf6a3d1f984",
+          "identity": {
+            "runId": "01a13edd-f786-769d-9845-80508a059f4b"
+          },
+          "occurredAt": "2026-10-15T09:22:21.885Z",
+          "schemaVersion": "crewon.run-event.v0",
+          "sequence": 6,
+          "type": "tool.requested"
+        },
+        {
+          "data": {
+            "artifactRef": null,
+            "callId": "call_a29cf23326de44559b554a28c01ce2a6",
+            "isError": false,
+            "kind": "function",
+            "name": "crewon_project_capabilities",
+            "output": "{\"capabilities\":[{\"capabilityId\":\"sha256:790cdef66383faf8075b439848e85f20b27359cf2a99e4beb9f489cb4222eb9f\",\"executionReady\":true,\"kind\":\"short-drama\",\"maximumEpisodes\":16,\"moduleAvailable\":true,\"source\":{\"contributionId\":\"workbench\",\"packageDigest\":\"sha256:75c33e7bcaaeafd48851c94ff06ccb065811403d6656eeca287149eab3de4ade\",\"pluginId\":\"crewon.short-drama\",\"publisherId\":\"example.publisher\",\"version\":\"50.2.1\"},\"stages\":[\"brief\",\"outline\",\"script\"],\"textPlansAvailable\":true,\"title\":\"AI 短剧\"}],\"schemaVersion\":\"crewon.project-planning-capabilities.v1\"}",
+            "outputTruncated": false,
+            "segmentId": "segment:01a13edd-f9e7-766d-99fe-76ad2f6f8feb",
+            "segmentSequence": 6
+          },
+          "eventId": "01a13ede-ac64-74a2-a650-8fe7097308a2",
+          "identity": {
+            "runId": "01a13edd-f786-769d-9845-80508a059f4b"
+          },
+          "occurredAt": "2026-10-15T09:22:22.948Z",
+          "schemaVersion": "crewon.run-event.v0",
+          "sequence": 8,
+          "type": "tool.completed"
+        },
+        {
+          "data": {
+            "actorId": "standalone-actor"
+          },
+          "eventId": "01a13ee4-093c-7328-bc9c-fb44c83022c5",
+          "identity": {
+            "runId": "01a13edd-f786-769d-9845-80508a059f4b"
+          },
+          "occurredAt": "2026-10-15T09:28:14.396Z",
+          "schemaVersion": "crewon.run-event.v0",
+          "sequence": 10,
+          "type": "run.cancel.requested"
+        },
+        {
+          "data": {
+            "reasonCode": "user_requested"
+          },
+          "eventId": "01a13ee4-0b08-7744-b14e-7c1fa844ebea",
+          "identity": {
+            "runId": "01a13edd-f786-769d-9845-80508a059f4b"
+          },
+          "occurredAt": "2026-10-15T09:28:14.785Z",
+          "schemaVersion": "crewon.run-event.v0",
+          "sequence": 11,
+          "type": "run.canceled"
+        }
+      ]
+    },
+    {
+      "runId": "01a13ee4-7f02-7231-b9fa-3f99b80a2e13",
+      "observations": [
+        {
+          "adapterName": "direct-responses",
+          "adapterVersion": "1",
+          "agentVersionId": "local-desktop-ee077319ec147b028da3b23e:model-052e4fc0bc88e2a5376eb746",
+          "callId": "0ce9c0b9-bfd6-4d99-ac18-1c1bea669c42",
+          "finishedAt": "2026-10-15T09:32:18.572Z",
+          "firstOutputLatencyMs": null,
+          "httpDiagnostics": {
+            "read": {
+              "end": "releasedBeforeEof"
+            },
+            "response": {
+              "cfRay": "a4adcbbbba102f69-LAX",
+              "contentType": "text/event-stream",
+              "oneApiRequestId": "202610150928498998939938268d9d6vgb5oejz",
+              "server": "cloudflare",
+              "status": 200
+            },
+            "termination": {
+              "code": "responses_idle_timeout",
+              "reason": "idleTimeout"
+            }
+          },
+          "httpTiming": {
+            "admittedMs": 4,
+            "dispatchedMs": 4,
+            "finishedMs": 213625,
+            "firstByteMs": 5637,
+            "headersMs": 5637,
+            "lastByteMs": 153588,
+            "readClosedMs": 213618
+          },
+          "modelId": "deepseek-v4-pro",
+          "operation": "generate",
+          "outcome": "failed",
+          "providerResponseId": "65e7108a-0b63-4f2e-a223-c101e1411b0f",
+          "purpose": "agent",
+          "schemaVersion": "crewon.model-call-observation.v0",
+          "startedAt": "2026-10-15T09:28:44.947Z",
+          "transport": "http",
+          "usageEventObserved": false
+        },
+        {
+          "adapterName": "direct-responses",
+          "adapterVersion": "1",
+          "agentVersionId": "local-desktop-ee077319ec147b028da3b23e:model-052e4fc0bc88e2a5376eb746",
+          "callId": "00893b3f-3431-4b45-8a78-bc5a5640c5a0",
+          "finishedAt": "2026-10-15T09:33:08.360Z",
+          "firstOutputLatencyMs": null,
+          "httpDiagnostics": {
+            "read": {
+              "end": "releasedBeforeEof"
+            },
+            "response": {
+              "cfRay": "a4add0f0d99269b5-LAX",
+              "contentType": "text/event-stream",
+              "oneApiRequestId": "202610150932227340063298268d9d6jdcPC4kr",
+              "server": "cloudflare",
+              "status": 200
+            },
+            "termination": {
+              "code": "segment_canceled",
+              "reason": "canceled"
+            }
+          },
+          "httpTiming": {
+            "admittedMs": 2,
+            "dispatchedMs": 2,
+            "finishedMs": 49546,
+            "firstByteMs": 4223,
+            "headersMs": 4222,
+            "lastByteMs": 4223,
+            "readClosedMs": 49546
+          },
+          "modelId": "deepseek-v4-pro",
+          "operation": "generate",
+          "outcome": "canceled",
+          "providerResponseId": null,
+          "purpose": "agent",
+          "schemaVersion": "crewon.model-call-observation.v0",
+          "startedAt": "2026-10-15T09:32:18.814Z",
+          "transport": "http",
+          "usageEventObserved": false
+        }
+      ],
+      "events": [
+        {
+          "data": {
+            "agentVersionId": "local-desktop-ee077319ec147b028da3b23e:model-052e4fc0bc88e2a5376eb746",
+            "authorityId": "standalone-authority",
+            "collaborationMode": "default",
+            "createdByActorId": "standalone-actor",
+            "goalBinding": null,
+            "policySnapshotId": "standalone-policy-v0",
+            "runtimeGeneration": "desktop-ee077319ec147b028da3b23e3c6a43d1",
+            "spaceId": "standalone-space",
+            "tenantId": "standalone-tenant",
+            "threadId": "01a13eda-63e7-710f-b2dd-21d340974b1e",
+            "toolPermissionMode": "approveForMe",
+            "workspaceBindingId": null
+          },
+          "eventId": "01a13ee4-7f04-742f-b75e-36bf6c17d8e8",
+          "identity": {
+            "runId": "01a13ee4-7f02-7231-b9fa-3f99b80a2e13"
+          },
+          "occurredAt": "2026-10-15T09:28:44.546Z",
+          "schemaVersion": "crewon.run-event.v0",
+          "sequence": 1,
+          "type": "run.created"
+        },
+        {
+          "data": {},
+          "eventId": "01a13ee4-8068-700c-bd92-902957ac0006",
+          "identity": {
+            "runId": "01a13ee4-7f02-7231-b9fa-3f99b80a2e13"
+          },
+          "occurredAt": "2026-10-15T09:28:44.904Z",
+          "schemaVersion": "crewon.run-event.v0",
+          "sequence": 2,
+          "type": "run.started"
+        },
+        {
+          "data": {
+            "actorId": "standalone-actor"
+          },
+          "eventId": "01a13ee8-8486-73a7-ae77-e7048ad847d2",
+          "identity": {
+            "runId": "01a13ee4-7f02-7231-b9fa-3f99b80a2e13"
+          },
+          "occurredAt": "2026-10-15T09:33:08.093Z",
+          "schemaVersion": "crewon.run-event.v0",
+          "sequence": 5,
+          "type": "run.cancel.requested"
+        },
+        {
+          "data": {
+            "reasonCode": "user_requested"
+          },
+          "eventId": "01a13ee8-85a7-70be-a351-248f72816587",
+          "identity": {
+            "runId": "01a13ee4-7f02-7231-b9fa-3f99b80a2e13"
+          },
+          "occurredAt": "2026-10-15T09:33:08.376Z",
+          "schemaVersion": "crewon.run-event.v0",
+          "sequence": 6,
+          "type": "run.canceled"
+        }
+      ]
+    },
+    {
+      "runId": "01a13ee9-1f1b-716a-b3cf-28bdc123a423",
+      "observations": [
+        {
+          "adapterName": "direct-responses",
+          "adapterVersion": "1",
+          "agentVersionId": "local-desktop-ee077319ec147b028da3b23e:model-83a2f822e6c5bf91214d5372",
+          "callId": "6ca99296-040b-4dc5-9e1b-01fc1ecfa50e",
+          "finishedAt": "2026-10-15T09:33:59.056Z",
+          "firstOutputLatencyMs": null,
+          "httpDiagnostics": {
+            "termination": {
+              "code": "responses_transport_unavailable",
+              "networkCode": "UND_ERR_CONNECT_TIMEOUT",
+              "reason": "transportError"
+            }
+          },
+          "httpTiming": {
+            "admittedMs": 10,
+            "dispatchedMs": 10,
+            "finishedMs": 10534
+          },
+          "modelId": "qwen-plus",
+          "operation": "generate",
+          "outcome": "failed",
+          "providerResponseId": null,
+          "purpose": "agent",
+          "schemaVersion": "crewon.model-call-observation.v0",
+          "startedAt": "2026-10-15T09:33:48.522Z",
+          "transport": "http",
+          "usageEventObserved": false
+        },
+        {
+          "adapterName": "direct-responses",
+          "adapterVersion": "1",
+          "agentVersionId": "local-desktop-ee077319ec147b028da3b23e:model-83a2f822e6c5bf91214d5372",
+          "callId": "5c9a70ba-8337-418b-92df-b0bac8bd4a07",
+          "finishedAt": "2026-10-15T09:34:15.321Z",
+          "firstOutputLatencyMs": null,
+          "httpDiagnostics": {
+            "read": {
+              "end": "releasedBeforeEof"
+            },
+            "response": {
+              "cfRay": "a4add3534d7747fc-LAX",
+              "contentType": "text/event-stream",
+              "oneApiRequestId": "202610150934009143265208268d9d6swRpRDzj",
+              "server": "cloudflare",
+              "status": 200
+            },
+            "termination": {
+              "code": "responses_provider_failed",
+              "reason": "protocolTerminal"
+            }
+          },
+          "httpTiming": {
+            "admittedMs": 12,
+            "dispatchedMs": 12,
+            "finishedMs": 16000,
+            "firstByteMs": 3489,
+            "headersMs": 3489,
+            "lastByteMs": 15862,
+            "readClosedMs": 15873,
+            "terminalMs": 15910
+          },
+          "modelId": "qwen-plus",
+          "operation": "generate",
+          "outcome": "failed",
+          "providerResponseId": "resp_a92106a3-62d9-9eed-90bf-fe69a9216995",
+          "purpose": "agent",
+          "schemaVersion": "crewon.model-call-observation.v0",
+          "startedAt": "2026-10-15T09:33:59.324Z",
+          "transport": "http",
+          "usageEventObserved": false
+        },
+        {
+          "adapterName": "direct-responses",
+          "adapterVersion": "1",
+          "agentVersionId": "local-desktop-ee077319ec147b028da3b23e:model-83a2f822e6c5bf91214d5372",
+          "callId": "5082f0e3-8dd8-4e2e-96cc-0e652a9a64b9",
+          "finishedAt": "2026-10-15T09:34:19.881Z",
+          "firstOutputLatencyMs": null,
+          "httpDiagnostics": {
+            "read": {
+              "end": "releasedBeforeEof"
+            },
+            "response": {
+              "cfRay": "a4add3b9ba35b54d-LAX",
+              "contentType": "text/event-stream",
+              "oneApiRequestId": "202610150934171137944058268d9d6MVt8fsSg",
+              "server": "cloudflare",
+              "status": 200
+            },
+            "termination": {
+              "code": "responses_provider_failed",
+              "reason": "protocolTerminal"
+            }
+          },
+          "httpTiming": {
+            "admittedMs": 1,
+            "dispatchedMs": 1,
+            "finishedMs": 4104,
+            "firstByteMs": 1750,
+            "headersMs": 1749,
+            "lastByteMs": 4103,
+            "readClosedMs": 4103,
+            "terminalMs": 4103
+          },
+          "modelId": "qwen-plus",
+          "operation": "generate",
+          "outcome": "failed",
+          "providerResponseId": "resp_c0cd1c34-aa80-9e7a-ac5c-bb2dfc35391f",
+          "purpose": "agent",
+          "schemaVersion": "crewon.model-call-observation.v0",
+          "startedAt": "2026-10-15T09:34:15.778Z",
+          "transport": "http",
+          "usageEventObserved": false
+        },
+        {
+          "adapterName": "direct-responses",
+          "adapterVersion": "1",
+          "agentVersionId": "local-desktop-ee077319ec147b028da3b23e:model-83a2f822e6c5bf91214d5372",
+          "callId": "e585a451-2e45-4458-9436-a4209e34acaf",
+          "finishedAt": "2026-10-15T09:34:42.346Z",
+          "firstOutputLatencyMs": null,
+          "httpDiagnostics": {
+            "read": {
+              "end": "releasedBeforeEof"
+            },
+            "response": {
+              "cfRay": "a4add3d9ecfd0d77-LAX",
+              "contentType": "text/event-stream",
+              "oneApiRequestId": "202610150934218562554558268d9d6Q4AQpKOp",
+              "server": "cloudflare",
+              "status": 200
+            },
+            "termination": {
+              "code": "responses_provider_failed",
+              "reason": "protocolTerminal"
+            }
+          },
+          "httpTiming": {
+            "admittedMs": 2,
+            "dispatchedMs": 2,
+            "finishedMs": 21725,
+            "firstByteMs": 1707,
+            "headersMs": 1702,
+            "lastByteMs": 21717,
+            "readClosedMs": 21717,
+            "terminalMs": 21719
+          },
+          "modelId": "qwen-plus",
+          "operation": "generate",
+          "outcome": "failed",
+          "providerResponseId": "resp_95dcf6c0-693e-9879-bd04-fb828422494c",
+          "purpose": "agent",
+          "schemaVersion": "crewon.model-call-observation.v0",
+          "startedAt": "2026-10-15T09:34:20.622Z",
+          "transport": "http",
+          "usageEventObserved": false
+        },
+        {
+          "adapterName": "direct-responses",
+          "adapterVersion": "1",
+          "agentVersionId": "local-desktop-ee077319ec147b028da3b23e:model-83a2f822e6c5bf91214d5372",
+          "callId": "8edfd7fc-844b-4dab-ab73-23364662467f",
+          "finishedAt": "2026-10-15T09:35:44.038Z",
+          "firstOutputLatencyMs": null,
+          "httpDiagnostics": {
+            "termination": {
+              "code": "responses_idle_timeout",
+              "reason": "idleTimeout"
+            }
+          },
+          "httpTiming": {
+            "admittedMs": 3,
+            "dispatchedMs": 3,
+            "finishedMs": 60011
+          },
+          "modelId": "qwen-plus",
+          "operation": "generate",
+          "outcome": "failed",
+          "providerResponseId": null,
+          "purpose": "agent",
+          "schemaVersion": "crewon.model-call-observation.v0",
+          "startedAt": "2026-10-15T09:34:44.027Z",
+          "transport": "http",
+          "usageEventObserved": false
+        },
+        {
+          "adapterName": "direct-responses",
+          "adapterVersion": "1",
+          "agentVersionId": "local-desktop-ee077319ec147b028da3b23e:model-83a2f822e6c5bf91214d5372",
+          "callId": "085f0e43-070c-43db-adb2-a5212338656b",
+          "finishedAt": "2026-10-15T09:35:57.922Z",
+          "firstOutputLatencyMs": null,
+          "httpDiagnostics": {
+            "termination": {
+              "code": "responses_transport_unavailable",
+              "networkCode": "UND_ERR_CONNECT_TIMEOUT",
+              "reason": "transportError"
+            }
+          },
+          "httpTiming": {
+            "admittedMs": 4,
+            "dispatchedMs": 4,
+            "finishedMs": 10513
+          },
+          "modelId": "qwen-plus",
+          "operation": "generate",
+          "outcome": "failed",
+          "providerResponseId": null,
+          "purpose": "agent",
+          "schemaVersion": "crewon.model-call-observation.v0",
+          "startedAt": "2026-10-15T09:35:47.409Z",
+          "transport": "http",
+          "usageEventObserved": false
+        }
+      ],
+      "events": [
+        {
+          "data": {
+            "agentVersionId": "local-desktop-ee077319ec147b028da3b23e:model-83a2f822e6c5bf91214d5372",
+            "authorityId": "standalone-authority",
+            "collaborationMode": "default",
+            "createdByActorId": "standalone-actor",
+            "goalBinding": null,
+            "policySnapshotId": "standalone-policy-v0",
+            "runtimeGeneration": "desktop-ee077319ec147b028da3b23e3c6a43d1",
+            "spaceId": "standalone-space",
+            "tenantId": "standalone-tenant",
+            "threadId": "01a13eda-63e7-710f-b2dd-21d340974b1e",
+            "toolPermissionMode": "approveForMe",
+            "workspaceBindingId": null
+          },
+          "eventId": "01a13ee9-1f1c-75a9-8f93-abb7908a8f24",
+          "identity": {
+            "runId": "01a13ee9-1f1b-716a-b3cf-28bdc123a423"
+          },
+          "occurredAt": "2026-10-15T09:33:47.675Z",
+          "schemaVersion": "crewon.run-event.v0",
+          "sequence": 1,
+          "type": "run.created"
+        },
+        {
+          "data": {},
+          "eventId": "01a13ee9-2239-75f0-9071-07eb1439f3a1",
+          "identity": {
+            "runId": "01a13ee9-1f1b-716a-b3cf-28bdc123a423"
+          },
+          "occurredAt": "2026-10-15T09:33:48.473Z",
+          "schemaVersion": "crewon.run-event.v0",
+          "sequence": 2,
+          "type": "run.started"
+        },
+        {
+          "data": {
+            "code": "responses_transport_unavailable",
+            "retryable": false
+          },
+          "eventId": "01a13eeb-1c00-73d8-ba74-3d7c290d6a45",
+          "identity": {
+            "runId": "01a13ee9-1f1b-716a-b3cf-28bdc123a423"
+          },
+          "occurredAt": "2026-10-15T09:35:57.952Z",
+          "schemaVersion": "crewon.run-event.v0",
+          "sequence": 10,
+          "type": "run.failed"
+        }
+      ]
+    }
+  ]
+}

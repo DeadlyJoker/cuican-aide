@@ -1,0 +1,35 @@
+{
+  "version": "50.2.6",
+  "packageDigest": "sha256:71a57f5ab3b363f8d3dfaca50eea61e8d9b03ebf0ea51475c55b3f014a792665",
+  "verifiedAt": "2026-10-16T04:04:55.097Z",
+  "changes": [
+    "Shared original brief revision editor for Foundation and legacy projects",
+    "Historical brief read restored in Foundation overview"
+  ],
+  "checks": {
+    "sourceUi": 25,
+    "compiledUi": 28,
+    "typecheck": "passed"
+  },
+  "clientInstalled": true,
+  "clientSelected": true,
+  "clientEnabled": true,
+  "clientAccepted": true,
+  "blocker": null,
+  "executionPrepared": true,
+  "pending": null,
+  "clientEvidence": {
+    "briefSave": "revision2 saved through original UI CAS; ack visible",
+    "briefHistory": "revisions1and2 visible together",
+    "projectList": "3 original projects visible",
+    "projectReopen": "original project and conversation restored",
+    "outline": "revision2 retained",
+    "script": "revision1 retained",
+    "newAgentRun": "plugin-HVgpnstxv4S7_L_ZX8kliRFVHU71znSTYdh2hCcny_M",
+    "newAgentRunTerminal": true,
+    "generationSubmitted": false,
+    "confirmedProposalRevision": 3,
+    "foundationRevision": 5
+  },
+  "updatedAt": "2026-10-16T06:29:25.782935+00:00"
+}

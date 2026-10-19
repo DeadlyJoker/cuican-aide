@@ -14,9 +14,98 @@ import {
 } from "./installedPluginGenerationJournal.test-support";
 import { flush } from "./pluginUiLoader.test-support";
 import { PluginUiLoaderError } from "./pluginUiValidation";
+import { ControlApiClientError } from "@crewon/control-client";
+import { parsePluginUiRecoveryHint } from "@crewon/contracts/plugins";
 
 afterEach(() => vi.useRealTimers());
 describe("account-owned project query journal", () => {
+  it.each(["refused", "dispatched", "lost"] as const)(
+    "reconciles a host no-admission reply once without another business query: %s",
+    async (outcome) => {
+      const f = queryJournalFixture();
+      const request = vi.fn(async () => {
+        throw new ControlApiClientError({
+          status: 409,
+          category: "conflict",
+          code: "project_query_revision_not_admitted",
+          requestId: "req-query",
+        });
+      });
+      let reads = 0;
+      const stage = vi.fn(async () => {
+        reads++;
+        if (reads === 2 && outcome === "lost")
+          throw new Error("recovery_unavailable");
+        const terminal = reads === 2;
+        return parsePluginUiRecoveryHint({
+          sourcePin: f.journal.snapshot()[0].sourcePin,
+          request: {
+            action:
+              "crewon.project-generation-queries.v1.queryConceptGeneration",
+            input: f.input,
+          },
+          phase: terminal ? outcome : "prepared",
+          revision: terminal ? 3 : 1,
+          dispatchMayHaveOccurred: terminal,
+          dispatchAttemptCount: terminal ? 1 : 0,
+          receipt: null,
+          retryable: !terminal || outcome !== "refused",
+          reasonCode:
+            terminal && outcome === "refused"
+              ? "project_query_revision_not_admitted"
+              : null,
+        });
+      });
+      await expect(
+        f.journal.invoke({
+          lease: f.lease,
+          input: f.input,
+          signal: f.caller.signal,
+          request,
+          stage,
+        }),
+      ).rejects.toThrow();
+      expect(request).toHaveBeenCalledOnce();
+      expect(stage).toHaveBeenCalledTimes(2);
+      expect(f.journal.snapshot()[0]).toMatchObject({
+        phase: outcome === "refused" ? "refused" : "uncertain",
+        input: f.input,
+        dispatchAttemptCount: 1,
+      });
+    },
+  );
+  it("an untyped conflict cannot trigger reconciliation or be treated as non-admission", async () => {
+    const f = queryJournalFixture();
+    const stage = vi.fn(async () =>
+      parsePluginUiRecoveryHint({
+        sourcePin: f.journal.snapshot()[0].sourcePin,
+        request: {
+          action: "crewon.project-generation-queries.v1.queryConceptGeneration",
+          input: f.input,
+        },
+        phase: "prepared",
+        revision: 1,
+        dispatchMayHaveOccurred: false,
+        dispatchAttemptCount: 0,
+        receipt: null,
+        retryable: true,
+        reasonCode: null,
+      }),
+    );
+    await expect(
+      f.journal.invoke({
+        lease: f.lease,
+        input: f.input,
+        signal: f.caller.signal,
+        stage,
+        request: async () => {
+          throw new Error("project_query_revision_not_admitted");
+        },
+      }),
+    ).rejects.toThrow();
+    expect(stage).toHaveBeenCalledOnce();
+    expect(f.journal.snapshot()[0].phase).toBe("uncertain");
+  });
   it("generation and query with the same business family and raw key own separate intents and Runs", async () => {
     const f = queryJournalFixture();
     const generation = createInstalledPluginGenerationJournal({

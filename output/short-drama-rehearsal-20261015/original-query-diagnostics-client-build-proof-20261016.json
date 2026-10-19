@@ -1,0 +1,54 @@
+{
+  "installedAt": "2026-10-16T11:32:01.308474+00:00",
+  "backup": "/private/tmp/crewon-plugin-performance-20261015/before-original-query-diagnostics-20261016",
+  "asarSha256": "b07f0c0d0fe732ba389bf0b65aafc076dc45cd93138e2406327811446f1764d5",
+  "runtime": {
+    "schemaVersion": "crewon.extension-build-identity.v1",
+    "implementationDigest": "sha256:6b093dcdc0389521f6b2f5aaa0d9d6d85e66f01785c04724459fe43e8dfaf473",
+    "bundles": [
+      {
+        "file": "control-api.mjs",
+        "digest": "sha256:768d9b6651e4bc96d1c8d59f7d7c26fdd535186c7cf7d3111e4c5a3de41e914f"
+      },
+      {
+        "file": "device-gateway.mjs",
+        "digest": "sha256:a75bcaee2d78fab139f01f4212d823dc0248a430df7c6e9650ee6eb12c6e0e52"
+      },
+      {
+        "file": "local-workspace-checks-mcp.mjs",
+        "digest": "sha256:00c30cb7aeb1699fc3c38a3a5e3318b03d8f9a8b97b22295ddd9671b6b0d5c64"
+      },
+      {
+        "file": "provider-model-catalog.mjs",
+        "digest": "sha256:a762f1e2f0e9bcd827505cff3443b3a5d826a8b7682963ce3227c9df2ed5f6f4"
+      },
+      {
+        "file": "provider-settings-coordinator.mjs",
+        "digest": "sha256:64d3d107b3a851c45c61f44c989d8d54fa68e606739cf5b74f06576857e16b96"
+      },
+      {
+        "file": "runtime-release.mjs",
+        "digest": "sha256:f82de7328c705a77122ea155f2338dfc23428902ec367dcf1f1bd257d3818d8d"
+      },
+      {
+        "file": "runtime-worker.mjs",
+        "digest": "sha256:97ac5ae9f050d231fae1542b8b08e6e37421cea9d6774f41a1ce989066bf119b"
+      }
+    ],
+    "historicalWorkItemScope": "crewon.extension-work-item-scope.v1"
+  },
+  "codesignVerified": true,
+  "controlTypecheckPassed": true,
+  "diagnosticTestsPassed": 13,
+  "queryOwnerAndHttpTestsPassed": 18,
+  "queryPostgresCasesSkipped": 17,
+  "clientAcceptancePassed": false,
+  "clientMainPid": 65517,
+  "currentBlocker": null,
+  "startupSample": "/private/tmp/crewon-runtime-merge-20261016/original-query-diagnostics-startup.sample.txt",
+  "boundaryPassed": true,
+  "originalGenerationResubmitted": false,
+  "lastUpdated": "2026-10-16T11:32:52.441034+00:00",
+  "runtimeChildrenStarted": true,
+  "controlPort": 62122
+}

@@ -5,6 +5,15 @@ import type { PluginTaskAdmission } from "@crewon/domain";
 import { nativeActor } from "../installed-plugin-native-authority.test-support.ts";
 import { nativeFoundationFixture } from "./native-project-foundation-runtime.test-support.ts";
 
+test("Foundation declarations load an approved catalogue above 128 KiB through the actual Native Worker", async (t) => {
+  const f = await nativeFoundationFixture(t, true, {
+    approvalPaddingBytes: 129 * 1024,
+  });
+  assert.ok(f.config);
+  const created = await f.createProject();
+  assert.equal(created.project.title, "夜航");
+});
+
 test("old v3 metadata/conversation opt-in does not infer Foundation Node authorization", async (t) => {
   const f = await nativeFoundationFixture(t, false);
   assert.equal(f.config, undefined);

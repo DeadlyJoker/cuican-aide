@@ -1,0 +1,373 @@
+{
+  "run": {
+    "agentVersionId": "native-plugin-agent-71456b2e92088e6b9707c9854463829a8b2cdc469cd72cae95f8487cb27bbd73",
+    "authorityId": "standalone-authority",
+    "cancelRequested": false,
+    "collaborationMode": "default",
+    "createdAt": "2026-10-16T07:51:04.332Z",
+    "createdByActorId": "standalone-actor",
+    "failure": null,
+    "goalAccounting": null,
+    "goalBinding": null,
+    "lastSequence": 84,
+    "origin": null,
+    "outputRef": "message:01a143b2-59a9-7759-a990-4f0f2fa95cab",
+    "policySnapshotId": "native-plugin-policy-71456b2e92088e6b9707c9854463829a8b2cdc469cd72cae95f8487cb27bbd73",
+    "reconciliationReceiptId": null,
+    "revision": 84,
+    "runId": "plugin-2-1I4-CbYvh0ci9gdtthT_z99i3HEMmlaWUw3DiSLKw",
+    "runtimeGeneration": "native-plugin-runtime-71456b2e92088e6b9707c9854463829a8b2cdc469cd72cae95f8487cb27bbd73",
+    "spaceId": "standalone-space",
+    "status": "completed",
+    "suspensionReasonCode": null,
+    "tenantId": "standalone-tenant",
+    "terminalAt": "2026-10-16T07:52:04.265Z",
+    "threadId": "01a13f61-7f59-77ed-bd1e-c5c7c2a4d67f",
+    "updatedAt": "2026-10-16T07:52:04.265Z",
+    "usage": {
+      "cachedInputTokens": 156544,
+      "inputTokens": 159893,
+      "outputTokens": 587,
+      "totalTokens": 160480
+    },
+    "waitingApproval": null,
+    "workspaceBindingId": null
+  },
+  "calls": [
+    {
+      "attemptId": "01a143b1-852f-75cc-aa0e-6a7fac0b6b0d",
+      "goalAttribution": null,
+      "observation": {
+        "adapterName": "direct-responses",
+        "adapterVersion": "1",
+        "agentVersionId": "native-plugin-agent-71456b2e92088e6b9707c9854463829a8b2cdc469cd72cae95f8487cb27bbd73",
+        "callId": "48034e5a-df4d-401b-bda8-cf8615755255",
+        "finishedAt": "2026-10-16T07:51:16.438Z",
+        "firstOutputLatencyMs": null,
+        "httpDiagnostics": {
+          "read": {
+            "end": "releasedBeforeEof"
+          },
+          "response": {
+            "cfRay": "a4b57a114b071ebf-HKG",
+            "contentType": "text/event-stream",
+            "oneApiRequestId": "202610160751104783282498268d9d6VkjZ8X7C",
+            "server": "cloudflare",
+            "status": 200
+          },
+          "stream": {
+            "byteCount": 114110,
+            "chunkCount": 58,
+            "commentFrameCount": 0,
+            "completedItemCount": 1,
+            "dataFrameCount": 8,
+            "frameCount": 8,
+            "lastEventType": "response.completed",
+            "pendingFrameBytes": 0,
+            "pendingJsonState": "empty",
+            "reasoningDeltaCount": 0,
+            "terminalEventCount": 1,
+            "textDeltaCount": 0,
+            "toolArgumentDeltaCount": 1,
+            "unknownEventCount": 1
+          },
+          "termination": {
+            "reason": "protocolTerminal"
+          }
+        },
+        "httpTiming": {
+          "admittedMs": 4,
+          "dispatchedMs": 4,
+          "finishedMs": 6550,
+          "firstByteMs": 4672,
+          "firstCompletedItemMs": 6219,
+          "firstSemanticMs": 6168,
+          "headersMs": 4665,
+          "lastByteMs": 6366,
+          "lastSemanticMs": 6368,
+          "readClosedMs": 6368,
+          "streamEndMs": 6550,
+          "terminalMs": 6550
+        },
+        "modelId": "gpt-6-astra",
+        "operation": "generate",
+        "outcome": "completed",
+        "providerResponseId": "resp_0524603a5674aed7016ad1d7720c1c8191a49d23c3bc7be242",
+        "purpose": "agent",
+        "schemaVersion": "crewon.model-call-observation.v0",
+        "startedAt": "2026-10-16T07:51:09.887Z",
+        "transport": "http",
+        "usageEventObserved": true
+      },
+      "runId": "plugin-2-1I4-CbYvh0ci9gdtthT_z99i3HEMmlaWUw3DiSLKw",
+      "stepId": "plugin--Tv5qdcnCW5InkLNYSM0zxWd_wtL4Hda76mLtSq78Y4",
+      "tenantId": "standalone-tenant"
+    },
+    {
+      "attemptId": "01a143b1-a879-73b8-af36-5de32ac8cacc",
+      "goalAttribution": null,
+      "observation": {
+        "adapterName": "direct-responses",
+        "adapterVersion": "1",
+        "agentVersionId": "native-plugin-agent-71456b2e92088e6b9707c9854463829a8b2cdc469cd72cae95f8487cb27bbd73",
+        "callId": "c42967a2-4575-4016-95de-d5dabbef5195",
+        "finishedAt": "2026-10-16T07:51:23.631Z",
+        "firstOutputLatencyMs": null,
+        "httpDiagnostics": {
+          "read": {
+            "end": "releasedBeforeEof"
+          },
+          "response": {
+            "cfRay": "a4b57a49ae4b4679-HKG",
+            "contentType": "text/event-stream",
+            "oneApiRequestId": "202610160751195124944998268d9d6uGCA5Peo",
+            "server": "cloudflare",
+            "status": 200
+          },
+          "stream": {
+            "byteCount": 122754,
+            "chunkCount": 66,
+            "commentFrameCount": 0,
+            "completedItemCount": 1,
+            "dataFrameCount": 40,
+            "frameCount": 40,
+            "lastEventType": "response.completed",
+            "pendingFrameBytes": 0,
+            "pendingJsonState": "empty",
+            "reasoningDeltaCount": 0,
+            "terminalEventCount": 1,
+            "textDeltaCount": 0,
+            "toolArgumentDeltaCount": 33,
+            "unknownEventCount": 1
+          },
+          "termination": {
+            "reason": "protocolTerminal"
+          }
+        },
+        "httpTiming": {
+          "admittedMs": 2,
+          "dispatchedMs": 3,
+          "finishedMs": 4719,
+          "firstByteMs": 1614,
+          "firstCompletedItemMs": 4545,
+          "firstSemanticMs": 3797,
+          "headersMs": 1614,
+          "lastByteMs": 4711,
+          "lastSemanticMs": 4712,
+          "readClosedMs": 4712,
+          "streamEndMs": 4719,
+          "terminalMs": 4718
+        },
+        "modelId": "gpt-6-astra",
+        "operation": "generate",
+        "outcome": "completed",
+        "providerResponseId": "resp_03dd75e4a3b26e15016ad1d77823c48191a79cf4eae8a94f8d",
+        "purpose": "agent",
+        "schemaVersion": "crewon.model-call-observation.v0",
+        "startedAt": "2026-10-16T07:51:18.913Z",
+        "transport": "http",
+        "usageEventObserved": true
+      },
+      "runId": "plugin-2-1I4-CbYvh0ci9gdtthT_z99i3HEMmlaWUw3DiSLKw",
+      "stepId": "model:plugin--Tv5qdcnCW5InkLNYSM0zxWd_wtL4Hda76mLtSq78Y4:2",
+      "tenantId": "standalone-tenant"
+    },
+    {
+      "attemptId": "01a143b1-c840-774a-8708-9814feab420e",
+      "goalAttribution": null,
+      "observation": {
+        "adapterName": "direct-responses",
+        "adapterVersion": "1",
+        "agentVersionId": "native-plugin-agent-71456b2e92088e6b9707c9854463829a8b2cdc469cd72cae95f8487cb27bbd73",
+        "callId": "57785d00-553e-4097-91f8-6d7ad1e5f648",
+        "finishedAt": "2026-10-16T07:51:45.130Z",
+        "firstOutputLatencyMs": null,
+        "httpDiagnostics": {
+          "read": {
+            "end": "releasedBeforeEof"
+          },
+          "response": {
+            "cfRay": "a4b57a7d980ee2dd-HKG",
+            "contentType": "text/event-stream",
+            "oneApiRequestId": "202610160751279976079218268d9d6DHZtAPrH",
+            "server": "cloudflare",
+            "status": 200
+          },
+          "stream": {
+            "byteCount": 225736,
+            "chunkCount": 151,
+            "commentFrameCount": 0,
+            "completedItemCount": 1,
+            "dataFrameCount": 429,
+            "frameCount": 429,
+            "lastEventType": "response.completed",
+            "pendingFrameBytes": 0,
+            "pendingJsonState": "empty",
+            "reasoningDeltaCount": 0,
+            "terminalEventCount": 1,
+            "textDeltaCount": 0,
+            "toolArgumentDeltaCount": 422,
+            "unknownEventCount": 1
+          },
+          "termination": {
+            "reason": "protocolTerminal"
+          }
+        },
+        "httpTiming": {
+          "admittedMs": 1,
+          "dispatchedMs": 1,
+          "finishedMs": 18082,
+          "firstByteMs": 2288,
+          "firstCompletedItemMs": 17866,
+          "firstSemanticMs": 4203,
+          "headersMs": 2287,
+          "lastByteMs": 18074,
+          "lastSemanticMs": 18076,
+          "readClosedMs": 18076,
+          "streamEndMs": 18082,
+          "terminalMs": 18082
+        },
+        "modelId": "gpt-6-astra",
+        "operation": "generate",
+        "outcome": "completed",
+        "providerResponseId": "resp_07ee5f46e59260c3016ad1d780a10081919e6fa8ec4b286ecd",
+        "purpose": "agent",
+        "schemaVersion": "crewon.model-call-observation.v0",
+        "startedAt": "2026-10-16T07:51:27.048Z",
+        "transport": "http",
+        "usageEventObserved": true
+      },
+      "runId": "plugin-2-1I4-CbYvh0ci9gdtthT_z99i3HEMmlaWUw3DiSLKw",
+      "stepId": "model:plugin--Tv5qdcnCW5InkLNYSM0zxWd_wtL4Hda76mLtSq78Y4:3",
+      "tenantId": "standalone-tenant"
+    },
+    {
+      "attemptId": "01a143b2-3c17-746c-a204-6832560776da",
+      "goalAttribution": null,
+      "observation": {
+        "adapterName": "direct-responses",
+        "adapterVersion": "1",
+        "agentVersionId": "native-plugin-agent-71456b2e92088e6b9707c9854463829a8b2cdc469cd72cae95f8487cb27bbd73",
+        "callId": "9ac1899c-18b9-4c66-b764-af3db12d96ba",
+        "finishedAt": "2026-10-16T07:52:04.262Z",
+        "firstOutputLatencyMs": 5955,
+        "httpDiagnostics": {
+          "read": {
+            "end": "releasedBeforeEof"
+          },
+          "response": {
+            "cfRay": "a4b57b368f2df1c6-HKG",
+            "contentType": "text/event-stream",
+            "oneApiRequestId": "20261016075158288626778268d9d6QqcYRA9O",
+            "server": "cloudflare",
+            "status": 200
+          },
+          "stream": {
+            "byteCount": 133849,
+            "chunkCount": 71,
+            "commentFrameCount": 0,
+            "completedItemCount": 1,
+            "dataFrameCount": 71,
+            "frameCount": 71,
+            "lastEventType": "response.completed",
+            "pendingFrameBytes": 0,
+            "pendingJsonState": "empty",
+            "reasoningDeltaCount": 0,
+            "terminalEventCount": 1,
+            "textDeltaCount": 62,
+            "toolArgumentDeltaCount": 0,
+            "unknownEventCount": 1
+          },
+          "termination": {
+            "reason": "protocolTerminal"
+          }
+        },
+        "httpTiming": {
+          "admittedMs": 2,
+          "dispatchedMs": 2,
+          "finishedMs": 7548,
+          "firstByteMs": 3634,
+          "firstCompletedItemMs": 7497,
+          "firstSemanticMs": 5955,
+          "headersMs": 3634,
+          "lastByteMs": 7542,
+          "lastSemanticMs": 7544,
+          "readClosedMs": 7544,
+          "streamEndMs": 7548,
+          "terminalMs": 7548
+        },
+        "modelId": "gpt-6-astra",
+        "operation": "generate",
+        "outcome": "completed",
+        "providerResponseId": "resp_0075616168b47582016ad1d79fe5b081918a2e63582f637bcb",
+        "purpose": "agent",
+        "schemaVersion": "crewon.model-call-observation.v0",
+        "startedAt": "2026-10-16T07:51:56.713Z",
+        "transport": "http",
+        "usageEventObserved": true
+      },
+      "runId": "plugin-2-1I4-CbYvh0ci9gdtthT_z99i3HEMmlaWUw3DiSLKw",
+      "stepId": "model:plugin--Tv5qdcnCW5InkLNYSM0zxWd_wtL4Hda76mLtSq78Y4:4",
+      "tenantId": "standalone-tenant"
+    }
+  ],
+  "assets": [
+    {
+      "assetId": "01a1437f-5f1e-7599-8e99-9ad1bf2a3f4d",
+      "createdAt": "2026-10-16T06:56:23.326Z",
+      "createdByActorId": "standalone-actor",
+      "kind": "character",
+      "latestContentRevision": 1,
+      "latestReferenceRevision": 0,
+      "locked": false,
+      "ownerPrincipalId": "standalone-principal",
+      "projectId": "01a13f43-094c-767a-9414-b5622b236255",
+      "revision": 2,
+      "schemaVersion": "crewon.project-asset.v1",
+      "selectedContentRevision": 1,
+      "selectedReferenceRevision": null,
+      "spaceId": "standalone-space",
+      "tenantId": "standalone-tenant",
+      "updatedAt": "2026-10-16T07:48:59.315Z",
+      "updatedByActorId": "standalone-actor"
+    },
+    {
+      "assetId": "01a14380-46c6-727b-8dd7-121ef91e4afb",
+      "createdAt": "2026-10-16T06:57:22.630Z",
+      "createdByActorId": "standalone-actor",
+      "kind": "character",
+      "latestContentRevision": 1,
+      "latestReferenceRevision": 0,
+      "locked": false,
+      "ownerPrincipalId": "standalone-principal",
+      "projectId": "01a13f43-094c-767a-9414-b5622b236255",
+      "revision": 2,
+      "schemaVersion": "crewon.project-asset.v1",
+      "selectedContentRevision": 1,
+      "selectedReferenceRevision": null,
+      "spaceId": "standalone-space",
+      "tenantId": "standalone-tenant",
+      "updatedAt": "2026-10-16T07:49:21.135Z",
+      "updatedByActorId": "standalone-actor"
+    },
+    {
+      "assetId": "01a143b2-2c35-77a1-957d-9da82b524ebb",
+      "createdAt": "2026-10-16T07:51:52.629Z",
+      "createdByActorId": "standalone-actor",
+      "kind": "scene",
+      "latestContentRevision": 1,
+      "latestReferenceRevision": 0,
+      "locked": false,
+      "ownerPrincipalId": "standalone-principal",
+      "projectId": "01a13f43-094c-767a-9414-b5622b236255",
+      "revision": 2,
+      "schemaVersion": "crewon.project-asset.v1",
+      "selectedContentRevision": 1,
+      "selectedReferenceRevision": null,
+      "spaceId": "standalone-space",
+      "tenantId": "standalone-tenant",
+      "updatedAt": "2026-10-16T07:52:50.258Z",
+      "updatedByActorId": "standalone-actor"
+    }
+  ]
+}

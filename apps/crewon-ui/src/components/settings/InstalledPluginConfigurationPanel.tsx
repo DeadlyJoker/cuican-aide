@@ -7,6 +7,7 @@ import {
 } from "../../lib/plugins/useInstalledPluginConfiguration";
 import { Button } from "../ui/button";
 import { InstalledPluginConfigurationFields } from "./InstalledPluginConfigurationFields";
+import { isDesktopShortDramaImagePreset } from "../../lib/desktop/desktopLocalPluginExecutionSetupProtocol";
 import type { DesktopLocalPluginExecutionSetupAccess } from "../../lib/desktop/desktopLocalPluginExecutionSetupProtocol";
 import { InstalledPluginExecutionSetup } from "./InstalledPluginExecutionSetup";
 import "./InstalledPluginConfigurationPanel.css";
@@ -122,6 +123,13 @@ export function InstalledPluginConfigurationPanel({
               path={[]}
               issues={state.validation?.issues ?? []}
             />
+            {selection.pluginId === "crewon.short-drama" && (
+              <p className="installed-plugin-configuration-hint">
+                {zh
+                  ? "baseUrl 请填写 HTTPS 服务根地址，不含路径、查询参数或账号密码；保存时会补齐末尾的 /。"
+                  : "Use an HTTPS service origin without a path, query or credentials. Saving adds the trailing slash."}
+              </p>
+            )}
             {state.credentialsUnsupported && (
               <p className="installed-plugin-configuration-error" role="status">
                 {zh
@@ -193,8 +201,7 @@ export function InstalledPluginConfigurationPanel({
         state.configuration !== null &&
         state.configuration.pluginVersion === state.package.version &&
         typeof baseUrl === "string" &&
-        (preset === "krea2-portrait" ||
-          preset === "krea2-character-three-view") && (
+        isDesktopShortDramaImagePreset(preset) && (
           <InstalledPluginExecutionSetup
             access={executionSetup}
             identity={{

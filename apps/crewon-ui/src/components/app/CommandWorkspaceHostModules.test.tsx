@@ -135,6 +135,46 @@ function fixtureModule(
 }
 
 describe("CommandWorkspace multiple host contributions", () => {
+  it("blocks a stale project submission while preserving the editable draft, and enables it after the context refresh", async () => {
+    const thread = {
+      id: "project-thread",
+      name: "项目",
+      preview: "",
+      cwd: "/fixture",
+      createdAt: 1,
+      updatedAt: 2,
+      turns: [],
+    } as unknown as Thread;
+    const props = {
+      selectedThread: thread,
+      selectedThreadId: thread.id,
+      linkedThreads: [thread],
+      connectionState: "connected" as const,
+      composerValue: "保留完整剧本创作请求",
+      projectConversationComposer: <span>正在更新项目创作状态…</span>,
+    };
+    await render({ ...props, projectConversationSubmitBlocked: true });
+    expect(
+      container!.querySelector<HTMLTextAreaElement>("textarea")?.disabled,
+    ).toBe(false);
+    expect(
+      container!.querySelector<HTMLTextAreaElement>("textarea")?.value,
+    ).toBe(props.composerValue);
+    expect(
+      container!.querySelector<HTMLButtonElement>(
+        'button[aria-label="发送任务"]',
+      )?.disabled,
+    ).toBe(true);
+    await render({ ...props, projectConversationSubmitBlocked: false });
+    expect(
+      container!.querySelector<HTMLButtonElement>(
+        'button[aria-label="发送任务"]',
+      )?.disabled,
+    ).toBe(false);
+    expect(
+      container!.querySelector<HTMLTextAreaElement>("textarea")?.value,
+    ).toBe(props.composerValue);
+  });
   it("keeps project stage controls off a new-task homepage with a retained old thread ID", () => {
     const markup = renderToStaticMarkup(
       <CommandWorkspace

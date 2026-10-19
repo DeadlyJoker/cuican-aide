@@ -4,11 +4,20 @@ import { act } from "react";
 import { createRoot } from "react-dom/client";
 import { afterAll, afterEach, beforeAll, expect, it } from "vitest";
 import { ControlApiClient } from "@crewon/control-client";
-import type { ProjectConversationComposerSelection } from "../control-runtime/controlProjectConversationTurn";
+import {
+  ControlProjectConversationTurn,
+  type ProjectConversationComposerSelection,
+} from "../control-runtime/controlProjectConversationTurn";
 import { useProjectConversationComposer } from "./useProjectConversationComposer";
 import { notifyProjectConversationBindingChanged } from "../plugins/projectConversationBindingChanges";
 import { ControlProjectMediaInputStageTurn } from "../control-runtime/controlProjectMediaInputStageTurn";
 import { scriptView } from "../control-runtime/controlProjectMediaInputStage.test-support";
+import { observeProjectTextMutation } from "../plugins/projectTextMutationChanges";
+import { uiLease } from "../plugins/pluginUiLoader.test-support";
+import {
+  textAdoptionRequest,
+  textAdoptionResponse,
+} from "../plugins/projectTextMutationChanges.test-support";
 const at = "2026-10-06T00:00:00.000Z",
   projectId = "project/中文 %2F";
 const digest = `sha256:${"a".repeat(64)}`;
@@ -179,6 +188,178 @@ async function fixture(
   await render();
   return { client, container, render, current: () => latest };
 }
+it("adopting an outline in the installed workbench refreshes the unchanged conversation before a script can be sent", async () => {
+  let reads = 0;
+  const refreshed = deferred<Response>();
+  const f = await fixture(
+    async (url) => {
+      if (
+        !new URL(String(url)).pathname.endsWith("project-conversation/context")
+      )
+        return Response.json(
+          {
+            error: {
+              code: "route_not_found",
+              message: "Optional service absent",
+            },
+          },
+          { status: 404 },
+        );
+      ++reads;
+      return reads === 1
+        ? Response.json({
+            context: {
+              binding,
+              projectRevision: 2,
+              briefRevision: 1,
+              outline: null,
+            },
+          })
+        : refreshed.promise;
+    },
+    "v2",
+    "current",
+  );
+  const page = {
+    pluginId: binding.source.pluginId,
+    context: { projectId, stage: "script" },
+  };
+  await f.render(binding.threadId, 1, null, page);
+  expect(f.current().blocked).toBe(true);
+  expect(f.container.querySelector('[role="alert"]')?.textContent).toContain(
+    "请先采用故事大纲",
+  );
+  const template = uiLease();
+  const lease = {
+    ...template,
+    selectionRevision: binding.source.selectionRevision,
+    packageDigest: binding.source.packageDigest,
+    descriptor: {
+      ...template.descriptor,
+      pluginId: binding.source.pluginId,
+      publisherId: binding.source.publisherId,
+      version: binding.source.version,
+    },
+  };
+  const request = {
+    ...textAdoptionRequest,
+    input: { ...textAdoptionRequest.input, projectId },
+  };
+  const output = {
+    ...textAdoptionResponse,
+    artifact: { ...textAdoptionResponse.artifact, projectId },
+    contentRevision: { ...textAdoptionResponse.contentRevision, projectId },
+  };
+  await act(async () =>
+    observeProjectTextMutation(
+      f.client,
+      { ...lease, packageDigest: `sha256:${"f".repeat(64)}` },
+      request,
+      output,
+    ),
+  );
+  expect(reads).toBe(1);
+  await act(async () =>
+    observeProjectTextMutation(f.client, lease, request, output),
+  );
+  expect(reads).toBe(2);
+  expect(f.current().blocked).toBe(true);
+  expect(f.container.textContent).toContain("正在更新项目创作状态");
+  await act(async () => {
+    refreshed.resolve(
+      Response.json({
+        context: {
+          binding,
+          projectRevision: 2,
+          briefRevision: 1,
+          outline: {
+            artifactId: "outline",
+            contentRevision: 1,
+            episodes: [{ episodeId: "episode/中文", title: "第一集" }],
+          },
+        },
+      }),
+    );
+    await new Promise((r) => setTimeout(r, 0));
+  });
+  expect(f.current().blocked).toBe(false);
+  expect(f.current().selection?.stage).toEqual({
+    kind: "script",
+    briefRevision: 1,
+    episodeId: "episode/中文",
+    outline: { artifactId: "outline", contentRevision: 1 },
+  });
+  expect(
+    f.container.querySelector('select[aria-label="剧本集数"]')?.textContent,
+  ).toContain("第一集");
+  expect(reads).toBe(2);
+});
+it("a failed refresh explains why cached project sources cannot be submitted, then recovers through the original reader", async () => {
+  let unavailable = false;
+  let contentRevision = 1;
+  const f = await fixture(
+    async (url) => {
+      if (
+        !new URL(String(url)).pathname.endsWith("project-conversation/context")
+      )
+        return Response.json(
+          {
+            error: {
+              code: "route_not_found",
+              message: "Optional service absent",
+            },
+          },
+          { status: 404 },
+        );
+      if (unavailable) throw new TypeError("fetch failed");
+      return Response.json({
+        context: {
+          binding,
+          projectRevision: 2,
+          briefRevision: 1,
+          outline: {
+            artifactId: "outline",
+            contentRevision,
+            episodes: [
+              { episodeId: "episode/中文", title: `大纲${contentRevision}` },
+            ],
+          },
+        },
+      });
+    },
+    "v2",
+    "current",
+  );
+  await f.render(binding.threadId, 1, null, {
+    pluginId: binding.source.pluginId,
+    context: { projectId, stage: "script" },
+  });
+  expect(f.current().blocked).toBe(false);
+  unavailable = true;
+  await act(async () => {
+    notifyProjectConversationBindingChanged(f.client, binding.threadId);
+    await new Promise((resolve) => setTimeout(resolve, 0));
+  });
+  expect(f.current().blocked).toBe(true);
+  expect(f.container.querySelector('[role="alert"]')?.textContent).toContain(
+    "未能更新项目来源",
+  );
+  expect(f.container.textContent).toContain("大纲1");
+  unavailable = false;
+  contentRevision = 2;
+  await act(async () => {
+    const retry = Array.from(f.container.querySelectorAll("button")).find(
+      (button) => button.textContent === "刷新项目",
+    )!;
+    retry.click();
+    await new Promise((resolve) => setTimeout(resolve, 0));
+  });
+  expect(f.current().blocked).toBe(false);
+  expect(f.current().selection?.stage).toMatchObject({
+    outline: { contentRevision: 2 },
+  });
+  expect(f.container.querySelector('[role="alert"]')).toBeNull();
+});
 it("mixed outline history reads every adopted episode page without promoting the latest structured candidate", async () => {
   const episodes = Array.from({ length: 23 }, (_, i) => ({
     episodeId: "episode-" + i,
@@ -744,3 +925,77 @@ it("right page navigation changes the bound composer stage without executing or 
   expect(f.container.textContent).not.toContain("当前阶段：");
   expect(writes).toBe(0);
 });
+
+for (const admitted of [true, false])
+  it(`overview follow-up sends the original Foundation-compatible discussion stage and ${admitted ? "accepts its receipt" : "never upgrades after rejection"}`, async () => {
+    const posts: Record<string, unknown>[] = [];
+    const f = await fixture(async (url, options) => {
+      if (options?.method === "POST") {
+        posts.push(JSON.parse(String(options.body)));
+        return admitted
+          ? Response.json({
+              disposition: "committed",
+              threadId: binding.threadId,
+              threadRevision: 2,
+              runId: "foundation-discussion-run",
+              runRevision: 1,
+              bindingRevision: binding.revision,
+              stageAdmissionDigest: digest,
+            })
+          : Response.json(
+              {
+                error: {
+                  category: "authorization",
+                  code: "project_conversation_authority_changed",
+                  message: "Denied by real authority",
+                  requestId: "denied-foundation",
+                },
+              },
+              { status: 403 },
+            );
+      }
+      const path = new URL(String(url)).pathname;
+      return Response.json(
+        path.endsWith("project-conversation")
+          ? { binding }
+          : path.endsWith("outline")
+            ? { view: publicTextView }
+            : { project },
+      );
+    });
+    await f.render(binding.threadId, 1, null, {
+      pluginId: binding.source.pluginId,
+      context: { projectId, stage: "overview" },
+    });
+    expect(f.container.textContent).toContain("当前阶段：创作方案");
+    const selection = f.current().selection!;
+    expect(selection.stage).toEqual({ kind: "discussion" });
+    const turn = new ControlProjectConversationTurn(
+      f.client,
+      () => "same-foundation-turn",
+    );
+    const sending = turn.start({
+      threadId: binding.threadId,
+      content: "保存同项目创作方案候选，不采用",
+      expectedThreadRevision: 1,
+      selection,
+    });
+    if (admitted)
+      expect(await sending).toEqual({
+        threadId: binding.threadId,
+        runId: "foundation-discussion-run",
+      });
+    else
+      await expect(sending).rejects.toMatchObject({
+        status: 403,
+        code: "project_conversation_authority_changed",
+      });
+    expect(posts).toHaveLength(1);
+    expect(posts[0]).toMatchObject({
+      projectId,
+      threadId: binding.threadId,
+      stage: { kind: "discussion" },
+      idempotencyKey: "same-foundation-turn",
+    });
+    expect(f.current().selection?.stage).toEqual({ kind: "discussion" });
+  });

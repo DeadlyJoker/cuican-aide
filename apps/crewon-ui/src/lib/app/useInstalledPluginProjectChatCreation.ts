@@ -1,4 +1,8 @@
-import { useMemo, type RefObject } from "react";
+import {
+  isDesktopLocalManagementAccess,
+  type DesktopLocalManagementAccess,
+} from "../desktop/desktopLocalManagementAccess";
+import { useMemo, useRef, type RefObject } from "react";
 import type { ControlApiClient } from "@crewon/control-client";
 import type { ControlPluginUiHost } from "../plugins/controlPluginUiHost";
 import type { PluginUiPageNavigation } from "../plugins/pluginUiPageNavigation";
@@ -18,6 +22,7 @@ export function useInstalledPluginProjectChatCreation<
   host,
   pageNavigation,
   enabled,
+  localManagementAccess = null,
   currentScope,
   mountedScope,
   onDiagnostic,
@@ -28,6 +33,7 @@ export function useInstalledPluginProjectChatCreation<
   host: ControlPluginUiHost | null;
   pageNavigation: PluginUiPageNavigation | null;
   enabled: boolean;
+  localManagementAccess?: DesktopLocalManagementAccess | null;
   currentScope: RefObject<Scope | null>;
   mountedScope: RefObject<Scope | null>;
   onDiagnostic(error: unknown): void;
@@ -40,24 +46,44 @@ export function useInstalledPluginProjectChatCreation<
     | undefined
   >;
 }>) {
+  const currentManagementAccess = useRef(localManagementAccess);
+  currentManagementAccess.current = localManagementAccess;
   return useMemo(() => {
+    const nativeOwner =
+      scope?.assets != null &&
+      location.protocol === "file:" &&
+      isDesktopLocalManagementAccess(localManagementAccess);
     if (
       !host ||
       !scope ||
-      scope.assets ||
-      !scope.sessionKey ||
+      (scope.assets != null && !nativeOwner) ||
+      (!scope.sessionKey && !nativeOwner) ||
       !pageNavigation ||
       !enabled
     )
       return undefined;
     const assertCurrent = () => {
-      if (currentScope.current !== scope || mountedScope.current !== scope)
+      if (
+        currentScope.current !== scope ||
+        mountedScope.current !== scope ||
+        (nativeOwner &&
+          (currentManagementAccess.current !== localManagementAccess ||
+            !isDesktopLocalManagementAccess(localManagementAccess)))
+      )
         throw new PluginUiLoaderError("plugin_ui_session_changed");
     };
     return createProjectChatCreation({
       client: scope.client,
       storage: localStorage,
-      ownerKey: JSON.stringify([scope.client.requestOrigin, scope.sessionKey]),
+      // File-scoped storage survives Native Control port rotation. The issued
+      // owner and current authenticated scope still fence every resumed write.
+      ownerKey: nativeOwner
+        ? JSON.stringify([
+            "desktop-local-management",
+            location.pathname,
+            scope.sessionKey,
+          ])
+        : JSON.stringify([scope.client.requestOrigin, scope.sessionKey]),
       assertCurrent,
       acquire: (module, signal) =>
         host.acquireMount(module.plugin, module.contributionId, signal),
@@ -89,6 +115,7 @@ export function useInstalledPluginProjectChatCreation<
     host,
     pageNavigation,
     enabled,
+    localManagementAccess,
     currentScope,
     mountedScope,
     onDiagnostic,

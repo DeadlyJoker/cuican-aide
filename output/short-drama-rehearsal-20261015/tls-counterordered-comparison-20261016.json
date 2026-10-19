@@ -1,0 +1,97 @@
+{
+  "recordedAt": "2026-10-15T16:51:08.944Z",
+  "node": "v24.18.1",
+  "openssl": "3.5.7",
+  "scope": "Counterordered TLS handshake-only comparison; no HTTP, credentials or model request; server hostname and certificate verification preserved; no application setting changed",
+  "host": "api.aicuican.com",
+  "results": [
+    {
+      "address": "104.21.29.91",
+      "round": 1,
+      "curve": "default",
+      "tcpMs": 287,
+      "tlsMs": 618,
+      "protocol": "TLSv1.3",
+      "group": null,
+      "error": null,
+      "elapsedMs": 1718
+    },
+    {
+      "address": "104.21.29.91",
+      "round": 2,
+      "curve": "X25519MLKEM768",
+      "tcpMs": 289,
+      "tlsMs": null,
+      "protocol": null,
+      "group": null,
+      "error": "DIAGNOSTIC_DEADLINE",
+      "elapsedMs": 7004
+    },
+    {
+      "address": "104.21.29.91",
+      "round": 3,
+      "curve": "X25519",
+      "tcpMs": 297,
+      "tlsMs": 619,
+      "protocol": "TLSv1.3",
+      "group": "X25519",
+      "error": null,
+      "elapsedMs": 935
+    },
+    {
+      "address": "104.21.29.91",
+      "round": 4,
+      "curve": "default",
+      "tcpMs": 295,
+      "tlsMs": null,
+      "protocol": null,
+      "group": null,
+      "error": "DIAGNOSTIC_DEADLINE",
+      "elapsedMs": 7003
+    },
+    {
+      "address": "172.67.148.182",
+      "round": 1,
+      "curve": "X25519MLKEM768",
+      "tcpMs": 1285,
+      "tlsMs": 1605,
+      "protocol": "TLSv1.3",
+      "group": null,
+      "error": null,
+      "elapsedMs": 1916
+    },
+    {
+      "address": "172.67.148.182",
+      "round": 2,
+      "curve": "default",
+      "tcpMs": 298,
+      "tlsMs": 625,
+      "protocol": "TLSv1.3",
+      "group": null,
+      "error": "DIAGNOSTIC_DEADLINE",
+      "elapsedMs": 7003
+    },
+    {
+      "address": "172.67.148.182",
+      "round": 3,
+      "curve": "X25519",
+      "tcpMs": 279,
+      "tlsMs": null,
+      "protocol": null,
+      "group": null,
+      "error": "DIAGNOSTIC_DEADLINE",
+      "elapsedMs": 7003
+    },
+    {
+      "address": "172.67.148.182",
+      "round": 4,
+      "curve": "default",
+      "tcpMs": 282,
+      "tlsMs": 2679,
+      "protocol": "TLSv1.3",
+      "group": null,
+      "error": null,
+      "elapsedMs": 3797
+    }
+  ]
+}

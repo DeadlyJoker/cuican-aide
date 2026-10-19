@@ -1,0 +1,250 @@
+{
+  "base": "3bdfef37a5e392b6a0c874b402059245fa061ae7",
+  "verifiedAt": "2026-10-15T08:52:47.729Z",
+  "patchSha256": "6dc38a920a62c3f42be5b65234cb63467ef2149002785595faaa9c4411cf532e",
+  "workingTreeContentSha256": "2ed99978d07dfa0c6bccf2ccf17db2a91680e8eb93bc6fec530734a9024756ef",
+  "sourceManifest": [
+    {
+      "path": "apps/control-api/src/desktop-metadata-only-media-startup.test.ts",
+      "sha256": "45d784f320c9ec1ef12829d7e3da758de78d0dfcdec445bca3ade40dd9f612db"
+    },
+    {
+      "path": "apps/control-api/src/desktop-plugin-runtime.ts",
+      "sha256": "021e7df07aade624a691d40f57cb628cfe47fed02f1cd3b079285a8e2a6c1cf4"
+    },
+    {
+      "path": "apps/control-api/src/desktop-project-execution-startup.test.ts",
+      "sha256": "64187a882b1fc8941ba2def28e8bf40ffcc9ecca6de1fee50de6064f581047f2"
+    },
+    {
+      "path": "apps/control-api/src/desktop-project-history-plugin-runtime.ts",
+      "sha256": "388fa64ba399d75c3e2daf500448e279d49aa3d8174519a8b14ce386764015c3"
+    },
+    {
+      "path": "apps/control-api/src/desktop-project-history-task-reads.test.ts",
+      "sha256": "04a891a43679d6b901a609c54710541a603356afe352ea2889bee217e34c768c"
+    },
+    {
+      "path": "apps/control-api/src/desktop-project-history-task-reads.ts",
+      "sha256": "eab1f972842f462634df88fb82f3298ad0205b29c9cda61b38b571e4d514164e"
+    },
+    {
+      "path": "apps/control-api/src/desktop-project-startup.ts",
+      "sha256": "b4acf603f108bcfb965c9cbde2316a7bd1f2ebf5d5483f3020dfac71af594d83"
+    },
+    {
+      "path": "apps/control-api/src/desktop-zero-plugins-main.integration.test.ts",
+      "sha256": "6eea775e87685b1c61acf0c64bca5270b21096beb92a88776fdbcd6ed6f95c3f"
+    },
+    {
+      "path": "apps/crewon-ui/electron/desktopAccountOrigin.test.ts",
+      "sha256": "67281a52a60f2c4d2a5a6d29d5710fef708c29405bbad8598089c6aad880870f"
+    },
+    {
+      "path": "apps/crewon-ui/electron/desktopLocalPluginExecutionSetup.test.ts",
+      "sha256": "bbe7e2a2c0e81e0cb072c66fdb3f49225c657716ebd8e77e90cd7fa869e0bfe2"
+    },
+    {
+      "path": "apps/crewon-ui/electron/desktopLocalPluginExecutionSetup.ts",
+      "sha256": "6f951b22489de99acd831778a1b9de87d39a1f6ef5206b398a55460f139316e3"
+    },
+    {
+      "path": "apps/crewon-ui/src/components/plugins/InstalledPluginGenerationControls.test.tsx",
+      "sha256": null
+    },
+    {
+      "path": "apps/crewon-ui/src/components/plugins/InstalledPluginGenerationControls.tsx",
+      "sha256": null
+    },
+    {
+      "path": "apps/crewon-ui/src/components/plugins/InstalledPluginLegacyTaskControls.test.tsx",
+      "sha256": "bf72d6169607e717cd57d7470c955169ecde49c234783515b5099f09cb67be82"
+    },
+    {
+      "path": "apps/crewon-ui/src/components/plugins/InstalledPluginLegacyTaskControls.tsx",
+      "sha256": "ac11d326a429bf0d0e1cebdf26507dcfcdb738f68f164a5c4fda2eb8a245a4d0"
+    },
+    {
+      "path": "apps/crewon-ui/src/components/plugins/InstalledPluginModuleTaskContext.integration.test.tsx",
+      "sha256": "934669f573e652af8cd2533edd5a7ca87f93986a0839d3662c52f6e7db3b4a50"
+    },
+    {
+      "path": "apps/crewon-ui/src/components/plugins/InstalledPluginProjectHistoricalQueryControls.tsx",
+      "sha256": null
+    },
+    {
+      "path": "apps/crewon-ui/src/components/plugins/InstalledPluginProjectQueryControls.test.tsx",
+      "sha256": null
+    },
+    {
+      "path": "apps/crewon-ui/src/components/plugins/InstalledPluginProjectQueryControls.tsx",
+      "sha256": null
+    },
+    {
+      "path": "apps/crewon-ui/src/components/plugins/InstalledPluginTaskControls.tsx",
+      "sha256": "195af554860e02b9ce7e3a131b19147380e5e3d2226b248e83b6a3e9eac9e407"
+    },
+    {
+      "path": "apps/crewon-ui/src/components/plugins/__snapshots__/InstalledPluginGenerationControls.test.tsx.snap",
+      "sha256": null
+    },
+    {
+      "path": "apps/crewon-ui/src/components/plugins/__snapshots__/InstalledPluginLegacyTaskControls.test.tsx.snap",
+      "sha256": "6cf9e3afa3f78d96d46b313348f11de3b7a1932605eb9dd8eaa75c41779ec598"
+    },
+    {
+      "path": "apps/crewon-ui/src/components/plugins/__snapshots__/InstalledPluginProjectQueryControls.test.tsx.snap",
+      "sha256": null
+    },
+    {
+      "path": "apps/crewon-ui/src/lib/agent-platform/agentPlatformBaseUrl.test.ts",
+      "sha256": "781088f640c686c29dc078925e0029f3cb5ef5d3f67e9f618d3a9b2e065b4ce2"
+    },
+    {
+      "path": "apps/crewon-ui/src/lib/agent-platform/agentPlatformRuntimeBaseUrl.ts",
+      "sha256": "343591a6f901cb27e1e129b0f0bfec63bc142180093eb58b032b38ed470cffca"
+    },
+    {
+      "path": "apps/crewon-ui/src/lib/plugins/installedPluginChanges.ts",
+      "sha256": "679ec9d774023d4792d9843e73fdfb4d02042fbf2c9800b9ed403cfa4558e32d"
+    },
+    {
+      "path": "apps/crewon-ui/src/lib/plugins/installedPluginMediaGenerationTransport.test.ts",
+      "sha256": "037b1b59895924dc1b88e15358635f75a17a174e2a23555c2136c2111d18259a"
+    },
+    {
+      "path": "apps/crewon-ui/src/lib/plugins/installedPluginTaskRequests.test.ts",
+      "sha256": "4245000a1de0b02734bc6a0ecd69c19d78eafd8fc960dac45c30e173ec5a9065"
+    },
+    {
+      "path": "apps/crewon-ui/src/lib/plugins/installedPluginTaskRequests.ts",
+      "sha256": "892b82d6301c121921493f8628d5a603317717b8cd2137b7a9043dd19e553773"
+    },
+    {
+      "path": "apps/crewon-ui/src/lib/plugins/installedPluginUiRecoveryHosts.test.ts",
+      "sha256": "b018500329bf43509780c8547115fc5c6eb72379990d0c553697e117dc06c958"
+    },
+    {
+      "path": "apps/crewon-ui/src/lib/plugins/pluginEntryByteImporter.test.ts",
+      "sha256": "94381b3863b033a87b106ee902a921bb72972196973792c6d4bbbdef07657cc6"
+    },
+    {
+      "path": "apps/crewon-ui/src/lib/plugins/pluginEntryByteImporter.ts",
+      "sha256": "0138571fd8565f4c95bb60edac5745fd147f303c02d4b39e43dacf34135b3e85"
+    },
+    {
+      "path": "apps/crewon-ui/src/lib/plugins/pluginEntryByteStore.test.ts",
+      "sha256": "1db0548ab124860af4c1fe5b66602f29ca2697cf68d2c2de5a36fecf5d08cb56"
+    },
+    {
+      "path": "apps/crewon-ui/src/lib/plugins/pluginEntryByteStore.ts",
+      "sha256": "6bc405891018f302c43a5340cd27a9e0dcacb6ee368071c73d920f44af441b7c"
+    },
+    {
+      "path": "apps/crewon-ui/src/lib/plugins/useInstalledPluginGenerationContext.test.tsx",
+      "sha256": "01a1604fc9b90fca92443118e94ae3bc19d014b99d4fea9df804b203e3ac4aaa"
+    },
+    {
+      "path": "apps/crewon-ui/src/lib/plugins/useInstalledPluginGenerationContext.ts",
+      "sha256": "f077d0a195ee52bd6b9eb9f356b8203b49f9bf9dede96d7975ff7ca74345d60e"
+    },
+    {
+      "path": "apps/crewon-ui/src/lib/plugins/useInstalledPluginProjectHistoricalQueryContext.test.tsx",
+      "sha256": "bfa7c0b86902d59d2b8df376851143961e17a3f57f0ddca36bcd7c4b5f8bab76"
+    },
+    {
+      "path": "apps/crewon-ui/src/lib/plugins/useInstalledPluginProjectHistoricalQueryContext.ts",
+      "sha256": "d73cc620871a97a8b7210f6750f44a1c0d327985101a6aa3bc135eb01201e2f8"
+    },
+    {
+      "path": "apps/crewon-ui/src/lib/plugins/useInstalledPluginProjectQueryContext.test.tsx",
+      "sha256": "0f1d9f33f1b80beb8a5ca7d8236287b697f01d8ad78ebf788b1edc7652fc1379"
+    },
+    {
+      "path": "apps/crewon-ui/src/lib/plugins/useInstalledPluginProjectQueryContext.ts",
+      "sha256": "40341c61e58a0912bccd63101dac4d57cf6adf395e8ce93d31e1de4148e79590"
+    },
+    {
+      "path": "apps/crewon-ui/src/lib/plugins/useInstalledPluginTaskContext.test.tsx",
+      "sha256": "7efa2c8760b70907dd25a364498c7c622cfd2c27e8dd15d34ed6c2551e9f02d4"
+    },
+    {
+      "path": "apps/crewon-ui/src/lib/plugins/useInstalledPluginTaskContext.ts",
+      "sha256": "6b006e108f89b61c56987e8063c9ace64ff1d775764aa70038edc0aa5a1bf02f"
+    },
+    {
+      "path": "apps/crewon-ui/vite.config.ts",
+      "sha256": "699c58c27080a2e2c8af07e99e787029ed22f2f7019ada29b1abac6923fef594"
+    },
+    {
+      "path": "examples/plugins/short-drama/package.json",
+      "sha256": "59f6856587e7bbcd5b6a3641bd571e8cc780907130d5cd0caf8db8942e289e8c"
+    },
+    {
+      "path": "examples/plugins/short-drama/src/ui.tsx",
+      "sha256": "2f8fda144d16a86d296faebd1797567c96851b079e6e4c6698ee06a92ae46cb4"
+    },
+    {
+      "path": "examples/plugins/short-drama/src/workbench/ConceptController.ts",
+      "sha256": "26ffd92bca6a3b38e2ecfcea447060e8397ef7ab2811f752fd26a858d9e6bd46"
+    },
+    {
+      "path": "examples/plugins/short-drama/src/workbench/ConceptGenerationIntentController.ts",
+      "sha256": "14a4476f87ea857988fbe57836c350e311497411cd5a79027309946d5b440ee2"
+    },
+    {
+      "path": "examples/plugins/short-drama/src/workbench/ConceptImageSelectionController.ts",
+      "sha256": "f628bc85ba16d2cecb11135d82329e11c0f35d2499926b47223276e0b8486ec7"
+    },
+    {
+      "path": "examples/plugins/short-drama/src/workbench/ConceptQueryController.ts",
+      "sha256": "7e0331763db1c3769030cf95b46d04dafa50129ceb1d2b1ae08ff97b3ba48bed"
+    },
+    {
+      "path": "examples/plugins/short-drama/src/workbench/ProjectRecoveryProjection.ts",
+      "sha256": "34bbfd589931fddb4ef55730da7973143989f0139117479b998b4a50af0d8a01"
+    },
+    {
+      "path": "examples/plugins/short-drama/src/workbench/ProjectRecoveryRecords.tsx",
+      "sha256": "694d0e68a0ee445324eb12e5bdc1c6286930fe4fce534879a032e4ee9c6cc664"
+    },
+    {
+      "path": "examples/plugins/short-drama/src/workbench/ShortDramaPersistentWorkbench.tsx",
+      "sha256": "74d137a095e129527afbd44f5f1af85918cff93b2bd4bb802c2620b43e926e1e"
+    },
+    {
+      "path": "examples/plugins/short-drama/src/workbench/creative-project-controller.ts",
+      "sha256": "67f19b3229ec7913946a39abda34ae3d41baefbacc9a08b3fcdde88a46b35156"
+    },
+    {
+      "path": "examples/plugins/short-drama/test/host-project-recovery.test.mjs",
+      "sha256": "f71c324b2857d6ab0b47ffc70fe94149987c83c89f5350759841f1027ca19ec5"
+    },
+    {
+      "path": "packages/contracts/src/desktop-project-execution-contract.test.ts",
+      "sha256": "6e9b617eff102ee76399541ab610b4468f7fb39be50b8bfe2f6e471208904ffe"
+    },
+    {
+      "path": "packages/contracts/src/desktop-project-execution-contract.ts",
+      "sha256": "985b42dcc467f31ab12d13f8806129f5e0c508cc3f271acb3282d92a4c173dda"
+    },
+    {
+      "path": "packages/contracts/src/plugin-ui-json.ts",
+      "sha256": "ce81ab0883a08b8cee1ec34834ec95e943db5cd9458f6e2b04a11157dbe8067e"
+    }
+  ],
+  "verifiedArchiveFiles": 18,
+  "mismatches": [],
+  "controlRuntimeMatches": true,
+  "controlRuntimeSha256": "5e9e08409a9401d9102b46878f9b6b134dca231008dfa78a57c2002be0e2acc5",
+  "isolatedArchiveMatches": true,
+  "isolatedControlRuntimeMatches": true,
+  "archiveSha256": "3b7b29c454b8ba0b1be00726239bf38aeba303e34927ac38f846453cc7012539",
+  "historyReaderSourceSha256": "eab1f972842f462634df88fb82f3298ad0205b29c9cda61b38b571e4d514164e",
+  "cancelledReadFixSourceSha256": "892b82d6301c121921493f8628d5a603317717b8cd2137b7a9043dd19e553773",
+  "shortDramaVersion": "50.2.1",
+  "shortDramaDigest": "sha256:75c33e7bcaaeafd48851c94ff06ccb065811403d6656eeca287149eab3de4ade",
+  "acceptanceApp": "/private/tmp/crewon-plugin-performance-20261015/CrewON验收.app",
+  "acceptanceProfile": "/private/tmp/crewon-plugin-performance-20261015/final-profile",
+  "coldRestartVerified": true
+}

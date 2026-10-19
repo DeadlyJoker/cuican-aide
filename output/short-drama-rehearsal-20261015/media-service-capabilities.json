@@ -1,0 +1,54 @@
+{
+  "recordedAt": "2026-10-15T15:05:40.586Z",
+  "source": "read-only GET /object_info/{node_class}; no credentials, generation or uploads",
+  "results": [
+    {
+      "nodeClass": "WanImageToVideo",
+      "status": 200,
+      "contentType": "application/json; charset=utf-8",
+      "bytes": 1261,
+      "elapsedMs": 137,
+      "available": true,
+      "outputTypes": ["CONDITIONING", "CONDITIONING", "LATENT"],
+      "requiredInputs": [
+        "positive",
+        "negative",
+        "vae",
+        "width",
+        "height",
+        "length",
+        "batch_size"
+      ]
+    },
+    {
+      "nodeClass": "SaveVideo",
+      "status": 200,
+      "contentType": "application/json; charset=utf-8",
+      "bytes": 7074,
+      "elapsedMs": 115,
+      "available": true,
+      "outputTypes": ["VIDEO"],
+      "requiredInputs": ["video", "filename_prefix", "format"]
+    },
+    {
+      "nodeClass": "LoadAudio",
+      "status": 200,
+      "contentType": "application/json; charset=utf-8",
+      "bytes": 2586,
+      "elapsedMs": 134,
+      "available": true,
+      "outputTypes": ["AUDIO"],
+      "requiredInputs": ["audio"]
+    },
+    {
+      "nodeClass": "SaveAudio",
+      "status": 200,
+      "contentType": "application/json; charset=utf-8",
+      "bytes": 845,
+      "elapsedMs": 113,
+      "available": true,
+      "outputTypes": ["AUDIO"],
+      "requiredInputs": ["audio", "filename_prefix"]
+    }
+  ]
+}

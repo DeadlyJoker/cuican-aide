@@ -22,6 +22,9 @@ export type ProjectMediaExecutionReview = ProjectMediaWorkflowReview &
       nodeIds: readonly string[];
     }>[];
   }>;
+// Native retains two reviewed workflows per immutable publication (up to 32).
+// Each graph remains independently capped at 64 KiB by graph().
+export const MAX_PROJECT_MEDIA_EXECUTION_REVIEWS = 32 * 2;
 export function mediaExecutionFail(code: string): never {
   throw new Error(`project_media_execution_${code}`);
 }
@@ -141,7 +144,7 @@ function freeze<T>(value: T): T {
 function imagePath(value: unknown): string {
   const r = fields(value, ["filename", "subfolder", "type"]);
   if (
-    r.type !== "output" ||
+    (r.type !== "output" && r.type !== "input") ||
     typeof r.filename !== "string" ||
     typeof r.subfolder !== "string" ||
     !r.filename ||
@@ -157,13 +160,14 @@ function imagePath(value: unknown): string {
       r.subfolder.split("/").some((p) => !p || p === "." || p === ".."))
   )
     mediaExecutionFail("material_path_invalid");
-  return [r.subfolder, r.filename].filter(Boolean).join("/") + " [output]";
+  return [r.subfolder, r.filename].filter(Boolean).join("/") + ` [${r.type}]`;
 }
 /** Pure validation oracle. The plugin still renders its own reviewed graph. */
 export function expectedProjectMediaSubmission(
   review: ProjectMediaExecutionReview,
   input: ProjectMediaRenderInput,
   operationId: string,
+  serviceProtocol: unknown = "native",
 ): PluginJsonHttpSubmission {
   if (
     !/^[a-f0-9]{8}-[a-f0-9]{4}-[a-f0-9]{4}-[a-f0-9]{4}-[a-f0-9]{12}$/u.test(
@@ -177,6 +181,13 @@ export function expectedProjectMediaSubmission(
       extensionCanonicalJson(review.workflow)
   )
     mediaExecutionFail("render_input_invalid");
+  if (
+    serviceProtocol !== undefined &&
+    serviceProtocol !== "native" &&
+    serviceProtocol !== "workflow-panel-v1" &&
+    serviceProtocol !== "workflow-api-v1"
+  )
+    mediaExecutionFail("service_protocol_invalid");
   const rendered = structuredClone(review.template) as Graph;
   rendered[review.promptBinding.nodeId]!.inputs[review.promptBinding.input] =
     input.prompt;
@@ -188,6 +199,20 @@ export function expectedProjectMediaSubmission(
     const path = imagePath(images[binding.role]);
     for (const id of binding.nodeIds) rendered[id]!.inputs.image = path;
   }
+  if (
+    serviceProtocol === "workflow-panel-v1" ||
+    serviceProtocol === "workflow-api-v1"
+  )
+    return Object.freeze({
+      method: "POST",
+      path: "/api/workflow/generate",
+      body: {
+        source: "quick",
+        workflow_template: rendered,
+        prompt_id: operationId,
+        client_id: operationId,
+      },
+    });
   return Object.freeze({
     method: "POST",
     path: "/prompt",

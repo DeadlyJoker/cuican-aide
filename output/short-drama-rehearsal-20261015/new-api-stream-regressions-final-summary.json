@@ -1,0 +1,207 @@
+{
+  "exitCode": 1,
+  "testEvents": [
+    {
+      "package": "github.com/QuantumNous/new-api/relay/helper",
+      "test": "TestResolveIncomingBillingExprRequestInput",
+      "action": "pass",
+      "seconds": 0
+    },
+    {
+      "package": "github.com/QuantumNous/new-api/relay/helper",
+      "test": "TestBuildBillingExprRequestInputFromRequest",
+      "action": "pass",
+      "seconds": 0
+    },
+    {
+      "package": "github.com/QuantumNous/new-api/relay/helper",
+      "test": "TestModelPriceHelperTieredUsesPreloadedRequestInput",
+      "action": "pass",
+      "seconds": 0
+    },
+    {
+      "package": "github.com/QuantumNous/new-api/relay/channel/openai",
+      "test": "TestResponsesTerminalClosesHeldOpenUpstream/responses",
+      "action": "pass",
+      "seconds": 0
+    },
+    {
+      "package": "github.com/QuantumNous/new-api/relay/channel/openai",
+      "test": "TestResponsesTerminalClosesHeldOpenUpstream/responses-to-chat",
+      "action": "pass",
+      "seconds": 0
+    },
+    {
+      "package": "github.com/QuantumNous/new-api/relay/channel/openai",
+      "test": "TestResponsesTerminalClosesHeldOpenUpstream",
+      "action": "pass",
+      "seconds": 0
+    },
+    {
+      "package": "github.com/QuantumNous/new-api/relay/channel/openai",
+      "test": "TestResponsesItemDoneDoesNotCompleteResponse",
+      "action": "pass",
+      "seconds": 0.05
+    },
+    {
+      "package": "github.com/QuantumNous/new-api/relay/channel/openai",
+      "test": "TestResponsesCancellationClosesHeldOpenUpstream",
+      "action": "pass",
+      "seconds": 0
+    },
+    {
+      "package": "github.com/QuantumNous/new-api/relay/helper",
+      "test": "TestStreamScannerHandler_StreamStatus_Timeout",
+      "action": "pass",
+      "seconds": 2
+    },
+    {
+      "package": "github.com/QuantumNous/new-api/relay/helper",
+      "test": "TestStreamScannerHandler_NilInputs",
+      "action": "pass",
+      "seconds": 0
+    },
+    {
+      "package": "github.com/QuantumNous/new-api/relay/helper",
+      "test": "TestStreamScannerHandler_PingDisabledByRelayInfo",
+      "action": "pass",
+      "seconds": 2.51
+    },
+    {
+      "package": "github.com/QuantumNous/new-api/relay/helper",
+      "test": "TestStreamScannerHandler_PingInterleavesWithSlowUpstream",
+      "action": "pass",
+      "seconds": 5.01
+    },
+    {
+      "package": "github.com/QuantumNous/new-api/relay/helper",
+      "test": "TestStreamScannerHandler_SlowUpstreamFastHandler",
+      "action": "pass",
+      "seconds": 0
+    },
+    {
+      "package": "github.com/QuantumNous/new-api/relay/helper",
+      "test": "TestStreamScannerHandler_PingSentDuringSlowUpstream",
+      "action": "pass",
+      "seconds": 3.51
+    },
+    {
+      "package": "github.com/QuantumNous/new-api/relay/helper",
+      "test": "TestStreamScannerHandler_DataWithExtraSpaces",
+      "action": "pass",
+      "seconds": 0
+    },
+    {
+      "package": "github.com/QuantumNous/new-api/relay/helper",
+      "test": "TestStreamScannerHandler_SkipsNonDataLines",
+      "action": "pass",
+      "seconds": 0
+    },
+    {
+      "package": "github.com/QuantumNous/new-api/relay/helper",
+      "test": "TestStreamScannerHandler_StopStopsStream",
+      "action": "pass",
+      "seconds": 0
+    },
+    {
+      "package": "github.com/QuantumNous/new-api/relay/helper",
+      "test": "TestStreamScannerHandler_DoneStopsScanner",
+      "action": "pass",
+      "seconds": 0
+    },
+    {
+      "package": "github.com/QuantumNous/new-api/relay/helper",
+      "test": "TestStreamScannerHandler_OrderPreserved",
+      "action": "pass",
+      "seconds": 0
+    },
+    {
+      "package": "github.com/QuantumNous/new-api/relay/helper",
+      "test": "TestStreamScannerHandler_10000Chunks",
+      "action": "pass",
+      "seconds": 0.01
+    },
+    {
+      "package": "github.com/QuantumNous/new-api/relay/helper",
+      "test": "TestStreamScannerHandler_1000Chunks",
+      "action": "pass",
+      "seconds": 0
+    },
+    {
+      "package": "github.com/QuantumNous/new-api/relay/helper",
+      "test": "TestStreamScannerHandler_EmptyBody",
+      "action": "pass",
+      "seconds": 0
+    },
+    {
+      "package": "github.com/QuantumNous/new-api/relay/helper",
+      "test": "TestStreamScannerHandler_StreamStatus_SoftErrors",
+      "action": "pass",
+      "seconds": 0
+    },
+    {
+      "package": "github.com/QuantumNous/new-api/relay/helper",
+      "test": "TestStreamScannerHandler_StreamStatus_PreInitialized",
+      "action": "fail",
+      "seconds": 0
+    },
+    {
+      "package": "github.com/QuantumNous/new-api/relay/helper",
+      "test": "TestStreamScannerHandler_StreamStatus_InitializedIfNil",
+      "action": "pass",
+      "seconds": 0
+    },
+    {
+      "package": "github.com/QuantumNous/new-api/relay/helper",
+      "test": "TestStreamScannerHandler_StreamStatus_ErrorThenStop",
+      "action": "pass",
+      "seconds": 0
+    },
+    {
+      "package": "github.com/QuantumNous/new-api/relay/helper",
+      "test": "TestStreamScannerHandler_StreamStatus_MultipleErrorsPerChunk",
+      "action": "pass",
+      "seconds": 0
+    },
+    {
+      "package": "github.com/QuantumNous/new-api/relay/helper",
+      "test": "TestStreamScannerHandler_StreamStatus_EOFWithoutDone",
+      "action": "pass",
+      "seconds": 0
+    },
+    {
+      "package": "github.com/QuantumNous/new-api/relay/helper",
+      "test": "TestStreamScannerHandler_StreamStatus_HandlerDone",
+      "action": "pass",
+      "seconds": 0
+    },
+    {
+      "package": "github.com/QuantumNous/new-api/relay/helper",
+      "test": "TestStreamScannerHandler_StreamStatus_HandlerStop",
+      "action": "pass",
+      "seconds": 0
+    },
+    {
+      "package": "github.com/QuantumNous/new-api/relay/helper",
+      "test": "TestStreamScannerHandler_StreamStatus_DoneReason",
+      "action": "pass",
+      "seconds": 0
+    },
+    {
+      "package": "github.com/QuantumNous/new-api/relay/helper",
+      "test": "TestStreamScannerHandler_ScannerDecoupledFromSlowHandler",
+      "action": "pass",
+      "seconds": 1.09
+    }
+  ],
+  "passedTestEvents": 31,
+  "failedTestEvents": [
+    {
+      "package": "github.com/QuantumNous/new-api/relay/helper",
+      "test": "TestStreamScannerHandler_StreamStatus_PreInitialized",
+      "action": "fail",
+      "seconds": 0
+    }
+  ],
+  "counting": "Go parent and subtest events are both retained; these counts are not independent case totals"
+}

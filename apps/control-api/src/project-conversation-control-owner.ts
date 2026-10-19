@@ -1,3 +1,4 @@
+import { readProjectConversationCreationContext } from "./project-conversation-creation-context.ts";
 import {
   registerProjectConversationExecutionAuthority,
   bindDerivedProjectConversationExecutionAuthority,
@@ -9,6 +10,7 @@ import {
 } from "./project-conversation-context-read-scope.ts";
 import {
   PROJECT_WORKSPACE_TARGET_ACTION,
+  PROJECT_CREATION_CONTEXT_ACTION,
   parseProjectWorkspaceTargetRequest,
   parseProjectWorkspaceTargetResponse,
 } from "@crewon/contracts/project-workspace-target";
@@ -170,6 +172,7 @@ export class ProjectConversationControlOwner {
   }
   supportsAction(action: string): boolean {
     return (
+      action === PROJECT_CREATION_CONTEXT_ACTION ||
       (action === PROJECT_WORKSPACE_TARGET_ACTION &&
         this.#input.nativeWorkspace !== undefined &&
         this.#input.projectOwnership === "plugin-project-v1") ||
@@ -383,6 +386,27 @@ export class ProjectConversationControlOwner {
   async #invoke(context: PluginUiActionContext) {
     this.assertAvailable();
     await assertPluginUiInvocationCurrent(context);
+    if (context.action === PROJECT_CREATION_CONTEXT_ACTION)
+      return readProjectConversationCreationContext({
+        context,
+        projectOwnership: this.#input.projectOwnership,
+        nativeWorkspaceAvailable: this.#input.nativeWorkspace !== undefined,
+        issue: () =>
+          this.#issue(
+            context.actor,
+            {
+              tenantId: context.scope.tenantId,
+              spaceId: context.scope.spaceId,
+              profileId: context.scope.profileId,
+              pluginId: context.package.pluginId,
+              publisherId: context.package.publisherId,
+              version: context.package.version,
+              packageDigest: context.package.packageDigest,
+              selectionRevision: context.selection.revision,
+            },
+            "target",
+          ),
+      });
     const association = Object.values(associationActions).includes(
       context.action as never,
     );

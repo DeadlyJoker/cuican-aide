@@ -208,6 +208,7 @@ export function usePluginInstallationSettings(
           request: command.request,
           idempotencyKey: command.key,
           signal,
+          ownerSignal: current.controller.signal,
         });
         if (!available()) return;
         // This hint withdraws old UI immediately; the next directory still comes from the server.
@@ -246,7 +247,10 @@ export function usePluginInstallationSettings(
         const command = intent.current;
         try {
           const currentSelection = await client.getSelection(command.pluginId, {
-            signal,
+            signal: AbortSignal.any([
+              current.controller.signal,
+              AbortSignal.timeout(REQUEST_TIMEOUT_MS),
+            ]),
           });
           if (!available()) return;
           notifyInstalledPluginSelectionChanged({

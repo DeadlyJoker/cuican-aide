@@ -10,6 +10,8 @@ import {
   type PluginTaskAdmissionPin,
 } from "@crewon/domain";
 import { ApplicationError } from "./application-error.ts";
+import { RunStoreError } from "./run-store-port.ts";
+import { queryRevisionNotAdmitted } from "./project-query-nonadmission.ts";
 import { pluginTaskCommitOptions } from "./plugin-task-commit-authority.ts";
 import type { ActorContext } from "./authorization-port.ts";
 import {
@@ -381,12 +383,49 @@ export class PluginQueryTaskApplicationService {
             project?.commitOptions,
           ),
         );
-      const result =
-        project === null
-          ? await commit()
-          : await ("historical" in project
-              ? commitProjectHistoricalQueryTask(commit)
-              : commitProjectQueryTask(commit));
+      const result = await (async () => {
+        try {
+          return project === null
+            ? await commit()
+            : await ("historical" in project
+                ? commitProjectHistoricalQueryTask(commit)
+                : commitProjectQueryTask(commit));
+        } catch (error) {
+          if (
+            projectInput !== undefined &&
+            !("historical" in projectInput) &&
+            (error instanceof ApplicationError ||
+              error instanceof RunStoreError) &&
+            error.code === "revision_conflict"
+          ) {
+            const thread = await d.store.loadThreadInSpace({
+              tenantId: actor.tenantId,
+              spaceId: actor.spaceId,
+              threadId: command.threadId,
+            });
+            // Read the receipt AFTER the advanced Thread. Every admitted query
+            // atomically stores both; the old CAS can never commit afterwards.
+            const saved = await d.extensions.loadExtensionTurnReceipt({
+              ...scope,
+              receipt,
+            });
+            if (
+              thread &&
+              thread.revision > command.expectedThreadRevision &&
+              saved === null
+            )
+              throw queryRevisionNotAdmitted(
+                {
+                  threadId: command.threadId,
+                  expectedThreadRevision: command.expectedThreadRevision,
+                  taskKey: command.idempotencyKey,
+                },
+                error,
+              );
+          }
+          throw error;
+        }
+      })();
       if (result.creditAdmission !== undefined)
         throw new ApplicationError(
           "internal",

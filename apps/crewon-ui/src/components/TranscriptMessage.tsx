@@ -406,9 +406,11 @@ const TranscriptStreamingMarkdown = memo(function TranscriptStreamingMarkdown({
 export function TranscriptThinkingMessage({
   crewonLabel,
   locale,
+  retrying = false,
 }: {
   crewonLabel: string;
   locale: Locale;
+  retrying?: boolean;
 }) {
   return (
     <article
@@ -421,7 +423,13 @@ export function TranscriptThinkingMessage({
         <div className="thinking-card" data-status="inProgress" role="status">
           <span className="status-dot" aria-hidden="true" />
           <span className="thinking-shimmer">
-            {locale === "zh" ? "正在思考" : "Thinking"}
+            {retrying
+              ? locale === "zh"
+                ? "连接中断，正在重试…"
+                : "Connection interrupted. Retrying…"
+              : locale === "zh"
+                ? "正在思考"
+                : "Thinking"}
           </span>
         </div>
       </div>

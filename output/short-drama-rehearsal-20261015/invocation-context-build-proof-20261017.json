@@ -1,0 +1,67 @@
+{
+  "checkedAt": "2026-10-17T03:43:59.130622+00:00",
+  "runtimeIdentity": {
+    "schemaVersion": "crewon.extension-build-identity.v1",
+    "implementationDigest": "sha256:c0038824c24f314ec0d6ea63e3ef8d99be7ab779f423532f3a071ade02db1e55",
+    "bundles": [
+      {
+        "file": "control-api.mjs",
+        "digest": "sha256:40ff5423c7e6bbd77a97d05e60f4b5153c88647a5bf34bdffdaab537e445a685"
+      },
+      {
+        "file": "device-gateway.mjs",
+        "digest": "sha256:a75bcaee2d78fab139f01f4212d823dc0248a430df7c6e9650ee6eb12c6e0e52"
+      },
+      {
+        "file": "local-workspace-checks-mcp.mjs",
+        "digest": "sha256:00c30cb7aeb1699fc3c38a3a5e3318b03d8f9a8b97b22295ddd9671b6b0d5c64"
+      },
+      {
+        "file": "provider-model-catalog.mjs",
+        "digest": "sha256:a762f1e2f0e9bcd827505cff3443b3a5d826a8b7682963ce3227c9df2ed5f6f4"
+      },
+      {
+        "file": "provider-settings-coordinator.mjs",
+        "digest": "sha256:64d3d107b3a851c45c61f44c989d8d54fa68e606739cf5b74f06576857e16b96"
+      },
+      {
+        "file": "runtime-release.mjs",
+        "digest": "sha256:21312a2b219ab7108eb5cd38cb78ff2008f201377ab34fcc0393576fc260ba55"
+      },
+      {
+        "file": "runtime-worker.mjs",
+        "digest": "sha256:938ace72f698ed1a595cb71fd285bc588b5e64a03a648ff7a18858986e31491a"
+      }
+    ],
+    "historicalWorkItemScope": "crewon.extension-work-item-scope.v1"
+  },
+  "verifiedBundles": [
+    "control-api.mjs",
+    "device-gateway.mjs",
+    "local-workspace-checks-mcp.mjs",
+    "provider-model-catalog.mjs",
+    "provider-settings-coordinator.mjs",
+    "runtime-release.mjs",
+    "runtime-worker.mjs"
+  ],
+  "codesignVerified": true,
+  "workerTypecheckPassed": true,
+  "controlTypecheckPassed": true,
+  "workerRegressionPassed": 33,
+  "workerPostgresSkipped": 1,
+  "actualPluginUiTestsPassed": 8,
+  "actualWorkerRestartStreamingTestPassed": true,
+  "pluginVersion": "50.2.13",
+  "pluginDigest": "sha256:131d7339e42d63eead4c8844330d2b59fa2200a9b9c31e1fec8467dd13b9fecc",
+  "immutableOldPluginDigest": "sha256:6be9a37cf5840a6fcd1a3d63813e2861afe5570fe15d642f611a50889e054a23",
+  "repositoryFormatPassed": true,
+  "boundaryPassed": true,
+  "clientAcceptancePassed": false,
+  "currentPhase": "concept input v3 readiness and real generation, no new supplier POST yet",
+  "latestUnexecutedGenerationRun": "plugin-GfFRWoHbnRAfPVvGbEQuCSSIw75cukYI4_uSN06T5go",
+  "clientPluginVersionSelected": "50.2.13",
+  "clientConfigurationRevision": 24,
+  "clientExecutionPreparationPassed": true,
+  "clientNoGenerationNoticePassed": true,
+  "clientNoGenerationScreenshot": "client-not-generated-20261017.png"
+}

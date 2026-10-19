@@ -27,6 +27,16 @@ export function parsePluginUiJsonValue(
   const maxBytes = options.maxBytes ?? 65536;
   if (!Number.isSafeInteger(maxBytes) || maxBytes < 1 || maxBytes > 65536)
     pluginUiFailure("plugin_ui_json_limit_invalid");
+  return copyBoundedJsonValue(input, maxBytes);
+}
+
+/** Internal contract helper; deliberately absent from package entrypoints. */
+export function copyBoundedJsonValue(
+  input: unknown,
+  maxBytes: number,
+): PluginUiJsonValue {
+  if (!Number.isSafeInteger(maxBytes) || maxBytes < 1 || maxBytes > 128 * 1024)
+    pluginUiFailure("plugin_ui_json_limit_invalid");
   const ancestors = new Set<object>();
   let nodes = 0;
   let bytes = 0;

@@ -3,6 +3,7 @@ import type {
   PublicProjectConversationBinding,
 } from "../project-conversations-service";
 import type { ProjectDetails } from "./creative-project-controller";
+import type { ProjectConversationWorkspaceTarget } from "../project-conversation-creation-context";
 
 type CreateInput = Parameters<
   PluginProjectConversationsClient["createConversation"]
@@ -18,7 +19,7 @@ export type CreationWorkspace = Readonly<{
 type WorkspaceResolver = (
   input: Readonly<{ projectId: string }>,
   options: Readonly<{ signal: AbortSignal }>,
-) => Promise<Readonly<{ projectId: string; workspaceId: string }>>;
+) => Promise<ProjectConversationWorkspaceTarget>;
 export type ConversationSnapshot = Readonly<{
   projectId: string | null;
   phase: "waiting" | "loading" | "ready" | "unavailable";
@@ -406,7 +407,10 @@ export class ProjectConversationController {
         if (!this.#current(epoch, projectId, operation)) return null;
         if (
           target.projectId !== projectId ||
-          !/^workspace-project-[a-f0-9]{64}$/u.test(target.workspaceId)
+          (target.workspaceId === null
+            ? Object.getOwnPropertyDescriptor(target, "workspaceMode")
+                ?.value !== "legacy-nullable"
+            : !/^workspace-project-[a-f0-9]{64}$/u.test(target.workspaceId))
         )
           throw new Error("project_conversation_workspace_target_invalid");
         workspaceId = target.workspaceId;

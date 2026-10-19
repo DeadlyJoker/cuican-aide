@@ -10,6 +10,11 @@ export type DesktopPluginUiBinding = Readonly<{
   controlOrigin: string;
 }>;
 
+/** A deferred renewal confirms the unchanged, still-live lease through Control. */
+export type DesktopPluginUiRenewResult =
+  | Readonly<{ kind: "renewed"; lease: PluginUiLease }>
+  | Readonly<{ kind: "deferred"; lease: PluginUiLease }>;
+
 export interface DesktopPluginUiAssets {
   readonly version: typeof DESKTOP_PLUGIN_UI_VERSION;
   adopt(
@@ -18,6 +23,8 @@ export interface DesktopPluginUiAssets {
   release(bindingRef: string): Promise<void>;
   /** Optional for older version-one preloads; only Main can extend the owned lease. */
   renew?(bindingRef: string): Promise<PluginUiLease>;
+  /** Optional on version one; trusted outcomes avoid classifying IPC error strings. */
+  renewResult?(bindingRef: string): Promise<DesktopPluginUiRenewResult>;
   invalidate(): Promise<void>;
 }
 

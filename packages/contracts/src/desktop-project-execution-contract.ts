@@ -20,7 +20,7 @@ import {
   type DesktopProjectHistoryConfiguration,
   type DesktopProjectHistoryPublication,
 } from "./desktop-project-history-contract.ts";
-import { parsePluginUiJsonValue } from "./plugin-ui-json.ts";
+import { copyBoundedJsonValue } from "./plugin-ui-json.ts";
 import { PLUGIN_UI_RECOVERY_VERSION } from "./plugin-ui-recovery-contract.ts";
 import {
   parseDesktopProjectHistoricalQueriesConfiguration,
@@ -122,7 +122,7 @@ export function parseDesktopProjectExecutionConfiguration(
       "uiRecovery",
     ];
     const value = pluginControlRecord(
-      parsePluginUiJsonValue(input, { maxBytes: 64 * 1024 }),
+      copyBoundedJsonValue(input, 128 * 1024),
       ["version", ...optional],
       { optional },
     );
@@ -246,6 +246,14 @@ export function parseDesktopProjectExecutionConfiguration(
                 r.targetIdentity.packageDigest === p.packageDigest,
             ) ||
             (mediaResults.purposes.includes("publish") &&
+              (
+                mediaResults.publishPublications ?? mediaResults.publications
+              ).some(
+                (publisher) =>
+                  publisher.pluginId === p.pluginId &&
+                  publisher.packageDigest === p.packageDigest &&
+                  publisher.contributionId === p.contributionId,
+              ) &&
               !mediaGenerations?.publications.some(
                 (g) =>
                   g.pluginId === p.pluginId &&

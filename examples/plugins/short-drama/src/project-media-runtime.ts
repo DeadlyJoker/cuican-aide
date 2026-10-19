@@ -37,6 +37,11 @@ import {
 } from "./reference-workflows.js";
 import { RetainedResults } from "./retained-results.js";
 import business from "../business.json" with { type: "json" };
+import {
+  comfyServiceProtocol,
+  comfySubmission,
+  comfyObservationPath,
+} from "./comfy-service.js";
 
 export const MEDIA_SUBMIT = "crewon_short_drama__media_submit";
 export const MEDIA_OBSERVE = "crewon_short_drama__media_observe";
@@ -193,6 +198,9 @@ export function createProjectMediaRuntime(
   media: PluginProjectMediaExecutionService,
   services?: PluginExecutionServices,
 ): PluginToolRuntime {
+  const protocol = comfyServiceProtocol(
+    context.configuration.parameters.serviceProtocol,
+  );
   if (
     !services?.externalOperations ||
     !services.jsonHttp ||
@@ -309,7 +317,7 @@ export function createProjectMediaRuntime(
           command,
           operationId: op.operationId,
           method: "GET",
-          path,
+          path: comfyObservationPath(protocol, path),
         }),
     );
     const resultJson =
@@ -317,7 +325,7 @@ export function createProjectMediaRuntime(
         ? JSON.stringify({
             images: observation.images.map((i) => ({
               ...i,
-              url: imageUrl(i, base.href),
+              url: imageUrl(i, base.href, protocol),
             })),
           })
         : null;
@@ -361,7 +369,7 @@ export function createProjectMediaRuntime(
         throw new Error("short_drama_media_result_invalid");
       const images = result.images.map((value) => {
         const ref = imageReference(value),
-          url = imageUrl(ref, base.href);
+          url = imageUrl(ref, base.href, protocol);
         if (object(value).url !== url)
           throw new Error("short_drama_media_result_invalid");
         return { ...ref, url };
@@ -454,16 +462,11 @@ export function createProjectMediaRuntime(
     });
     if (new URL(input.targetServiceOrigin).origin !== base.origin)
       throw new Error("short_drama_media_origin_mismatch");
-    const request = {
-      method: "POST" as const,
-      path: "/prompt",
-      body: {
-        prompt: rendered.graph,
-        prompt_id: id,
-        client_id: id,
-        extra_data: { crewon_request_id: id },
-      },
-    };
+    const request = comfySubmission(
+      protocol === "native" ? "native" : "workflow-panel-v1",
+      rendered.graph,
+      id,
+    );
     const saved = await operations.reserve({
         command,
         operationId: id,

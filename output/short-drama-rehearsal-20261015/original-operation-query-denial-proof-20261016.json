@@ -1,0 +1,18 @@
+{
+  "capturedAt": "2026-10-16T10:24:31.415509+00:00",
+  "runId": "plugin-UEGufTPczeTYJPzEKKkVv60J_f_qsEMASzBodGlT1Yo",
+  "operationId": "81932a4d-5f2e-d919-13a4-e8794aff833d",
+  "clientOperationStatus": "submitted",
+  "workItem": {
+    "status": "completed",
+    "attemptCount": 44,
+    "lastErrorCode": "plugin_execution_io_request_not_approved"
+  },
+  "observeRequestedAt": "2026-10-16T10:11:32.722Z",
+  "canceledAt": "2026-10-16T10:16:21.084Z",
+  "cause": "Exact static route /api/comfy/proxy/history excludes the real request query ?prompt_id=<saved-operation-id>; deterministic denial retried instead of terminal failure.",
+  "remoteExecutionDurationSeconds": 60.108,
+  "outputNodeId": "58",
+  "filename": "comfyui_00003_.png",
+  "clientResultAccepted": false
+}

@@ -131,6 +131,34 @@ export function materialPreparationOrigin(
     invalid();
   return url.origin + "/";
 }
+/** Only newly reserved transfers select a protocol; old records retain their original adapter. */
+export function materialPreparationUploadAdapter(
+  configuration: ProjectMaterialPreparationTarget["configuration"],
+): ProjectMaterialPreparationInitial["transfer"]["adapter"] {
+  const protocol = configuration.parameters.serviceProtocol;
+  if (protocol === undefined || protocol === "native")
+    return "comfyui-image-upload.v1";
+  if (protocol === "workflow-panel-v1" || protocol === "workflow-api-v1")
+    return "comfyui-workflow-file-upload.v1";
+  return invalid();
+}
+function transferOutput(
+  adapter: ProjectMaterialPreparationInitial["transfer"]["adapter"],
+  preparationId: string,
+  byteDigest: string,
+) {
+  return adapter === "comfyui-workflow-file-upload.v1"
+    ? Object.freeze({
+        filename: `material-${preparationId}-${byteDigest.slice(7)}.png`,
+        subfolder: "",
+        type: "input" as const,
+      })
+    : Object.freeze({
+        filename: `material-${byteDigest.slice(7)}.png`,
+        subfolder: `crewon-materials/${preparationId}`,
+        type: "output" as const,
+      });
+}
 export function createProjectMaterialPreparationInitial(
   input: ProjectMaterialPreparationReservation,
 ): ProjectMaterialPreparationInitial {
@@ -159,24 +187,27 @@ export function createProjectMaterialPreparationInitial(
     )
   )
     invalid();
+  const adapter = materialPreparationUploadAdapter(target.configuration);
   const body = {
     schemaVersion:
-      source.schemaVersion === "crewon.project-reference-frozen-material.v1"
-        ? ("crewon.project-material-preparation.v1" as const)
-        : ("crewon.project-material-preparation.v2" as const),
+      adapter === "comfyui-workflow-file-upload.v1"
+        ? ("crewon.project-material-preparation.v3" as const)
+        : source.schemaVersion === "crewon.project-reference-frozen-material.v1"
+          ? ("crewon.project-material-preparation.v1" as const)
+          : ("crewon.project-material-preparation.v2" as const),
     ...projectMaterialPreparationIdentity(request),
     request,
     source,
     target,
     transfer: Object.freeze({
-      adapter: "comfyui-image-upload.v1" as const,
+      adapter,
       preparationId: transfer.preparationId,
       origin: materialPreparationOrigin(target.configuration),
-      output: Object.freeze({
-        filename: `material-${source.source.byteDigest.slice(7)}.png`,
-        subfolder: `crewon-materials/${transfer.preparationId}`,
-        type: "output" as const,
-      }),
+      output: transferOutput(
+        adapter,
+        transfer.preparationId,
+        source.source.byteDigest,
+      ),
       requestDigest: projectAssetDigest(transfer.requestDigest),
     }),
     createdAt: projectAssetTimestamp(r.at),
@@ -211,8 +242,10 @@ export function parseProjectMaterialPreparationInitial(
     ]);
   if (
     (r.schemaVersion !== "crewon.project-material-preparation.v1" &&
-      r.schemaVersion !== "crewon.project-material-preparation.v2") ||
-    t.adapter !== "comfyui-image-upload.v1"
+      r.schemaVersion !== "crewon.project-material-preparation.v2" &&
+      r.schemaVersion !== "crewon.project-material-preparation.v3") ||
+    (t.adapter !== "comfyui-image-upload.v1" &&
+      t.adapter !== "comfyui-workflow-file-upload.v1")
   )
     invalid();
   // The creation recipe validates all nested data and derives the only legal target path.
@@ -232,17 +265,21 @@ export function parseProjectMaterialPreparationInitial(
     invalid();
   if (
     r.schemaVersion !==
-    (source.schemaVersion === "crewon.project-reference-frozen-material.v1"
-      ? "crewon.project-material-preparation.v1"
-      : "crewon.project-material-preparation.v2")
+      (t.adapter === "comfyui-workflow-file-upload.v1"
+        ? "crewon.project-material-preparation.v3"
+        : source.schemaVersion === "crewon.project-reference-frozen-material.v1"
+          ? "crewon.project-material-preparation.v1"
+          : "crewon.project-material-preparation.v2") ||
+    (t.adapter === "comfyui-workflow-file-upload.v1" &&
+      materialPreparationUploadAdapter(target.configuration) !== t.adapter)
   )
     invalid();
   const identity = projectMaterialPreparationIdentity(request),
-    output = Object.freeze({
-      filename: `material-${source.source.byteDigest.slice(7)}.png`,
-      subfolder: `crewon-materials/${t.preparationId}`,
-      type: "output" as const,
-    }),
+    output = transferOutput(
+      t.adapter,
+      t.preparationId,
+      source.source.byteDigest,
+    ),
     origin = materialPreparationOrigin(target.configuration);
   if (
     r.intentId !== identity.intentId ||
@@ -256,15 +293,17 @@ export function parseProjectMaterialPreparationInitial(
     invalid();
   const body = {
     schemaVersion:
-      source.schemaVersion === "crewon.project-reference-frozen-material.v1"
-        ? ("crewon.project-material-preparation.v1" as const)
-        : ("crewon.project-material-preparation.v2" as const),
+      t.adapter === "comfyui-workflow-file-upload.v1"
+        ? ("crewon.project-material-preparation.v3" as const)
+        : source.schemaVersion === "crewon.project-reference-frozen-material.v1"
+          ? ("crewon.project-material-preparation.v1" as const)
+          : ("crewon.project-material-preparation.v2" as const),
     ...identity,
     request,
     source,
     target,
     transfer: Object.freeze({
-      adapter: "comfyui-image-upload.v1" as const,
+      adapter: t.adapter,
       preparationId: t.preparationId,
       origin,
       output,

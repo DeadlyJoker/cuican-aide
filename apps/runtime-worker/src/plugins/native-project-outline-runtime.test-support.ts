@@ -27,6 +27,7 @@ export async function nativeOutlineFixture(
   enabled = true,
   options: Readonly<{
     inactiveOutlinePublication?: "append" | "replace";
+    approvalPaddingBytes?: number;
   }> = {},
 ) {
   const workers: ReturnType<typeof createInstalledPluginWorkerAuthority>[] = [];
@@ -117,6 +118,12 @@ export async function nativeOutlineFixture(
     }),
     { mode: 0o600 },
   );
+  if (options.approvalPaddingBytes)
+    writeFileSync(
+      f.approvalPath,
+      readFileSync(f.approvalPath, "utf8") +
+        " ".repeat(options.approvalPaddingBytes),
+    );
   const bootstrap = await prepareDesktopPluginBootstrap({
     dataDirectory: f.directory,
     actor: nativeActor,

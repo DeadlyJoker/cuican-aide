@@ -1,0 +1,61 @@
+{
+  "builtAt": "2026-10-17T07:00:07.172Z",
+  "path": "/private/tmp/crewon-plugin-performance-20261015/query-recovery-profile-20261017.asar",
+  "sha256": "a32e995cb823fab686fc86525e8153d6f6aee96aeb0851f6c4e108641dc71784",
+  "headerSha256": "eda4579b131ac28d1da54bb6d357c819747c39eeb6015e4825d64662c8dedae8",
+  "nonRendererFilesVerified": 17464,
+  "mainUnchanged": true,
+  "clientAcceptancePassed": false,
+  "runtimeImplementationDigest": "sha256:7c0cca2926d36f3b685570f962efe8afa51480027270ee0a765d263270d8fa39",
+  "installedAndHashesVerified": true,
+  "checks": {
+    "domainApplicationContractsStoreRegressions": {
+      "passed": 78,
+      "postgresSkipped": 14
+    },
+    "uiQueryContextAndJournalTests": 52,
+    "controlThreadRuntimeTests": 115,
+    "packageTypechecks": "passed: domain/contracts/application/store",
+    "controlTypecheck": "passed",
+    "uiBuildAndTypecheck": "passed",
+    "boundary": "passed",
+    "uiThreadContextAndRuntimeIntegrationTests": 168
+  },
+  "rootCause": {
+    "requestId": "req-gp",
+    "httpStatus": 409,
+    "code": "revision_conflict",
+    "frozenQueryExpectedThreadRevision": 30,
+    "actualThreadRevision": 31,
+    "actualThreadAdvance": "assistant message appended at 2026-10-17T03:53:42.152Z"
+  },
+  "preservedQueryIdempotencyKey": "69e37924-e0b0-41ec-8741-e9eb0213f7b8",
+  "queryRecoverySemantics": "Only an opaque host proof after a newer Thread snapshot and subsequent absent atomic query receipt may close the exact old dispatch under CAS; no request/history rewrite and no generation resubmission.",
+  "compatibility": "No schema migration. Adds one explicit refused-query reason and allows its recorded attempt count above one; updated contract readers required. Older readers fail closed. Original request and audit pins remain immutable.",
+  "clientQueryAcceptance": {
+    "verifiedAt": "2026-10-17T08:41:15.294872+00:00",
+    "oldIntentKey": "69e37924-e0b0-41ec-8741-e9eb0213f7b8",
+    "oldIntentPhase": "refused",
+    "reason": "project_query_revision_not_admitted",
+    "immutableRequestAndSevenDispatchAttemptsRetained": true,
+    "freshQueryKey": "514d7fae-3383-4903-a90d-1608d59066a6",
+    "freshQueryExpectedRevision": 31,
+    "freshQueryAcceptedRevision": 32,
+    "attempts": 1,
+    "runId": "plugin-ghrmkX2xElhmBdsMl63UGFzXGfCuXitE4UHZvgxfEPY",
+    "runStatus": "completed",
+    "operationId": "eed9bb32-0f9f-efae-277c-39aba1f26da0",
+    "operationStatus": "succeeded",
+    "filename": "comfyui_00004_.png",
+    "visibleImageRendered": true,
+    "generationResubmitted": false,
+    "qualityVerdict": "rejected: people present in empty-scene reference, paper text, poor counter geometry",
+    "imageAdopted": false,
+    "screenshot": "client-v3-result-quality-rejected-20261017.png",
+    "notProven": [
+      "automatic reconciliation UI introduced later",
+      "image adoption and reopen",
+      "full film lifecycle"
+    ]
+  }
+}

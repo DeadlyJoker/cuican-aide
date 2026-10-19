@@ -3,6 +3,34 @@ import { describe, expect, it } from "vitest";
 import { TranscriptFailureMessage } from "./TranscriptMessage";
 
 describe("model failure presentation", () => {
+  it.each(["zh", "en"] as const)(
+    "keeps a failed task admission separate from a model failure in %s",
+    (locale) => {
+      const markup = renderToStaticMarkup(
+        <TranscriptFailureMessage
+          crewonLabel="CrewON"
+          locale={locale}
+          error={{
+            message: "control_api_transport_unavailable",
+            codexErrorInfo: null,
+            additionalDetails: null,
+          }}
+        />,
+      );
+      expect(markup).toContain(
+        locale === "zh" ? "工作台连接中断" : "Workspace connection interrupted",
+      );
+      expect(markup).toContain(
+        locale === "zh" ? "重试原请求" : "retry the original request",
+      );
+      expect(markup).not.toContain(
+        locale === "zh" ? "模型连接失败" : "Model connection failed",
+      );
+      expect(markup).toContain(
+        "<code>control_api_transport_unavailable</code>",
+      );
+    },
+  );
   it.each([
     ["responses_provider_server_is_overloaded", "模型服务繁忙"],
     ["responses_provider_invalid_prompt", "模型请求被拒绝"],

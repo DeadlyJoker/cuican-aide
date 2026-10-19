@@ -1,0 +1,18 @@
+{
+  "recordedAt": "2026-10-16T02:46:44.937001+00:00",
+  "readOnly": true,
+  "devices": [
+    {
+      "name": "cuda:0 NVIDIA RTX PRO 6000 Blackwell Server Edition : cudaMallocAsync",
+      "type": "cuda",
+      "vram_total": 101975851008,
+      "vram_free": 101273108480,
+      "torch_vram_total": 67108864,
+      "torch_vram_free": 33554432
+    }
+  ],
+  "queue": {
+    "queue_running": 0,
+    "queue_pending": 0
+  }
+}

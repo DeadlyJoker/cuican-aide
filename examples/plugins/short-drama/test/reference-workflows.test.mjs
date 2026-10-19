@@ -145,9 +145,9 @@ for (const [name, change] of [
     },
   ],
   [
-    "input directory result",
+    "temporary directory reference",
     (r) => {
-      r.images.character.type = "input";
+      r.images.character.type = "temp";
     },
   ],
   [
@@ -307,4 +307,20 @@ test("unknown original reference generation only reads history and queue, never 
   );
   assert.deepEqual(calls, ["/history/" + id, "/queue"]);
   assert.deepEqual(out, { status: "unknownOutcome", images: [] });
+});
+
+test("reviewed workflow accepts host-prepared input references without converting their namespace", () => {
+  const q = request();
+  q.images.character = {
+    filename: "material-prepared.png",
+    subfolder: "",
+    type: "input",
+  };
+  const out = render(q);
+  assert.equal(out.graph["146"].inputs.image, "material-prepared.png [input]");
+  assert.equal(out.sourceImages.character.type, "input");
+  for (const type of ["temp", "INPUT", "input] [output"])
+    assert.throws(() =>
+      render({ ...q, images: { character: { ...q.images.character, type } } }),
+    );
 });

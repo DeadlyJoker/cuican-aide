@@ -51,6 +51,15 @@ export function krea2Workflow(
   operationId: string,
   preset: KreaPreset,
 ): ComfyApiGraph {
+  validateImagePrompt(prompt, operationId);
+  const template = templates[parseKreaPreset(preset)];
+  return renderComfyApiGraph(template.graph, template.options, {
+    prompt,
+    outputPrefix: `crewon-${operationId}`,
+  });
+}
+
+export function validateImagePrompt(prompt: string, operationId: string): void {
   if (
     typeof prompt !== "string" ||
     !prompt.trim() ||
@@ -61,9 +70,4 @@ export function krea2Workflow(
     throw new Error("comfy_prompt_invalid");
   if (!/^[a-f0-9-]{36}$/u.test(operationId))
     throw new Error("comfy_operation_id_invalid");
-  const template = templates[parseKreaPreset(preset)];
-  return renderComfyApiGraph(template.graph, template.options, {
-    prompt,
-    outputPrefix: `crewon-${operationId}`,
-  });
 }

@@ -15,6 +15,7 @@ import {
   PLUGIN_UI_CONTROL_DEADLINE_MS,
   assertPluginUiCurrent,
 } from "./controlPluginUiSupport";
+import { ControlApiClientError } from "@crewon/control-client";
 import {
   abortedPluginUiOperation,
   PluginUiLoaderError,
@@ -592,6 +593,39 @@ export function createInstalledPluginProjectQueryJournal(
             return { output: entry.receipt };
           } catch (error) {
             if (error instanceof PluginUiRecoveryRefusedError) throw error;
+            if (
+              actual.businessSent &&
+              stage &&
+              error instanceof ControlApiClientError &&
+              error.status === 409 &&
+              error.code === "project_query_revision_not_admitted" &&
+              !caller.aborted &&
+              !actual.controller.signal.aborted
+            ) {
+              // Reconcile the same durable stage once. This never dispatches
+              // another query, and the error string alone proves no outcome.
+              try {
+                const hint = capturePluginUiRecoveryStage(
+                  await stage(actual.controller.signal),
+                  requestFor(entry.input),
+                  entry.sourcePin,
+                );
+                checkCurrent(extra);
+                if (caller.aborted || actual.controller.signal.aborted)
+                  throw abortedPluginUiOperation();
+                mergePluginUiRecoveryStageHistory(entry, hint);
+                if (hint.phase === "refused" && entry.phase !== "accepted") {
+                  entry.phase = "refused";
+                  entry.reasonCode = hint.reasonCode;
+                  publish(entry);
+                  throw new PluginUiRecoveryRefusedError(hint.reasonCode!);
+                }
+              } catch (recoveryError) {
+                if (recoveryError instanceof PluginUiRecoveryRefusedError)
+                  throw recoveryError;
+                // Lost reconciliation stays unknown under the original key.
+              }
+            }
             if (actual.sent) unknown(entry);
             else
               refused(

@@ -1,0 +1,117 @@
+{
+  "recordedAt": "2026-10-15T14:35:14.069087Z",
+  "measurementTiming": {
+    "completedBefore": "2026-10-15T14:34:42Z",
+    "exactWallClockStartEndCaptured": false,
+    "threePairedHeadSamplesElapsedMs": 21800,
+    "overallDurationApproxSeconds": 30,
+    "overallDurationLimitSeconds": 60
+  },
+  "target": "https://api.aicuican.com/",
+  "scope": {
+    "credentialsUsed": false,
+    "authorizationHeaderUsed": false,
+    "modelEndpointCalled": false,
+    "requestMethods": ["HEAD", "GET"],
+    "responseBodiesRead": false,
+    "networkConfigurationChanged": false,
+    "profileOrSourceChanged": false,
+    "requestsOutsideRootPath": false
+  },
+  "tools": {
+    "node": "v24.18.1",
+    "nodeTransport": "built-in fetch; HEAD abort deadline 7000ms; GET root canceled after headers",
+    "curl": "HEAD; --noproxy *; --connect-timeout 5; --max-time 7; body discarded; only status/timings printed"
+  },
+  "proxyEnvironment": {
+    "checkedNames": [
+      "HTTP_PROXY",
+      "HTTPS_PROXY",
+      "ALL_PROXY",
+      "NO_PROXY",
+      "http_proxy",
+      "https_proxy",
+      "all_proxy",
+      "no_proxy",
+      "NODE_USE_ENV_PROXY"
+    ],
+    "presentNames": [],
+    "valuesPrinted": false,
+    "childEnvironmentProxyVariablesRemoved": true
+  },
+  "dns": {
+    "elapsedMs": 321,
+    "ipv4": ["104.21.29.91", "172.67.148.182"],
+    "ipv6": ["2606:4700:3033::ac43:94b6", "2606:4700:3031::6815:1d5b"]
+  },
+  "nodeHeadSamples": [
+    {
+      "sample": 1,
+      "status": 200,
+      "headersMs": 6102
+    },
+    {
+      "sample": 2,
+      "status": null,
+      "elapsedMs": 7002,
+      "error": "TimeoutError",
+      "underlyingErrorCode": null,
+      "termination": "explicit 7000ms AbortSignal timeout before headers; fetch alone does not identify TCP versus TLS versus headers wait"
+    },
+    {
+      "sample": 3,
+      "status": 200,
+      "headersMs": 3931
+    }
+  ],
+  "nodeGetSample": {
+    "status": 200,
+    "headersMs": 1633,
+    "bodyCanceledAfterHeaders": true
+  },
+  "curlHeadSamples": [
+    {
+      "sample": 1,
+      "status": 200,
+      "remoteIp": "104.21.29.91",
+      "dnsMs": 3.885,
+      "tcpConnectedMs": 311.405,
+      "tlsEstablishedMs": 650.537,
+      "headersMs": 2479.918,
+      "totalMs": 2485.792,
+      "exitCode": 0
+    },
+    {
+      "sample": 2,
+      "status": 200,
+      "remoteIp": "104.21.29.91",
+      "dnsMs": 5.91,
+      "tcpConnectedMs": 322.976,
+      "tlsEstablishedMs": 640.814,
+      "headersMs": 4204.545,
+      "totalMs": 4204.813,
+      "exitCode": 0
+    },
+    {
+      "sample": 3,
+      "status": null,
+      "remoteIp": "104.21.29.91",
+      "dnsMs": 5.685,
+      "tcpConnectedMs": 330.353,
+      "tlsEstablishedMs": null,
+      "headersMs": null,
+      "totalMs": 5003.895,
+      "exitCode": 28,
+      "termination": "TCP connected; TLS completion and response headers not observed before curl connect timeout"
+    }
+  ],
+  "interpretation": {
+    "supported": "Unauthenticated direct root requests show intermittent connection/TLS or pre-header waiting instability. Both Node and curl encountered a failed sample while other requests succeeded.",
+    "notEstablished": [
+      "The exact failing network segment, local ISP, Cloudflare edge, origin, TLS peer or service component is not identified.",
+      "The cause or source of Responses incomplete JSON tails and missing terminal events is not established by root HEAD/GET probes.",
+      "Root success does not prove authenticated /v1/responses is healthy; root failure does not explain every model latency.",
+      "No IPv4 versus IPv6 comparison was performed; curl observations used the recorded IPv4 address."
+    ]
+  }
+}

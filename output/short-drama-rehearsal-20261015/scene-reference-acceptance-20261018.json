@@ -1,0 +1,37 @@
+{
+  "at": "2026-10-18T08:55:34.825294+00:00",
+  "projectId": "01a13f43-094c-767a-9414-b5622b236255",
+  "assetId": "01a143b2-2c35-77a1-957d-9da82b524ebb",
+  "saveReferenceOriginalKey": "f3f1bc0b-3d48-45dd-9422-24c0c54f3ec6",
+  "saveReferenceConfirmedAssetRevision": 3,
+  "referenceRevision": 1,
+  "selectReferenceKey": "ab13e0a2-f821-493e-8ffa-b0a84eaa4986",
+  "selectedAssetRevision": 4,
+  "reopenedFromProjectNavigation": true,
+  "screenshot": "output/short-drama-rehearsal-20261015/client-scene-reference-reopened-20261018.png",
+  "sourceFix": "Native project startup supplies reference verifier from existing selection identities",
+  "additionalClientIssue": "Other mounted workbench retains stale recovery and asset view until explicit recheck",
+  "additionalFix": "Re-entering an activated asset page with an open view or recovery record refreshes metadata only; preserves dirty draft and unresolved local request",
+  "pluginCandidate": "50.2.16",
+  "packageDigest": "sha256:4a10e5f5feeeeb75cdb2b52fce0a5673caedb4b23ce81354fb09a57531e2f9b0",
+  "pluginTests": {
+    "pass": 524,
+    "fail": 0,
+    "skip": 0
+  },
+  "additionalFixClientAcceptance": false,
+  "fullFilmAcceptance": false,
+  "additionalFixInstalledPluginVersion": "50.2.16",
+  "additionalConceptListFix": {
+    "candidateVersion": "50.2.17",
+    "installed": false,
+    "tests": {
+      "pass": 525,
+      "fail": 0,
+      "skip": 0
+    },
+    "uiSha256": "57cde85c31dc11262ea4d4304d42de05e683b1ea986e2db796d78fd1e9079102",
+    "reasonNotInstalled": "Preserve installation scope of original pending generation on 50.2.16 until its outcome is resolved"
+  },
+  "updatedAt": "2026-10-18T13:53:35.794005+00:00"
+}

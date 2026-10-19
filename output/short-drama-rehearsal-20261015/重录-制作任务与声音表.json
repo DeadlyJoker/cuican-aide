@@ -1,0 +1,367 @@
+{
+  "kind": "production preparation outside persisted project; not an execution contract, saved storyboard, generation receipt or acceptance",
+  "preparedAt": "2026-10-16T04:26:40.769713+00:00",
+  "projectId": "01a13f43-094c-767a-9414-b5622b236255",
+  "sourceScript": {
+    "artifactId": "01a142dc-664f-70a8-a2ea-bf7260762c50",
+    "contentRevision": 1,
+    "contentDigest": "sha256:c8454d2d19c6089a29982dc698dcde383b6e4415944b370a65973aa500e699ca"
+  },
+  "sourceOutline": {
+    "artifactId": "01a14284-96db-74ff-be5d-bae1e189b995",
+    "contentRevision": 2,
+    "contentDigest": "sha256:fee286ef70f647d019c83483a448f76ce98af6cf2f72e66c0ed961cc7f1f2e46"
+  },
+  "formalBriefRevision": 1,
+  "formalBriefNeedsRevision": true,
+  "target": {
+    "durationMs": 90000,
+    "width": 1280,
+    "height": 720,
+    "framesPerSecond": 24,
+    "expectedFrameCount": 2160,
+    "videoCodec": "h264",
+    "audioCodec": "aac",
+    "audioSampleRate": 48000,
+    "commercialReleaseStatus": "unverified"
+  },
+  "shots": [
+    {
+      "sourceSceneId": "shot01",
+      "startMs": 0,
+      "endMs": 10000,
+      "framesAt24Fps": 240,
+      "action": "00:00—00:10，10秒。16:9，中景固定双人构图，外部摄影机在柜台端部、两人关系轴同一侧；后续所有角度均在此侧，不越轴。成年林夏站柜台外，右手拿自己的手机，左手攥店钥匙；成年周成在柜台内。普通桌灯照着正面朝上的台词纸，纸写“自愿离职，感谢店里培养，工资已经结清”，全片不翻动。周成先宣布辞退，手掌压在写有“林夏3200”的信封上，文字留在掌边可见。林夏望向信封，没有交钥匙。声音：同期对白、室内底噪，无配乐、旁白。剪辑：直接开场，尾部沿林夏视线硬切。",
+      "dialogue": [
+        {
+          "speaker": "周成",
+          "text": "明天不用来了。钥匙留下。"
+        }
+      ],
+      "mediaStatus": "not-generated"
+    },
+    {
+      "sourceSceneId": "shot02",
+      "startMs": 10000,
+      "endMs": 18000,
+      "framesAt24Fps": 192,
+      "action": "00:10—00:18，8秒。柜台端同轴侧近景，信封、周成压住信封的手及林夏右手手机同框；固定机位。周成不递钱，只以眼神示意正面朝上的纸。林夏看看钱，再抬手机，左手钥匙仍攥紧。声音：周成平直说完条件，保留句间短停顿及衣料摩擦。剪辑：硬切入；尾部接抬机动作，无时间省略。",
+      "dialogue": [
+        {
+          "speaker": "周成",
+          "text": "欠你的三千二，念完给。一口气录完。"
+        }
+      ],
+      "mediaStatus": "not-generated"
+    },
+    {
+      "sourceSceneId": "shot03",
+      "startMs": 18000,
+      "endMs": 27000,
+      "framesAt24Fps": 216,
+      "action": "00:18—00:27，9秒。同轴侧斜后方近景，能看见林夏手机屏幕及她的侧脸。手机预置前置视频待录界面；约19秒，她用持机右手拇指按开始，屏幕计时从零递增，左手不松钥匙、不触手机。右手把屏幕及前置镜头对着自己，镜头略低于眼睛，视线可下落到纸。她吸气，先为拿钱服从，低声起念。不切入手机录像画面，不更换手机。声音：同期台词、轻吸气；无额外提示音。剪辑：动作匹配硬切入，尾部接同一句念词。",
+      "dialogue": [
+        {
+          "speaker": "林夏",
+          "text": "自愿离职，感谢店里培养，"
+        }
+      ],
+      "mediaStatus": "not-generated"
+    },
+    {
+      "sourceSceneId": "shot04",
+      "startMs": 27000,
+      "endMs": 36000,
+      "framesAt24Fps": 216,
+      "action": "00:27—00:36，9秒。同轴侧林夏近景，固定，构图带右手手机边缘和柜台信封。她续念，眼睛落到周成手边仍未交付的信封，话音停住；停两拍后问钱，身体未前倾抢拿。左手钥匙仍在下方攥着。录像持续，不触屏。声音：未完成的句子、短静默、直接询问及室内底噪。剪辑：硬切，保持连续时间，不用插叙。",
+      "dialogue": [
+        {
+          "speaker": "林夏",
+          "text": "工资已经……"
+        },
+        {
+          "speaker": "林夏",
+          "text": "钱呢？"
+        }
+      ],
+      "mediaStatus": "not-generated"
+    },
+    {
+      "sourceSceneId": "shot05",
+      "startMs": 36000,
+      "endMs": 42000,
+      "framesAt24Fps": 144,
+      "action": "00:36—00:42，6秒。同轴侧双人中近景，固定。周成仍压着信封，视线从手机移回林夏脸上，要求重新念而非重新录。林夏不按任何键，右手持机不变，嘴角开始勉强上提。声音：周成两句短促指令，随后留出约两秒静默。剪辑：硬切入，尾部切林夏反应。",
+      "dialogue": [
+        {
+          "speaker": "周成",
+          "text": "重来。笑一下。"
+        }
+      ],
+      "mediaStatus": "not-generated"
+    },
+    {
+      "sourceSceneId": "shot06",
+      "startMs": 42000,
+      "endMs": 48000,
+      "framesAt24Fps": 144,
+      "action": "00:42—00:48，6秒。同轴侧林夏面部近景，固定，右手手机在画面边缘。她挤出笑，重新起念，随即被周成催促；笑缓慢落下，眼睛从纸移向周成。左手握钥匙，录像仍连续，未停录重启。声音：她迟疑的念词、周成画外催促，末尾短静默。剪辑：硬切，48秒处接她转动手机的动作。",
+      "dialogue": [
+        {
+          "speaker": "林夏",
+          "text": "自愿……"
+        },
+        {
+          "speaker": "周成",
+          "text": "别停啊。"
+        }
+      ],
+      "mediaStatus": "not-generated"
+    },
+    {
+      "sourceSceneId": "shot07",
+      "startMs": 48000,
+      "endMs": 56000,
+      "framesAt24Fps": 192,
+      "action": "00:48—00:56，8秒。同轴侧双人中近景，固定稍宽，完整看清右手动作。48秒起，林夏右手转动整部手机约半圈，让屏幕和前置镜头一起朝周成；不切换摄像头、不换手。她将手机稳定在胸口以上，直接问付款时间。周成视线落向屏幕。左手钥匙始终攥在身侧。声音：林夏平实询问，随后保留等待回应的空白；衣料轻响。剪辑：在动作起点硬切入，转向全过程留在本镜，无跳切。",
+      "dialogue": [
+        {
+          "speaker": "林夏",
+          "text": "三千二，什么时候给？"
+        }
+      ],
+      "mediaStatus": "not-generated"
+    },
+    {
+      "sourceSceneId": "shot08",
+      "startMs": 56000,
+      "endMs": 64000,
+      "framesAt24Fps": 192,
+      "action": "00:56—01:04，8秒。仍在原轴侧，从周成侧后方取斜角中近景，手机屏幕、周成侧脸和信封同框；机位不绕到轴线另一侧。屏幕可见周成入镜及持续递增计时，约37—45秒，与19秒开始对应。周成看见计时后，用原压信封的手把信封向自己收回几厘米，仍在柜台上；随后说出威胁。林夏右手稳住手机，左手不松钥匙。声音：纸信封擦过台面、同期对白，无强调音效。剪辑：硬切入，尾部保持连续时空。",
+      "dialogue": [
+        {
+          "speaker": "周成",
+          "text": "你非要这么弄，今天就别拿了。"
+        }
+      ],
+      "mediaStatus": "not-generated"
+    },
+    {
+      "sourceSceneId": "shot09",
+      "startMs": 64000,
+      "endMs": 72000,
+      "framesAt24Fps": 192,
+      "action": "01:04—01:12，8秒。同轴侧林夏中近景，固定，保留右手手机与台面信封关系。64秒起她将整部手机转回自己，屏幕与前置镜头共同回转，不操作界面。她先看仍在周成手边的信封，喉头轻动，咽下口气；左手钥匙攥得更紧，再抬眼看自己手机镜头。以停顿表现今天拿钱的愿望与拒绝谎言的冲突，不演成获胜或挑衅。声音：克制呼吸、室内底噪，无台词、配乐。剪辑：硬切，整机转回全程可见，尾部接正面表态。",
+      "dialogue": [],
+      "mediaStatus": "not-generated"
+    },
+    {
+      "sourceSceneId": "shot10",
+      "startMs": 72000,
+      "endMs": 80000,
+      "framesAt24Fps": 192,
+      "action": "01:12—01:20，8秒。同轴侧近景固定，林夏脸与右手手机同框。她面对前置镜头清楚说完三句话；第一句约2.5秒、第二句约2.5秒、末句约2秒，句间共留约1秒，不拖长停顿、不加哭喊。左手继续握钥匙，右手未碰停止键；说完仍录制。声音：同期台词，干净底噪，无音乐或旁白。剪辑：硬切入，整段陈述不切碎，80秒处切接停录前动作。",
+      "dialogue": [
+        {
+          "speaker": "林夏",
+          "text": "明天不用来，是你说的。"
+        },
+        {
+          "speaker": "林夏",
+          "text": "三千二，我没拿到。"
+        },
+        {
+          "speaker": "林夏",
+          "text": "‘自愿’，我不念。"
+        }
+      ],
+      "mediaStatus": "not-generated"
+    },
+    {
+      "sourceSceneId": "shot11",
+      "startMs": 80000,
+      "endMs": 85000,
+      "framesAt24Fps": 120,
+      "action": "01:20—01:25，5秒。同轴侧手部近景固定，右手机、左钥匙、柜台同框。约81秒，林夏才用持机右手拇指点停止，屏幕连续录制计时约62秒后停下；不查账、不回看、不退出查看其他内容。随后左手松开放下钥匙，右手握住自己的手机下垂带走，身体转向离开。信封始终留在周成手边，不接触林夏。声音：一次清晰钥匙落台声、衣料声和起步声，无台词。剪辑：硬切入，保持停录在先、还钥匙在后的可见顺序；尾部接离开动作。",
+      "dialogue": [],
+      "mediaStatus": "not-generated"
+    },
+    {
+      "sourceSceneId": "shot12",
+      "startMs": 85000,
+      "endMs": 90000,
+      "framesAt24Fps": 120,
+      "action": "01:25—01:30，5秒。原柜台端同轴侧台面近景固定，普通桌灯照着钥匙、正面朝上的虚假结清台词纸、周成手边写有“林夏3200”的未交付信封；周成的手停在信封旁。林夏右手带自己的手机从画面边缘离开，随即只留台面；不跟拍到其他地点。她没有拿到工资，纸未翻动，信封未打开，无现金清点或付款动作。声音：她的脚步逐渐远去，室内底噪保留，无旁白、救援来电或音乐。剪辑：硬切入，静持至01:30整，画面结束，不另加片尾时长。12镜时间连续，总计划时长90秒；全片仅林夏与周成两名成年人、同一柜台。",
+      "dialogue": [],
+      "mediaStatus": "not-generated"
+    }
+  ],
+  "dialogueCues": [
+    {
+      "sourceSceneId": "shot01",
+      "sourceDialogueIndex": 0,
+      "speaker": "周成",
+      "text": "明天不用来了。钥匙留下。",
+      "windowMs": [0, 10000],
+      "actualStartMs": null,
+      "actualEndMs": null,
+      "alignmentStatus": "awaiting actual speech and ASR; shot window is not final cue timing"
+    },
+    {
+      "sourceSceneId": "shot02",
+      "sourceDialogueIndex": 0,
+      "speaker": "周成",
+      "text": "欠你的三千二，念完给。一口气录完。",
+      "windowMs": [10000, 18000],
+      "actualStartMs": null,
+      "actualEndMs": null,
+      "alignmentStatus": "awaiting actual speech and ASR; shot window is not final cue timing"
+    },
+    {
+      "sourceSceneId": "shot03",
+      "sourceDialogueIndex": 0,
+      "speaker": "林夏",
+      "text": "自愿离职，感谢店里培养，",
+      "windowMs": [18000, 27000],
+      "actualStartMs": null,
+      "actualEndMs": null,
+      "alignmentStatus": "awaiting actual speech and ASR; shot window is not final cue timing"
+    },
+    {
+      "sourceSceneId": "shot04",
+      "sourceDialogueIndex": 0,
+      "speaker": "林夏",
+      "text": "工资已经……",
+      "windowMs": [27000, 36000],
+      "actualStartMs": null,
+      "actualEndMs": null,
+      "alignmentStatus": "awaiting actual speech and ASR; shot window is not final cue timing"
+    },
+    {
+      "sourceSceneId": "shot04",
+      "sourceDialogueIndex": 1,
+      "speaker": "林夏",
+      "text": "钱呢？",
+      "windowMs": [27000, 36000],
+      "actualStartMs": null,
+      "actualEndMs": null,
+      "alignmentStatus": "awaiting actual speech and ASR; shot window is not final cue timing"
+    },
+    {
+      "sourceSceneId": "shot05",
+      "sourceDialogueIndex": 0,
+      "speaker": "周成",
+      "text": "重来。笑一下。",
+      "windowMs": [36000, 42000],
+      "actualStartMs": null,
+      "actualEndMs": null,
+      "alignmentStatus": "awaiting actual speech and ASR; shot window is not final cue timing"
+    },
+    {
+      "sourceSceneId": "shot06",
+      "sourceDialogueIndex": 0,
+      "speaker": "林夏",
+      "text": "自愿……",
+      "windowMs": [42000, 48000],
+      "actualStartMs": null,
+      "actualEndMs": null,
+      "alignmentStatus": "awaiting actual speech and ASR; shot window is not final cue timing"
+    },
+    {
+      "sourceSceneId": "shot06",
+      "sourceDialogueIndex": 1,
+      "speaker": "周成",
+      "text": "别停啊。",
+      "windowMs": [42000, 48000],
+      "actualStartMs": null,
+      "actualEndMs": null,
+      "alignmentStatus": "awaiting actual speech and ASR; shot window is not final cue timing"
+    },
+    {
+      "sourceSceneId": "shot07",
+      "sourceDialogueIndex": 0,
+      "speaker": "林夏",
+      "text": "三千二，什么时候给？",
+      "windowMs": [48000, 56000],
+      "actualStartMs": null,
+      "actualEndMs": null,
+      "alignmentStatus": "awaiting actual speech and ASR; shot window is not final cue timing"
+    },
+    {
+      "sourceSceneId": "shot08",
+      "sourceDialogueIndex": 0,
+      "speaker": "周成",
+      "text": "你非要这么弄，今天就别拿了。",
+      "windowMs": [56000, 64000],
+      "actualStartMs": null,
+      "actualEndMs": null,
+      "alignmentStatus": "awaiting actual speech and ASR; shot window is not final cue timing"
+    },
+    {
+      "sourceSceneId": "shot10",
+      "sourceDialogueIndex": 0,
+      "speaker": "林夏",
+      "text": "明天不用来，是你说的。",
+      "windowMs": [72000, 80000],
+      "actualStartMs": null,
+      "actualEndMs": null,
+      "alignmentStatus": "awaiting actual speech and ASR; shot window is not final cue timing"
+    },
+    {
+      "sourceSceneId": "shot10",
+      "sourceDialogueIndex": 1,
+      "speaker": "林夏",
+      "text": "三千二，我没拿到。",
+      "windowMs": [72000, 80000],
+      "actualStartMs": null,
+      "actualEndMs": null,
+      "alignmentStatus": "awaiting actual speech and ASR; shot window is not final cue timing"
+    },
+    {
+      "sourceSceneId": "shot10",
+      "sourceDialogueIndex": 2,
+      "speaker": "林夏",
+      "text": "‘自愿’，我不念。",
+      "windowMs": [72000, 80000],
+      "actualStartMs": null,
+      "actualEndMs": null,
+      "alignmentStatus": "awaiting actual speech and ASR; shot window is not final cue timing"
+    }
+  ],
+  "proposedOriginalVoices": {
+    "林夏": "成年女性，约28岁，普通话，音色清楚略低，疲惫但不气声卖惨；起初勉强配合，询问时朴素直接，最后清楚坚定，不哭喊，不像胜利宣言。",
+    "周成": "成年男性，约43岁，普通话，中低音，习惯发号施令但不夸张咆哮；开始平直，把钱当条件，看到自己被录时声音绷紧。"
+  },
+  "voiceApproach": "Candidate VoxCPM2 voice_design; no real person references. Try one full performance per speaker for stable voice, derive per-line alignment from actual audio. Review pronunciation and delivery before accepting. No voice generation has run.",
+  "modelCandidates": [
+    {
+      "purpose": "motion",
+      "model": "Wan-AI/Wan2.2-I2V-A14B",
+      "modelCard": "https://huggingface.co/Wan-AI/Wan2.2-I2V-A14B",
+      "license": "Apache-2.0 per official model card",
+      "status": "matching family found in saved catalog; deployed exact weight hashes and successful load unverified"
+    },
+    {
+      "purpose": "speech",
+      "model": "openbmb/VoxCPM2",
+      "node": "VRGDG_VoxCPM2Generate",
+      "modelCard": "https://huggingface.co/openbmb/VoxCPM2",
+      "license": "Apache-2.0 per official model card",
+      "status": "current service declaration verified; weights, wrapper provenance, actual load and quality unverified"
+    }
+  ],
+  "releaseChecks": [
+    "actual adopted upstream revisions re-read before admission",
+    "immutable workflow/model identity and original operation receipts",
+    "all shots render actual motion and maintain the same two adult characters/counter",
+    "right-hand phone and left-hand keys; no camera swap or recording restart; record 19–81 seconds",
+    "no employer payment, no rescue, no extra actors or added dialogue",
+    "13 source dialogue cues all audible and attributed, no missing or invented words",
+    "actual audio alignment, intelligibility, lip sync, noise, peak and cut boundaries reviewed",
+    "full file decode, 90 seconds/2160 frames, target picture and audio measured",
+    "model sees actual sampled frames and hears actual audio or verified ASR; visual judgment alone cannot certify speech",
+    "review findings bound to exact media digests; revised output reviewed again",
+    "model/weights/wrapper, reference assets, fonts and any soundtrack usage evidence",
+    "watch and listen to the final actual file end to end; no publish claim from HTTP success"
+  ]
+}

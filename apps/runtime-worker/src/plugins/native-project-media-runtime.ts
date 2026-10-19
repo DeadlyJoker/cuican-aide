@@ -2,6 +2,7 @@ import { createDesktopAdoptedMediaReader } from "@crewon/media-runtime/desktop-a
 import {
   ApplicationError,
   ExtensionConfigurationApplicationService,
+  materialPreparationUploadAdapter,
   type ActorContext,
   type ProjectMediaInputPermission,
 } from "@crewon/application";
@@ -23,6 +24,7 @@ import {
 import type { InstalledPluginProjectMediaConfig } from "./installed-plugin-project-media-composition.ts";
 import { loadNativeProjectMediaReviews } from "./native-project-media-reviews.ts";
 import type { NetworkDnsResolver } from "../network-egress.ts";
+import { createNativeReferenceMaterialReadAuthorization } from "./native-reference-material-read-authorization.ts";
 
 type Owner = Readonly<{
   projects: DesktopProjectExecutionConfiguration;
@@ -219,25 +221,11 @@ export async function createNativeProjectMediaRuntime(
               return allow();
             },
           },
-          read: {
-            authorize: async ({ actor, action, resource }) => {
-              current(actor);
-              if (
-                action !== "projectReferenceMaterial:read" ||
-                new URL(resource.path, resource.origin).pathname !== "/view" ||
-                !owner.authority.networkGrants.some(
-                  (g) =>
-                    g.pluginId === resource.pluginId &&
-                    g.version === resource.pluginVersion &&
-                    g.packageDigest === resource.packageDigest &&
-                    g.baseUrl === resource.origin &&
-                    hasPath(g.paths, "GET", "/view"),
-                )
-              )
-                denied();
-              return allow();
-            },
-          },
+          read: createNativeReferenceMaterialReadAuthorization({
+            current,
+            configurations,
+            networkGrants: owner.authority.networkGrants,
+          }),
           freeze: {
             authorize: async ({ actor, action, resource }) => {
               current(actor);
@@ -271,6 +259,10 @@ export async function createNativeProjectMediaRuntime(
                   revision: request.target.configurationRevision,
                 });
                 current(actor);
+                const workflowApi =
+                  c !== null &&
+                  materialPreparationUploadAdapter(c) ===
+                    "comfyui-workflow-file-upload.v1";
                 if (
                   !c ||
                   !reviews.some(
@@ -291,8 +283,12 @@ export async function createNativeProjectMediaRuntime(
                               ? "POST"
                               : "GET",
                             action === "projectMaterial:upload"
-                              ? "/upload/image"
-                              : "/view",
+                              ? workflowApi
+                                ? "/api/comfy/upload/file"
+                                : "/upload/image"
+                              : workflowApi
+                                ? "/api/comfy/view"
+                                : "/view",
                           ),
                       ),
                   )

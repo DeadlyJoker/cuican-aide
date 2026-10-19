@@ -38,6 +38,7 @@ export type SettingsDataMode = "demo" | "disconnected" | "live";
 
 type SettingsContentProps = {
   children?: ReactNode;
+  disconnectedNotice?: Readonly<{ title: string; description: string }> | null;
   presentation?: "legacy" | "authored";
   onSectionChange?: (section: SettingsSection) => void;
   activeSection: SettingsSection;
@@ -59,6 +60,7 @@ type SettingsSummarySection = {
 
 export function SettingsContent({
   children,
+  disconnectedNotice = null,
   presentation = "legacy",
   onSectionChange,
   activeSection,
@@ -135,8 +137,16 @@ export function SettingsContent({
                 <RefreshCw size={16} />
               )
             }
-            title={copy.dataModeTitle[dataMode]}
-            description={copy.dataModeDescription[dataMode]}
+            title={
+              dataMode === "disconnected" && disconnectedNotice
+                ? disconnectedNotice.title
+                : copy.dataModeTitle[dataMode]
+            }
+            description={
+              dataMode === "disconnected" && disconnectedNotice
+                ? disconnectedNotice.description
+                : copy.dataModeDescription[dataMode]
+            }
             variant={dataMode === "demo" ? "warning" : "default"}
           />
         ) : null}

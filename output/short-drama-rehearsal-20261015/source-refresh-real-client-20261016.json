@@ -1,0 +1,581 @@
+{
+  "recordedAt": "2026-10-16T03:24:04.646028+00:00",
+  "readOnly": true,
+  "artifacts": [
+    {
+      "schemaVersion": "crewon.project-text-artifact.v1",
+      "tenantId": "standalone-tenant",
+      "spaceId": "standalone-space",
+      "projectId": "01a13f43-094c-767a-9414-b5622b236255",
+      "kind": "outline",
+      "episodeId": null,
+      "artifactId": "01a14284-96db-74ff-be5d-bae1e189b995",
+      "ownerPrincipalId": "standalone-principal",
+      "revision": 4,
+      "latestContentRevision": 2,
+      "selectedContentRevision": 2,
+      "locked": false,
+      "createdByActorId": "standalone-actor",
+      "createdAt": "2026-10-16T02:22:28.031Z",
+      "updatedByActorId": "standalone-actor",
+      "updatedAt": "2026-10-16T03:09:51.377Z"
+    }
+  ],
+  "outlineVersions": [
+    {
+      "schemaVersion": "crewon.project-text-revision.v1",
+      "tenantId": "standalone-tenant",
+      "spaceId": "standalone-space",
+      "projectId": "01a13f43-094c-767a-9414-b5622b236255",
+      "artifactId": "01a14284-96db-74ff-be5d-bae1e189b995",
+      "contentRevision": 1,
+      "brief": {
+        "briefRevision": 1,
+        "contentDigest": "sha256:196c53948a151398a9054667aaab83841aae20b171accaf658fbefe5f09d4106"
+      },
+      "createdByActorId": "standalone-actor",
+      "createdAt": "2026-10-16T02:22:28.031Z",
+      "kind": "outline",
+      "episodeId": null,
+      "outline": null,
+      "content": {
+        "title": "重录",
+        "logline": "被辞退的店员必须在拿回欠薪和拒绝虚假自愿离职之间作出有代价的选择。",
+        "synopsis": "关门后的小店柜台，店主周成以支付拖欠的3200元为条件，逼被辞退的林夏录下“自愿离职、工资已经结清”的虚假表述。林夏起初为了今天拿到钱而配合，却在念到“工资已经……”时发现信封仍在周成手边，于是停止念词但不停止录像。周成要求重来、要求她笑，林夏仍只重念，不中断连续前置录像。她在约48秒将整机转向周成，直接追问何时付款；周成因自己入镜而收回信封，威胁今天不给。约64秒手机转回，林夏经过短暂犹豫，选择不把未收到的钱说成已结清，陈述被辞退和欠薪事实，拒绝念“自愿”。80秒后她才停止录像，放下钥匙，带自己的手机离开；她没有拿到3200元，柜台只留下钥匙、虚假台词纸和未交付信封。故事以人物主动承担损失的选择收束，不添加法条、救援、巧合付款或旁白说教。",
+        "episodes": [
+          {
+            "episodeId": "ep1",
+            "title": "一集：不念自愿",
+            "summary": "关门后的小店柜台，林夏今天必须拿回被拖欠的3200元；周成却先宣布她明天不用来了，并把写有“林夏3200”的工资信封压在手边，要求她用自己的手机录下“自愿离职、感谢店里培养、工资已经结清”，以一段虚假表述遮掩欠薪。林夏右手持手机、左手攥住钥匙，在18—35秒间按下前置录像开始键。她为拿钱先配合，念到“工资已经……”时看向仍未交付的信封，停词问钱在哪里。周成让她“重来”、要求她笑一下；重来只重念，录像持续不断。约48秒，林夏将整部手机转向周成，让前置镜头与屏幕同时朝向他，直接问“三千二，什么时候给？”周成看见自己和录制计时，反而收回信封，威胁她今天别拿钱。约64秒，林夏把手机转回自己；她短暂犹豫，确认继续配合意味着把未收到的钱说成已结清，于是承担失去3200元的现实代价，陈述“明天不用来”是周成说的、三千二尚未收到，并拒念“自愿”。录像从开始持续到80秒后才停止，她放下左手一直攥着的钥匙，右手带自己的手机离开。周成没有付款，柜台留下钥匙、正面朝上的虚假结清台词纸和手边未交付的工资信封，脚步声远去。结尾不靠旁白或外部救援解释，悬念落在林夏拒绝用虚假话语换钱后必须承受的损失。"
+          }
+        ]
+      },
+      "contentDigest": "sha256:45376b389ff5e106c0ebb16f9b79ae7a821d79ce62fab0d575e500e537900713"
+    },
+    {
+      "schemaVersion": "crewon.project-text-revision.v1",
+      "tenantId": "standalone-tenant",
+      "spaceId": "standalone-space",
+      "projectId": "01a13f43-094c-767a-9414-b5622b236255",
+      "artifactId": "01a14284-96db-74ff-be5d-bae1e189b995",
+      "contentRevision": 2,
+      "brief": {
+        "briefRevision": 1,
+        "contentDigest": "sha256:196c53948a151398a9054667aaab83841aae20b171accaf658fbefe5f09d4106"
+      },
+      "createdByActorId": "standalone-actor",
+      "createdAt": "2026-10-16T03:09:15.677Z",
+      "kind": "outline",
+      "episodeId": null,
+      "outline": null,
+      "content": {
+        "title": "重录",
+        "logline": "被辞退的店员必须在拿回欠薪和拒绝虚假自愿离职之间作出有代价的选择。",
+        "synopsis": "关门后的小店柜台，店主周成以支付拖欠的3200元为条件，逼被辞退的林夏录下“自愿离职、工资已经结清”的虚假表述。林夏起初为了今天拿到钱而配合，却在念到“工资已经……”时发现信封仍在周成手边，于是停止念词但不停止录像。周成要求重来、要求她笑，林夏仍只重念，不中断连续前置录像。她在约48秒将整机转向周成，直接追问何时付款；周成因自己入镜而收回信封，威胁今天不给。约64秒手机转回，林夏经过短暂犹豫，选择不把未收到的钱说成已结清，陈述被辞退和欠薪事实，拒绝念“自愿”。80秒后她才停止录像，放下钥匙，带自己的手机离开；她没有拿到3200元，柜台只留下钥匙、虚假台词纸和未交付信封。故事以人物主动承担损失的选择收束，不添加法条、救援、巧合付款或旁白说教。",
+        "episodes": [
+          {
+            "episodeId": "ep1",
+            "title": "不念自愿",
+            "summary": "关门后的小店柜台，林夏今天必须拿回被拖欠的3200元；周成却先宣布她明天不用来了，并把写有“林夏3200”的工资信封压在手边，要求她用自己的手机录下“自愿离职、感谢店里培养、工资已经结清”，以一段虚假表述遮掩欠薪。林夏右手持手机、左手攥住钥匙，在18—35秒间按下前置录像开始键。她为拿钱先配合，念到“工资已经……”时看向仍未交付的信封，停词问钱在哪里。周成让她“重来”、要求她笑一下；重来只重念，录像持续不断。约48秒，林夏将整部手机转向周成，让前置镜头与屏幕同时朝向他，直接问“三千二，什么时候给？”周成看见自己和录制计时，反而收回信封，威胁她今天别拿钱。约64秒，林夏把手机转回自己；她短暂犹豫，确认继续配合意味着把未收到的钱说成已结清，于是承担今天拿不到3200元的现实代价，陈述“明天不用来”是周成说的、三千二尚未收到，并拒念“自愿”。录像从开始持续到80秒后才停止，她放下左手一直攥着的钥匙，右手带自己的手机离开。周成没有付款，柜台留下钥匙、正面朝上的虚假结清台词纸和手边未交付的工资信封，脚步声远去。结尾不靠旁白或外部救援解释，悬念落在林夏拒绝用虚假话语换钱后必须承受的损失。"
+          }
+        ]
+      },
+      "contentDigest": "sha256:fee286ef70f647d019c83483a448f76ce98af6cf2f72e66c0ed961cc7f1f2e46"
+    }
+  ],
+  "latestRuns": [
+    {
+      "agentVersionId": "native-plugin-agent-07d635668b84638e0753c7874c68b7d2c2b290450b23d4aa76a32a1e7da015c5",
+      "authorityId": "standalone-authority",
+      "cancelRequested": false,
+      "collaborationMode": "default",
+      "createdAt": "2026-10-16T02:18:20.817Z",
+      "createdByActorId": "standalone-actor",
+      "failure": null,
+      "goalAccounting": null,
+      "goalBinding": null,
+      "lastSequence": 91,
+      "origin": null,
+      "outputRef": "message:01a14284-d993-7099-a97b-28e5fdeecdb9",
+      "policySnapshotId": "native-plugin-policy-07d635668b84638e0753c7874c68b7d2c2b290450b23d4aa76a32a1e7da015c5",
+      "reconciliationReceiptId": null,
+      "revision": 91,
+      "runId": "plugin-0owxtUH9uZ1oLO7Akmpy9554lR7eXHBCxBcZZw33x7A",
+      "runtimeGeneration": "native-plugin-runtime-07d635668b84638e0753c7874c68b7d2c2b290450b23d4aa76a32a1e7da015c5",
+      "spaceId": "standalone-space",
+      "status": "completed",
+      "suspensionReasonCode": null,
+      "tenantId": "standalone-tenant",
+      "terminalAt": "2026-10-16T02:22:45.139Z",
+      "threadId": "01a13f61-7f59-77ed-bd1e-c5c7c2a4d67f",
+      "updatedAt": "2026-10-16T02:22:45.139Z",
+      "usage": {
+        "cachedInputTokens": 89600,
+        "inputTokens": 93411,
+        "outputTokens": 1209,
+        "totalTokens": 94620
+      },
+      "waitingApproval": null,
+      "workspaceBindingId": null
+    },
+    {
+      "agentVersionId": "native-plugin-agent-07d635668b84638e0753c7874c68b7d2c2b290450b23d4aa76a32a1e7da015c5",
+      "authorityId": "standalone-authority",
+      "cancelRequested": false,
+      "collaborationMode": "default",
+      "createdAt": "2026-10-16T02:16:08.375Z",
+      "createdByActorId": "standalone-actor",
+      "failure": null,
+      "goalAccounting": null,
+      "goalBinding": null,
+      "lastSequence": 50,
+      "origin": null,
+      "outputRef": "message:01a1427f-8192-75e8-b4b5-6ec3b42bcf17",
+      "policySnapshotId": "native-plugin-policy-07d635668b84638e0753c7874c68b7d2c2b290450b23d4aa76a32a1e7da015c5",
+      "reconciliationReceiptId": null,
+      "revision": 50,
+      "runId": "plugin-jC2jEeM_rTi3tk4DMtmlYbgc9pGuXor8OIaSaMMttl8",
+      "runtimeGeneration": "native-plugin-runtime-07d635668b84638e0753c7874c68b7d2c2b290450b23d4aa76a32a1e7da015c5",
+      "spaceId": "standalone-space",
+      "status": "completed",
+      "suspensionReasonCode": null,
+      "tenantId": "standalone-tenant",
+      "terminalAt": "2026-10-16T02:16:54.929Z",
+      "threadId": "01a13f61-7f59-77ed-bd1e-c5c7c2a4d67f",
+      "updatedAt": "2026-10-16T02:16:54.929Z",
+      "usage": {
+        "cachedInputTokens": 16768,
+        "inputTokens": 17053,
+        "outputTokens": 48,
+        "totalTokens": 17101
+      },
+      "waitingApproval": null,
+      "workspaceBindingId": null
+    }
+  ],
+  "stageAdmissions": [
+    {
+      "schemaVersion": "crewon.project-stage-run-admission.v1",
+      "actor": {
+        "tenantId": "standalone-tenant",
+        "spaceId": "standalone-space",
+        "principalId": "standalone-principal",
+        "actorId": "standalone-actor"
+      },
+      "installation": {
+        "tenantId": "standalone-tenant",
+        "spaceId": "standalone-space",
+        "profileId": "a5885592-393f-479b-9d72-c4824cd6338d",
+        "pluginId": "crewon.short-drama",
+        "publisherId": "example.publisher",
+        "version": "50.2.2",
+        "packageDigest": "sha256:02fe65205486848455e7cc64877f77b7c62b82a15664aaae5092607386b554b8",
+        "selectionRevision": 54
+      },
+      "runId": "plugin-pq2c_Oq7jkxFp_40avEupfXOUgtdn484rKCwbspZOSs",
+      "threadId": "01a13f61-7f59-77ed-bd1e-c5c7c2a4d67f",
+      "projectId": "01a13f43-094c-767a-9414-b5622b236255",
+      "bindingId": "01a13f61-7f5a-726b-8393-3f646fb37a2e",
+      "bindingRevision": 1,
+      "workspaceId": null,
+      "stage": {
+        "kind": "discussion"
+      },
+      "sources": {
+        "brief": {
+          "briefRevision": 1,
+          "contentDigest": "sha256:196c53948a151398a9054667aaab83841aae20b171accaf658fbefe5f09d4106"
+        },
+        "outline": null
+      },
+      "allowedOperations": [
+        "project_context_read",
+        "project_read",
+        "outline_read",
+        "script_read",
+        "content_read",
+        "text_history"
+      ],
+      "userContentDigest": "sha256:122537255abe297b33d510e7cb14a8ace9ab56486a2992e651829ae568694b95",
+      "taskInputDigest": "sha256:d1515b162d5b0cbbe1cb9cea2a75c508030d65f0aa078532337d24130ab26c76",
+      "pluginTaskAdmissionDigest": "sha256:348eac226133bbe633344b29a5328313d098785f387ebcc900fd62bcd0af3562",
+      "extensionBindingDigest": "sha256:5bab55f76d44395755468577e00f17380eb0385e176ddf4d1292b4ce53683651",
+      "requestDigest": "sha256:83e610e358d2ebe42be34d31689a0cdf492d18d3a46b61bccd09bbf51e319a0e",
+      "idempotencyKey": "plugin-task:c404314ae77c9444db1d5bd2a7598c3bc009eb318511456e1eaa163f323767f9",
+      "createdAt": "2026-10-15T11:45:20.906Z",
+      "contentDigest": "sha256:b28442aa1f7b3099874209efc2ac06495c4a6d47ef9cd9806d6b4313a6947d93"
+    },
+    {
+      "schemaVersion": "crewon.project-stage-run-admission.v1",
+      "actor": {
+        "tenantId": "standalone-tenant",
+        "spaceId": "standalone-space",
+        "principalId": "standalone-principal",
+        "actorId": "standalone-actor"
+      },
+      "installation": {
+        "tenantId": "standalone-tenant",
+        "spaceId": "standalone-space",
+        "profileId": "a5885592-393f-479b-9d72-c4824cd6338d",
+        "pluginId": "crewon.short-drama",
+        "publisherId": "example.publisher",
+        "version": "50.2.4",
+        "packageDigest": "sha256:c02eabc3ae953a346abf4605aa6cb0dde52b826a86d21e85b06203a193f3ab6a",
+        "selectionRevision": 57
+      },
+      "runId": "plugin-PD7Shp2-C0w4j-rDGrHyIMvqOREoCBafMnAuoCgOoro",
+      "threadId": "01a13f61-7f59-77ed-bd1e-c5c7c2a4d67f",
+      "projectId": "01a13f43-094c-767a-9414-b5622b236255",
+      "bindingId": "01a13f61-7f5a-726b-8393-3f646fb37a2e",
+      "bindingRevision": 2,
+      "workspaceId": null,
+      "stage": {
+        "kind": "discussion"
+      },
+      "sources": {
+        "brief": {
+          "briefRevision": 1,
+          "contentDigest": "sha256:196c53948a151398a9054667aaab83841aae20b171accaf658fbefe5f09d4106"
+        },
+        "outline": null
+      },
+      "allowedOperations": [
+        "project_context_read",
+        "project_read",
+        "outline_read",
+        "script_read",
+        "content_read",
+        "text_history"
+      ],
+      "userContentDigest": "sha256:ae1ac1c9c4628a5c6fef2c2c9c35a8ac1adff88b616fccd17f390a4ce0345ee1",
+      "taskInputDigest": "sha256:177f5b439affab1ea9addb23cdecb69e5efaf38e0b518c3a65a78847834c93a4",
+      "pluginTaskAdmissionDigest": "sha256:6ee3feafe386df97b418323c1153473a54bee2cd448158b13cbe205a0a2b0139",
+      "extensionBindingDigest": "sha256:6a38aa55af030d6a158490e8b28491d2bf5a393fc3ea74bb63dec8ced9e390a8",
+      "requestDigest": "sha256:a78a7af9d88cd41484094b872fdd2bd563d21108e9d29ec52cd0be6ba0c46fbb",
+      "idempotencyKey": "plugin-task:04c2924ef86ab2625940172b5d85111c8c1386b0a800305b96c509b17440ccc5",
+      "createdAt": "2026-10-15T12:16:18.938Z",
+      "contentDigest": "sha256:8d15cd4201b6fb1b267ca3c9f16fdb445fe7d1a93edd50f0312c52e38fe53052"
+    },
+    {
+      "schemaVersion": "crewon.project-stage-run-admission.v1",
+      "actor": {
+        "tenantId": "standalone-tenant",
+        "spaceId": "standalone-space",
+        "principalId": "standalone-principal",
+        "actorId": "standalone-actor"
+      },
+      "installation": {
+        "tenantId": "standalone-tenant",
+        "spaceId": "standalone-space",
+        "profileId": "a5885592-393f-479b-9d72-c4824cd6338d",
+        "pluginId": "crewon.short-drama",
+        "publisherId": "example.publisher",
+        "version": "50.2.4",
+        "packageDigest": "sha256:c02eabc3ae953a346abf4605aa6cb0dde52b826a86d21e85b06203a193f3ab6a",
+        "selectionRevision": 57
+      },
+      "runId": "plugin-gN8k3c92VXmzJdCB9_SX-ZXwLv-euCx9TbpbJ0VQ2go",
+      "threadId": "01a13f61-7f59-77ed-bd1e-c5c7c2a4d67f",
+      "projectId": "01a13f43-094c-767a-9414-b5622b236255",
+      "bindingId": "01a13f61-7f5a-726b-8393-3f646fb37a2e",
+      "bindingRevision": 2,
+      "workspaceId": null,
+      "stage": {
+        "kind": "discussion"
+      },
+      "sources": {
+        "brief": {
+          "briefRevision": 1,
+          "contentDigest": "sha256:196c53948a151398a9054667aaab83841aae20b171accaf658fbefe5f09d4106"
+        },
+        "outline": null
+      },
+      "allowedOperations": [
+        "project_context_read",
+        "project_read",
+        "outline_read",
+        "script_read",
+        "content_read",
+        "text_history"
+      ],
+      "userContentDigest": "sha256:5784d6bd3dd6c9f57c870c7dd23601921ad6cf34ec005c245b1899ecceeab515",
+      "taskInputDigest": "sha256:518f9651ea82283d9abb7abb40917e03c63a906fb875b7814fe26cc71d5ef9b9",
+      "pluginTaskAdmissionDigest": "sha256:8510d74d4eddaf7b648760b98101e02029b42b153f18a7c8ecd00f85b83cbb66",
+      "extensionBindingDigest": "sha256:1f6c4fe861cf4e20c9f457a53a017b124ad7027a327e6660c9dac267574cd5ce",
+      "requestDigest": "sha256:53077fcd5b3ed88d326687d5501beb53b31d84fcc4951ade1c6aada30a1d5ec1",
+      "idempotencyKey": "plugin-task:d53d363d5231df3c2cb0905aacf873539d34705841191c2c42c05d3a8c8a98d7",
+      "createdAt": "2026-10-15T12:50:01.613Z",
+      "contentDigest": "sha256:f5f8c179da17d7ea443589031aecdaa5607279b9b97f3f5be4eb54b737d1bae8"
+    },
+    {
+      "schemaVersion": "crewon.project-stage-run-admission.v1",
+      "actor": {
+        "tenantId": "standalone-tenant",
+        "spaceId": "standalone-space",
+        "principalId": "standalone-principal",
+        "actorId": "standalone-actor"
+      },
+      "installation": {
+        "tenantId": "standalone-tenant",
+        "spaceId": "standalone-space",
+        "profileId": "a5885592-393f-479b-9d72-c4824cd6338d",
+        "pluginId": "crewon.short-drama",
+        "publisherId": "example.publisher",
+        "version": "50.2.5",
+        "packageDigest": "sha256:f16b3a5afcd335f6eeda1368670442049b23399c736775c4bb7b0820d8724f98",
+        "selectionRevision": 60
+      },
+      "runId": "plugin-zzyXsjJywNSaQWm7ALzWSw3XpAgkL6Inq3PEriQeBso",
+      "threadId": "01a13f61-7f59-77ed-bd1e-c5c7c2a4d67f",
+      "projectId": "01a13f43-094c-767a-9414-b5622b236255",
+      "bindingId": "01a13f61-7f5a-726b-8393-3f646fb37a2e",
+      "bindingRevision": 3,
+      "workspaceId": null,
+      "stage": {
+        "kind": "discussion"
+      },
+      "sources": {
+        "brief": {
+          "briefRevision": 1,
+          "contentDigest": "sha256:196c53948a151398a9054667aaab83841aae20b171accaf658fbefe5f09d4106"
+        },
+        "outline": null
+      },
+      "allowedOperations": [
+        "project_context_read",
+        "project_read",
+        "outline_read",
+        "script_read",
+        "content_read",
+        "text_history"
+      ],
+      "userContentDigest": "sha256:86067831985db6f6cffda7c3bd3e9d08f29156e2d11200b522c988509bef484d",
+      "taskInputDigest": "sha256:b929bfe95e2f294d07815125966537bef0a4fff984cb96041abc1f8e9e562e89",
+      "pluginTaskAdmissionDigest": "sha256:80fa68ac8f2771a57d4b96f4212b378a04608c6d63a07749e92fc9cf51e0acab",
+      "extensionBindingDigest": "sha256:ce46fd632cce4099f192d057b905563083fe80acae16a86de76711bfa9b60a4d",
+      "requestDigest": "sha256:f12573190c513b32c677fb9cdb47146a4ffc8458af5385fbc80659989cf59b0b",
+      "idempotencyKey": "plugin-task:e64e39c075a5c07af722c22d3e75b16e80d1d4a468fe74fcb0f6731332ba3563",
+      "createdAt": "2026-10-15T14:31:15.697Z",
+      "contentDigest": "sha256:f9ad4fc96068e79d8185e0a208f127088b8dea7b68c1296e414550ce368088a3"
+    },
+    {
+      "schemaVersion": "crewon.project-stage-run-admission.v1",
+      "actor": {
+        "tenantId": "standalone-tenant",
+        "spaceId": "standalone-space",
+        "principalId": "standalone-principal",
+        "actorId": "standalone-actor"
+      },
+      "installation": {
+        "tenantId": "standalone-tenant",
+        "spaceId": "standalone-space",
+        "profileId": "a5885592-393f-479b-9d72-c4824cd6338d",
+        "pluginId": "crewon.short-drama",
+        "publisherId": "example.publisher",
+        "version": "50.2.5",
+        "packageDigest": "sha256:f16b3a5afcd335f6eeda1368670442049b23399c736775c4bb7b0820d8724f98",
+        "selectionRevision": 60
+      },
+      "runId": "plugin-7DebIFmDWoV0jmAkgi1mhBYp5eV0jJkKx6zyeqJcPLE",
+      "threadId": "01a13f61-7f59-77ed-bd1e-c5c7c2a4d67f",
+      "projectId": "01a13f43-094c-767a-9414-b5622b236255",
+      "bindingId": "01a13f61-7f5a-726b-8393-3f646fb37a2e",
+      "bindingRevision": 3,
+      "workspaceId": null,
+      "stage": {
+        "kind": "outline",
+        "briefRevision": 1
+      },
+      "sources": {
+        "brief": {
+          "briefRevision": 1,
+          "contentDigest": "sha256:196c53948a151398a9054667aaab83841aae20b171accaf658fbefe5f09d4106"
+        },
+        "outline": null
+      },
+      "allowedOperations": [
+        "project_context_read",
+        "project_read",
+        "outline_read",
+        "script_read",
+        "content_read",
+        "text_history",
+        "outline_save"
+      ],
+      "userContentDigest": "sha256:8adfa97fa60778079c70f384c708646b5e27ac808420579852fed3a7866ce282",
+      "taskInputDigest": "sha256:039063116a837cc550afc841da25cfa69da2c3482dcdeaae4130e90a14d26ebe",
+      "pluginTaskAdmissionDigest": "sha256:fc3b17bb9a924ba7692603d164846baf2d8e4e5e898189e8f88829cb67054ad0",
+      "extensionBindingDigest": "sha256:6299f001b5819b1e5dcc8bc3195bc21333e079aeb7ae257a4b44eacddef627d8",
+      "requestDigest": "sha256:fb6b0ff8a18c71952d25885de0d487605185c678a3bc74c5fe6d4de57c95aeec",
+      "idempotencyKey": "plugin-task:ee7281944f5d7a299fb1da481a9c2e7f49c05bc9da24ae57938388281f933507",
+      "createdAt": "2026-10-15T14:37:07.173Z",
+      "contentDigest": "sha256:8d6bf42cf8eae07ae95165dd615440b78af7e5591f0c59fddc675c23c4e2569e"
+    },
+    {
+      "schemaVersion": "crewon.project-stage-run-admission.v1",
+      "actor": {
+        "tenantId": "standalone-tenant",
+        "spaceId": "standalone-space",
+        "principalId": "standalone-principal",
+        "actorId": "standalone-actor"
+      },
+      "installation": {
+        "tenantId": "standalone-tenant",
+        "spaceId": "standalone-space",
+        "profileId": "a5885592-393f-479b-9d72-c4824cd6338d",
+        "pluginId": "crewon.short-drama",
+        "publisherId": "example.publisher",
+        "version": "50.2.5",
+        "packageDigest": "sha256:f16b3a5afcd335f6eeda1368670442049b23399c736775c4bb7b0820d8724f98",
+        "selectionRevision": 60
+      },
+      "runId": "plugin-izj3PanFGkpcJfgwFCjPnpcl72yfe21VMZTSZ1jpfZ4",
+      "threadId": "01a13f61-7f59-77ed-bd1e-c5c7c2a4d67f",
+      "projectId": "01a13f43-094c-767a-9414-b5622b236255",
+      "bindingId": "01a13f61-7f5a-726b-8393-3f646fb37a2e",
+      "bindingRevision": 3,
+      "workspaceId": null,
+      "stage": {
+        "kind": "discussion"
+      },
+      "sources": {
+        "brief": {
+          "briefRevision": 1,
+          "contentDigest": "sha256:196c53948a151398a9054667aaab83841aae20b171accaf658fbefe5f09d4106"
+        },
+        "outline": null
+      },
+      "allowedOperations": [
+        "project_context_read",
+        "project_read",
+        "outline_read",
+        "script_read",
+        "content_read",
+        "text_history"
+      ],
+      "userContentDigest": "sha256:8adfa97fa60778079c70f384c708646b5e27ac808420579852fed3a7866ce282",
+      "taskInputDigest": "sha256:6e929ad1a8c2e214aac5d73eeaf5576a6df2ba00a33bf66dd1aabb70cd16860c",
+      "pluginTaskAdmissionDigest": "sha256:a442e64691270d453b78bb04fe8b8424c3b948427d4723a27359619265e57094",
+      "extensionBindingDigest": "sha256:eb5738ff0ccabdef18cb8c734a1bd3704511fd70fd12474f18cd5b0aa196fb36",
+      "requestDigest": "sha256:8a496ed2dfe2b1f52b4f9c71c108d211392ef14413c8e995d2c550423abfec93",
+      "idempotencyKey": "plugin-task:bcc792d8ff7fdd223ea5366e2194417ca6fec0bbaa254abc74de3393caf66afb",
+      "createdAt": "2026-10-16T02:11:01.031Z",
+      "contentDigest": "sha256:87f47e1426c32f462dd7e3a52d141c46087296b7e5a71867c164012b4352b11b"
+    },
+    {
+      "schemaVersion": "crewon.project-stage-run-admission.v1",
+      "actor": {
+        "tenantId": "standalone-tenant",
+        "spaceId": "standalone-space",
+        "principalId": "standalone-principal",
+        "actorId": "standalone-actor"
+      },
+      "installation": {
+        "tenantId": "standalone-tenant",
+        "spaceId": "standalone-space",
+        "profileId": "a5885592-393f-479b-9d72-c4824cd6338d",
+        "pluginId": "crewon.short-drama",
+        "publisherId": "example.publisher",
+        "version": "50.2.5",
+        "packageDigest": "sha256:f16b3a5afcd335f6eeda1368670442049b23399c736775c4bb7b0820d8724f98",
+        "selectionRevision": 60
+      },
+      "runId": "plugin-jC2jEeM_rTi3tk4DMtmlYbgc9pGuXor8OIaSaMMttl8",
+      "threadId": "01a13f61-7f59-77ed-bd1e-c5c7c2a4d67f",
+      "projectId": "01a13f43-094c-767a-9414-b5622b236255",
+      "bindingId": "01a13f61-7f5a-726b-8393-3f646fb37a2e",
+      "bindingRevision": 3,
+      "workspaceId": null,
+      "stage": {
+        "kind": "discussion"
+      },
+      "sources": {
+        "brief": {
+          "briefRevision": 1,
+          "contentDigest": "sha256:196c53948a151398a9054667aaab83841aae20b171accaf658fbefe5f09d4106"
+        },
+        "outline": null
+      },
+      "allowedOperations": [
+        "project_context_read",
+        "project_read",
+        "outline_read",
+        "script_read",
+        "content_read",
+        "text_history"
+      ],
+      "userContentDigest": "sha256:56ae66bf69b17d045e6eb20518b2b5d7db073c26003eb849585f297c1d725090",
+      "taskInputDigest": "sha256:da98f01eb0e7843895af4d00de516d0aacfc33ad608f79777ee69dbbb425de0b",
+      "pluginTaskAdmissionDigest": "sha256:1277ca811b0293910a544d016089f92f3baf09ca3a42c21ac63123bb10490502",
+      "extensionBindingDigest": "sha256:46c4b14a0a3d3b95858c6d78c911091467c7dac822f7538e7151d45e63e9cee2",
+      "requestDigest": "sha256:f434a78ad2bb69903fbcda1fd7c37732b46dea617f1acaf8dfaa5dbec1473e52",
+      "idempotencyKey": "plugin-task:10d201023613b18dd49953acaa5f77d82a2f11db7370cc5aadde628ea2081f80",
+      "createdAt": "2026-10-16T02:16:08.375Z",
+      "contentDigest": "sha256:c1e623a291e94cd409f398a1b7bd1e7eb6c88743761b46743b89c9c0f5aefb46"
+    },
+    {
+      "schemaVersion": "crewon.project-stage-run-admission.v1",
+      "actor": {
+        "tenantId": "standalone-tenant",
+        "spaceId": "standalone-space",
+        "principalId": "standalone-principal",
+        "actorId": "standalone-actor"
+      },
+      "installation": {
+        "tenantId": "standalone-tenant",
+        "spaceId": "standalone-space",
+        "profileId": "a5885592-393f-479b-9d72-c4824cd6338d",
+        "pluginId": "crewon.short-drama",
+        "publisherId": "example.publisher",
+        "version": "50.2.5",
+        "packageDigest": "sha256:f16b3a5afcd335f6eeda1368670442049b23399c736775c4bb7b0820d8724f98",
+        "selectionRevision": 60
+      },
+      "runId": "plugin-0owxtUH9uZ1oLO7Akmpy9554lR7eXHBCxBcZZw33x7A",
+      "threadId": "01a13f61-7f59-77ed-bd1e-c5c7c2a4d67f",
+      "projectId": "01a13f43-094c-767a-9414-b5622b236255",
+      "bindingId": "01a13f61-7f5a-726b-8393-3f646fb37a2e",
+      "bindingRevision": 3,
+      "workspaceId": null,
+      "stage": {
+        "kind": "outline",
+        "briefRevision": 1
+      },
+      "sources": {
+        "brief": {
+          "briefRevision": 1,
+          "contentDigest": "sha256:196c53948a151398a9054667aaab83841aae20b171accaf658fbefe5f09d4106"
+        },
+        "outline": null
+      },
+      "allowedOperations": [
+        "project_context_read",
+        "project_read",
+        "outline_read",
+        "script_read",
+        "content_read",
+        "text_history",
+        "outline_save"
+      ],
+      "userContentDigest": "sha256:fb01b8af31226910642ca306376009216685c3b82136dc1d4dc4b514d3b8fed2",
+      "taskInputDigest": "sha256:6548ff06bfe00bb00a70c134f22421387642e8e30ff8719a4ad0ab9ea18e3d50",
+      "pluginTaskAdmissionDigest": "sha256:5b462b0c925c6a873678473bc39fc473b552ee42de9032450996548de35a8fb6",
+      "extensionBindingDigest": "sha256:9a35d73975c2e6b654c44c4196851d72f32eb4208308d254ea4816cb29a6f8b0",
+      "requestDigest": "sha256:8b4c2291b0ebb931d7fdebfa7a56a1f8922f0b0e2b455a2048377f88c4b64f67",
+      "idempotencyKey": "plugin-task:d086109258e013ec37e32aa745202b38bdaab755e34de54eb099b5666a13dd5e",
+      "createdAt": "2026-10-16T02:18:20.817Z",
+      "contentDigest": "sha256:bc07f61095aa757748d643cbce25b0225fbc6d8c819c309b42b1dcf9fd9ecd39"
+    }
+  ],
+  "clientObservations": {
+    "outline2SavedAndAdopted": true,
+    "automaticComposerSync": "not accepted: old episode title remained, diagnostic manual reread returned revision2",
+    "scriptSubmit": "one request, transport failure, no new Run observed; original draft retained by client",
+    "moduleDiagnostic": "plugin_ui_control_timeout"
+  },
+  "sourceRegression": {
+    "cachedRefreshFailureWasHidden": "reproduced failing test, fixed, 57 related tests passed",
+    "controlTransportWasMislabelledAsModelFailure": "fixed, targeted tests running"
+  },
+  "fullLifecycleAccepted": false
+}

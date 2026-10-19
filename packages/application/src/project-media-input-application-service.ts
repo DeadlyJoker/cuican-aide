@@ -299,7 +299,9 @@ export function captureProjectMediaWorkflowReviews(
   input: readonly ProjectMediaWorkflowReview[],
 ): readonly ProjectMediaWorkflowReview[] {
   const copy = mediaInputData(input);
-  if (!Array.isArray(copy) || copy.length < 1 || copy.length > 32)
+  // Native approvals retain both workflows for up to 32 immutable packages.
+  // Keep the complete historical pins under the same bounded review budget.
+  if (!Array.isArray(copy) || copy.length < 1 || copy.length > 32 * 2)
     fail("review_invalid");
   const reviews = copy.map(parseProjectMediaWorkflowReview);
   if (

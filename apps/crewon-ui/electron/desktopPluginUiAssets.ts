@@ -1,3 +1,5 @@
+import { reconcileNativePluginUiRenewal } from "./desktopPluginUiRenewalReconciliation.ts";
+import { isRetiredPluginUiMountResponse } from "./desktopPluginUiCleanup.ts";
 import { createHash, randomBytes } from "node:crypto";
 import type { ChildProcess } from "node:child_process";
 import {
@@ -9,6 +11,7 @@ import {
   desktopPluginUiAssetUrl,
   parseDesktopPluginUiAssetUrl,
   type DesktopPluginUiBinding,
+  type DesktopPluginUiRenewResult,
 } from "../src/lib/desktop/desktopPluginUiProtocol.ts";
 
 type NativeSession = Readonly<{
@@ -43,6 +46,17 @@ const MAX_ASSET_BYTES = 32 * 1024 * 1024;
 const MAX_RESERVED_BYTES = 128 * 1024 * 1024;
 const JSON_BYTES = 512 * 1024;
 const DEADLINE_MS = 5_000;
+
+class NativePluginUiTransientRequestError extends Error {
+  constructor(cause: unknown) {
+    super("desktop_plugin_ui_transport_unavailable", { cause });
+  }
+}
+class NativePluginUiRenewalDeferredError extends Error {
+  constructor(readonly lease: PluginUiLease) {
+    super("desktop_plugin_ui_renewal_deferred");
+  }
+}
 const mimeTypes: Readonly<Record<string, string>> = Object.freeze({
   ".js": "text/javascript; charset=utf-8",
   ".mjs": "text/javascript; charset=utf-8",
@@ -266,43 +280,53 @@ export class DesktopPluginUiAssetBroker {
     // Take this snapshot before registering the renewal. New asset operations wait
     // for its inner flight; disposal never depends on its own public cleanup result.
     const previous = [...entry.operations];
+    const original = entry.lease;
+    let renewalDispatched = false;
     const operation = this.#trackOperation(entry, async () => {
-      const settled = await Promise.allSettled(previous);
-      this.#assertCurrent(entry);
-      if (settled.some((result) => result.status === "rejected"))
-        failure("desktop_plugin_ui_prior_operation_failed");
-      await this.#fresh(entry);
-      const lease = entry.lease;
-      const response = await this.#request(
-        entry,
-        "POST",
-        "/renew",
-        JSON_BYTES,
-        undefined,
-        JSON.stringify({ expectedExpiresAt: lease.expiresAt }),
-      );
-      if (
-        response.contentType !== "application/json; charset=utf-8" &&
-        response.contentType !== "application/json"
-      )
-        failure("desktop_plugin_ui_lease_response_invalid");
-      const renewed = parseRenewPluginUiMountResponse(
-        JSON.parse(
-          new TextDecoder("utf-8", { fatal: true }).decode(response.bytes),
-        ),
-        lease,
-      );
-      this.#assertCurrent(entry);
-      // The authenticated CAS response alone may update expiry. All other pinned
-      // fields, the Entry object, binding reference and asset URL remain unchanged.
-      entry.lease = renewed;
-      entry.identity = JSON.stringify(renewed);
-      this.#armExpiry(entry);
-      await this.#fresh(entry);
-      this.#assertCurrent(entry);
-      return renewed;
+      try {
+        const settled = await Promise.allSettled(previous);
+        this.#assertCurrent(entry);
+        if (settled.some((result) => result.status === "rejected"))
+          failure("desktop_plugin_ui_prior_operation_failed");
+        await this.#fresh(entry);
+        const lease = entry.lease;
+        renewalDispatched = true;
+        const response = await this.#request(
+          entry,
+          "POST",
+          "/renew",
+          JSON_BYTES,
+          undefined,
+          JSON.stringify({ expectedExpiresAt: lease.expiresAt }),
+        );
+        if (
+          response.contentType !== "application/json; charset=utf-8" &&
+          response.contentType !== "application/json"
+        )
+          failure("desktop_plugin_ui_lease_response_invalid");
+        const renewed = parseRenewPluginUiMountResponse(
+          JSON.parse(
+            new TextDecoder("utf-8", { fatal: true }).decode(response.bytes),
+          ),
+          lease,
+        );
+        this.#assertCurrent(entry);
+        // The authenticated CAS response alone may update expiry. All other pinned
+        // fields, the Entry object, binding reference and asset URL remain unchanged.
+        entry.lease = renewed;
+        entry.identity = JSON.stringify(renewed);
+        this.#armExpiry(entry);
+        await this.#fresh(entry);
+        this.#assertCurrent(entry);
+        return renewed;
+      } catch (error) {
+        if (!(error instanceof NativePluginUiTransientRequestError))
+          throw error;
+        return this.#reconcileRenewal(entry, original, renewalDispatched);
+      }
     });
     const result = operation.catch(async (error: unknown) => {
+      if (error instanceof NativePluginUiRenewalDeferredError) throw error;
       try {
         await this.release(bindingRef);
       } catch (cleanup) {
@@ -321,6 +345,40 @@ export class DesktopPluginUiAssetBroker {
       })
       .catch(() => {});
     return result;
+  }
+
+  async renewResult(bindingRef: string): Promise<DesktopPluginUiRenewResult> {
+    try {
+      return Object.freeze({
+        kind: "renewed",
+        lease: await this.renew(bindingRef),
+      });
+    } catch (error) {
+      if (!(error instanceof NativePluginUiRenewalDeferredError)) throw error;
+      return Object.freeze({ kind: "deferred", lease: error.lease });
+    }
+  }
+
+  async #reconcileRenewal(
+    entry: Entry,
+    original: PluginUiLease,
+    renewalDispatched: boolean,
+  ): Promise<PluginUiLease> {
+    this.#assertCurrent(entry);
+    const response = await this.#request(entry, "GET", "", JSON_BYTES);
+    const renewed = reconcileNativePluginUiRenewal({
+      ...response,
+      original,
+      identity: entry.identity,
+      renewalDispatched,
+    });
+    this.#assertCurrent(entry);
+    if (renewed === null)
+      throw new NativePluginUiRenewalDeferredError(original);
+    entry.lease = renewed;
+    entry.identity = JSON.stringify(renewed);
+    this.#armExpiry(entry);
+    return renewed;
   }
 
   /** Called by the genuine Electron Session request gate, before any asset egress. */
@@ -452,6 +510,17 @@ export class DesktopPluginUiAssetBroker {
       )
         failure("desktop_plugin_ui_cleanup_response_invalid");
       if (
+        result.status === 404 &&
+        sessionIdentity(captureSession(this.#session())) ===
+          sessionIdentity(entry.session) &&
+        entry.uncertainReaders.size === 0 &&
+        isRetiredPluginUiMountResponse(value)
+      ) {
+        this.#entries.delete(entry.bindingRef);
+        return;
+      }
+      if (
+        result.status !== 200 ||
         !value ||
         typeof value !== "object" ||
         Reflect.ownKeys(value).length !== 1 ||
@@ -575,7 +644,12 @@ export class DesktopPluginUiAssetBroker {
       entry,
       renewal
         ? async () => {
-            await renewal.operation;
+            try {
+              await renewal.operation;
+            } catch (error) {
+              if (!(error instanceof NativePluginUiRenewalDeferredError))
+                throw error;
+            }
             this.#assertCurrent(entry);
             return run();
           }
@@ -622,14 +696,29 @@ export class DesktopPluginUiAssetBroker {
       entry.session.baseUrl,
     );
     signal.throwIfAborted();
-    const response = await this.#fetch(url, {
-      method,
-      headers,
-      signal,
-      redirect: "error",
-      cache: "no-store",
-      ...(body === undefined ? {} : { body }),
-    });
+    const transport = async <T>(work: () => Promise<T>): Promise<T> => {
+      try {
+        return await work();
+      } catch (error) {
+        if (
+          !entry.abort.signal.aborted &&
+          !callerSignal?.aborted &&
+          (deadline.aborted || error instanceof TypeError)
+        )
+          throw new NativePluginUiTransientRequestError(error);
+        throw error;
+      }
+    };
+    const response = await transport(() =>
+      this.#fetch(url, {
+        method,
+        headers,
+        signal,
+        redirect: "error",
+        cache: "no-store",
+        ...(body === undefined ? {} : { body }),
+      }),
+    );
     const reader = response.body?.getReader();
     let cancellation: Promise<void> | null = null;
     const cancel = () => {
@@ -649,7 +738,16 @@ export class DesktopPluginUiAssetBroker {
         cancel();
         failure("desktop_plugin_ui_request_aborted");
       }
-      if (response.status !== 200 || response.redirected || !reader)
+      if (response.status >= 500 && !response.redirected)
+        throw new NativePluginUiTransientRequestError(
+          new Error("desktop_plugin_ui_http_unavailable"),
+        );
+      if (
+        (response.status !== 200 &&
+          !(method === "DELETE" && response.status === 404)) ||
+        response.redirected ||
+        !reader
+      )
         failure("desktop_plugin_ui_http_invalid");
       const declared = response.headers.get("content-length");
       if (
@@ -662,7 +760,7 @@ export class DesktopPluginUiAssetBroker {
       const bytes = new Uint8Array(maximumBytes);
       let length = 0;
       while (true) {
-        const next = await reader.read();
+        const next = await transport(() => reader.read());
         if (signal.aborted) failure("desktop_plugin_ui_request_aborted");
         if (next.done) {
           complete = true;
@@ -679,9 +777,19 @@ export class DesktopPluginUiAssetBroker {
       if (declared !== null && Number(declared) !== length)
         failure("desktop_plugin_ui_asset_length_invalid");
       return {
+        status: response.status,
         bytes: bytes.subarray(0, length),
         contentType: response.headers.get("content-type"),
       };
+    } catch (error) {
+      if (
+        deadline.aborted &&
+        !entry.abort.signal.aborted &&
+        !callerSignal?.aborted &&
+        entry.failure === null
+      )
+        throw new NativePluginUiTransientRequestError(error);
+      throw error;
     } finally {
       signal.removeEventListener("abort", cancel);
       if (!complete) cancel();

@@ -11,12 +11,18 @@ export type DesktopProjectMediaResultsConfiguration = Readonly<{
   version: "crewon.desktop-project-media-results.v1";
   purposes: readonly ("read" | "publish")[];
   publications: readonly DesktopProjectHistoryPublication[];
+  /** When absent, legacy publish purposes apply to all publications. */
+  publishPublications?: readonly DesktopProjectHistoryPublication[];
 }>;
 export function parseDesktopProjectMediaResultsConfiguration(
   input: unknown,
   approved: readonly Readonly<{ pluginId: string; packageDigest: string }>[],
 ): DesktopProjectMediaResultsConfiguration {
-  const r = pluginControlRecord(input, ["version", "purposes", "publications"]);
+  const r = pluginControlRecord(
+    input,
+    ["version", "purposes", "publications", "publishPublications"],
+    { optional: ["publishPublications"] },
+  );
   if (
     r.version !== "crewon.desktop-project-media-results.v1" ||
     !Array.isArray(r.purposes) ||
@@ -26,6 +32,16 @@ export function parseDesktopProjectMediaResultsConfiguration(
     r.purposes.some((p) => p !== "read" && p !== "publish")
   )
     invalid();
+  const publishPublications =
+    r.publishPublications === undefined
+      ? undefined
+      : parseDesktopProjectHistoryConfiguration(
+          {
+            version: DESKTOP_PROJECT_HISTORY_VERSION,
+            pluginUi: { publications: r.publishPublications },
+          },
+          { publications: approved },
+        ).pluginUi!.publications;
   const publications = parseDesktopProjectHistoryConfiguration(
     {
       version: DESKTOP_PROJECT_HISTORY_VERSION,
@@ -33,6 +49,20 @@ export function parseDesktopProjectMediaResultsConfiguration(
     },
     { publications: approved },
   ).pluginUi!.publications;
+  if (
+    publishPublications !== undefined &&
+    (!r.purposes.includes("publish") ||
+      publishPublications.some(
+        (p) =>
+          !publications.some(
+            (candidate) =>
+              p.pluginId === candidate.pluginId &&
+              p.packageDigest === candidate.packageDigest &&
+              p.contributionId === candidate.contributionId,
+          ),
+      ))
+  )
+    invalid();
   if (
     publications.some(
       (p) =>
@@ -44,6 +74,7 @@ export function parseDesktopProjectMediaResultsConfiguration(
     version: r.version,
     purposes: Object.freeze([...r.purposes]) as readonly ("read" | "publish")[],
     publications,
+    ...(publishPublications === undefined ? {} : { publishPublications }),
   });
 }
 function invalid(): never {

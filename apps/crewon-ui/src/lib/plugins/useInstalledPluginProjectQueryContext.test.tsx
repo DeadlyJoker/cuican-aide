@@ -21,8 +21,12 @@ import {
   queryContextModule,
   queryContextTask,
   queryJournalInput,
+  queryJournalLease,
   queryJournalReceipt,
 } from "./installedPluginProjectQuery.test-support";
+
+import { installedPluginTaskRead } from "./installedPluginTaskRequests";
+import { publishControlThreadRevision } from "../control-runtime/controlThreadRevisionSubscriptions";
 
 type Input = Parameters<typeof useInstalledPluginProjectQueryContext>[0];
 describe("installed project query host context", () => {
@@ -93,6 +97,67 @@ describe("installed project query host context", () => {
       ["GET", "/api/v1/threads/thread-1"],
     ]);
     expect(f.adopt).not.toHaveBeenCalled();
+  });
+  it("refreshes the cached query CAS from the existing canonical thread stream after the model reply", async () => {
+    await render();
+    await phase("ready");
+    f.threads.set("thread-1", { ...f.threads.get("thread-1")!, revision: 18 });
+    await change(() =>
+      publishControlThreadRevision(f.ports.runtime, "thread-1"),
+    );
+    await phase("ready");
+    expect(state.context.thread?.revision).toBe(18);
+    expect(
+      f.requests.filter((r) => r.path === "/api/v1/threads/thread-1"),
+    ).toHaveLength(2);
+    expect(f.adopt).not.toHaveBeenCalled();
+  });
+
+  it("makes the query context ready while an independent plugin read is still loading", async () => {
+    const late = deferred<Response>();
+    f.setHandler((request) =>
+      request.path === "/api/v1/threads/thread-2" ? late.promise : undefined,
+    );
+    const slow = installedPluginTaskRead(f.client, (signal) =>
+      f.client.getThread("thread-2", { signal }),
+    );
+    await vi.waitFor(() => expect(f.requests).toHaveLength(1));
+    try {
+      await render();
+      await phase("ready");
+      expect(state.context.thread?.threadId).toBe("thread-1");
+      expect(f.requests).toHaveLength(2);
+    } finally {
+      late.resolve(
+        taskContextJson({
+          thread: taskContextThread("thread-2"),
+          eventSequence: 17,
+        }),
+      );
+      await slow;
+    }
+  });
+
+  it("ignores unrelated query families while retaining current-family refreshes", async () => {
+    await render();
+    await phase("ready");
+    const ready = state.context;
+    await change(() =>
+      f.accept(
+        queryJournalInput(),
+        queryJournalLease("example.other-workbench"),
+      ),
+    );
+    expect(state.context).toBe(ready);
+    expect(f.requests).toHaveLength(1);
+    expect(state.context.intent).toBeNull();
+
+    f.threads.set("thread-1", taskContextThread("thread-1", 99));
+    await change(() => f.accept());
+    await phase("ready");
+    expect(state.context.intent?.phase).toBe("accepted");
+    expect(state.context.thread?.revision).toBe(99);
+    expect(f.requests.length).toBeGreaterThan(1);
   });
 
   it("no selected or prepared Thread remains empty and never creates a conversation", async () => {

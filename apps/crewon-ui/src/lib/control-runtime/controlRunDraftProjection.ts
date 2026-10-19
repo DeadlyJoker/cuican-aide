@@ -1,13 +1,17 @@
 import type { RunEventView } from "@crewon/contracts";
+import type { ControlRunModelActivity } from "./controlRunModelActivity";
 
 export type ControlRunDraftProjectionState = Readonly<{
   segmentId: string | null;
+  modelActivity?: ControlRunModelActivity;
 }>;
 
 export type ControlRunDraftProjectionResult = Readonly<{
   state: ControlRunDraftProjectionState;
   reset: boolean;
   delta: string;
+  /** Emitted only on a phase transition, never for every streamed text chunk. */
+  modelActivity?: ControlRunModelActivity | null;
 }>;
 
 export function createControlRunDraftProjectionState(): ControlRunDraftProjectionState {
@@ -19,6 +23,33 @@ export function createControlRunDraftProjectionState(): ControlRunDraftProjectio
  * assistant Message still replaces this draft when the Run settles.
  */
 export function applyControlRunDraftEvent(
+  current: ControlRunDraftProjectionState,
+  event: RunEventView,
+): ControlRunDraftProjectionResult {
+  let modelActivity = current.modelActivity ?? null;
+  if (event.type === "model.sampling.retry") modelActivity = "retrying";
+  else if (event.type === "segment.started" || event.type === "tool.completed")
+    modelActivity = "waiting";
+  else if (
+    event.type === "tool.requested" ||
+    event.type === "run.completed" ||
+    event.type === "run.failed" ||
+    event.type === "run.canceled" ||
+    (event.type === "model.output.delta" && event.data.delta.trim().length > 0)
+  )
+    modelActivity = null;
+  const projected = projectDraftText(current, event);
+  const { modelActivity: _prior, ...state } = projected.state;
+  return {
+    ...projected,
+    state: modelActivity ? { ...state, modelActivity } : state,
+    ...(modelActivity !== (current.modelActivity ?? null)
+      ? { modelActivity }
+      : {}),
+  };
+}
+
+function projectDraftText(
   current: ControlRunDraftProjectionState,
   event: RunEventView,
 ): ControlRunDraftProjectionResult {

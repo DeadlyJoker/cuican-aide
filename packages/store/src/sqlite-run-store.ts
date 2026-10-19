@@ -22,6 +22,7 @@ import type {
   RecordPluginProjectWorkspaceNamespaceInput,
 } from "@crewon/application";
 import { SqliteProjectFoundationRunStore } from "./project-foundation-run-store.ts";
+import { SqliteProjectMediaImageReviewJobStore } from "./project-media-image-review-job-store.ts";
 import { assertSqliteOrdinaryTurnProjectScope } from "./project-conversation-ordinary-turn-fence.ts";
 import { SqliteProjectConceptSelectionStore } from "./sqlite-project-concept-selection-store.ts";
 import { SqlitePluginUiIntentJournalStore } from "./sqlite-plugin-ui-intent-journal-store.ts";
@@ -784,6 +785,18 @@ export class SqliteRunStore implements DomainStore {
     return new SqliteProjectFoundationRunStore({
       database: this.#database,
       assertOpen: () => this.#assertOpen(),
+    });
+  }
+
+  /** Native review opt-in on this original connection; construction never migrates. */
+  projectMediaImageReviewJobStore(): SqliteProjectMediaImageReviewJobStore {
+    this.#assertOpen();
+    return new SqliteProjectMediaImageReviewJobStore({
+      database: this.#database,
+      assertOpen: () => this.#assertOpen(),
+      loadRunWithinTransaction: (input) => this.#loadRun(input),
+      commitTurnWithinTransaction: (input) =>
+        this.#commitTurnStart(input, { withinTransaction: true }),
     });
   }
 

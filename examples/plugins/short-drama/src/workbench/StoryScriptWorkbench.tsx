@@ -547,9 +547,18 @@ export function StoryScriptWorkbench({
               {editing ? (
                 <>
                   {sourceChanged && (
-                    <p className="detail-note" role="status">
-                      需求或大纲已更新，原内容保留。可在“历史与来源”中确认来源。
-                    </p>
+                    <div className="detail-note" role="status">
+                      <p>
+                        需求或大纲已更新，请复核当前正文后确认新候选的来源。
+                      </p>
+                      <button
+                        className="text-button"
+                        disabled={disabled || controller.recovery.blocksWrites}
+                        onClick={() => controller.useCurrentSource()}
+                      >
+                        复核后使用当前来源
+                      </button>
+                    </div>
                   )}
                   {snapshot.target.kind === "outline" ? (
                     <OutlineEditor
@@ -584,7 +593,7 @@ export function StoryScriptWorkbench({
                 <ProjectTextDocument
                   revision={snapshot.content}
                   selected={selected}
-                  stale={snapshot.view?.dependencyState === "stale"}
+                  stale={sourceChanged}
                   locked={artifact?.locked ?? false}
                   onOpenEpisode={
                     selected &&

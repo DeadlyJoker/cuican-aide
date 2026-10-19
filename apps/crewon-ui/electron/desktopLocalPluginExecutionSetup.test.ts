@@ -23,9 +23,33 @@ import {
   parseDesktopLocalPluginExecutionSetupPluginId,
   runDesktopLocalPluginExecutionSetup,
 } from "./desktopLocalPluginExecutionSetup.ts";
-import { SHORT_NETWORK_PATHS } from "./desktopLocalPluginExecutionSetupSnapshot.ts";
+import {
+  SHORT_NETWORK_PATHS,
+  SHORT_WORKFLOW_PANEL_NETWORK_PATHS,
+} from "./desktopLocalPluginExecutionSetupSnapshot.ts";
 import { DESKTOP_RUNTIME_OWNER as actor } from "./desktopExtensionRuntime.ts";
 const fixtures: Awaited<ReturnType<typeof executionSetupFixture>>[] = [];
+it("prepares workflow-panel transport without granting native submission or reference upload", async () => {
+  const f = await fixture({
+    version: "50.2.10",
+    serviceProtocol: "workflow-panel-v1",
+  });
+  const { owner, preview, claim } = await previewClaim(f);
+  expect(preview.networkPaths).toEqual(SHORT_WORKFLOW_PANEL_NETWORK_PATHS);
+  expect(preview.mediaGenerationPreparation).toBeUndefined();
+  const result = await runDesktopLocalPluginExecutionSetup(
+    { owner, claim, onStopInvalidation: (stop) => stop() },
+    lifecycle(f).port,
+  );
+  expect(result.state).toBe("prepared");
+  const policy = JSON.parse(readFileSync(f.policyPath, "utf8"));
+  expect(policy.networkGrants).toHaveLength(1);
+  expect(policy.networkGrants[0].paths).toEqual(
+    SHORT_WORKFLOW_PANEL_NETWORK_PATHS,
+  );
+  expect(JSON.stringify(policy)).not.toContain("/upload/image");
+  expect(JSON.stringify(policy)).not.toContain('"/prompt"');
+});
 async function fixture(options?: Parameters<typeof executionSetupFixture>[0]) {
   const value = await executionSetupFixture(options);
   fixtures.push(value);
@@ -380,6 +404,92 @@ describe("explicit Main local execution preparation", () => {
     },
   );
 
+  it("accepts prepared model siblings while preserving the first Native default and disabled selection", async () => {
+    const f = await fixture(),
+      { owner, claim } = await previewClaim(f);
+    await owner.commitPolicyWhileStopped(claim);
+    const runtime = f.fakePreparedRuntime();
+    const sibling = {
+      ...f.entry,
+      configuredTarget: {
+        ...f.entry.configuredTarget,
+        agentVersionId: "fixture-second-model-agent",
+        agentVersionContentDigest: fixtureHash("second-model-agent"),
+        materializationDigest: fixtureHash("second-model-materialization"),
+      },
+    };
+    const multiple = { ...runtime, expectedCatalogEntries: [f.entry, sibling] };
+    const mapping = await owner.captureProjectMappingWhileRunning(
+      claim,
+      multiple,
+    );
+    f.withdrawRuntime();
+    await owner.commitProjectMappingWhileStopped(mapping);
+    await f.start();
+    await expect(
+      owner.verifyPreparedWhileRunning(claim, {
+        ...multiple,
+        expectedCatalogEntries: [sibling, f.entry],
+      }),
+    ).rejects.toThrow("runtime_changed");
+    await owner.verifyPreparedWhileRunning(claim, multiple);
+    expect(
+      owner.result(claim, { stage: "mappingCommitted", runtimeStatus: "ready" })
+        .state,
+    ).toBe("prepared");
+    expect(
+      await f.store
+        .pluginInstallationStore()
+        .loadSelection({ scope: f.scope, pluginId: f.identity.pluginId }),
+    ).toEqual(f.installedSelection);
+  });
+
+  it.each(["identity", "configuration", "workspace"] as const)(
+    "rejects %s drift in any prepared model sibling",
+    async (drift) => {
+      const f = await fixture(),
+        { owner, claim } = await previewClaim(f);
+      await owner.commitPolicyWhileStopped(claim);
+      const sibling = {
+        ...f.entry,
+        identity: {
+          ...f.entry.identity,
+          ...(drift === "identity"
+            ? { packageDigest: fixtureHash("changed-package") }
+            : {}),
+        },
+        configuration:
+          drift === "configuration"
+            ? (createExtensionConfiguration(
+                { ...f.configuration, revision: f.configuration.revision + 1 },
+                { sha256: fixtureHash },
+              ) as unknown as typeof f.entry.configuration)
+            : f.entry.configuration,
+        configuredTarget: {
+          ...f.entry.configuredTarget,
+          ...(drift === "workspace"
+            ? { workspaceBindingId: "other-workspace" }
+            : {}),
+        },
+      };
+      await expect(
+        owner.captureProjectMappingWhileRunning(claim, {
+          ...f.fakePreparedRuntime(),
+          expectedCatalogEntries: [f.entry, sibling],
+        }),
+      ).rejects.toThrow(
+        drift === "identity"
+          ? "runtime_identity"
+          : drift === "configuration"
+            ? "runtime_configuration"
+            : "runtime_workspace",
+      );
+      expect(
+        JSON.parse(readFileSync(f.approvalPath, "utf8")).schemaVersion,
+      ).toBe("crewon.desktop-plugin-approval.v1");
+    },
+  );
+
   it.each([1, 2])(
     "returns committed restartRequired for original stage %i startup failure",
     async (failure) => {
@@ -695,3 +805,43 @@ describe("explicit Main local execution preparation", () => {
     );
   });
 });
+
+it.each(["api-c16-scene", "api-c16-portrait", "api-t4-three-view"] as const)(
+  "prepares saved API profile %s without native submission or reference upload authority",
+  async (preset) => {
+    const f = await fixture({
+      version: "50.2.12",
+      serviceProtocol: "workflow-api-v1",
+      preset,
+    });
+    const { owner, preview, claim } = await previewClaim(f);
+    expect(preview.preset).toBe(preset);
+    expect(preview.networkPaths).toEqual(SHORT_WORKFLOW_PANEL_NETWORK_PATHS);
+    expect(preview.mediaGenerationPreparation).toBeUndefined();
+    const result = await runDesktopLocalPluginExecutionSetup(
+      { owner, claim, onStopInvalidation: (stop) => stop() },
+      lifecycle(f).port,
+    );
+    expect(result.state).toBe("prepared");
+    const policy = JSON.parse(readFileSync(f.policyPath, "utf8"));
+    expect(policy.networkGrants[0].paths).toEqual(
+      SHORT_WORKFLOW_PANEL_NETWORK_PATHS,
+    );
+  },
+);
+
+it.each([
+  ["api-c16-scene", "native"],
+  ["krea2-portrait", "workflow-api-v1"],
+] as const)(
+  "rejects preset %s paired with protocol %s before preview or policy writes",
+  async (preset, serviceProtocol) => {
+    const f = await fixture({ version: "50.2.12", serviceProtocol, preset });
+    await expect(
+      f
+        .create()
+        .preview({ bootstrap: f.bootstrap, pluginId: f.identity.pluginId }),
+    ).rejects.toThrow("configuration_unsupported");
+    expect(existsSync(f.policyPath)).toBe(false);
+  },
+);

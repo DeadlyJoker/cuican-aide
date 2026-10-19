@@ -8,7 +8,13 @@ import {
   importTrustedPluginUiModule,
   type PluginUiModuleImporter,
 } from "./trustedPluginUiLoader";
-import { PluginUiLoaderError } from "./pluginUiValidation";
+import {
+  awaitPluginUiOperation,
+  PluginUiLoaderError,
+} from "./pluginUiValidation";
+
+// Optional storage must not consume the module's online loading deadline.
+export const PLUGIN_ENTRY_CACHE_READ_DEADLINE_MS = 200;
 
 export type PluginUiEntryImport = Readonly<{
   url: string;
@@ -71,7 +77,7 @@ export function createPluginEntryByteImporter(input: {
         ]),
       ).buffer,
     );
-    const stored = await store.get(key).catch(() => null);
+    const stored = await readCachedEntry(store, key, signal);
     const cached =
       stored &&
       stored.byteLength === file.byteLength &&
@@ -154,6 +160,31 @@ export function createPluginEntryByteImporter(input: {
       revokeUrl(moduleUrl);
     }
   };
+}
+async function readCachedEntry(
+  store: PluginEntryByteStore,
+  key: string,
+  signal: AbortSignal,
+): Promise<ArrayBuffer | null> {
+  let timer: ReturnType<typeof setTimeout> | undefined;
+  try {
+    return await awaitPluginUiOperation(
+      Promise.race([
+        Promise.resolve()
+          .then(() => store.get(key))
+          .catch(() => null),
+        new Promise<null>((resolve) => {
+          timer = setTimeout(
+            () => resolve(null),
+            PLUGIN_ENTRY_CACHE_READ_DEADLINE_MS,
+          );
+        }),
+      ]),
+      signal,
+    );
+  } finally {
+    clearTimeout(timer);
+  }
 }
 async function hash(bytes: ArrayBuffer): Promise<string> {
   return [...new Uint8Array(await crypto.subtle.digest("SHA-256", bytes))]

@@ -4,6 +4,7 @@ import { ControlApiClientError } from "@crewon/control-client";
 import type { PluginUiMountHandle } from "./trustedPluginUiLoader";
 import { PluginUiLoaderError } from "./pluginUiValidation";
 import { PluginUiUpdateDeferredError } from "./pluginUiPresentationUpdate";
+import { PluginUiLeaseRenewalDeferredError } from "./pluginUiLeaseLifecycle";
 import {
   deferred,
   flush,
@@ -31,6 +32,25 @@ async function mounted(h = uiHarness(), lease = uiLease()) {
 const timeout = () => new PluginUiLoaderError("plugin_ui_control_timeout");
 
 describe("live mounted presentation updates", () => {
+  it("retains verified props across a trusted renewal deferral while actions still reject without replay", async () => {
+    const { h, handle, lease } = await mounted();
+    const deferredError = new PluginUiLeaseRenewalDeferredError(lease);
+    h.ports.validateMount.mockRejectedValueOnce(deferredError);
+    await expect(
+      handle.update(uiProps({ stage: "尚未授权的新属性" })),
+    ).rejects.toBeInstanceOf(PluginUiUpdateDeferredError);
+    expect(h.root.textContent).toBe('{"title":"初始内容"}');
+    expect(h.instances[0].dispose).not.toHaveBeenCalled();
+    h.ports.validateMount.mockRejectedValueOnce(deferredError);
+    await expect(
+      h.instances[0].services.invoke("save", { draft: true }, {}),
+    ).rejects.toBe(deferredError);
+    expect(h.ports.invoke).not.toHaveBeenCalled();
+    await flush();
+    expect(h.ports.invoke).not.toHaveBeenCalled();
+    expect(h.instances[0].dispose).not.toHaveBeenCalled();
+  });
+
   it("does not revalidate equivalent props and does not lose a reversal during an executing update", async () => {
     const { h, handle } = await mounted();
     await handle.update(uiProps());

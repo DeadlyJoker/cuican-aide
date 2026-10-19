@@ -13,7 +13,9 @@ for (const change of ["withdraw", "close"] as const)
     `Native media rejects ${change} after the original profile read, before source I/O or Run admission`,
     { skip: process.platform === "win32", timeout: 30_000 },
     async (t) => {
-      const f = await nativeMediaFlowFixture(t);
+      const f = await nativeMediaFlowFixture(t, {
+        packageDirectory: process.env.CREWON_MEDIA_GENERATION_PACKAGE_DIR,
+      });
       const original = DesktopPluginAuthority.prototype.profile;
       let changed = false;
       t.mock.method(

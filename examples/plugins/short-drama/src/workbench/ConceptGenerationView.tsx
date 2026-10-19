@@ -54,6 +54,9 @@ export function ConceptGenerationView({
     controller.getSnapshot,
   );
   const { generation } = snapshot;
+  const generationNotSubmitted =
+    generation?.task.runStatus === "completed" &&
+    generation.task.operations.length === 0;
   const hasSource = snapshot.source !== null;
   useEffect(() => {
     const document = panel.current?.ownerDocument;
@@ -115,10 +118,20 @@ export function ConceptGenerationView({
       {generation && (
         <>
           <p className="detail-note">
-            任务状态：{runLabels[generation.task.runStatus]}
+            任务状态：
+            {generationNotSubmitted
+              ? "未执行生成"
+              : runLabels[generation.task.runStatus]}
           </p>
           {generation.task.operations.length === 0 && (
-            <p className="detail-note">还没有可展示的执行记录。</p>
+            <p
+              className="detail-note"
+              role={generationNotSubmitted ? "alert" : undefined}
+            >
+              {generationNotSubmitted
+                ? "任务已结束，但未提交生成，尚未产生图片。"
+                : "还没有可展示的执行记录。"}
+            </p>
           )}
           {generation.task.operations.map((operation) => (
             <div

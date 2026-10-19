@@ -326,15 +326,15 @@ async function fixture(
   };
 }
 test(
-  "Native startup retains exact authority for approved bootstraps above 64 KiB",
+  "Native startup retains exact authority for approved bootstraps above 128 KiB",
   nativeOnly,
   async (t) => {
     const f = await fixture(t, {
       historical: true,
       retainedSourceCount: 32,
-      sourceDirectoryPadding: 2_200,
+      sourceDirectoryPadding: 3_900,
     });
-    assert.ok(Buffer.byteLength(JSON.stringify(f.bootstrap)) > 65_536);
+    assert.ok(Buffer.byteLength(JSON.stringify(f.bootstrap)) > 128 * 1024);
     assert.throws(
       () => extensionCanonicalJson(f.bootstrap),
       /extension_json_limit/u,

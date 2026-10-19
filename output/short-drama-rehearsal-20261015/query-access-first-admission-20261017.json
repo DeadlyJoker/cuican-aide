@@ -1,0 +1,791 @@
+{
+  "recordedAt": "2026-10-17T03:12:43.294246+00:00",
+  "records": [
+    {
+      "requestId": "req-b5",
+      "pid": 7498,
+      "elapsedMs": 0.133,
+      "sequence": 1,
+      "phase": "route.invoke",
+      "status": "start"
+    },
+    {
+      "requestId": "req-b5",
+      "pid": 7498,
+      "elapsedMs": 4.216,
+      "sequence": 2,
+      "phase": "request.peer-prepare",
+      "status": "start"
+    },
+    {
+      "requestId": "req-b5",
+      "pid": 7498,
+      "elapsedMs": 395.503,
+      "sequence": 3,
+      "phase": "request.peer-prepare",
+      "status": "end"
+    },
+    {
+      "requestId": "req-b5",
+      "pid": 7498,
+      "elapsedMs": 422.235,
+      "sequence": 4,
+      "phase": "query.current",
+      "status": "start"
+    },
+    {
+      "requestId": "req-b5",
+      "pid": 7498,
+      "elapsedMs": 423.967,
+      "sequence": 5,
+      "phase": "query.current",
+      "status": "end"
+    },
+    {
+      "requestId": "req-b5",
+      "pid": 7498,
+      "elapsedMs": 424.005,
+      "sequence": 6,
+      "phase": "query.target-package",
+      "status": "start"
+    },
+    {
+      "requestId": "req-b5",
+      "pid": 7498,
+      "elapsedMs": 424.306,
+      "sequence": 7,
+      "phase": "query.target-package",
+      "status": "end"
+    },
+    {
+      "requestId": "req-b5",
+      "pid": 7498,
+      "elapsedMs": 424.32,
+      "sequence": 8,
+      "phase": "query.source-bytes",
+      "status": "start"
+    },
+    {
+      "requestId": "req-b5",
+      "pid": 7498,
+      "elapsedMs": 487.299,
+      "sequence": 9,
+      "phase": "query.source-bytes",
+      "status": "end"
+    },
+    {
+      "requestId": "req-b5",
+      "pid": 7498,
+      "elapsedMs": 487.337,
+      "sequence": 10,
+      "phase": "query.target-bytes",
+      "status": "start"
+    },
+    {
+      "requestId": "req-b5",
+      "pid": 7498,
+      "elapsedMs": 524.538,
+      "sequence": 11,
+      "phase": "query.target-bytes",
+      "status": "end"
+    },
+    {
+      "requestId": "req-b5",
+      "pid": 7498,
+      "elapsedMs": 524.625,
+      "sequence": 12,
+      "phase": "query.target-policy",
+      "status": "start"
+    },
+    {
+      "requestId": "req-b5",
+      "pid": 7498,
+      "elapsedMs": 525.749,
+      "sequence": 13,
+      "phase": "query.target-policy",
+      "status": "end"
+    },
+    {
+      "requestId": "req-b5",
+      "pid": 7498,
+      "elapsedMs": 526.172,
+      "sequence": 14,
+      "phase": "query.transaction-current",
+      "status": "start"
+    },
+    {
+      "requestId": "req-b5",
+      "pid": 7498,
+      "elapsedMs": 529.559,
+      "sequence": 15,
+      "phase": "query.transaction-bytes",
+      "status": "start"
+    },
+    {
+      "requestId": "req-b5",
+      "pid": 7498,
+      "elapsedMs": 586.904,
+      "sequence": 16,
+      "phase": "query.transaction-bytes",
+      "status": "end"
+    },
+    {
+      "requestId": "req-b5",
+      "pid": 7498,
+      "elapsedMs": 587.032,
+      "sequence": 17,
+      "phase": "query.transaction-access",
+      "status": "start"
+    },
+    {
+      "requestId": "req-b5",
+      "pid": 7498,
+      "elapsedMs": 593.293,
+      "sequence": 18,
+      "phase": "query.transaction-access",
+      "status": "end"
+    },
+    {
+      "requestId": "req-b5",
+      "pid": 7498,
+      "elapsedMs": 594.22,
+      "sequence": 19,
+      "phase": "query.transaction-bytes",
+      "status": "start"
+    },
+    {
+      "requestId": "req-b5",
+      "pid": 7498,
+      "elapsedMs": 635.988,
+      "sequence": 20,
+      "phase": "query.transaction-bytes",
+      "status": "end"
+    },
+    {
+      "requestId": "req-b5",
+      "pid": 7498,
+      "elapsedMs": 636.049,
+      "sequence": 21,
+      "phase": "query.transaction-access",
+      "status": "start"
+    },
+    {
+      "requestId": "req-b5",
+      "pid": 7498,
+      "elapsedMs": 640.059,
+      "sequence": 22,
+      "phase": "query.transaction-access",
+      "status": "end"
+    },
+    {
+      "requestId": "req-b5",
+      "pid": 7498,
+      "elapsedMs": 640.149,
+      "sequence": 23,
+      "phase": "query.transaction-current",
+      "status": "end"
+    },
+    {
+      "requestId": "req-b5",
+      "pid": 7498,
+      "elapsedMs": 640.992,
+      "sequence": 24,
+      "phase": "query.current",
+      "status": "start"
+    },
+    {
+      "requestId": "req-b5",
+      "pid": 7498,
+      "elapsedMs": 644.56,
+      "sequence": 25,
+      "phase": "query.current",
+      "status": "end"
+    },
+    {
+      "requestId": "req-b5",
+      "pid": 7498,
+      "elapsedMs": 644.601,
+      "sequence": 26,
+      "phase": "query.saved-generation",
+      "status": "start"
+    },
+    {
+      "requestId": "req-b5",
+      "pid": 7498,
+      "elapsedMs": 691.322,
+      "sequence": 27,
+      "phase": "query.saved-generation",
+      "status": "end"
+    },
+    {
+      "requestId": "req-b5",
+      "pid": 7498,
+      "elapsedMs": 691.562,
+      "sequence": 28,
+      "phase": "query.shared-ready",
+      "status": "start"
+    },
+    {
+      "requestId": "req-b5",
+      "pid": 7498,
+      "elapsedMs": 692.158,
+      "sequence": 29,
+      "phase": "query.shared-ready",
+      "status": "end"
+    },
+    {
+      "requestId": "req-b5",
+      "pid": 7498,
+      "elapsedMs": 692.21,
+      "sequence": 30,
+      "phase": "query.transaction-current",
+      "status": "start"
+    },
+    {
+      "requestId": "req-b5",
+      "pid": 7498,
+      "elapsedMs": 695.781,
+      "sequence": 31,
+      "phase": "query.transaction-bytes",
+      "status": "start"
+    },
+    {
+      "requestId": "req-b5",
+      "pid": 7498,
+      "elapsedMs": 730.259,
+      "sequence": 32,
+      "phase": "query.transaction-bytes",
+      "status": "end"
+    },
+    {
+      "requestId": "req-b5",
+      "pid": 7498,
+      "elapsedMs": 730.301,
+      "sequence": 33,
+      "phase": "query.transaction-access",
+      "status": "start"
+    },
+    {
+      "requestId": "req-b5",
+      "pid": 7498,
+      "elapsedMs": 734.246,
+      "sequence": 34,
+      "phase": "query.transaction-access",
+      "status": "end"
+    },
+    {
+      "requestId": "req-b5",
+      "pid": 7498,
+      "elapsedMs": 735.127,
+      "sequence": 35,
+      "phase": "query.transaction-bytes",
+      "status": "start"
+    },
+    {
+      "requestId": "req-b5",
+      "pid": 7498,
+      "elapsedMs": 782.67,
+      "sequence": 36,
+      "phase": "query.transaction-bytes",
+      "status": "end"
+    },
+    {
+      "requestId": "req-b5",
+      "pid": 7498,
+      "elapsedMs": 782.722,
+      "sequence": 37,
+      "phase": "query.transaction-access",
+      "status": "start"
+    },
+    {
+      "requestId": "req-b5",
+      "pid": 7498,
+      "elapsedMs": 786.394,
+      "sequence": 38,
+      "phase": "query.transaction-access",
+      "status": "end"
+    },
+    {
+      "requestId": "req-b5",
+      "pid": 7498,
+      "elapsedMs": 786.421,
+      "sequence": 39,
+      "phase": "query.transaction-current",
+      "status": "end"
+    },
+    {
+      "requestId": "req-b5",
+      "pid": 7498,
+      "elapsedMs": 786.848,
+      "sequence": 40,
+      "phase": "query.current",
+      "status": "start"
+    },
+    {
+      "requestId": "req-b5",
+      "pid": 7498,
+      "elapsedMs": 788.183,
+      "sequence": 41,
+      "phase": "query.current",
+      "status": "end"
+    },
+    {
+      "requestId": "req-b5",
+      "pid": 7498,
+      "elapsedMs": 788.198,
+      "sequence": 42,
+      "phase": "query.node-execute",
+      "status": "start"
+    },
+    {
+      "requestId": "req-b5",
+      "pid": 7498,
+      "elapsedMs": 790.714,
+      "sequence": 43,
+      "phase": "query.transaction-current",
+      "status": "start"
+    },
+    {
+      "requestId": "req-b5",
+      "pid": 7498,
+      "elapsedMs": 793.918,
+      "sequence": 44,
+      "phase": "query.transaction-bytes",
+      "status": "start"
+    },
+    {
+      "requestId": "req-b5",
+      "pid": 7498,
+      "elapsedMs": 826.872,
+      "sequence": 45,
+      "phase": "query.transaction-bytes",
+      "status": "end"
+    },
+    {
+      "requestId": "req-b5",
+      "pid": 7498,
+      "elapsedMs": 826.923,
+      "sequence": 46,
+      "phase": "query.transaction-access",
+      "status": "start"
+    },
+    {
+      "requestId": "req-b5",
+      "pid": 7498,
+      "elapsedMs": 830.691,
+      "sequence": 47,
+      "phase": "query.transaction-access",
+      "status": "end"
+    },
+    {
+      "requestId": "req-b5",
+      "pid": 7498,
+      "elapsedMs": 831.3,
+      "sequence": 48,
+      "phase": "query.transaction-bytes",
+      "status": "start"
+    },
+    {
+      "requestId": "req-b5",
+      "pid": 7498,
+      "elapsedMs": 867.006,
+      "sequence": 49,
+      "phase": "query.transaction-bytes",
+      "status": "end"
+    },
+    {
+      "requestId": "req-b5",
+      "pid": 7498,
+      "elapsedMs": 867.053,
+      "sequence": 50,
+      "phase": "query.transaction-access",
+      "status": "start"
+    },
+    {
+      "requestId": "req-b5",
+      "pid": 7498,
+      "elapsedMs": 872.796,
+      "sequence": 51,
+      "phase": "query.transaction-access",
+      "status": "end"
+    },
+    {
+      "requestId": "req-b5",
+      "pid": 7498,
+      "elapsedMs": 872.846,
+      "sequence": 52,
+      "phase": "query.transaction-current",
+      "status": "end"
+    },
+    {
+      "requestId": "req-b5",
+      "pid": 7498,
+      "elapsedMs": 873.524,
+      "sequence": 53,
+      "phase": "query.current",
+      "status": "start"
+    },
+    {
+      "requestId": "req-b5",
+      "pid": 7498,
+      "elapsedMs": 875.474,
+      "sequence": 54,
+      "phase": "query.current",
+      "status": "end"
+    },
+    {
+      "requestId": "req-b5",
+      "pid": 7498,
+      "elapsedMs": 889.295,
+      "sequence": 55,
+      "phase": "query.transaction-current",
+      "status": "start"
+    },
+    {
+      "requestId": "req-b5",
+      "pid": 7498,
+      "elapsedMs": 892.455,
+      "sequence": 56,
+      "phase": "query.transaction-bytes",
+      "status": "start"
+    },
+    {
+      "requestId": "req-b5",
+      "pid": 7498,
+      "elapsedMs": 930.941,
+      "sequence": 57,
+      "phase": "query.transaction-bytes",
+      "status": "end"
+    },
+    {
+      "requestId": "req-b5",
+      "pid": 7498,
+      "elapsedMs": 930.987,
+      "sequence": 58,
+      "phase": "query.transaction-access",
+      "status": "start"
+    },
+    {
+      "requestId": "req-b5",
+      "pid": 7498,
+      "elapsedMs": 934.856,
+      "sequence": 59,
+      "phase": "query.transaction-access",
+      "status": "end"
+    },
+    {
+      "requestId": "req-b5",
+      "pid": 7498,
+      "elapsedMs": 935.446,
+      "sequence": 60,
+      "phase": "query.transaction-bytes",
+      "status": "start"
+    },
+    {
+      "requestId": "req-b5",
+      "pid": 7498,
+      "elapsedMs": 983.592,
+      "sequence": 61,
+      "phase": "query.transaction-bytes",
+      "status": "end"
+    },
+    {
+      "requestId": "req-b5",
+      "pid": 7498,
+      "elapsedMs": 983.638,
+      "sequence": 62,
+      "phase": "query.transaction-access",
+      "status": "start"
+    },
+    {
+      "requestId": "req-b5",
+      "pid": 7498,
+      "elapsedMs": 987.378,
+      "sequence": 63,
+      "phase": "query.transaction-access",
+      "status": "end"
+    },
+    {
+      "requestId": "req-b5",
+      "pid": 7498,
+      "elapsedMs": 987.423,
+      "sequence": 64,
+      "phase": "query.transaction-current",
+      "status": "end"
+    },
+    {
+      "requestId": "req-b5",
+      "pid": 7498,
+      "elapsedMs": 987.932,
+      "sequence": 65,
+      "phase": "query.current",
+      "status": "start"
+    },
+    {
+      "requestId": "req-b5",
+      "pid": 7498,
+      "elapsedMs": 989.443,
+      "sequence": 66,
+      "phase": "query.current",
+      "status": "end"
+    },
+    {
+      "requestId": "req-b5",
+      "pid": 7498,
+      "elapsedMs": 991.878,
+      "sequence": 67,
+      "phase": "query.task-commit",
+      "status": "start"
+    },
+    {
+      "requestId": "req-b5",
+      "pid": 7498,
+      "elapsedMs": 1012.011,
+      "sequence": 68,
+      "phase": "query.transaction-current",
+      "status": "start"
+    },
+    {
+      "requestId": "req-b5",
+      "pid": 7498,
+      "elapsedMs": 1015.101,
+      "sequence": 69,
+      "phase": "query.transaction-bytes",
+      "status": "start"
+    },
+    {
+      "requestId": "req-b5",
+      "pid": 7498,
+      "elapsedMs": 1050.957,
+      "sequence": 70,
+      "phase": "query.transaction-bytes",
+      "status": "end"
+    },
+    {
+      "requestId": "req-b5",
+      "pid": 7498,
+      "elapsedMs": 1051.005,
+      "sequence": 71,
+      "phase": "query.transaction-access",
+      "status": "start"
+    },
+    {
+      "requestId": "req-b5",
+      "pid": 7498,
+      "elapsedMs": 1054.834,
+      "sequence": 72,
+      "phase": "query.transaction-access",
+      "status": "end"
+    },
+    {
+      "requestId": "req-b5",
+      "pid": 7498,
+      "elapsedMs": 1055.435,
+      "sequence": 73,
+      "phase": "query.transaction-bytes",
+      "status": "start"
+    },
+    {
+      "requestId": "req-b5",
+      "pid": 7498,
+      "elapsedMs": 1102.787,
+      "sequence": 74,
+      "phase": "query.transaction-bytes",
+      "status": "end"
+    },
+    {
+      "requestId": "req-b5",
+      "pid": 7498,
+      "elapsedMs": 1102.832,
+      "sequence": 75,
+      "phase": "query.transaction-access",
+      "status": "start"
+    },
+    {
+      "requestId": "req-b5",
+      "pid": 7498,
+      "elapsedMs": 1106.484,
+      "sequence": 76,
+      "phase": "query.transaction-access",
+      "status": "end"
+    },
+    {
+      "requestId": "req-b5",
+      "pid": 7498,
+      "elapsedMs": 1106.518,
+      "sequence": 77,
+      "phase": "query.transaction-current",
+      "status": "end"
+    },
+    {
+      "requestId": "req-b5",
+      "pid": 7498,
+      "elapsedMs": 1106.958,
+      "sequence": 78,
+      "phase": "query.current",
+      "status": "start"
+    },
+    {
+      "requestId": "req-b5",
+      "pid": 7498,
+      "elapsedMs": 1108.393,
+      "sequence": 79,
+      "phase": "query.current",
+      "status": "end"
+    },
+    {
+      "requestId": "req-b5",
+      "pid": 7498,
+      "elapsedMs": 1178.053,
+      "sequence": 80,
+      "phase": "query.transaction-bytes",
+      "status": "start"
+    },
+    {
+      "requestId": "req-b5",
+      "pid": 7498,
+      "elapsedMs": 1216.453,
+      "sequence": 81,
+      "phase": "query.transaction-bytes",
+      "status": "end"
+    },
+    {
+      "requestId": "req-b5",
+      "pid": 7498,
+      "elapsedMs": 1216.496,
+      "sequence": 82,
+      "phase": "query.transaction-access",
+      "status": "start"
+    },
+    {
+      "requestId": "req-b5",
+      "pid": 7498,
+      "elapsedMs": 1220.39,
+      "sequence": 83,
+      "phase": "query.transaction-access",
+      "status": "end"
+    },
+    {
+      "requestId": "req-b5",
+      "pid": 7498,
+      "elapsedMs": 1220.99,
+      "sequence": 84,
+      "phase": "query.transaction-bytes",
+      "status": "start"
+    },
+    {
+      "requestId": "req-b5",
+      "pid": 7498,
+      "elapsedMs": 1258.52,
+      "sequence": 85,
+      "phase": "query.transaction-bytes",
+      "status": "end"
+    },
+    {
+      "requestId": "req-b5",
+      "pid": 7498,
+      "elapsedMs": 1258.573,
+      "sequence": 86,
+      "phase": "query.transaction-access",
+      "status": "start"
+    },
+    {
+      "requestId": "req-b5",
+      "pid": 7498,
+      "elapsedMs": 1262.364,
+      "sequence": 87,
+      "phase": "query.transaction-access",
+      "status": "end"
+    },
+    {
+      "requestId": "req-b5",
+      "pid": 7498,
+      "elapsedMs": 1281.899,
+      "sequence": 88,
+      "phase": "query.host-resolve",
+      "status": "start"
+    },
+    {
+      "requestId": "req-b5",
+      "pid": 7498,
+      "elapsedMs": 1584.357,
+      "sequence": 89,
+      "phase": "query.host-resolve",
+      "status": "end"
+    },
+    {
+      "requestId": "req-b5",
+      "pid": 7498,
+      "elapsedMs": 1590.14,
+      "sequence": 90,
+      "phase": "query.host-evaluate",
+      "status": "start"
+    },
+    {
+      "requestId": "req-b5",
+      "pid": 7498,
+      "elapsedMs": 3133.577,
+      "sequence": 91,
+      "phase": "query.host-evaluate",
+      "status": "end"
+    },
+    {
+      "requestId": "req-b5",
+      "pid": 7498,
+      "elapsedMs": 3165.71,
+      "sequence": 92,
+      "phase": "query.transaction-current",
+      "status": "start"
+    },
+    {
+      "requestId": "req-b5",
+      "pid": 7498,
+      "elapsedMs": 3168.75,
+      "sequence": 93,
+      "phase": "query.transaction-bytes",
+      "status": "start"
+    },
+    {
+      "requestId": "req-b5",
+      "pid": 7498,
+      "elapsedMs": 3198.581,
+      "sequence": 94,
+      "phase": "query.transaction-bytes",
+      "status": "end"
+    },
+    {
+      "requestId": "req-b5",
+      "pid": 7498,
+      "elapsedMs": 3198.639,
+      "sequence": 95,
+      "phase": "query.transaction-access",
+      "status": "start"
+    },
+    {
+      "requestId": "req-b5",
+      "pid": 7498,
+      "elapsedMs": 3202.553,
+      "sequence": 96,
+      "phase": "query.transaction-access",
+      "status": "end"
+    }
+  ],
+  "receipt": {
+    "configurationRevision": 23,
+    "disposition": "committed",
+    "messageId": "plugin-hc3gwBU-n56D8qATTkQVZPUqfz23gstVvodovyhewkY",
+    "runId": "plugin-lIU-GkmLo0v2_NPL-KNgi_XM9v18kAepjLrV_zhwKcI",
+    "threadId": "01a13f61-7f59-77ed-bd1e-c5c7c2a4d67f",
+    "threadRevision": 26
+  },
+  "intentPhase": "accepted",
+  "dispatchAttemptCount": 6,
+  "firstQueryAfterWorkerRestartAdmitted": true,
+  "fullClientAcceptancePassed": false,
+  "worker": {
+    "attemptCount": 51,
+    "error": "plugin_execution_io_http_failed"
+  },
+  "generationResubmitted": false,
+  "caveat": "Diagnostic-only runtime change does not establish a causal latency fix for the earlier first-launch timeout."
+}

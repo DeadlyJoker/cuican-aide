@@ -21,6 +21,123 @@ import {
   nativeProcessHttp,
 } from "./desktopInstalledPluginRuntime.process.test-support.ts";
 
+it("actual crashed Worker leaves a fresh authenticated management Control with execution unavailable", async () => {
+  const managementPackage = process.env.CREWON_TEST_MANAGEMENT_SHORT_DRAMA_DIR;
+  const f = await nativeInstalledProcessFixture(
+    managementPackage ?? packageDirectory,
+    {
+      workerStartupFailure: true,
+      ...(managementPackage
+        ? {
+            managementPackageIdentity: {
+              pluginId: "crewon.short-drama",
+              version: "50.2.5",
+            },
+          }
+        : {}),
+    },
+  );
+  const runtime = f.supervisor(true, false);
+  try {
+    await runtime.start();
+    const session = runtime.session();
+    expect(
+      (await nativeProcessHttp(session, "GET", "/api/v1/health/live")).status,
+    ).toBe(200);
+    expect(
+      (await nativeProcessHttp(session, "GET", "/api/v1/health/ready")).status,
+    ).toBe(503);
+    if (f.sources[0]) {
+      const source = f.sources[0];
+      expect(runtime.localManagementAccess()).not.toBeNull();
+      const installed = await nativeProcessHttp(
+        session,
+        "POST",
+        "/api/v1/plugins/installations",
+        {
+          sourceId: source.sourceId,
+          expectedPluginId: source.pluginId,
+          expectedPackageDigest: source.packageDigest,
+          expectedSelectionRevision: null,
+        },
+        "recovery-install",
+      );
+      expect(installed.status, await installed.clone().text()).toBe(200);
+      const { selection } = await installed.json();
+      expect(
+        (
+          await nativeProcessHttp(
+            session,
+            "GET",
+            `/api/v1/plugins/selections/${source.pluginId}`,
+          )
+        ).status,
+      ).toBe(200);
+      const disabled = await nativeProcessHttp(
+        session,
+        "PUT",
+        `/api/v1/plugins/selections/${source.pluginId}`,
+        {
+          state: "disabled",
+          selectedPackageDigest: source.packageDigest,
+          expectedSelectionRevision: selection.revision,
+        },
+        "recovery-disable",
+      );
+      expect(disabled.status).toBe(200);
+      expect((await disabled.json()).mutation.selection.state).toBe("disabled");
+      expect(
+        (
+          await nativeProcessHttp(
+            session,
+            "GET",
+            `/api/v1/extensions/${source.pluginId}/tasks`,
+          )
+        ).status,
+      ).toBe(404);
+    }
+    const created = await nativeProcessHttp(
+      session,
+      "POST",
+      "/api/v1/threads",
+      { title: "Recovery execution remains unavailable" },
+      "recovery-thread",
+    );
+    expect(created.status).toBe(201);
+    const { thread } = await created.json();
+    const denied = await nativeProcessHttp(
+      session,
+      "POST",
+      `/api/v1/threads/${thread.threadId}/turns`,
+      {
+        expectedRevision: thread.revision,
+        content: "Never dispatch from management recovery",
+        agentVersionId: null,
+        executionIntent: "none",
+      },
+      "recovery-execution-denied",
+    );
+    expect(denied.status).toBe(404);
+    expect(f.modelRequests()).toBe(0);
+    expect(f.supplierRequests()).toBe(0);
+    await f.assertNoNodeImports();
+    expect(f.logs.join("")).toContain("Runtime unavailable");
+    const rows = await f.observations();
+    const controls = rows.filter((row) =>
+      row.entry.endsWith("/control-api/src/main.ts"),
+    );
+    expect(controls).toHaveLength(2);
+    expect(() => process.kill(controls[0]!.pid, 0)).toThrow();
+    await runtime.start();
+    expect(await f.observations()).toHaveLength(rows.length);
+    await runtime.stop();
+    expect(() => process.kill(controls[1]!.pid, 0)).toThrow();
+    expect(await nativeBootstrapFiles(f.dataDirectory)).toEqual([]);
+  } finally {
+    await closeNativeProcessFixture(f);
+  }
+}, 120_000);
+
 const packageDirectory = process.env.CREWON_TEST_PROFESSIONAL_PLUGIN_V1_DIR;
 
 it.runIf(packageDirectory !== undefined)(

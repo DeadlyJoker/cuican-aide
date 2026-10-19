@@ -79,7 +79,11 @@ export type ProjectMediaExecutionNew = Readonly<{
     Partial<
       Record<
         ProjectMediaExecutionRole,
-        Readonly<{ filename: string; subfolder: string; type: "output" }>
+        Readonly<{
+          filename: string;
+          subfolder: string;
+          type: "output" | "input";
+        }>
       >
     >
   >;

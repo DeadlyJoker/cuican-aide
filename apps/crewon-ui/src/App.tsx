@@ -1671,6 +1671,7 @@ export function App({
               void sendMessageInNewThread(text, settings, null, images);
             }}
             projectConversationComposer={projectConversationComposer.view}
+            projectConversationSubmitBlocked={projectConversationComposer.blocked}
             onSend={(text, settings, images) => {
               if (projectConversationComposer.blocked) {
                 setComposerValue(text);

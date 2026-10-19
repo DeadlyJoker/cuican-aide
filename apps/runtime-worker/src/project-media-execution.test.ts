@@ -770,3 +770,69 @@ test("actual workflow review rejects digest, mutable-slot and output-node ambigu
   const graphs = await reviewedMediaGraphs();
   assert.equal(graphs.graphs.length, 2);
 });
+
+test("the real packaged input renderer and host oracle agree on both workflow protocols while preserving native submission bytes", async (t) => {
+  const f = await fixture(t, "sqlite");
+  const adapter = await reviewedMediaGraphs();
+  const review = f.reviews[0]!;
+  const operationId = "019fa0ca-9059-7147-83c2-ccf7b433a4ef";
+  const input = {
+    workflow: review.workflow,
+    prompt: "same original adult character",
+    targetServiceOrigin: "https://provider.example/",
+    images: {
+      character: {
+        filename: "material-prepared.png",
+        subfolder: "",
+        type: "input" as const,
+      },
+    },
+  };
+  const rendered = adapter.render({
+    workflowId: "krea2-reference-four-view",
+    prompt: input.prompt,
+    operationId,
+    sourceServiceOrigin: input.targetServiceOrigin,
+    targetServiceOrigin: input.targetServiceOrigin,
+    images: input.images,
+  });
+  for (const protocol of ["workflow-panel-v1", "workflow-api-v1"]) {
+    const actual = expectedProjectMediaSubmission(
+      review,
+      input,
+      operationId,
+      protocol,
+    );
+    assert.equal(actual.path, "/api/workflow/generate");
+    assert.deepEqual(actual.body, {
+      source: "quick",
+      workflow_template: rendered.graph,
+      prompt_id: operationId,
+      client_id: operationId,
+    });
+    assert.equal(
+      (rendered.graph as Record<string, { inputs: { image?: string } }>)["146"]!
+        .inputs.image,
+      "material-prepared.png [input]",
+    );
+  }
+  const native = expectedProjectMediaSubmission(review, input, operationId);
+  assert.deepEqual(
+    expectedProjectMediaSubmission(review, input, operationId, "native"),
+    native,
+  );
+  assert.equal(native.path, "/prompt");
+  assert.throws(() =>
+    expectedProjectMediaSubmission(review, input, operationId, "future"),
+  );
+  assert.throws(() =>
+    expectedProjectMediaSubmission(
+      review,
+      {
+        ...input,
+        images: { character: { ...input.images.character, type: "temp" } },
+      } as unknown as typeof input,
+      operationId,
+    ),
+  );
+});

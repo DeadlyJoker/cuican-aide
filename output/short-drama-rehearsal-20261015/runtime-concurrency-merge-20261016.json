@@ -1,0 +1,96 @@
+{
+  "branch": "codex/plugin-performance-runtime-integration",
+  "head": "24d7a6343100bc98f53594765fec923a4bf53271",
+  "method": "fast-forward, retain merged local changes unstaged",
+  "overlappingFiles": [
+    "apps/runtime-worker/src/runtime-worker.ts",
+    "packages/store/src/index.ts"
+  ],
+  "unrelatedFilesVerified": 315,
+  "unrelatedFilesChanged": [],
+  "workingTreeClean": false,
+  "pushed": false,
+  "recordedAt": "2026-10-16T03:53:21.193726+00:00",
+  "sourceParent": "3bdfef37a5e392b6a0c874b402059245fa061ae7",
+  "validation": {
+    "schedulingStreaming": {
+      "pass": 34,
+      "fail": 0,
+      "skip": 0
+    },
+    "continuationLeaseCancellationTerminal": {
+      "pass": 111,
+      "fail": 0,
+      "skip": 21,
+      "skipReason": "PostgreSQL URL not configured; two latency cases also belong to scheduling group"
+    },
+    "originalMediaReviewAdmission": {
+      "pass": 11,
+      "fail": 0,
+      "skip": 0,
+      "fixtures": "existing verified immutable 50.2.5 reference-workflow package, real FFmpeg, local HTTP model fixture"
+    },
+    "typechecks": "Store, Worker, Control passed; Worker rechecked after final compatibility patch, passed",
+    "boundary": "passed",
+    "repositoryFormat": "passed",
+    "newTestFormat": "passed",
+    "diffCheck": "passed"
+  },
+  "compatibilityResolution": {
+    "file": "apps/runtime-worker/src/runtime-tool-continuation.test-support.ts",
+    "change": "Expose a DomainStore port facade for fault injection, preserve concrete SQLite owner rejection in production. Added explicit original-owner/Proxy rejection regression.",
+    "productionAdmissionRelaxed": false
+  },
+  "runtime": {
+    "path": "/private/tmp/crewon-plugin-performance-20261015/CrewON验收.app",
+    "implementationDigest": "sha256:c75305ef12bf907b0baf35b23217b1c8610b640067658c6623f9ba6bee62eae4",
+    "bundles": 7,
+    "allManifestDigestsVerified": true,
+    "deepStrictCodesign": "passed",
+    "installed": true,
+    "clientAccepted": false,
+    "startupBlock": null,
+    "lastObservedAt": "2026-10-16T03:50:14.075876+00:00",
+    "startupRecovery": "User handled system keychain prompt; Control and Worker started; account restored as admin; workspace visible.",
+    "readOnlyLoadingChecks": {
+      "pluginNavigation": "pass: Resources > Plugins displays AI short drama; enabled plugin also has independent global entry",
+      "projects": "pass: three existing projects; 重录 reads confirmed proposal and adopted outline 2 titled 不念自愿; composer becomes outline stage",
+      "taskList": "pass: existing tasks visible",
+      "taskHistory": "pass: selected existing terminal failed task restores original message and model overload feedback",
+      "timingBoundary": "CUA action-to-first-observation durations include automation and AX overhead; no precise frontend performance benchmark",
+      "observedActionDurationsMs": {
+        "resourceNavigation": 966,
+        "pluginNavigationExpansion": 1116,
+        "taskList": 1936,
+        "taskDetail": 1335,
+        "projectInitialView": 5726
+      },
+      "pluginColdEntry": "initial spinner at 969 ms; list confirmed at 16701 ms; actual completion between observations, not measured exactly",
+      "newCreativeOrGenerationRequestByAgent": false,
+      "remainingFailures": [
+        "Resources skills catalog reports agent_platform_catalog_read_timeout and shows prior 39 items",
+        "cold module/account restoration still shows waits; no full latency acceptance",
+        "adoption automatic synchronization and full script/video flow not revalidated in this merge request"
+      ],
+      "userInterference": "Last attempted navigation returned user-changed-app; refreshed observation showed plugin root. No further UI mutation."
+    }
+  },
+  "backup": "/private/tmp/crewon-runtime-merge-20261016",
+  "finalUnrelatedHashAudit": "315 original unrelated files unchanged",
+  "localWorkingChangesCommitted": false,
+  "logs": {
+    "typechecks.log": "0d1915a0983489cdc88f71e53105eea8402255e21ff35439faed95e029c729c0",
+    "streaming-tests.log": "2493f11312d7738d5eec58f6d8347f18ce6cb1ef980b1cda334ebebdac96ab00",
+    "worker-typecheck-final.log": "f3a27ad51384300eda5209fe35f1990070f72b4e16e619caad82b5c36261bf6d",
+    "format.log": "afd0d265f84b3b6c0e01a95fba9476bb8eb9d3df85f728960450995b0da10c3e",
+    "sample.log": "ef70bf985fb5a015148fb3dacb6e54d0b168ad651b4d74fe17e0446c575cb0e6",
+    "boundary.log": "9ca051bf69b76010b6bdde6c73202e042b6c69e932667cbdacb0353047bf50a4",
+    "continuation-regression.log": "c83718229c85123eaad4a880fb6ed5d1a6610103e15093d6ed1d6104276710d8",
+    "media-review-regression.log": "5f9eaaeb3e7d235476368e5cde05c3d8c8c74859957665b2ec5dbb6431a712bc",
+    "sign.log": "bec2eb019e4cc90d4c524beb5d3ee0e17f9bbed97ef1ca471b3117a2ca81cb76",
+    "streaming-tests-final.log": "6ed1ab75ca70eae0a305cfa41ae5b3ed016d8bd666b6ea0ca60ae8870edccbbf",
+    "sample-after.log": "711221234c768ea1fa8a1f22a1899535971ce0964f854c3794a38b105f550d47",
+    "runtime-build.log": "f0f55eb4f03ec7bf88c321de258f899be684b7b7dbf67be7c1ccc5a7a0d9d00d",
+    "media-review-regression-pinned.log": "fcf8672286e29b15587bb2ca25770adfd45819a314bf85313edb6fbf1ec10ee4"
+  }
+}

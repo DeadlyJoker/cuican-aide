@@ -41,6 +41,9 @@ export class ProjectTextController {
   #ready = false;
   #disposed = false;
   #epoch = 0;
+  #invalidated = false;
+  #backgroundReading = false;
+  #preservedDrafts = new Set<string>();
   #snapshot = initial();
   #listeners = new Set<() => void>();
   #reads = new Map<string, AbortController>();
@@ -166,6 +169,7 @@ export class ProjectTextController {
     this.#abortReads();
     this.#write?.abort();
     this.#details = details;
+    this.#invalidated = false;
     this.recovery.setProject(details?.project.projectId ?? null);
     this.#intent = null;
     this.#presentedRecovery = null;
@@ -180,7 +184,26 @@ export class ProjectTextController {
     if (this.#ready && details) void this.refreshRecovery();
   }
   refreshWriteActivity() {
+    this.#drainInvalidation();
     this.#emit();
+  }
+  invalidate(projectId: string) {
+    if (this.#disposed || projectId !== this.#details?.project.projectId)
+      return;
+    this.#invalidated = true;
+    this.#drainInvalidation();
+  }
+  #drainInvalidation() {
+    if (
+      !this.#invalidated ||
+      !this.#canRead() ||
+      this.contentReadBlocked ||
+      this.#snapshot.opening ||
+      this.#backgroundReading
+    )
+      return;
+    this.#invalidated = false;
+    void this.open(this.#snapshot.target, "background");
   }
   #available() {
     return (
@@ -195,6 +218,7 @@ export class ProjectTextController {
   #update(update: Partial<TextSnapshot>) {
     this.#snapshot = { ...this.#snapshot, ...update };
     this.#emit();
+    queueMicrotask(() => this.#drainInvalidation());
   }
   #emit() {
     if (!this.#disposed) for (const listener of this.#listeners) listener();
@@ -207,6 +231,8 @@ export class ProjectTextController {
     ]);
   }
   #remember() {
+    if (this.#snapshot.dirty && this.#snapshot.content)
+      this.#preservedDrafts.add(this.#key());
     if (this.#snapshot.draft)
       this.#drafts.set(this.#key(), {
         draft: this.#snapshot.draft,
@@ -250,28 +276,34 @@ export class ProjectTextController {
         this.#reads.get(lane) === controller,
     };
   }
-  async open(target: TextTarget = this.#snapshot.target) {
+  async open(
+    target: TextTarget = this.#snapshot.target,
+    mode: "foreground" | "background" = "foreground",
+  ) {
     if (!this.#canRead() || this.contentReadBlocked) return;
+    const background = mode === "background";
+    if (background) this.#backgroundReading = true;
     this.#remember();
     this.#reads.get("view")?.abort();
     this.#reads.get("conflict")?.abort();
     const read = this.#reading("open");
-    this.#reads.get("history")?.abort();
+    if (!background) this.#reads.get("history")?.abort();
     const projectId = this.#details!.project.projectId;
-    this.#update({
-      target,
-      phase: "loading",
-      opening: true,
-      view: null,
-      content: null,
-      draft: null,
-      dirty: false,
-      history: [],
-      nextContentRevision: null,
-      loadingHistory: false,
-      error: null,
-      notice: null,
-    });
+    if (!background)
+      this.#update({
+        target,
+        phase: "loading",
+        opening: true,
+        view: null,
+        content: null,
+        draft: null,
+        dirty: false,
+        history: [],
+        nextContentRevision: null,
+        loadingHistory: false,
+        error: null,
+        notice: null,
+      });
     try {
       const { details, view, outline, content } = await readProjectTextView({
         client: this.#client,
@@ -281,10 +313,23 @@ export class ProjectTextController {
         signal: read.controller.signal,
       });
       if (!read.current()) return;
+      if (background && this.contentReadBlocked) {
+        this.#invalidated = true;
+        return;
+      }
       if (details.project.revision >= this.#details!.project.revision)
         this.#details = details;
+      if (background) this.#remember();
       const cached = this.#drafts.get(this.#key(target));
-      const saved = cached?.dirty ? cached : undefined;
+      if (!background && !cached?.dirty)
+        this.#preservedDrafts.delete(this.#key(target));
+      const saved = background
+        ? this.#preservedDrafts.has(this.#key(target))
+          ? cached
+          : undefined
+        : cached?.dirty
+          ? cached
+          : undefined;
       this.#update({
         phase: "ready",
         opening: false,
@@ -314,10 +359,13 @@ export class ProjectTextController {
     } catch {
       if (read.current())
         this.#update({
-          phase: "unavailable",
+          phase: background ? this.#snapshot.phase : "unavailable",
           opening: false,
           error: "大纲与剧本读取失败，请检查模块服务后重试。",
         });
+    } finally {
+      if (background) this.#backgroundReading = false;
+      this.#drainInvalidation();
     }
   }
   async loadArtifacts(more = false) {
@@ -354,6 +402,7 @@ export class ProjectTextController {
   }
   setDraft(draft: TextDraft) {
     if (!this.#available() || this.locked || this.#snapshot.opening) return;
+    this.#preservedDrafts.add(this.#key());
     this.#update({ draft, dirty: true, notice: null });
     this.#remember();
   }
@@ -407,6 +456,7 @@ export class ProjectTextController {
       content.artifactId !== view.artifact.artifactId
     )
       return;
+    this.#preservedDrafts.add(this.#key());
     this.#update({
       content,
       draft: content.content,
@@ -505,6 +555,7 @@ export class ProjectTextController {
   }
   useCurrentSource() {
     if (!this.#available() || this.locked || this.#snapshot.opening) return;
+    this.#preservedDrafts.add(this.#key());
     this.#update({
       sourceBriefRevision: this.#details!.brief.briefRevision,
       sourceOutline: this.#currentOutline(),
@@ -624,6 +675,9 @@ export class ProjectTextController {
       if (!current()) return;
       this.#intent = null;
       this.#write = null;
+      if (intent.kind === "save-outline" || intent.kind === "save-script")
+        this.#preservedDrafts.add(this.#key());
+      else this.#preservedDrafts.delete(this.#key());
       this.#update(
         projectTextMutationProjection(intent, result, this.#snapshot),
       );
@@ -656,17 +710,18 @@ export class ProjectTextController {
       this.#snapshot.saving ||
       this.#physicalWritesPending()
     )
-      return;
+      return false;
     const epoch = this.#epoch,
       projectId = this.#details!.project.projectId;
     const record = await this.recovery.check();
     if (
       !record ||
+      this.recovery.getSnapshot().phase !== "blocked" ||
       !this.#canRead() ||
       epoch !== this.#epoch ||
       projectId !== this.#details?.project.projectId
     )
-      return;
+      return false;
     const read = this.#reading("recovery-view");
     for (const lane of ["open", "view", "history", "conflict"])
       this.#reads.get(lane)?.abort();
@@ -683,7 +738,7 @@ export class ProjectTextController {
         this.recovery.getSnapshot().intent?.intentId !== record.intentId ||
         this.recovery.getSnapshot().intent?.revision !== record.revision
       )
-        return;
+        return false;
       if (restored.details.project.revision >= this.#details!.project.revision)
         this.#details = restored.details;
       this.#intent = record.phase === "accepted" ? null : restored.intent;
@@ -695,12 +750,14 @@ export class ProjectTextController {
       });
       this.#remember();
       void this.loadArtifacts();
+      return true;
     } catch {
       if (read.current())
         this.#update({
           opening: false,
           error: "原请求保留，相关版本读取失败。请重新读取恢复记录。",
         });
+      return false;
     } finally {
       if (read.current()) this.#update({ opening: false });
     }

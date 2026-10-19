@@ -1,0 +1,103 @@
+{
+  "builtAt": "2026-10-16T08:09:10.695Z",
+  "acceptedInClient": false,
+  "renderer": {
+    "path": "/private/tmp/crewon-plugin-performance-20261015/concept-navigation-profile-20261016.asar",
+    "sha256": "1dc7d8f6fb99bcc56c32cf8c107701f1edf1b392d1a78709838d5f2257eafa3d",
+    "headerSha256": "5735c6d3e7808d838e5a9a2eb1ba48c4da8e882a6bfc2dbda355ffb997f1c68c",
+    "nonRendererFilesIntegrityVerified": 17464,
+    "startup": {
+      "entries": [
+        "assets/index-CiseM1TG.js"
+      ],
+      "eagerChunks": [
+        "assets/index-CiseM1TG.js",
+        "assets/runtime-PPVm8Dsz.js",
+        "assets/react-BPCV84d_.js",
+        "assets/icons-BKXws8yi.js",
+        "assets/desktopFetch-C6vSCXoG.js"
+      ],
+      "eagerBytes": 326474,
+      "javascriptLimitBytes": 524288,
+      "cloudflareEntryExcluded": true
+    }
+  },
+  "sourceHashes": {
+    "apps/crewon-ui/src/lib/app/installedPluginNavigationLocator.ts": "2377b24527eafab128bdd70364fb175009ad10396e8ce6db456c810f044ef200",
+    "apps/crewon-ui/src/lib/app/projectConversationPageStage.ts": "50a310a8368a9756529097bfcbcbc43bca4ab44d1bc822493bd7b2e9b8afdb60",
+    "examples/plugins/short-drama/src/workbench/ShortDramaPersistentWorkbench.tsx": "4f00eebf0a6a296d91021a81cb758161b38bcd43662878fccbe7bab3a5817fc0",
+    "examples/plugins/short-drama/src/workbench/ShortDramaProjectNavigation.tsx": "e4c08d571ec02cbdb5d5089465295c32eda8b45ed20dab04addf00f4ecf1a8d9"
+  },
+  "checks": {
+    "pluginTests": 25,
+    "hostTests": 19,
+    "pluginTypecheck": "passed",
+    "uiAndNativeLint": "passed",
+    "boundary": "passed",
+    "repositoryFormat": "passed",
+    "diffCheck": "passed",
+    "codesignDeepStrict": "passed",
+    "oldPackage50.2.8": "54 files unchanged"
+  },
+  "installedAt": "2026-10-16T08:10:20.425600+00:00",
+  "backup": "/private/tmp/crewon-plugin-performance-20261015/before-concept-navigation-20261016",
+  "scope": "Concept workspace navigation/save/reopen; no claim of completed video/audio/composition",
+  "verificationNote": "An accidentally unfiltered UI suite was stopped after overload-related failures; passing counts refer only to final bounded targeted runs.",
+  "coldStartup": {
+    "mainPid": 46814,
+    "observedWindow": "正在恢复登录状态",
+    "keychainPromptObserved": false,
+    "note": "Cold launch required approximately 80 seconds for runtime and renderer; not counted as project load latency."
+  },
+  "plugin": {
+    "version": "50.2.9",
+    "packageDigest": "sha256:508d825100aeb6dbfeb7a267b68f926ef1b071cffcc376eafe0c44d31fc503a3",
+    "directory": "examples/plugins/short-drama/dist/50.2.9",
+    "fileCount": 54,
+    "sourceImport": "normal client UI accepted",
+    "approvalBytes": 137645,
+    "sourceCount": 27,
+    "configurationRevision": 22,
+    "selection": {
+      "revision": 74,
+      "state": "enabled",
+      "selected_package_digest": "sha256:508d825100aeb6dbfeb7a267b68f926ef1b071cffcc376eafe0c44d31fc503a3"
+    },
+    "executionPreparation": "normal UI completed; no media input upload enabled"
+  },
+  "clientObservations": {
+    "projectId": "01a13f43-094c-767a-9414-b5622b236255",
+    "threadId": "01a13f61-7f59-77ed-bd1e-c5c7c2a4d67f",
+    "navigation": "Adopted scene action opened concepts; editor displayed the original 114-character visual description; chat showed 当前阶段：概念图",
+    "save": "Normal UI committed exactly one 闭店柜台 concept input v1, current brief v2",
+    "savedConcepts": [
+      {
+        "assetId": "01a143cb-306d-763f-9ae5-436695a837b4",
+        "createdAt": "2026-10-16T08:19:12.088Z",
+        "createdByActorId": "standalone-actor",
+        "latestAssetRevision": 1,
+        "name": "闭店柜台",
+        "projectId": "01a13f43-094c-767a-9414-b5622b236255",
+        "revision": 1,
+        "schemaVersion": "crewon.concept-asset.v0",
+        "spaceId": "standalone-space",
+        "tenantId": "standalone-tenant",
+        "updatedAt": "2026-10-16T08:19:12.088Z",
+        "updatedByActorId": "standalone-actor"
+      }
+    ],
+    "generationReadiness": "Initial read failed generically; one explicit read-only refresh later enabled 生成概念图. First failure cause remains unproven.",
+    "generationSubmitted": false,
+    "reopenAccepted": true,
+    "blockingEvidence": "CUA returned The Mac is locked and automatic unlock could not unlock it while closing DevTools. User unlock requested; no automatic unlock attempted by us.",
+    "observedAt": "2026-10-16T08:23:02.127562+00:00",
+    "reopenEvidence": "Observed saved concept v1, exact 114-character prompt, brief v2 in original project after actual Renderer refresh and reopen.",
+    "generationReadinessLatestDiagnosis": {
+      "clientDeadlineMs": 12000,
+      "exception": "PluginUiLoaderError: plugin_ui_operation_aborted",
+      "observedCallStack": "AbortSignal dispatch from setTimeout in pluginUiControlRequest; timeout closure flag r=true",
+      "backendStageResponsible": "Not established; package verification microbenchmark alone is insufficient",
+      "debuggerRestored": "Caught exception pause disabled; execution resumed before lock"
+    }
+  }
+}

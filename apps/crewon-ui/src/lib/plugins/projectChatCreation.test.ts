@@ -1,6 +1,9 @@
 // @vitest-environment happy-dom
 import { describe, expect, it, vi } from "vitest";
-import type { ControlApiClient } from "@crewon/control-client";
+import {
+  ControlApiClientError,
+  type ControlApiClient,
+} from "@crewon/control-client";
 import {
   createProjectChatCreation,
   type ProjectChatCreationPorts,
@@ -50,6 +53,13 @@ function fixture() {
       _ref: string,
       request: { action: string; input: Record<string, unknown> },
     ) => {
+      if (request.action.endsWith("getCreationContext"))
+        return {
+          output: {
+            schemaVersion: "crewon.project-conversation-creation-context.v1",
+            workspaceMode: "plugin-owned-explicit",
+          },
+        };
       if (request.action.endsWith("createProject"))
         return {
           output: {
@@ -137,16 +147,17 @@ describe("shared Send creates an isolated project through the original services"
     const f = fixture();
     await f.create(f.module, idea);
     expect(f.invoke.mock.calls.map((c) => c[1].action)).toEqual([
+      "crewon.project-workspace-target.v1.getCreationContext",
       "crewon.project-foundation.v1.createProject",
       "crewon.project-workspace-target.v1.resolveTarget",
       "crewon.project-conversations.v1.createConversation",
     ]);
-    expect(f.invoke.mock.calls[0][1].input).toMatchObject({
+    expect(f.invoke.mock.calls[1][1].input).toMatchObject({
       briefText: idea.content,
       origin: "creative",
       creativeStartMode: "confirm-plan",
     });
-    expect(f.invoke.mock.calls[2][1].input).toMatchObject({
+    expect(f.invoke.mock.calls[3][1].input).toMatchObject({
       projectId: "project",
       workspaceId: f.binding.workspaceId,
     });
@@ -170,6 +181,22 @@ describe("shared Send creates an isolated project through the original services"
     );
     expect(f.raw.size).toBe(0);
     expect(f.ports.release).toHaveBeenCalledOnce();
+  });
+  it("releases the durable intent after a definitive model validation rejection", async () => {
+    const f = fixture();
+    f.startStage.mockRejectedValueOnce(
+      new ControlApiClientError({
+        status: 422,
+        category: "validation",
+        code: "plugin_task_model_selection_invalid",
+        requestId: "fixture",
+      }),
+    );
+    await expect(f.create(f.module, idea)).rejects.toThrow(
+      "plugin_task_model_selection_invalid",
+    );
+    expect(f.raw.size).toBe(0);
+    expect(f.ports.opened).not.toHaveBeenCalled();
   });
   for (const lost of ["createProject", "createConversation", "startStage"])
     it(`a lost ${lost} receipt resumes the exact original command after reload`, async () => {
@@ -233,13 +260,14 @@ describe("shared Send creates an isolated project through the original services"
       original = g.invoke.getMockImplementation()!;
     g.invoke.mockImplementation(async (...args) => {
       const response = await original(...args);
-      vi.mocked(g.ports.assertCurrent).mockImplementation(() => {
-        throw new Error("session_changed");
-      });
+      if (args[1].action.endsWith("createProject"))
+        vi.mocked(g.ports.assertCurrent).mockImplementation(() => {
+          throw new Error("session_changed");
+        });
       return response;
     });
     await expect(g.create(g.module, idea)).rejects.toThrow("session_changed");
-    expect(g.invoke).toHaveBeenCalledOnce();
+    expect(g.invoke).toHaveBeenCalledTimes(2);
     expect(g.startStage).not.toHaveBeenCalled();
     expect(JSON.parse([...g.raw.values()][0]).projectId).toBe("project");
     expect(g.ports.opened).not.toHaveBeenCalled();
@@ -302,3 +330,60 @@ it("uses an explicit quoted project name without truncating the creative idea", 
   expect(request?.input.title).toBe("回声来信");
   expect(request?.input.briefText).toBe(content);
 });
+
+it("resumes the original ordinary project and conversation key using explicit legacy composition", async () => {
+  const f = fixture();
+  const original = f.invoke.getMockImplementation()!;
+  f.invoke.mockImplementation(async (...args) => {
+    if (args[1].action.endsWith("getCreationContext"))
+      return {
+        output: {
+          schemaVersion: "crewon.project-conversation-creation-context.v1",
+          workspaceMode: "legacy-nullable",
+        },
+      };
+    if (args[1].action.endsWith("createConversation")) throw new Error("lost");
+    return original(...args);
+  });
+  await expect(f.create(f.module, idea)).rejects.toThrow("lost");
+  const stored = JSON.parse([...f.raw.values()][0]);
+  expect(stored.projectId).toBe("project");
+  const first = f.invoke.mock.calls.at(-1)![1];
+  expect(first.input.workspaceId).toBeNull();
+  Object.assign(f.binding, { workspaceId: null });
+  f.invoke.mockImplementation(async (...args) => {
+    if (args[1].action.endsWith("getCreationContext"))
+      return {
+        output: {
+          schemaVersion: "crewon.project-conversation-creation-context.v1",
+          workspaceMode: "legacy-nullable",
+        },
+      };
+    return original(...args);
+  });
+  await createProjectChatCreation(f.ports)(f.module, idea);
+  expect(
+    f.invoke.mock.calls.filter((c) => c[1].action.endsWith("createProject")),
+  ).toHaveLength(1);
+  expect(
+    f.invoke.mock.calls.filter((c) => c[1].action.endsWith("resolveTarget")),
+  ).toHaveLength(0);
+  expect(f.invoke.mock.calls.at(-1)![1]).toEqual(first);
+});
+for (const outcome of ["denied", "unknown"])
+  it(`creation context ${outcome} causes zero subsequent writes`, async () => {
+    const f = fixture();
+    f.invoke.mockImplementation(async () => {
+      if (outcome === "denied") throw new Error("denied");
+      return {
+        output: {
+          schemaVersion: "crewon.project-conversation-creation-context.v1",
+          workspaceMode: "unknown",
+        },
+      };
+    });
+    await expect(f.create(f.module, idea)).rejects.toThrow();
+    expect(f.invoke).toHaveBeenCalledOnce();
+    expect(f.startStage).not.toHaveBeenCalled();
+    expect(f.invoke.mock.calls[0][1].action).toContain("getCreationContext");
+  });

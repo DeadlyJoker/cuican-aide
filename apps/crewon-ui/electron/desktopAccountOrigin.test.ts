@@ -5,10 +5,10 @@ import {
 } from "./desktopAccountOrigin.ts";
 
 describe("desktop account origin", () => {
-  it("keeps the default transport limited to loopback", () => {
+  it("trusts only the configured account origin by default", () => {
     expect(parseDesktopTrustedAccountOrigin(undefined)).toBeNull();
     expect(parseDesktopTrustedAccountOrigin(null)).toBeNull();
-    expect(desktopAccountOriginForBuild({})).toBeNull();
+    expect(desktopAccountOriginForBuild({})).toBe("https://pim.aicuican.com");
   });
 
   it("accepts one canonical HTTPS origin including a deliberate port", () => {
@@ -81,13 +81,13 @@ describe("desktop account origin", () => {
     ).toBe("https://alias.example");
   });
 
-  it("keeps an explicitly empty runtime backend on the original local fallback", () => {
+  it("uses the account origin for an explicitly empty runtime backend", () => {
     expect(
       desktopAccountOriginForBuild({
         runtimeBaseUrl: "",
         proxyTarget: "https://pim.aicuican.com",
       }),
-    ).toBeNull();
+    ).toBe("https://pim.aicuican.com");
   });
 
   it.each([

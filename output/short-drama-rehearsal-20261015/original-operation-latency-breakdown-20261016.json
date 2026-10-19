@@ -1,0 +1,36 @@
+{
+  "recordedAt": "2026-10-16T10:31:21.562833+00:00",
+  "runId": "plugin-UEGufTPczeTYJPzEKKkVv60J_f_qsEMASzBodGlT1Yo",
+  "totalUntilManualStopMs": 425743,
+  "remoteFinishedAt": "2026-10-16T10:12:18.825Z",
+  "remoteExecutionMs": 60108,
+  "elapsedAfterRemoteCompletionUntilStopMs": 242259,
+  "modelCallTotalMs": 103355,
+  "modelCalls": [
+    {
+      "outcome": "failed",
+      "durationMs": 10528
+    },
+    {
+      "outcome": "completed",
+      "durationMs": 16542
+    },
+    {
+      "outcome": "completed",
+      "durationMs": 35481
+    },
+    {
+      "outcome": "completed",
+      "durationMs": 28734
+    },
+    {
+      "outcome": "completed",
+      "durationMs": 12070
+    }
+  ],
+  "successfulOriginalResultQueryTransportMs": 217,
+  "nonAdditiveWarning": "Remote execution overlaps the observe/permission retry phase; durations must not be added without a timeline.",
+  "rootCause": "query route rejected by exact-path grant; work item repeated 44 attempts",
+  "originalOperationRetained": true,
+  "clientReacceptance": "waiting for macOS Keychain authorization after repaired build re-sign"
+}

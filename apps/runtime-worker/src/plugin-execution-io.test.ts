@@ -1,6 +1,7 @@
 import assert from "node:assert/strict";
 import test from "node:test";
 import type { ToolExecutionCommand } from "@crewon/tool-broker";
+import { PluginExecutionIoPolicyError } from "./plugins/plugin-execution-io-network.ts";
 import {
   ioFixture,
   command,
@@ -9,6 +10,65 @@ import {
   response,
   submission,
 } from "./plugin-execution-io.test-support.ts";
+
+test("panel query reaches transport only for the exact persisted operation, with no submission replay", async (t) => {
+  const f = await ioFixture(t);
+  const original = f.owner();
+  await f.invoke(original, async (command) => {
+    await original.services.externalOperations!.reserve({
+      command,
+      operationId: f.operationId,
+      request: submission,
+    });
+  });
+  const query = command(
+    { executionId: "panel-query", idempotencyKey: "panel-query" },
+    policy("readOnly", "replaySafe"),
+  );
+  const owner = f.owner({
+    network: {
+      baseUrlParameter: "baseUrl",
+      paths: [
+        {
+          method: "GET",
+          operationPathPrefix: "/api/comfy/proxy/history?prompt_id=",
+        },
+      ],
+    },
+  });
+  await f.invoke(
+    owner,
+    async (command) => {
+      for (const path of [
+        "/api/comfy/proxy/history",
+        "/api/comfy/proxy/history?prompt_id=foreign",
+        `/api/comfy/proxy/history?prompt_id=${f.operationId}&all=true`,
+        `/api/comfy/proxy/history?prompt_id=${f.operationId}&prompt_id=foreign`,
+      ]) {
+        await assert.rejects(
+          async () =>
+            owner.services.jsonHttp!.request({
+              command,
+              operationId: f.operationId,
+              method: "GET",
+              path,
+            }),
+          PluginExecutionIoPolicyError,
+        );
+      }
+      assert.equal(f.controls.dns, 0);
+      await owner.services.jsonHttp!.request({
+        command,
+        operationId: f.operationId,
+        method: "GET",
+        path: `/api/comfy/proxy/history?prompt_id=${f.operationId}`,
+      });
+    },
+    { command: query },
+  );
+  assert.equal(f.controls.sends, 1);
+  assert.equal(f.controls.reserves, 1);
+});
 
 test("SQLite IO owner requires actual private grant/checked identity; copied and late commands perform zero IO", async (t) => {
   const f = await ioFixture(t);

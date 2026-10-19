@@ -41,7 +41,7 @@ export function DesktopLocalManagementAccessProvider({
   onLoginAccount,
   children,
 }: {
-  access: DesktopLocalManagementAccess;
+  access: DesktopLocalManagementAccess | null;
   onLoginAccount?: () => void;
   children: ReactNode;
 }) {

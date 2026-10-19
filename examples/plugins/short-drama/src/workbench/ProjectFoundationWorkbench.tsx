@@ -1,4 +1,4 @@
-import { useState, useSyncExternalStore } from "react";
+import { useState, useSyncExternalStore, type ReactNode } from "react";
 import { Pencil, Check } from "lucide-react";
 import { parseProjectFoundationParameters } from "@crewon/plugin-sdk/project-foundation-ui";
 import { ProjectCreationParametersFields } from "./ProjectCreationParametersFields";
@@ -9,11 +9,13 @@ import { validBrief, type ProjectDetails } from "./creative-project-controller";
 export function ProjectFoundationWorkbench({
   controller,
   details,
+  briefEditor,
   sourcePage = false,
   onContinue,
 }: {
   controller: ProjectFoundationController;
   details: ProjectDetails;
+  briefEditor: ReactNode;
   sourcePage?: boolean;
   onContinue(): void;
 }) {
@@ -96,6 +98,7 @@ export function ProjectFoundationWorkbench({
                 </span>
               )}
             </div>
+            {briefEditor}
             {editingParameters && parameters && (
               <form
                 className="modal-form"

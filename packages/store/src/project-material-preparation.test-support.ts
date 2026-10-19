@@ -34,7 +34,11 @@ export type MaterialTargetFixture = Readonly<{
 export async function materialPreparationFixture(
   t: TestContext,
   backend: "sqlite" | "postgres",
-  options: { migrate?: boolean; targetFixture?: MaterialTargetFixture } = {},
+  options: {
+    migrate?: boolean;
+    targetFixture?: MaterialTargetFixture;
+    serviceProtocol?: "native" | "workflow-panel-v1" | "workflow-api-v1";
+  } = {},
 ) {
   const f = await projectAssetReferenceImageFixture(t, backend),
     source = await f.resolver().resolveSelectedReference(f.actor, f.query);
@@ -127,6 +131,9 @@ export async function materialPreparationFixture(
       parameters: {
         baseUrl: "https://target.provider.example:8443/",
         preset: options.targetFixture?.preset ?? "standard",
+        ...(options.serviceProtocol
+          ? { serviceProtocol: options.serviceProtocol }
+          : {}),
       },
       credentialBindings: [],
       createdByActorId: f.actor.actorId,

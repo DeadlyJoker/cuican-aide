@@ -6,6 +6,7 @@ import { compareTraces, type CanonicalTrace } from "@crewon/test-contracts";
 
 import {
   AgentKernelError,
+  type AgentHistoryItem,
   type KernelAgentEvent,
 } from "./agent-kernel-port.ts";
 import { CrewONAgentKernel } from "./crewon-agent-kernel.ts";
@@ -190,7 +191,7 @@ test("matches the shared deterministic text Segment trace", async () => {
 
 test("matches AR-031 Provider end_turn=false empty continuation", async () => {
   const reference = fixture<{
-    expectedRequests: ModelInputItem[][];
+    expectedRequests: AgentHistoryItem[][];
     expectedStableEvents: Array<Record<string, unknown>>;
     finalState: Record<string, unknown>;
   }>("provider-end-turn-continuation.reference.json");
@@ -873,7 +874,7 @@ test("bounds same-Turn retries", async () => {
 
 test("carries a completed assistant item into an incomplete-stream retry", async () => {
   const reference = fixture<{
-    completedItem: ModelInputItem;
+    completedItem: AgentHistoryItem;
     expectedSecondRequestItems: readonly ModelInputItem[];
     finalState: { samplingRetries: number };
   }>("stream-completed-assistant-close-retry.reference.json");

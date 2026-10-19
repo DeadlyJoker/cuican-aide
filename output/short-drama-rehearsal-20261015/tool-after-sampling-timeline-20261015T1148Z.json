@@ -1,0 +1,1410 @@
+{
+  "capturedAt": "2026-10-15T11:49:08.796539+00:00",
+  "source": "final-profile/control-runtime-v1/control.sqlite (mode=ro)",
+  "endpoint": {
+    "origin": "https://api.aicuican.com",
+    "path": "/v1/responses",
+    "source": "Native Worker environment; query and credentials excluded"
+  },
+  "runs": [
+    {
+      "runId": "plugin-pq2c_Oq7jkxFp_40avEupfXOUgtdn484rKCwbspZOSs",
+      "threadId": "01a13f61-7f59-77ed-bd1e-c5c7c2a4d67f",
+      "status": "completed",
+      "updatedAt": "2026-10-15T11:56:17.356Z",
+      "failure": null,
+      "events": [
+        {
+          "sequence": 1,
+          "occurredAt": "2026-10-15T11:45:20.906Z",
+          "type": "run.created",
+          "data": {}
+        },
+        {
+          "sequence": 2,
+          "occurredAt": "2026-10-15T11:45:23.883Z",
+          "type": "run.started",
+          "data": {}
+        },
+        {
+          "sequence": 3,
+          "occurredAt": "2026-10-15T11:45:23.899Z",
+          "type": "segment.started",
+          "data": {
+            "attempt": 1,
+            "segmentId": "segment:01a13f61-9bb4-713a-819f-e468f6e6f3ef"
+          }
+        },
+        {
+          "sequence": 4,
+          "occurredAt": "2026-10-15T11:45:34.431Z",
+          "type": "model.sampling.retry",
+          "data": {
+            "code": "responses_transport_unavailable",
+            "discardedOutput": false,
+            "maxRetries": 5,
+            "samplingAttempt": 1,
+            "segmentId": "segment:01a13f61-9bb4-713a-819f-e468f6e6f3ef"
+          }
+        },
+        {
+          "sequence": 5,
+          "occurredAt": "2026-10-15T11:46:19.479Z",
+          "type": "usage.recorded",
+          "data": {
+            "segmentId": "segment:01a13f61-9bb4-713a-819f-e468f6e6f3ef"
+          }
+        },
+        {
+          "sequence": 6,
+          "occurredAt": "2026-10-15T11:46:19.484Z",
+          "type": "tool.requested",
+          "data": {
+            "callId": "call_432a36c3807d490ba7ba3f21663f31a3",
+            "name": "update_plan",
+            "segmentId": "segment:01a13f61-9bb4-713a-819f-e468f6e6f3ef"
+          }
+        },
+        {
+          "sequence": 7,
+          "occurredAt": "2026-10-15T11:46:19.491Z",
+          "type": "segment.completed",
+          "data": {
+            "segmentId": "segment:01a13f61-9bb4-713a-819f-e468f6e6f3ef"
+          }
+        },
+        {
+          "sequence": 8,
+          "occurredAt": "2026-10-15T11:46:19.503Z",
+          "type": "run.plan.updated",
+          "data": {
+            "callId": "call_432a36c3807d490ba7ba3f21663f31a3"
+          }
+        },
+        {
+          "sequence": 9,
+          "occurredAt": "2026-10-15T11:46:19.506Z",
+          "type": "tool.completed",
+          "data": {
+            "callId": "call_432a36c3807d490ba7ba3f21663f31a3",
+            "isError": false,
+            "name": "update_plan",
+            "segmentId": "segment:01a13f61-9bb4-713a-819f-e468f6e6f3ef"
+          }
+        },
+        {
+          "sequence": 10,
+          "occurredAt": "2026-10-15T11:46:21.046Z",
+          "type": "segment.started",
+          "data": {
+            "attempt": 1,
+            "segmentId": "segment:01a13f62-7af2-7708-8cca-e560f7ff2dde"
+          }
+        },
+        {
+          "sequence": 11,
+          "occurredAt": "2026-10-15T11:48:54.312Z",
+          "type": "model.sampling.retry",
+          "data": {
+            "code": "responses_idle_timeout",
+            "discardedOutput": false,
+            "maxRetries": 5,
+            "samplingAttempt": 1,
+            "segmentId": "segment:01a13f62-7af2-7708-8cca-e560f7ff2dde"
+          }
+        },
+        {
+          "sequence": 12,
+          "occurredAt": "2026-10-15T11:50:05.856Z",
+          "type": "model.sampling.retry",
+          "data": {
+            "code": "responses_idle_timeout",
+            "discardedOutput": false,
+            "maxRetries": 5,
+            "samplingAttempt": 2,
+            "segmentId": "segment:01a13f62-7af2-7708-8cca-e560f7ff2dde"
+          }
+        },
+        {
+          "sequence": 13,
+          "occurredAt": "2026-10-15T11:51:54.417Z",
+          "type": "tool.requested",
+          "data": {
+            "callId": "call_e58c5fd06a214f4f8996b1c2f7570aa2",
+            "name": "crewon_short_drama__project_context_read",
+            "segmentId": "segment:01a13f62-7af2-7708-8cca-e560f7ff2dde"
+          }
+        },
+        {
+          "sequence": 14,
+          "occurredAt": "2026-10-15T11:51:54.421Z",
+          "type": "segment.completed",
+          "data": {
+            "segmentId": "segment:01a13f62-7af2-7708-8cca-e560f7ff2dde"
+          }
+        },
+        {
+          "sequence": 15,
+          "occurredAt": "2026-10-15T11:51:54.878Z",
+          "type": "tool.completed",
+          "data": {
+            "callId": "call_e58c5fd06a214f4f8996b1c2f7570aa2",
+            "isError": false,
+            "name": "crewon_short_drama__project_context_read",
+            "segmentId": "segment:01a13f62-7af2-7708-8cca-e560f7ff2dde"
+          }
+        },
+        {
+          "sequence": 16,
+          "occurredAt": "2026-10-15T11:51:55.534Z",
+          "type": "segment.started",
+          "data": {
+            "attempt": 1,
+            "segmentId": "segment:01a13f67-958b-70b6-8753-1032993a9227"
+          }
+        }
+      ],
+      "modelCalls": [
+        {
+          "attemptId": "01a13f61-9bb4-713a-819f-e468f6e6f3ef",
+          "stepId": "plugin-i-F9IknLN5fQIHhRf7djquaVU2mp1CX_J_0noQvq8GQ",
+          "adapterName": "direct-responses",
+          "adapterVersion": "1",
+          "agentVersionId": "native-plugin-agent-d004f628d743fc7b31bd94193566d7d0da61efb0601e94404e928291816aedac",
+          "callId": "3b24dc4a-4f2a-48b9-a3d8-2ccb60d16ddd",
+          "finishedAt": "2026-10-15T11:45:34.423Z",
+          "firstOutputLatencyMs": null,
+          "httpDiagnostics": {
+            "termination": {
+              "code": "responses_transport_unavailable",
+              "networkCode": "UND_ERR_CONNECT_TIMEOUT",
+              "reason": "transportError"
+            }
+          },
+          "httpTiming": {
+            "admittedMs": 2,
+            "dispatchedMs": 2,
+            "finishedMs": 10519
+          },
+          "modelId": "gpt-5.6-luna",
+          "operation": "generate",
+          "outcome": "failed",
+          "providerResponseId": null,
+          "purpose": "agent",
+          "schemaVersion": "crewon.model-call-observation.v0",
+          "startedAt": "2026-10-15T11:45:23.904Z",
+          "transport": "http",
+          "usageEventObserved": false
+        },
+        {
+          "attemptId": "01a13f61-9bb4-713a-819f-e468f6e6f3ef",
+          "stepId": "plugin-i-F9IknLN5fQIHhRf7djquaVU2mp1CX_J_0noQvq8GQ",
+          "adapterName": "direct-responses",
+          "adapterVersion": "1",
+          "agentVersionId": "native-plugin-agent-d004f628d743fc7b31bd94193566d7d0da61efb0601e94404e928291816aedac",
+          "callId": "0d2dc911-deaf-4bd0-bee6-02e62def9989",
+          "finishedAt": "2026-10-15T11:46:19.477Z",
+          "firstOutputLatencyMs": null,
+          "httpDiagnostics": {
+            "read": {
+              "end": "releasedBeforeEof"
+            },
+            "response": {
+              "cfRay": "a4ae94403ac451e7-LAX",
+              "contentType": "text/event-stream",
+              "oneApiRequestId": "202610151145426566458708268d9d6DcX5RW4s",
+              "server": "cloudflare",
+              "status": 200
+            },
+            "termination": {
+              "reason": "protocolTerminal"
+            }
+          },
+          "httpTiming": {
+            "admittedMs": 4,
+            "dispatchedMs": 4,
+            "finishedMs": 44837,
+            "firstByteMs": 10485,
+            "firstCompletedItemMs": 27010,
+            "headersMs": 10482,
+            "lastByteMs": 44772,
+            "readClosedMs": 44775,
+            "streamEndMs": 44837,
+            "terminalMs": 44837
+          },
+          "modelId": "gpt-5.6-luna",
+          "operation": "generate",
+          "outcome": "completed",
+          "providerResponseId": "resp_043a9a3913ae872c016ad0bce88fb881918a423fb1fd2a92b8",
+          "purpose": "agent",
+          "schemaVersion": "crewon.model-call-observation.v0",
+          "startedAt": "2026-10-15T11:45:34.640Z",
+          "transport": "http",
+          "usageEventObserved": true
+        },
+        {
+          "attemptId": "01a13f62-7af2-7708-8cca-e560f7ff2dde",
+          "stepId": "model:plugin-i-F9IknLN5fQIHhRf7djquaVU2mp1CX_J_0noQvq8GQ:2",
+          "adapterName": "direct-responses",
+          "adapterVersion": "1",
+          "agentVersionId": "native-plugin-agent-d004f628d743fc7b31bd94193566d7d0da61efb0601e94404e928291816aedac",
+          "callId": "2265acd3-7440-413c-9c94-c62f8a2c2d6b",
+          "finishedAt": "2026-10-15T11:48:54.308Z",
+          "firstOutputLatencyMs": null,
+          "httpDiagnostics": {
+            "read": {
+              "end": "releasedBeforeEof"
+            },
+            "response": {
+              "cfRay": "a4ae9563a8dd4633-LAX",
+              "contentType": "text/event-stream",
+              "oneApiRequestId": "202610151146295552751628268d9d6zsJFesZu",
+              "server": "cloudflare",
+              "status": 200
+            },
+            "termination": {
+              "code": "responses_idle_timeout",
+              "reason": "idleTimeout"
+            }
+          },
+          "httpTiming": {
+            "admittedMs": 1,
+            "dispatchedMs": 1,
+            "finishedMs": 153260,
+            "firstByteMs": 25221,
+            "headersMs": 25220,
+            "lastByteMs": 93252,
+            "readClosedMs": 153259
+          },
+          "modelId": "gpt-5.6-luna",
+          "operation": "generate",
+          "outcome": "failed",
+          "providerResponseId": null,
+          "purpose": "agent",
+          "schemaVersion": "crewon.model-call-observation.v0",
+          "startedAt": "2026-10-15T11:46:21.048Z",
+          "transport": "http",
+          "usageEventObserved": false
+        },
+        {
+          "attemptId": "01a13f62-7af2-7708-8cca-e560f7ff2dde",
+          "stepId": "model:plugin-i-F9IknLN5fQIHhRf7djquaVU2mp1CX_J_0noQvq8GQ:2",
+          "adapterName": "direct-responses",
+          "adapterVersion": "1",
+          "agentVersionId": "native-plugin-agent-d004f628d743fc7b31bd94193566d7d0da61efb0601e94404e928291816aedac",
+          "callId": "51c091be-a8a9-4296-aeea-c1c7de5d8c59",
+          "finishedAt": "2026-10-15T11:50:05.852Z",
+          "firstOutputLatencyMs": null,
+          "httpDiagnostics": {
+            "read": {
+              "end": "releasedBeforeEof"
+            },
+            "response": {
+              "cfRay": "a4ae990e6a36867d-LAX",
+              "contentType": "text/event-stream",
+              "oneApiRequestId": "202610151149004811729628268d9d6foFeJqqx",
+              "server": "cloudflare",
+              "status": 200
+            },
+            "termination": {
+              "code": "responses_idle_timeout",
+              "reason": "idleTimeout"
+            }
+          },
+          "httpTiming": {
+            "admittedMs": 2,
+            "dispatchedMs": 2,
+            "finishedMs": 71345,
+            "firstByteMs": 6957,
+            "headersMs": 6957,
+            "lastByteMs": 11344,
+            "readClosedMs": 71345
+          },
+          "modelId": "gpt-5.6-luna",
+          "operation": "generate",
+          "outcome": "failed",
+          "providerResponseId": "resp_04e968bd3a59c9c8016ad0bdacf9248191a91a271c7002fc60",
+          "purpose": "agent",
+          "schemaVersion": "crewon.model-call-observation.v0",
+          "startedAt": "2026-10-15T11:48:54.507Z",
+          "transport": "http",
+          "usageEventObserved": false
+        },
+        {
+          "attemptId": "01a13f62-7af2-7708-8cca-e560f7ff2dde",
+          "stepId": "model:plugin-i-F9IknLN5fQIHhRf7djquaVU2mp1CX_J_0noQvq8GQ:2",
+          "adapterName": "direct-responses",
+          "adapterVersion": "1",
+          "agentVersionId": "native-plugin-agent-d004f628d743fc7b31bd94193566d7d0da61efb0601e94404e928291816aedac",
+          "callId": "504f1702-ae03-496d-9c42-1c24bc1ccf34",
+          "finishedAt": "2026-10-15T11:51:54.414Z",
+          "firstOutputLatencyMs": null,
+          "httpDiagnostics": {
+            "read": {
+              "end": "releasedBeforeEof"
+            },
+            "response": {
+              "cfRay": "a4ae9aba9e0d7c43-LAX",
+              "contentType": "text/event-stream",
+              "oneApiRequestId": "202610151150085042032908268d9d66qJMQvrQ",
+              "server": "cloudflare",
+              "status": 200
+            },
+            "termination": {
+              "code": "responses_idle_timeout",
+              "reason": "idleTimeout"
+            }
+          },
+          "httpTiming": {
+            "admittedMs": 3,
+            "dispatchedMs": 3,
+            "finishedMs": 108127,
+            "firstByteMs": 3140,
+            "firstCompletedItemMs": 22906,
+            "headersMs": 3140,
+            "lastByteMs": 48123,
+            "readClosedMs": 108126
+          },
+          "modelId": "gpt-5.6-luna",
+          "operation": "generate",
+          "outcome": "failed",
+          "providerResponseId": "resp_051a532f0628d739016ad0bdf10abc8191907fa5d5f14b7c58",
+          "purpose": "agent",
+          "schemaVersion": "crewon.model-call-observation.v0",
+          "startedAt": "2026-10-15T11:50:06.287Z",
+          "transport": "http",
+          "usageEventObserved": false
+        },
+        {
+          "attemptId": "01a13f67-958b-70b6-8753-1032993a9227",
+          "stepId": "model:plugin-i-F9IknLN5fQIHhRf7djquaVU2mp1CX_J_0noQvq8GQ:3",
+          "adapterName": "direct-responses",
+          "adapterVersion": "1",
+          "agentVersionId": "native-plugin-agent-d004f628d743fc7b31bd94193566d7d0da61efb0601e94404e928291816aedac",
+          "callId": "f0b38f71-ce0c-4763-9e35-2cffa67a0a83",
+          "finishedAt": null,
+          "firstOutputLatencyMs": null,
+          "modelId": "gpt-5.6-luna",
+          "operation": "generate",
+          "outcome": "unknown",
+          "providerResponseId": null,
+          "purpose": "agent",
+          "schemaVersion": "crewon.model-call-observation.v0",
+          "startedAt": "2026-10-15T11:51:55.535Z",
+          "transport": "http",
+          "usageEventObserved": false
+        }
+      ],
+      "toolToNextCall": [
+        {
+          "tool": "update_plan",
+          "toolCompletedAt": "2026-10-15T11:46:19.506Z",
+          "nextCallId": "2265acd3-7440-413c-9c94-c62f8a2c2d6b",
+          "nextModel": "gpt-5.6-luna",
+          "nextStartedAt": "2026-10-15T11:46:21.048Z",
+          "gapMs": 1542,
+          "callElapsedAtCaptureMs": 153260
+        }
+      ]
+    },
+    {
+      "runId": "01a13ee9-1f1b-716a-b3cf-28bdc123a423",
+      "threadId": "01a13eda-63e7-710f-b2dd-21d340974b1e",
+      "status": "failed",
+      "updatedAt": "2026-10-15T09:35:57.952Z",
+      "failure": {
+        "code": "responses_transport_unavailable",
+        "retryable": false
+      },
+      "events": [
+        {
+          "sequence": 1,
+          "occurredAt": "2026-10-15T09:33:47.675Z",
+          "type": "run.created",
+          "data": {}
+        },
+        {
+          "sequence": 2,
+          "occurredAt": "2026-10-15T09:33:48.473Z",
+          "type": "run.started",
+          "data": {}
+        },
+        {
+          "sequence": 3,
+          "occurredAt": "2026-10-15T09:33:48.511Z",
+          "type": "segment.started",
+          "data": {
+            "attempt": 1,
+            "segmentId": "segment:01a13ee9-2249-733d-b350-7c52be6c93d1"
+          }
+        },
+        {
+          "sequence": 4,
+          "occurredAt": "2026-10-15T09:33:59.069Z",
+          "type": "model.sampling.retry",
+          "data": {
+            "code": "responses_transport_unavailable",
+            "discardedOutput": false,
+            "maxRetries": 5,
+            "samplingAttempt": 1,
+            "segmentId": "segment:01a13ee9-2249-733d-b350-7c52be6c93d1"
+          }
+        },
+        {
+          "sequence": 5,
+          "occurredAt": "2026-10-15T09:34:15.328Z",
+          "type": "model.sampling.retry",
+          "data": {
+            "code": "responses_provider_failed",
+            "discardedOutput": false,
+            "maxRetries": 5,
+            "samplingAttempt": 2,
+            "segmentId": "segment:01a13ee9-2249-733d-b350-7c52be6c93d1"
+          }
+        },
+        {
+          "sequence": 6,
+          "occurredAt": "2026-10-15T09:34:19.882Z",
+          "type": "model.sampling.retry",
+          "data": {
+            "code": "responses_provider_failed",
+            "discardedOutput": false,
+            "maxRetries": 5,
+            "samplingAttempt": 3,
+            "segmentId": "segment:01a13ee9-2249-733d-b350-7c52be6c93d1"
+          }
+        },
+        {
+          "sequence": 7,
+          "occurredAt": "2026-10-15T09:34:42.362Z",
+          "type": "model.sampling.retry",
+          "data": {
+            "code": "responses_provider_failed",
+            "discardedOutput": false,
+            "maxRetries": 5,
+            "samplingAttempt": 4,
+            "segmentId": "segment:01a13ee9-2249-733d-b350-7c52be6c93d1"
+          }
+        },
+        {
+          "sequence": 8,
+          "occurredAt": "2026-10-15T09:35:44.042Z",
+          "type": "model.sampling.retry",
+          "data": {
+            "code": "responses_idle_timeout",
+            "discardedOutput": false,
+            "maxRetries": 5,
+            "samplingAttempt": 5,
+            "segmentId": "segment:01a13ee9-2249-733d-b350-7c52be6c93d1"
+          }
+        },
+        {
+          "sequence": 9,
+          "occurredAt": "2026-10-15T09:35:57.934Z",
+          "type": "segment.failed",
+          "data": {
+            "code": "responses_transport_unavailable",
+            "retryable": false,
+            "segmentId": "segment:01a13ee9-2249-733d-b350-7c52be6c93d1"
+          }
+        },
+        {
+          "sequence": 10,
+          "occurredAt": "2026-10-15T09:35:57.952Z",
+          "type": "run.failed",
+          "data": {
+            "code": "responses_transport_unavailable",
+            "retryable": false
+          }
+        }
+      ],
+      "modelCalls": [
+        {
+          "attemptId": "01a13ee9-2249-733d-b350-7c52be6c93d1",
+          "stepId": "01a13ee9-1f1d-72df-9222-eb9caa49deb2",
+          "adapterName": "direct-responses",
+          "adapterVersion": "1",
+          "agentVersionId": "local-desktop-ee077319ec147b028da3b23e:model-83a2f822e6c5bf91214d5372",
+          "callId": "6ca99296-040b-4dc5-9e1b-01fc1ecfa50e",
+          "finishedAt": "2026-10-15T09:33:59.056Z",
+          "firstOutputLatencyMs": null,
+          "httpDiagnostics": {
+            "termination": {
+              "code": "responses_transport_unavailable",
+              "networkCode": "UND_ERR_CONNECT_TIMEOUT",
+              "reason": "transportError"
+            }
+          },
+          "httpTiming": {
+            "admittedMs": 10,
+            "dispatchedMs": 10,
+            "finishedMs": 10534
+          },
+          "modelId": "qwen-plus",
+          "operation": "generate",
+          "outcome": "failed",
+          "providerResponseId": null,
+          "purpose": "agent",
+          "schemaVersion": "crewon.model-call-observation.v0",
+          "startedAt": "2026-10-15T09:33:48.522Z",
+          "transport": "http",
+          "usageEventObserved": false
+        },
+        {
+          "attemptId": "01a13ee9-2249-733d-b350-7c52be6c93d1",
+          "stepId": "01a13ee9-1f1d-72df-9222-eb9caa49deb2",
+          "adapterName": "direct-responses",
+          "adapterVersion": "1",
+          "agentVersionId": "local-desktop-ee077319ec147b028da3b23e:model-83a2f822e6c5bf91214d5372",
+          "callId": "5c9a70ba-8337-418b-92df-b0bac8bd4a07",
+          "finishedAt": "2026-10-15T09:34:15.321Z",
+          "firstOutputLatencyMs": null,
+          "httpDiagnostics": {
+            "read": {
+              "end": "releasedBeforeEof"
+            },
+            "response": {
+              "cfRay": "a4add3534d7747fc-LAX",
+              "contentType": "text/event-stream",
+              "oneApiRequestId": "202610150934009143265208268d9d6swRpRDzj",
+              "server": "cloudflare",
+              "status": 200
+            },
+            "termination": {
+              "code": "responses_provider_failed",
+              "reason": "protocolTerminal"
+            }
+          },
+          "httpTiming": {
+            "admittedMs": 12,
+            "dispatchedMs": 12,
+            "finishedMs": 16000,
+            "firstByteMs": 3489,
+            "headersMs": 3489,
+            "lastByteMs": 15862,
+            "readClosedMs": 15873,
+            "terminalMs": 15910
+          },
+          "modelId": "qwen-plus",
+          "operation": "generate",
+          "outcome": "failed",
+          "providerResponseId": "resp_a92106a3-62d9-9eed-90bf-fe69a9216995",
+          "purpose": "agent",
+          "schemaVersion": "crewon.model-call-observation.v0",
+          "startedAt": "2026-10-15T09:33:59.324Z",
+          "transport": "http",
+          "usageEventObserved": false
+        },
+        {
+          "attemptId": "01a13ee9-2249-733d-b350-7c52be6c93d1",
+          "stepId": "01a13ee9-1f1d-72df-9222-eb9caa49deb2",
+          "adapterName": "direct-responses",
+          "adapterVersion": "1",
+          "agentVersionId": "local-desktop-ee077319ec147b028da3b23e:model-83a2f822e6c5bf91214d5372",
+          "callId": "5082f0e3-8dd8-4e2e-96cc-0e652a9a64b9",
+          "finishedAt": "2026-10-15T09:34:19.881Z",
+          "firstOutputLatencyMs": null,
+          "httpDiagnostics": {
+            "read": {
+              "end": "releasedBeforeEof"
+            },
+            "response": {
+              "cfRay": "a4add3b9ba35b54d-LAX",
+              "contentType": "text/event-stream",
+              "oneApiRequestId": "202610150934171137944058268d9d6MVt8fsSg",
+              "server": "cloudflare",
+              "status": 200
+            },
+            "termination": {
+              "code": "responses_provider_failed",
+              "reason": "protocolTerminal"
+            }
+          },
+          "httpTiming": {
+            "admittedMs": 1,
+            "dispatchedMs": 1,
+            "finishedMs": 4104,
+            "firstByteMs": 1750,
+            "headersMs": 1749,
+            "lastByteMs": 4103,
+            "readClosedMs": 4103,
+            "terminalMs": 4103
+          },
+          "modelId": "qwen-plus",
+          "operation": "generate",
+          "outcome": "failed",
+          "providerResponseId": "resp_c0cd1c34-aa80-9e7a-ac5c-bb2dfc35391f",
+          "purpose": "agent",
+          "schemaVersion": "crewon.model-call-observation.v0",
+          "startedAt": "2026-10-15T09:34:15.778Z",
+          "transport": "http",
+          "usageEventObserved": false
+        },
+        {
+          "attemptId": "01a13ee9-2249-733d-b350-7c52be6c93d1",
+          "stepId": "01a13ee9-1f1d-72df-9222-eb9caa49deb2",
+          "adapterName": "direct-responses",
+          "adapterVersion": "1",
+          "agentVersionId": "local-desktop-ee077319ec147b028da3b23e:model-83a2f822e6c5bf91214d5372",
+          "callId": "e585a451-2e45-4458-9436-a4209e34acaf",
+          "finishedAt": "2026-10-15T09:34:42.346Z",
+          "firstOutputLatencyMs": null,
+          "httpDiagnostics": {
+            "read": {
+              "end": "releasedBeforeEof"
+            },
+            "response": {
+              "cfRay": "a4add3d9ecfd0d77-LAX",
+              "contentType": "text/event-stream",
+              "oneApiRequestId": "202610150934218562554558268d9d6Q4AQpKOp",
+              "server": "cloudflare",
+              "status": 200
+            },
+            "termination": {
+              "code": "responses_provider_failed",
+              "reason": "protocolTerminal"
+            }
+          },
+          "httpTiming": {
+            "admittedMs": 2,
+            "dispatchedMs": 2,
+            "finishedMs": 21725,
+            "firstByteMs": 1707,
+            "headersMs": 1702,
+            "lastByteMs": 21717,
+            "readClosedMs": 21717,
+            "terminalMs": 21719
+          },
+          "modelId": "qwen-plus",
+          "operation": "generate",
+          "outcome": "failed",
+          "providerResponseId": "resp_95dcf6c0-693e-9879-bd04-fb828422494c",
+          "purpose": "agent",
+          "schemaVersion": "crewon.model-call-observation.v0",
+          "startedAt": "2026-10-15T09:34:20.622Z",
+          "transport": "http",
+          "usageEventObserved": false
+        },
+        {
+          "attemptId": "01a13ee9-2249-733d-b350-7c52be6c93d1",
+          "stepId": "01a13ee9-1f1d-72df-9222-eb9caa49deb2",
+          "adapterName": "direct-responses",
+          "adapterVersion": "1",
+          "agentVersionId": "local-desktop-ee077319ec147b028da3b23e:model-83a2f822e6c5bf91214d5372",
+          "callId": "8edfd7fc-844b-4dab-ab73-23364662467f",
+          "finishedAt": "2026-10-15T09:35:44.038Z",
+          "firstOutputLatencyMs": null,
+          "httpDiagnostics": {
+            "termination": {
+              "code": "responses_idle_timeout",
+              "reason": "idleTimeout"
+            }
+          },
+          "httpTiming": {
+            "admittedMs": 3,
+            "dispatchedMs": 3,
+            "finishedMs": 60011
+          },
+          "modelId": "qwen-plus",
+          "operation": "generate",
+          "outcome": "failed",
+          "providerResponseId": null,
+          "purpose": "agent",
+          "schemaVersion": "crewon.model-call-observation.v0",
+          "startedAt": "2026-10-15T09:34:44.027Z",
+          "transport": "http",
+          "usageEventObserved": false
+        },
+        {
+          "attemptId": "01a13ee9-2249-733d-b350-7c52be6c93d1",
+          "stepId": "01a13ee9-1f1d-72df-9222-eb9caa49deb2",
+          "adapterName": "direct-responses",
+          "adapterVersion": "1",
+          "agentVersionId": "local-desktop-ee077319ec147b028da3b23e:model-83a2f822e6c5bf91214d5372",
+          "callId": "085f0e43-070c-43db-adb2-a5212338656b",
+          "finishedAt": "2026-10-15T09:35:57.922Z",
+          "firstOutputLatencyMs": null,
+          "httpDiagnostics": {
+            "termination": {
+              "code": "responses_transport_unavailable",
+              "networkCode": "UND_ERR_CONNECT_TIMEOUT",
+              "reason": "transportError"
+            }
+          },
+          "httpTiming": {
+            "admittedMs": 4,
+            "dispatchedMs": 4,
+            "finishedMs": 10513
+          },
+          "modelId": "qwen-plus",
+          "operation": "generate",
+          "outcome": "failed",
+          "providerResponseId": null,
+          "purpose": "agent",
+          "schemaVersion": "crewon.model-call-observation.v0",
+          "startedAt": "2026-10-15T09:35:47.409Z",
+          "transport": "http",
+          "usageEventObserved": false
+        }
+      ],
+      "toolToNextCall": []
+    },
+    {
+      "runId": "01a13ee4-7f02-7231-b9fa-3f99b80a2e13",
+      "threadId": "01a13eda-63e7-710f-b2dd-21d340974b1e",
+      "status": "canceled",
+      "updatedAt": "2026-10-15T09:33:08.376Z",
+      "failure": null,
+      "events": [
+        {
+          "sequence": 1,
+          "occurredAt": "2026-10-15T09:28:44.546Z",
+          "type": "run.created",
+          "data": {}
+        },
+        {
+          "sequence": 2,
+          "occurredAt": "2026-10-15T09:28:44.904Z",
+          "type": "run.started",
+          "data": {}
+        },
+        {
+          "sequence": 3,
+          "occurredAt": "2026-10-15T09:28:44.943Z",
+          "type": "segment.started",
+          "data": {
+            "attempt": 1,
+            "segmentId": "segment:01a13ee4-8076-74ae-8ffa-c82f29cee916"
+          }
+        },
+        {
+          "sequence": 4,
+          "occurredAt": "2026-10-15T09:32:18.597Z",
+          "type": "model.sampling.retry",
+          "data": {
+            "code": "responses_idle_timeout",
+            "discardedOutput": true,
+            "maxRetries": 5,
+            "samplingAttempt": 1,
+            "segmentId": "segment:01a13ee4-8076-74ae-8ffa-c82f29cee916"
+          }
+        },
+        {
+          "sequence": 5,
+          "occurredAt": "2026-10-15T09:33:08.093Z",
+          "type": "run.cancel.requested",
+          "data": {}
+        },
+        {
+          "sequence": 6,
+          "occurredAt": "2026-10-15T09:33:08.376Z",
+          "type": "run.canceled",
+          "data": {}
+        }
+      ],
+      "modelCalls": [
+        {
+          "attemptId": "01a13ee4-8076-74ae-8ffa-c82f29cee916",
+          "stepId": "01a13ee4-7f05-7019-9b93-fad5c2830de6",
+          "adapterName": "direct-responses",
+          "adapterVersion": "1",
+          "agentVersionId": "local-desktop-ee077319ec147b028da3b23e:model-052e4fc0bc88e2a5376eb746",
+          "callId": "0ce9c0b9-bfd6-4d99-ac18-1c1bea669c42",
+          "finishedAt": "2026-10-15T09:32:18.572Z",
+          "firstOutputLatencyMs": null,
+          "httpDiagnostics": {
+            "read": {
+              "end": "releasedBeforeEof"
+            },
+            "response": {
+              "cfRay": "a4adcbbbba102f69-LAX",
+              "contentType": "text/event-stream",
+              "oneApiRequestId": "202610150928498998939938268d9d6vgb5oejz",
+              "server": "cloudflare",
+              "status": 200
+            },
+            "termination": {
+              "code": "responses_idle_timeout",
+              "reason": "idleTimeout"
+            }
+          },
+          "httpTiming": {
+            "admittedMs": 4,
+            "dispatchedMs": 4,
+            "finishedMs": 213625,
+            "firstByteMs": 5637,
+            "headersMs": 5637,
+            "lastByteMs": 153588,
+            "readClosedMs": 213618
+          },
+          "modelId": "deepseek-v4-pro",
+          "operation": "generate",
+          "outcome": "failed",
+          "providerResponseId": "65e7108a-0b63-4f2e-a223-c101e1411b0f",
+          "purpose": "agent",
+          "schemaVersion": "crewon.model-call-observation.v0",
+          "startedAt": "2026-10-15T09:28:44.947Z",
+          "transport": "http",
+          "usageEventObserved": false
+        },
+        {
+          "attemptId": "01a13ee4-8076-74ae-8ffa-c82f29cee916",
+          "stepId": "01a13ee4-7f05-7019-9b93-fad5c2830de6",
+          "adapterName": "direct-responses",
+          "adapterVersion": "1",
+          "agentVersionId": "local-desktop-ee077319ec147b028da3b23e:model-052e4fc0bc88e2a5376eb746",
+          "callId": "00893b3f-3431-4b45-8a78-bc5a5640c5a0",
+          "finishedAt": "2026-10-15T09:33:08.360Z",
+          "firstOutputLatencyMs": null,
+          "httpDiagnostics": {
+            "read": {
+              "end": "releasedBeforeEof"
+            },
+            "response": {
+              "cfRay": "a4add0f0d99269b5-LAX",
+              "contentType": "text/event-stream",
+              "oneApiRequestId": "202610150932227340063298268d9d6jdcPC4kr",
+              "server": "cloudflare",
+              "status": 200
+            },
+            "termination": {
+              "code": "segment_canceled",
+              "reason": "canceled"
+            }
+          },
+          "httpTiming": {
+            "admittedMs": 2,
+            "dispatchedMs": 2,
+            "finishedMs": 49546,
+            "firstByteMs": 4223,
+            "headersMs": 4222,
+            "lastByteMs": 4223,
+            "readClosedMs": 49546
+          },
+          "modelId": "deepseek-v4-pro",
+          "operation": "generate",
+          "outcome": "canceled",
+          "providerResponseId": null,
+          "purpose": "agent",
+          "schemaVersion": "crewon.model-call-observation.v0",
+          "startedAt": "2026-10-15T09:32:18.814Z",
+          "transport": "http",
+          "usageEventObserved": false
+        }
+      ],
+      "toolToNextCall": []
+    },
+    {
+      "runId": "01a13edd-f786-769d-9845-80508a059f4b",
+      "threadId": "01a13eda-63e7-710f-b2dd-21d340974b1e",
+      "status": "canceled",
+      "updatedAt": "2026-10-15T09:28:14.785Z",
+      "failure": null,
+      "events": [
+        {
+          "sequence": 1,
+          "occurredAt": "2026-10-15T09:21:36.646Z",
+          "type": "run.created",
+          "data": {}
+        },
+        {
+          "sequence": 2,
+          "occurredAt": "2026-10-15T09:21:37.219Z",
+          "type": "run.started",
+          "data": {}
+        },
+        {
+          "sequence": 3,
+          "occurredAt": "2026-10-15T09:21:37.269Z",
+          "type": "segment.started",
+          "data": {
+            "attempt": 1,
+            "segmentId": "segment:01a13edd-f9e7-766d-99fe-76ad2f6f8feb"
+          }
+        },
+        {
+          "sequence": 4,
+          "occurredAt": "2026-10-15T09:22:06.615Z",
+          "type": "model.sampling.retry",
+          "data": {
+            "code": "responses_provider_server_error",
+            "discardedOutput": false,
+            "maxRetries": 5,
+            "samplingAttempt": 1,
+            "segmentId": "segment:01a13edd-f9e7-766d-99fe-76ad2f6f8feb"
+          }
+        },
+        {
+          "sequence": 5,
+          "occurredAt": "2026-10-15T09:22:21.877Z",
+          "type": "usage.recorded",
+          "data": {
+            "segmentId": "segment:01a13edd-f9e7-766d-99fe-76ad2f6f8feb"
+          }
+        },
+        {
+          "sequence": 6,
+          "occurredAt": "2026-10-15T09:22:21.885Z",
+          "type": "tool.requested",
+          "data": {
+            "callId": "call_a29cf23326de44559b554a28c01ce2a6",
+            "name": "crewon_project_capabilities",
+            "segmentId": "segment:01a13edd-f9e7-766d-99fe-76ad2f6f8feb"
+          }
+        },
+        {
+          "sequence": 7,
+          "occurredAt": "2026-10-15T09:22:21.908Z",
+          "type": "segment.completed",
+          "data": {
+            "segmentId": "segment:01a13edd-f9e7-766d-99fe-76ad2f6f8feb"
+          }
+        },
+        {
+          "sequence": 8,
+          "occurredAt": "2026-10-15T09:22:22.948Z",
+          "type": "tool.completed",
+          "data": {
+            "callId": "call_a29cf23326de44559b554a28c01ce2a6",
+            "isError": false,
+            "name": "crewon_project_capabilities",
+            "segmentId": "segment:01a13edd-f9e7-766d-99fe-76ad2f6f8feb"
+          }
+        },
+        {
+          "sequence": 9,
+          "occurredAt": "2026-10-15T09:22:23.269Z",
+          "type": "segment.started",
+          "data": {
+            "attempt": 1,
+            "segmentId": "segment:01a13ede-ad9b-747b-82fe-c0d2673ac6ab"
+          }
+        },
+        {
+          "sequence": 10,
+          "occurredAt": "2026-10-15T09:28:14.396Z",
+          "type": "run.cancel.requested",
+          "data": {}
+        },
+        {
+          "sequence": 11,
+          "occurredAt": "2026-10-15T09:28:14.785Z",
+          "type": "run.canceled",
+          "data": {}
+        }
+      ],
+      "modelCalls": [
+        {
+          "attemptId": "01a13edd-f9e7-766d-99fe-76ad2f6f8feb",
+          "stepId": "01a13edd-f787-7327-85b1-3d3188e44811",
+          "adapterName": "direct-responses",
+          "adapterVersion": "1",
+          "agentVersionId": "local-desktop-ee077319ec147b028da3b23e:model-dedfefd51120f28386c9dba7",
+          "callId": "49ea3dc2-4c83-4c39-aa37-3206d1d071d6",
+          "finishedAt": "2026-10-15T09:22:06.600Z",
+          "firstOutputLatencyMs": null,
+          "httpDiagnostics": {
+            "read": {
+              "end": "releasedBeforeEof"
+            },
+            "response": {
+              "cfRay": "a4adc1370bc169a4-LAX",
+              "contentType": "text/event-stream",
+              "oneApiRequestId": "202610150921389212299848268d9d6WPxUFeMX",
+              "server": "cloudflare",
+              "status": 200
+            },
+            "termination": {
+              "code": "responses_provider_server_error",
+              "reason": "protocolTerminal"
+            }
+          },
+          "httpTiming": {
+            "admittedMs": 5,
+            "dispatchedMs": 5,
+            "finishedMs": 29327,
+            "firstByteMs": 3514,
+            "headersMs": 3513,
+            "lastByteMs": 29308,
+            "readClosedMs": 29315,
+            "terminalMs": 29327
+          },
+          "modelId": "gpt-6.1-sol",
+          "operation": "generate",
+          "outcome": "failed",
+          "providerResponseId": "resp_08f93f50c29b6816016ad09b2386a081919edb38b3cbb5e0ed",
+          "purpose": "agent",
+          "schemaVersion": "crewon.model-call-observation.v0",
+          "startedAt": "2026-10-15T09:21:37.273Z",
+          "transport": "http",
+          "usageEventObserved": false
+        },
+        {
+          "attemptId": "01a13edd-f9e7-766d-99fe-76ad2f6f8feb",
+          "stepId": "01a13edd-f787-7327-85b1-3d3188e44811",
+          "adapterName": "direct-responses",
+          "adapterVersion": "1",
+          "agentVersionId": "local-desktop-ee077319ec147b028da3b23e:model-dedfefd51120f28386c9dba7",
+          "callId": "1243db7f-45cb-4165-886e-b510a7ff9c62",
+          "finishedAt": "2026-10-15T09:22:21.872Z",
+          "firstOutputLatencyMs": null,
+          "httpDiagnostics": {
+            "read": {
+              "end": "releasedBeforeEof"
+            },
+            "response": {
+              "cfRay": "a4adc1fd9fcb75b7-LAX",
+              "contentType": "text/event-stream",
+              "oneApiRequestId": "202610150922106464179208268d9d6hssmc1OO",
+              "server": "cloudflare",
+              "status": 200
+            },
+            "termination": {
+              "reason": "protocolTerminal"
+            }
+          },
+          "httpTiming": {
+            "admittedMs": 8,
+            "dispatchedMs": 8,
+            "finishedMs": 15051,
+            "firstByteMs": 8422,
+            "firstCompletedItemMs": 14722,
+            "headersMs": 8421,
+            "lastByteMs": 15028,
+            "readClosedMs": 15030,
+            "streamEndMs": 15051,
+            "terminalMs": 15051
+          },
+          "modelId": "gpt-6.1-sol",
+          "operation": "generate",
+          "outcome": "completed",
+          "providerResponseId": "resp_0ea3973e78b0756e016ad09b460e8481918cfed5890bfaba67",
+          "purpose": "agent",
+          "schemaVersion": "crewon.model-call-observation.v0",
+          "startedAt": "2026-10-15T09:22:06.821Z",
+          "transport": "http",
+          "usageEventObserved": true
+        },
+        {
+          "attemptId": "01a13ede-ad9b-747b-82fe-c0d2673ac6ab",
+          "stepId": "model:01a13edd-f787-7327-85b1-3d3188e44811:2",
+          "adapterName": "direct-responses",
+          "adapterVersion": "1",
+          "agentVersionId": "local-desktop-ee077319ec147b028da3b23e:model-dedfefd51120f28386c9dba7",
+          "callId": "03fa8e21-0f67-40d4-b694-455900fa7b00",
+          "finishedAt": "2026-10-15T09:28:14.666Z",
+          "firstOutputLatencyMs": null,
+          "httpDiagnostics": {
+            "read": {
+              "end": "releasedBeforeEof"
+            },
+            "response": {
+              "cfRay": "a4adc254d8472360-LAX",
+              "contentType": "text/event-stream",
+              "oneApiRequestId": "202610150922245939829798268d9d6cPuPkQgL",
+              "server": "cloudflare",
+              "status": 200
+            },
+            "termination": {
+              "code": "segment_canceled",
+              "reason": "canceled"
+            }
+          },
+          "httpTiming": {
+            "admittedMs": 3,
+            "dispatchedMs": 3,
+            "finishedMs": 351390,
+            "firstByteMs": 2305,
+            "firstCompletedItemMs": 327253,
+            "headersMs": 2305,
+            "lastByteMs": 327247,
+            "readClosedMs": 351385
+          },
+          "modelId": "gpt-6.1-sol",
+          "operation": "generate",
+          "outcome": "canceled",
+          "providerResponseId": "resp_080708ae1f5e734e016ad09b51194c81919abac8eb865e35f4",
+          "purpose": "agent",
+          "schemaVersion": "crewon.model-call-observation.v0",
+          "startedAt": "2026-10-15T09:22:23.275Z",
+          "transport": "http",
+          "usageEventObserved": false
+        }
+      ],
+      "toolToNextCall": [
+        {
+          "tool": "crewon_project_capabilities",
+          "toolCompletedAt": "2026-10-15T09:22:22.948Z",
+          "nextCallId": "03fa8e21-0f67-40d4-b694-455900fa7b00",
+          "nextModel": "gpt-6.1-sol",
+          "nextStartedAt": "2026-10-15T09:22:23.275Z",
+          "gapMs": 327,
+          "callElapsedAtCaptureMs": 351390
+        }
+      ]
+    },
+    {
+      "runId": "01a13eda-6495-7408-953e-31d32ef06968",
+      "threadId": "01a13eda-63e7-710f-b2dd-21d340974b1e",
+      "status": "failed",
+      "updatedAt": "2026-10-15T09:18:12.820Z",
+      "failure": {
+        "code": "responses_event_json_invalid",
+        "retryable": false
+      },
+      "events": [
+        {
+          "sequence": 1,
+          "occurredAt": "2026-10-15T09:17:42.421Z",
+          "type": "run.created",
+          "data": {}
+        },
+        {
+          "sequence": 2,
+          "occurredAt": "2026-10-15T09:17:42.879Z",
+          "type": "run.started",
+          "data": {}
+        },
+        {
+          "sequence": 3,
+          "occurredAt": "2026-10-15T09:17:42.940Z",
+          "type": "segment.started",
+          "data": {
+            "attempt": 1,
+            "segmentId": "segment:01a13eda-6687-75af-9e5b-95c10757d128"
+          }
+        },
+        {
+          "sequence": 4,
+          "occurredAt": "2026-10-15T09:18:01.759Z",
+          "type": "model.sampling.retry",
+          "data": {
+            "code": "responses_transport_unavailable",
+            "discardedOutput": false,
+            "maxRetries": 5,
+            "samplingAttempt": 1,
+            "segmentId": "segment:01a13eda-6687-75af-9e5b-95c10757d128"
+          }
+        },
+        {
+          "sequence": 5,
+          "occurredAt": "2026-10-15T09:18:12.817Z",
+          "type": "segment.failed",
+          "data": {
+            "code": "responses_event_json_invalid",
+            "retryable": false,
+            "segmentId": "segment:01a13eda-6687-75af-9e5b-95c10757d128"
+          }
+        },
+        {
+          "sequence": 6,
+          "occurredAt": "2026-10-15T09:18:12.820Z",
+          "type": "run.failed",
+          "data": {
+            "code": "responses_event_json_invalid",
+            "retryable": false
+          }
+        }
+      ],
+      "modelCalls": [
+        {
+          "attemptId": "01a13eda-6687-75af-9e5b-95c10757d128",
+          "stepId": "01a13eda-6496-7376-83d1-95c120e4d120",
+          "adapterName": "direct-responses",
+          "adapterVersion": "1",
+          "agentVersionId": "local-desktop-ee077319ec147b028da3b23e",
+          "callId": "9b94abe4-8be2-4aa8-a185-4a52eef1bd9a",
+          "finishedAt": "2026-10-15T09:18:01.751Z",
+          "firstOutputLatencyMs": null,
+          "httpDiagnostics": {
+            "termination": {
+              "code": "responses_transport_unavailable",
+              "networkCode": "ECONNRESET",
+              "reason": "transportError"
+            }
+          },
+          "httpTiming": {
+            "admittedMs": 4,
+            "dispatchedMs": 4,
+            "finishedMs": 18799
+          },
+          "modelId": "gpt-6-astra",
+          "operation": "generate",
+          "outcome": "failed",
+          "providerResponseId": null,
+          "purpose": "agent",
+          "schemaVersion": "crewon.model-call-observation.v0",
+          "startedAt": "2026-10-15T09:17:42.952Z",
+          "transport": "http",
+          "usageEventObserved": false
+        },
+        {
+          "attemptId": "01a13eda-6687-75af-9e5b-95c10757d128",
+          "stepId": "01a13eda-6496-7376-83d1-95c120e4d120",
+          "adapterName": "direct-responses",
+          "adapterVersion": "1",
+          "agentVersionId": "local-desktop-ee077319ec147b028da3b23e",
+          "callId": "7cc1a934-df3d-4b7e-978d-585bc0e112ec",
+          "finishedAt": "2026-10-15T09:18:12.812Z",
+          "firstOutputLatencyMs": null,
+          "httpDiagnostics": {
+            "read": {
+              "end": "releasedBeforeEof"
+            },
+            "response": {
+              "cfRay": "a4adbbf52f1c2163-LAX",
+              "contentType": "text/event-stream",
+              "oneApiRequestId": "202610150918036829098408268d9d6lFWd4Pvi",
+              "server": "cloudflare",
+              "status": 200
+            },
+            "termination": {
+              "code": "responses_event_json_invalid",
+              "reason": "protocolError"
+            }
+          },
+          "httpTiming": {
+            "admittedMs": 3,
+            "dispatchedMs": 3,
+            "finishedMs": 10859,
+            "firstByteMs": 4726,
+            "headersMs": 4712,
+            "lastByteMs": 10752,
+            "readClosedMs": 10756
+          },
+          "modelId": "gpt-6-astra",
+          "operation": "generate",
+          "outcome": "failed",
+          "providerResponseId": "resp_0de9f50217586e6a016ad09a4cf99c81918d73bf32872556eb",
+          "purpose": "agent",
+          "schemaVersion": "crewon.model-call-observation.v0",
+          "startedAt": "2026-10-15T09:18:01.954Z",
+          "transport": "http",
+          "usageEventObserved": false
+        }
+      ],
+      "toolToNextCall": []
+    }
+  ],
+  "physicalConnections": "COMMAND   PID       USER   FD   TYPE             DEVICE SIZE/OFF NODE NAME\nCrewON  96296 cheneywang   26u  IPv4 0x28d8fac4efd02090      0t0  TCP 127.0.0.1:49906 (LISTEN)\nCrewON  96296 cheneywang   27u  IPv4 0xbd88d974695653b7      0t0  TCP 127.0.0.1:49758 (LISTEN)\nCrewON  96296 cheneywang   34u  IPv4  0x969fc59d0669dcb      0t0  TCP 11.65.70.70:51862->172.67.148.182:443 (ESTABLISHED)\n",
+  "controlHealth": {
+    "status": 200,
+    "elapsedMs": 24
+  },
+  "limits": [
+    "An unfinished call observation has no persisted live httpTiming; established Worker TLS connection does not uniquely identify the call or prove headers arrived.",
+    "Idle timeout resets on protocol activity; no visible tool or text event does not imply no SSE bytes.",
+    "No DB/config/UI mutations or model retries/cancellation were performed by this observer."
+  ],
+  "updatedAt": "2026-10-15T11:57:14.165550+00:00",
+  "confirmedDiagnosis": {
+    "toolDurationMs": 22,
+    "nextSamplingGapMs": 1542,
+    "callId": "2265acd3-7440-413c-9c94-c62f8a2c2d6b",
+    "dispatchMs": 1,
+    "headersMs": 25220,
+    "firstByteMs": 25221,
+    "lastByteMs": 93252,
+    "finishedMs": 153260,
+    "classification": "SSE response200 after dispatch, no completed item, no protocol terminal; 60-second silence after last bytes triggered responses_idle_timeout; automatic sampling retry began 199ms later.",
+    "notEstablished": "Contents/type counts of received SSE bytes unavailable without additional instrumentation; do not claim heartbeat or malformed event as confirmed."
+  },
+  "nativeRenewalLog": {
+    "path": "/private/tmp/crewon-plugin-performance-20261015/creation-renewal-story.log",
+    "matchingRenewOrTimeoutOrPluginUiOrErrorLines": 0,
+    "limitation": "absence of errors does not prove successful renew CAS; actual UI verified separately"
+  },
+  "actualProjectScope": {
+    "projectId": "01a13f43-094c-767a-9414-b5622b236255",
+    "threadId": "01a13f61-7f59-77ed-bd1e-c5c7c2a4d67f",
+    "bindingId": "01a13f61-7f5a-726b-8393-3f646fb37a2e",
+    "stage": {
+      "kind": "discussion"
+    },
+    "allowedOperations": [
+      "project_context_read",
+      "project_read",
+      "outline_read",
+      "script_read",
+      "content_read",
+      "text_history"
+    ]
+  },
+  "toolBufferEvidence": {
+    "callId": "504f1702-ae03-496d-9c42-1c24bc1ccf34",
+    "firstCompletedItemMs": 22906,
+    "finishedMs": 108127,
+    "outcome": "failed",
+    "termination": "responses_idle_timeout",
+    "toolRequestedAt": "2026-10-15T11:51:54.417Z",
+    "observationFinishedAt": "2026-10-15T11:51:54.414Z",
+    "toolCompletedAt": "2026-10-15T11:51:54.878Z",
+    "interpretation": "A complete read-only tool item was retained during sampling and dispatched only after the stream ended by idle timeout, not a validated model terminal."
+  },
+  "foundationSidecarCorrection": {
+    "finding": "project_context_read.scope covers Project text operations only; it does not deny independent Foundation proposal authority. Earlier assumption that discussion forbids all candidate saves was incorrect.",
+    "admission": {
+      "runId": "plugin-pq2c_Oq7jkxFp_40avEupfXOUgtdn484rKCwbspZOSs",
+      "projectId": "01a13f43-094c-767a-9414-b5622b236255",
+      "threadId": "01a13f61-7f59-77ed-bd1e-c5c7c2a4d67f",
+      "bindingId": "01a13f61-7f5a-726b-8393-3f646fb37a2e",
+      "bindingRevision": 1,
+      "foundationRevision": 1,
+      "parametersRevision": 1,
+      "allowedOperations": [
+        "foundation_scope",
+        "foundation_read",
+        "foundation_source",
+        "foundation_source_page",
+        "foundation_chapters",
+        "foundation_proposal",
+        "foundation_proposals",
+        "foundation_proposal_save"
+      ],
+      "contentDigest": "sha256:875428be788bbfdf5e3c3102338a6aece04f41e368d59cea5a973357d9ac99b7"
+    },
+    "requirementExists": true,
+    "modelDefinitionExposesTools": true,
+    "stageRule": "Foundation admission and commit require original discussion stage, not brief."
+  },
+  "naturalTerminal": {
+    "status": "completed",
+    "lastSequence": 395,
+    "projectProposalCount": 0,
+    "textRevisionCount": 0,
+    "foundationScopeToolCalled": false,
+    "finalMessageClaim": "discussion is read-only; no candidate save permission; ask user to move to requirement stage",
+    "verifiedCorrection": "This claim contradicts real independent Foundation admission; instructions must distinguish Project text scope from Foundation proposal scope."
+  },
+  "unlockDeliveryCheck": {
+    "capturedAt": "2026-10-15T12:02:53.054685+00:00",
+    "database": {
+      "status": "completed",
+      "lastSequence": 395,
+      "eventCount": 395
+    },
+    "outbox": {
+      "run.events.available": 255,
+      "run.updated": 28,
+      "allDelivered": true,
+      "allAttemptCount": 1,
+      "lastErrorCode": null
+    },
+    "independentAuthenticatedReplay": {
+      "afterSequence": 9,
+      "httpStatus": 200,
+      "elapsedMs": 50,
+      "eventCount": 386,
+      "firstSequence": 10,
+      "lastSequence": 395,
+      "terminal": "run.completed",
+      "bytes": 124766
+    },
+    "uiObservationByRoot": {
+      "initial": "First AX after unlock still displayed initial tool / plan1of3 / active run",
+      "followup": "Without refresh or successful click, next AX within about15s showed completed /5tools/finaltext/plan3of3",
+      "provenance": "Root observed native UI; this observer did not operate UI"
+    },
+    "conclusion": "Temporary stale state during unlock/reconnect or AX refresh; no evidence of permanent event loss, backend/outbox/replay complete. Investigation closed without new product changes."
+  }
+}

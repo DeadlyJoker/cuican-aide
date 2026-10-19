@@ -2,6 +2,8 @@ import assert from "node:assert/strict";
 import test from "node:test";
 import {
   validateModelCallRecord,
+  MODEL_HTTP_STREAM_COUNT_FIELDS,
+  MODEL_HTTP_STREAM_COUNTER_LIMIT,
   type ModelCallRecord,
 } from "./model-call-observation.ts";
 
@@ -110,4 +112,126 @@ test("HTTP diagnostics reject unsupported scope, keys, header values and unbound
         }),
       /model_call_http_diagnostics_invalid/,
     );
+});
+
+test("optional bounded stream evidence accepts old records and refuses payload, unknown names, accessors and unbounded counters", () => {
+  const stream = {
+    ...Object.fromEntries(
+      MODEL_HTTP_STREAM_COUNT_FIELDS.map((key) => [key, 0]),
+    ),
+    pendingFrameBytes: 0,
+    lastEventType: "unknown",
+  };
+  const validate = (value: unknown) =>
+    validateModelCallRecord({
+      ...record,
+      observation: {
+        ...record.observation,
+        httpTiming: { firstSemanticMs: 10, lastSemanticMs: 20 },
+        httpDiagnostics: { stream: value as never },
+      },
+    });
+  validate(stream);
+  for (const patch of [
+    { byteCount: -1 },
+    { byteCount: Infinity },
+    { byteCount: 0.5 },
+    { byteCount: MODEL_HTTP_STREAM_COUNTER_LIMIT + 1 },
+    { pendingFrameBytes: 256 * 1024 + 1 },
+    { lastEventType: "private-event" },
+    { body: "secret" },
+  ])
+    assert.throws(
+      () => validate({ ...stream, ...patch }),
+      /model_call_http_diagnostics_invalid/,
+    );
+  assert.throws(
+    () => validate({ pendingFrameBytes: 0 }),
+    /model_call_http_diagnostics_invalid/,
+  );
+  let reads = 0;
+  const accessor = { ...stream };
+  Object.defineProperty(accessor, "byteCount", {
+    enumerable: true,
+    get() {
+      reads++;
+      return 0;
+    },
+  });
+  assert.throws(
+    () => validate(accessor),
+    /model_call_http_diagnostics_invalid/,
+  );
+  assert.equal(reads, 0);
+  assert.throws(
+    () => validate({ ...stream, [Symbol("secret")]: "secret" }),
+    /model_call_http_diagnostics_invalid/,
+  );
+});
+
+test("pending frame classification is optional, bounded, and never widens event or outcome authority", () => {
+  const base = {
+    ...Object.fromEntries(
+      MODEL_HTTP_STREAM_COUNT_FIELDS.map((key) => [key, 0]),
+    ),
+    pendingFrameBytes: 28_786,
+  };
+  const validate = (patch: Record<string, unknown>) =>
+    validateModelCallRecord({
+      ...record,
+      observation: {
+        ...record.observation,
+        httpDiagnostics: { stream: { ...base, ...patch } as never },
+      },
+    });
+  validate({});
+  for (const pendingJsonState of [
+    "empty",
+    "no-data",
+    "done-marker",
+    "complete-object",
+    "complete-nonobject",
+    "not-complete-json",
+    "multiple-data-events",
+  ])
+    validate({ pendingJsonState });
+  validate({
+    pendingJsonState: "complete-object",
+    pendingEventType: "response.completed",
+  });
+  validate({
+    pendingJsonState: "complete-object",
+    pendingEventType: "unknown",
+  });
+  for (const patch of [
+    { pendingJsonState: undefined },
+    { pendingJsonState: "raw JSON" },
+    { pendingEventType: "response.completed" },
+    { pendingJsonState: "done-marker", pendingEventType: "response.completed" },
+    { pendingJsonState: "complete-object", pendingEventType: undefined },
+    { pendingJsonState: "complete-object", pendingEventType: "private-secret" },
+    { pendingJsonState: "complete-object", pendingText: "secret" },
+  ])
+    assert.throws(() => validate(patch), /model_call_http_diagnostics_invalid/);
+  let reads = 0;
+  const stream = { ...base, pendingJsonState: "complete-object" };
+  Object.defineProperty(stream, "pendingEventType", {
+    enumerable: true,
+    get() {
+      reads++;
+      return "response.completed";
+    },
+  });
+  assert.throws(
+    () =>
+      validateModelCallRecord({
+        ...record,
+        observation: {
+          ...record.observation,
+          httpDiagnostics: { stream: stream as never },
+        },
+      }),
+    /model_call_http_diagnostics_invalid/,
+  );
+  assert.equal(reads, 0);
 });

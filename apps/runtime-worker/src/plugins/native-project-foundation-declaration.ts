@@ -1,4 +1,5 @@
 import {
+  DESKTOP_PLUGIN_APPROVAL_MAX_BYTES,
   parseDesktopProjectFoundationToolsConfiguration,
   type DesktopNativePluginPackageIdentity,
   type DesktopProjectFoundationToolsConfiguration,
@@ -22,7 +23,10 @@ export function captureNativeProjectFoundationDeclaration(
   if (!Object.hasOwn(input.bootstrap, "projectFoundationTools"))
     return undefined;
   const approval = record(
-    captureNativeAuthorityFile(input.approvalPath, 128 * 1024).value,
+    captureNativeAuthorityFile(
+      input.approvalPath,
+      DESKTOP_PLUGIN_APPROVAL_MAX_BYTES,
+    ).value,
   );
   const sources = list(input.bootstrap.sources),
     approved = list(approval.sources);

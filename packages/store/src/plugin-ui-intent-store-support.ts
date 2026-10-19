@@ -13,6 +13,7 @@ import {
   pluginUiIntentIdentity,
   pluginUiIntentRequest,
   refusePluginUiIntentFirstDispatch,
+  refusePluginUiIntentUnadmittedQuery,
   creativeProjectDigest,
   creativeProjectOpaqueId,
   creativeProjectTimestamp,
@@ -41,7 +42,7 @@ export type IntentPlan<T> = Generator<
   readonly Record<string, unknown>[]
 >;
 export type IntentCommand = Readonly<{
-  kind: "stage" | "dispatch" | "accept" | "refuse" | "list";
+  kind: "stage" | "dispatch" | "accept" | "refuse" | "refuseQuery" | "list";
   account: PluginUiIntentJournalAccount;
   at?: string;
   sourcePin?: PluginTaskAdmissionPin;
@@ -50,6 +51,7 @@ export type IntentCommand = Readonly<{
   requestDigest?: string;
   receiptJson?: string;
   reasonCode?: string;
+  expectedDispatchAttemptCount?: number;
 }>;
 function own(
   input: unknown,
@@ -166,12 +168,25 @@ export function captureIntentCommand(
   }
   if (kind === "refuse" && value.expectedDispatchAttemptCount !== 1)
     throw new Error("plugin_ui_intent_refusal_attempt_invalid");
+  if (
+    kind === "refuseQuery" &&
+    (!Number.isSafeInteger(value.expectedDispatchAttemptCount) ||
+      (value.expectedDispatchAttemptCount as number) < 1 ||
+      value.reasonCode !== "project_query_revision_not_admitted")
+  )
+    throw new Error("plugin_ui_intent_refusal_attempt_invalid");
   return Object.freeze({
     kind,
     account,
     at,
     intentId: creativeProjectOpaqueId(value.intentId),
     requestDigest: creativeProjectDigest(value.requestDigest),
+    ...(kind === "refuseQuery"
+      ? {
+          expectedDispatchAttemptCount:
+            value.expectedDispatchAttemptCount as number,
+        }
+      : {}),
     ...(kind === "accept"
       ? { receiptJson: pluginUiIntentCanonicalObject(value.receiptJson) }
       : { reasonCode: creativeProjectOpaqueId(value.reasonCode) }),
@@ -432,7 +447,14 @@ export function* intentPlan(
         command.at!,
         uiIntentDigester,
       );
-    } else
+    } else if (command.kind === "refuseQuery")
+      next = refusePluginUiIntentUnadmittedQuery(
+        original,
+        command.expectedDispatchAttemptCount!,
+        command.at!,
+        uiIntentDigester,
+      );
+    else
       next = refusePluginUiIntentFirstDispatch(
         original,
         command.reasonCode!,

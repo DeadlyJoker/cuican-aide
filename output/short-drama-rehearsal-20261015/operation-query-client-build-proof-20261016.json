@@ -1,0 +1,53 @@
+{
+  "builtAt": "2026-10-16T10:28:47.784Z",
+  "output": "/private/tmp/crewon-plugin-performance-20261015/operation-query-profile-20261016.asar",
+  "sha256": "017d88847d71a0b3024bb6b81285ab8045480765a327d96606e3f34a6e3b2a22",
+  "headerSha256": "901249f421738f73a8dc235d54d01b3adfdb4905ece5b1d91e5a08d5e1f64f02",
+  "nonUiAndNativeFilesIntegrityVerified": 17458,
+  "runtime": {
+    "schemaVersion": "crewon.extension-build-identity.v1",
+    "implementationDigest": "sha256:155ee9ad239c67a81d92bafeb316da78c26b0035011b7f2465b460f7e092600f",
+    "bundles": [
+      {
+        "file": "control-api.mjs",
+        "digest": "sha256:52530e06d211de3cc2526b564474eb32ff318c5b275715132eecf75926f4c9b0"
+      },
+      {
+        "file": "device-gateway.mjs",
+        "digest": "sha256:a75bcaee2d78fab139f01f4212d823dc0248a430df7c6e9650ee6eb12c6e0e52"
+      },
+      {
+        "file": "local-workspace-checks-mcp.mjs",
+        "digest": "sha256:00c30cb7aeb1699fc3c38a3a5e3318b03d8f9a8b97b22295ddd9671b6b0d5c64"
+      },
+      {
+        "file": "provider-model-catalog.mjs",
+        "digest": "sha256:a762f1e2f0e9bcd827505cff3443b3a5d826a8b7682963ce3227c9df2ed5f6f4"
+      },
+      {
+        "file": "provider-settings-coordinator.mjs",
+        "digest": "sha256:64d3d107b3a851c45c61f44c989d8d54fa68e606739cf5b74f06576857e16b96"
+      },
+      {
+        "file": "runtime-release.mjs",
+        "digest": "sha256:a311117ce1471ab1b511818dd1c64c8fd254c561abc7ff1d79c420780d0eb58e"
+      },
+      {
+        "file": "runtime-worker.mjs",
+        "digest": "sha256:5b4aecb6f055a039d8d480af1ca1b0d571448af84c960587587740eeb5dd464a"
+      }
+    ],
+    "historicalWorkItemScope": "crewon.extension-work-item-scope.v1"
+  },
+  "installed": true,
+  "acceptedInClient": false,
+  "installedAt": "2026-10-16T10:29:20.060702+00:00",
+  "codesignVerified": true,
+  "installedRuntimeIdentityVerified": true,
+  "sourceTestsPassed": 123,
+  "postgresTestsSkipped": 1,
+  "workerTypecheckPassed": true,
+  "uiBuildPassed": true,
+  "hostTypecheckPassed": true,
+  "boundaryPassed": true
+}

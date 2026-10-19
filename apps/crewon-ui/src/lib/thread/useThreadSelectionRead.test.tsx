@@ -14,6 +14,58 @@ import { transcriptFixture } from "../control-runtime/controlTranscriptWindow.te
 
 Object.assign(globalThis, { IS_REACT_ACT_ENVIRONMENT: true });
 
+it("a newer authoritative projection supersedes a selection without reporting a connection failure", async () => {
+  const published = vi.fn();
+  const f = transcriptFixture(8, { onThread: published });
+  const original = f.client.getRunPlan.bind(f.client);
+  let release!: () => void;
+  const gate = new Promise<void>((resolve) => {
+    release = resolve;
+  });
+  const plans = vi
+    .spyOn(f.client, "getRunPlan")
+    .mockImplementationOnce(async (...args) => {
+      const result = await original(...args);
+      await gate;
+      return result;
+    });
+  const setNotice = vi.fn(),
+    preserve = vi.fn(),
+    setThreads = vi.fn();
+  let selection: Promise<Thread | null> | undefined;
+  try {
+    selection = selectThreadAction({
+      client: f.runtime,
+      threadId: "thread-1",
+      isConnected: true,
+      locale: "zh",
+      setThreads,
+      setNotice,
+      preserveThreadsAfterConnectionLoss: preserve,
+      setSelectedThreadId() {},
+      setAppView() {},
+      setInspectorOpen() {},
+      setSidebarOpen() {},
+      shouldAutoCloseSidebar: () => false,
+    });
+    await vi.waitFor(() => expect(plans).toHaveBeenCalled());
+    const current = await f.runtime.readThread("thread-1");
+    expect(current.id).toBe("thread-1");
+    expect(current.turns).toHaveLength(4);
+    release();
+    expect(await selection).toBeNull();
+    expect(setNotice).not.toHaveBeenCalled();
+    expect(preserve).not.toHaveBeenCalled();
+    expect(setThreads).not.toHaveBeenCalled();
+    expect(published).toHaveBeenCalled();
+    expect(f.mutations).toHaveLength(0);
+  } finally {
+    release();
+    await selection;
+    f.runtime.close();
+  }
+});
+
 it("closes stale identity callbacks and unmounted reads even when a reader ignores cancellation", async () => {
   let run!: ThreadSelectionRead;
   function Probe({ identity }: { identity: object }) {

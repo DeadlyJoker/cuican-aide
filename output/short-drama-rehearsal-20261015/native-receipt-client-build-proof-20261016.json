@@ -1,0 +1,81 @@
+{
+  "sourceHashes": {
+    "apps/crewon-ui/src/lib/plugins/pluginInstallationSelection.ts": "cfb83906f35fe0241f7df50a8a05a3f87bf8377afab7e14bed9adf9c96000f3a",
+    "apps/crewon-ui/src/lib/plugins/usePluginInstallationSettings.ts": "badc94172ea6391970d882b251955aa6c9cd845d9fafb99a7d97a7a4a3ba735f",
+    "apps/crewon-ui/src/components/settings/InstalledPluginSettingsNativeSelection.test.tsx": "4badcf513f0e41ec4f8c28343399f37821e198befb22b3ac1a85a331330b9330",
+    "apps/crewon-ui/src/lib/plugins/usePluginExecutionPreparationStatus.ts": "f982ef6ff30d6d407dfc8049ced53ddfc4a83f05e4fa7f2708f6b009e8e1532c",
+    "apps/crewon-ui/src/components/app/CommandSettingsRoute.tsx": "9a1ffe846ce1ef2a29a6a05b80a942407bf26038a68ae2ae69bf896d22e4d0a5",
+    "apps/crewon-ui/src/components/settings/SettingsContent.tsx": "4e4acad46f43c105c9699f818fd3ebcd65929276851826ded788b07be780a42d",
+    "apps/crewon-ui/src/components/app/CommandSettingsRoute.preparation.test.tsx": "4463ba8888f4f841aa0978f46476919265bbaa8d7f5a604715540d327c082876"
+  },
+  "checks": {
+    "targetedTests": 33,
+    "preparationTests": 58,
+    "typecheck": "passed",
+    "lint": "passed",
+    "combinedSerialTests": 76,
+    "parallelInitialRun": "75 passed; large sparse configuration test exceeded 5 seconds during concurrent packaging; isolated and final serial runs passed"
+  },
+  "acceptedInClient": true,
+  "priorClientObserved": {
+    "packageVersion": "50.2.7",
+    "selectionRevision": 66,
+    "configurationRevision": 20,
+    "activationRevision": 41,
+    "selectionCommittedAt": "2026-10-16T06:31:06.439Z",
+    "activationCommittedAt": "2026-10-16T06:31:26.725Z",
+    "uiOutcome": "unknown; stale disabled catalog; original intent retained"
+  },
+  "scope": "Native receipt deadline and preparation progress; no Main/runtime or media changes",
+  "rendererPackage": {
+    "path": "/private/tmp/crewon-plugin-performance-20261015/native-receipt-profile-20261016.asar",
+    "sha256": "9eb7db0c244cc7a6a20ca597915075b5890a35e89c37c5a664f246b3dad46aa5",
+    "headerSha256": "6375aa3e95b7752bd35290c2c53d417684ae1e1cf3efd38f7f13ab028300c02f",
+    "nonRendererFilesVerified": 17464,
+    "startup": {
+      "entries": [
+        "assets/index-BPsUDlZe.js"
+      ],
+      "eagerChunks": [
+        "assets/index-BPsUDlZe.js",
+        "assets/runtime-PPVm8Dsz.js",
+        "assets/react-BPCV84d_.js",
+        "assets/icons-BKXws8yi.js",
+        "assets/desktopFetch-C6vSCXoG.js"
+      ],
+      "eagerBytes": 326474,
+      "javascriptLimitBytes": 524288,
+      "cloudflareEntryExcluded": true
+    }
+  },
+  "installed": true,
+  "signatureVerification": "passed",
+  "clientColdStart": "main PID96806, enabled plugin entry and all 3 original projects visible; no new keychain handoff needed",
+  "clientRetest": {
+    "disableUi": "selection saved; disabled; enable action available; no unknown/retry",
+    "enableUi": "selection saved; enabled; disable action available; no unknown/retry",
+    "authority": {
+      "plugin_profile_selections": {
+        "revision": 68,
+        "state": "enabled",
+        "updatedAt": "2026-10-16T06:44:20.235Z"
+      },
+      "extension_activations": {
+        "revision": 43,
+        "state": "enabled",
+        "updatedAt": "2026-10-16T06:44:32.617Z"
+      }
+    },
+    "observationDurationIsUpperBound": true,
+    "disableStartedAt": "2026-10-16T06:43:46.261Z",
+    "enableStartedAt": "2026-10-16T06:44:19.920Z"
+  },
+  "acceptanceScope": "Native selection disable/enable UI and execution preparation pending/final receipt; cold start and original project restoration",
+  "clientPreparationProgress": {
+    "pendingVisible": true,
+    "pendingText": "正在准备插件执行环境；运行环境正在重启，设置会在恢复后自动显示。无需重复确认或保存。",
+    "genericUnavailableShown": false,
+    "finalPrepared": true,
+    "enabledPreserved": true
+  }
+}

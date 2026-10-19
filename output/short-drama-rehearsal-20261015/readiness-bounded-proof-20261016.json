@@ -1,0 +1,21 @@
+{
+  "observedAt": "2026-10-16T10:06:17.075Z",
+  "fixtureOnly": true,
+  "requestId": "req-readinesssqlite",
+  "records": 64,
+  "routeCompleted": true,
+  "savedInputCompleted": true,
+  "checks": [
+    "ℹ tests 49",
+    "ℹ pass 35",
+    "ℹ fail 0",
+    "ℹ skipped 14"
+  ],
+  "controlTypecheck": "passed",
+  "client": {
+    "currentBlocker": "macOS Keychain decrypt authorization",
+    "sample": "/private/tmp/crewon-runtime-merge-20261016/readiness-bounded-startup.sample.txt",
+    "generationSubmitted": false,
+    "acceptanceComplete": false
+  }
+}

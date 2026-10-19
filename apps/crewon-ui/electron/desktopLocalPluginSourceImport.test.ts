@@ -632,7 +632,7 @@ describe("Native Main local prebuilt source import", () => {
             ...f.originalApproval,
             actor: DESKTOP_RUNTIME_OWNER,
           });
-        else writeFileSync(f.approvalPath, Buffer.alloc(128 * 1024 + 1, 0x20));
+        else writeFileSync(f.approvalPath, Buffer.alloc(256 * 1024 + 1, 0x20));
       }
       const before = readFileSync(f.approvalPath);
       await expect(f.create().previewDirectory(f.source)).rejects.toThrow();

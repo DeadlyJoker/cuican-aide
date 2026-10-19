@@ -1,0 +1,20 @@
+{
+  "recordedAt": "2026-10-15T19:22:30.251750+00:00",
+  "readOnly": true,
+  "projectId": "01a13f43-094c-767a-9414-b5622b236255",
+  "foundationRevision": 3,
+  "parametersRevision": 2,
+  "confirmedProposal": {
+    "digest": "sha256:2ef11e6f3a3884ccd533eb17012fd996f291850f4e37e09d2cd580e846f30f24",
+    "revision": 2
+  },
+  "textArtifacts": 0,
+  "latestRun": {
+    "runId": "plugin-7DebIFmDWoV0jmAkgi1mhBYp5eV0jJkKx6zyeqJcPLE",
+    "revision": 19,
+    "status": "canceled"
+  },
+  "reviewJobSchemaInstalledInLiveProfile": false,
+  "newLiveModelOrMediaRequestsSubmitted": false,
+  "computerUse": "Mac locked; no UI operations performed"
+}

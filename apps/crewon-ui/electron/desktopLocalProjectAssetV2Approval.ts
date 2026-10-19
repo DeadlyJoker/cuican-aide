@@ -60,24 +60,39 @@ export function composeDesktopLocalProjectAssetV2Approval(
   // reference upload/generation or downloading new provider outputs.
   const canPublish =
     approval.projects.mediaGenerations?.publications.some(exact) === true;
-  // Purposes apply to the whole publication list. Upgrading this package must
-  // not silently grant publishing to another package that was read-only.
+  // Preserve historical read access while granting publication only to packages
+  // whose generation consent was already explicit.
   const results = approval.projects.mediaResults;
   if (
-    canPublish &&
-    results &&
-    !results.purposes.includes("publish") &&
-    results.publications.some((p) => !exact(p))
-  )
-    invalid();
-  if (
-    !canPublish &&
-    results?.purposes.includes("publish") &&
-    !results.publications.some(exact)
+    results?.publications.some(
+      (p) =>
+        !approval.sources.some(
+          (s) =>
+            s.pluginId === p.pluginId && s.packageDigest === p.packageDigest,
+        ) ||
+        !approval.projects.mediaInputs?.reviews.some(
+          (r) =>
+            r.targetIdentity.pluginId === p.pluginId &&
+            r.targetIdentity.packageDigest === p.packageDigest,
+        ),
+    )
   )
     invalid();
   const append = (previous: readonly (typeof publication)[] = []) =>
     previous.some(exact) ? previous : [...previous, publication];
+  const publications = append(results?.publications);
+  const previousPublishers = results?.purposes.includes("publish")
+    ? (results.publishPublications ?? results.publications)
+    : [];
+  const publishers = canPublish
+    ? append(previousPublishers)
+    : previousPublishers;
+  const scopedPublishers =
+    publishers.length > 0 &&
+    (publishers.length !== publications.length ||
+      publications.some(
+        (p) => !publishers.some((publisher) => isDeepStrictEqual(p, publisher)),
+      ));
   return parseDesktopPluginApproval({
     ...approval,
     projects: {
@@ -87,7 +102,8 @@ export function composeDesktopLocalProjectAssetV2Approval(
         purposes: canPublish
           ? ["read", "publish"]
           : (results?.purposes ?? ["read"]),
-        publications: append(approval.projects.mediaResults?.publications),
+        publications,
+        ...(scopedPublishers ? { publishPublications: publishers } : {}),
       },
       assetV2: {
         version: "crewon.desktop-project-assets.v2",

@@ -20,7 +20,8 @@ import {
   parseDesktopPluginApproval,
 } from "./desktopPluginBootstrap.ts";
 
-export const MAX_APPROVAL_BYTES = 128 * 1024;
+import { DESKTOP_PLUGIN_APPROVAL_MAX_BYTES } from "@crewon/contracts/plugins";
+export const MAX_APPROVAL_BYTES = DESKTOP_PLUGIN_APPROVAL_MAX_BYTES;
 export const PENDING_SUFFIX = ".import-pending-v1";
 export type DirectoryPin = Readonly<{ path: string; metadata: Stats }>;
 export type FileSnapshot = Readonly<{ bytes: Buffer; metadata: Stats }>;

@@ -1,0 +1,103 @@
+{
+  "builtAt": "2026-10-16T03:39:59.560Z",
+  "implementationDigest": "sha256:748fee99ad9d9016e1a8276d0dc93b696d217c0032355b67d67e2c11f568651c",
+  "identity": {
+    "schemaVersion": "crewon.extension-build-identity.v1",
+    "implementationDigest": "sha256:748fee99ad9d9016e1a8276d0dc93b696d217c0032355b67d67e2c11f568651c",
+    "bundles": [
+      {
+        "file": "control-api.mjs",
+        "digest": "sha256:ea6f14deab394b423ad2e1a21b5295c3153e5bf728bb77328bc55feb29f1c23f"
+      },
+      {
+        "file": "device-gateway.mjs",
+        "digest": "sha256:a75bcaee2d78fab139f01f4212d823dc0248a430df7c6e9650ee6eb12c6e0e52"
+      },
+      {
+        "file": "local-workspace-checks-mcp.mjs",
+        "digest": "sha256:00c30cb7aeb1699fc3c38a3a5e3318b03d8f9a8b97b22295ddd9671b6b0d5c64"
+      },
+      {
+        "file": "provider-model-catalog.mjs",
+        "digest": "sha256:a762f1e2f0e9bcd827505cff3443b3a5d826a8b7682963ce3227c9df2ed5f6f4"
+      },
+      {
+        "file": "provider-settings-coordinator.mjs",
+        "digest": "sha256:92a4b4c600d5ead308b9ecc3180170c5fe4903575e900a1e92fd1617904593a7"
+      },
+      {
+        "file": "runtime-release.mjs",
+        "digest": "sha256:2110739af2b70118f1b02c28a6247e8726a318a55dce0c5e9fa0b72e11ac13de"
+      },
+      {
+        "file": "runtime-worker.mjs",
+        "digest": "sha256:3fcb84450776f1df9b5d1cc8f91c07f3c62d2ab54dbb1f3555dbf6e6f323bb4a"
+      }
+    ],
+    "historicalWorkItemScope": "crewon.extension-work-item-scope.v1"
+  },
+  "bundles": {
+    "control-api.mjs": "ea6f14deab394b423ad2e1a21b5295c3153e5bf728bb77328bc55feb29f1c23f",
+    "runtime-worker.mjs": "3fcb84450776f1df9b5d1cc8f91c07f3c62d2ab54dbb1f3555dbf6e6f323bb4a",
+    "runtime-release.mjs": "2110739af2b70118f1b02c28a6247e8726a318a55dce0c5e9fa0b72e11ac13de",
+    "provider-model-catalog.mjs": "a762f1e2f0e9bcd827505cff3443b3a5d826a8b7682963ce3227c9df2ed5f6f4",
+    "provider-settings-coordinator.mjs": "92a4b4c600d5ead308b9ecc3180170c5fe4903575e900a1e92fd1617904593a7",
+    "device-gateway.mjs": "a75bcaee2d78fab139f01f4212d823dc0248a430df7c6e9650ee6eb12c6e0e52",
+    "local-workspace-checks-mcp.mjs": "00c30cb7aeb1699fc3c38a3a5e3318b03d8f9a8b97b22295ddd9671b6b0d5c64"
+  },
+  "status": "built, not installed or client-accepted",
+  "acceptanceOnly": true,
+  "diagnosticVariant": {
+    "directory": "/private/tmp/crewon-plugin-performance-20261015/native-current-profiled-runtime-20261016",
+    "implementationDigest": "sha256:748fee99ad9d9016e1a8276d0dc93b696d217c0032355b67d67e2c11f568651c",
+    "identity": {
+      "schemaVersion": "crewon.extension-build-identity.v1",
+      "implementationDigest": "sha256:748fee99ad9d9016e1a8276d0dc93b696d217c0032355b67d67e2c11f568651c",
+      "bundles": [
+        {
+          "file": "control-api.mjs",
+          "digest": "sha256:4ab2a93e9f843a0ec83686d5229fcb34e99ec905315d90275995dc4156abf0e0"
+        },
+        {
+          "file": "device-gateway.mjs",
+          "digest": "sha256:a75bcaee2d78fab139f01f4212d823dc0248a430df7c6e9650ee6eb12c6e0e52"
+        },
+        {
+          "file": "local-workspace-checks-mcp.mjs",
+          "digest": "sha256:00c30cb7aeb1699fc3c38a3a5e3318b03d8f9a8b97b22295ddd9671b6b0d5c64"
+        },
+        {
+          "file": "provider-model-catalog.mjs",
+          "digest": "sha256:a762f1e2f0e9bcd827505cff3443b3a5d826a8b7682963ce3227c9df2ed5f6f4"
+        },
+        {
+          "file": "provider-settings-coordinator.mjs",
+          "digest": "sha256:92a4b4c600d5ead308b9ecc3180170c5fe4903575e900a1e92fd1617904593a7"
+        },
+        {
+          "file": "runtime-release.mjs",
+          "digest": "sha256:2110739af2b70118f1b02c28a6247e8726a318a55dce0c5e9fa0b72e11ac13de"
+        },
+        {
+          "file": "runtime-worker.mjs",
+          "digest": "sha256:3fcb84450776f1df9b5d1cc8f91c07f3c62d2ab54dbb1f3555dbf6e6f323bb4a"
+        }
+      ],
+      "historicalWorkItemScope": "crewon.extension-work-item-scope.v1"
+    },
+    "controlCanonicalSha256": "ea6f14deab394b423ad2e1a21b5295c3153e5bf728bb77328bc55feb29f1c23f",
+    "controlProfiledSha256": "4ab2a93e9f843a0ec83686d5229fcb34e99ec905315d90275995dc4156abf0e0",
+    "exactManifestVerification": "all seven entries pass after the sampling header is applied",
+    "profileDirectory": "/private/tmp/crewon-plugin-performance-20261015/control-cpu-profiles-fixed-20261016",
+    "status": "installed, not yet client-accepted",
+    "profileChangesAuthority": false
+  },
+  "checks": {
+    "nativeFileAndOwnershipTests": 18,
+    "controlTypecheck": "passed"
+  },
+  "installedAt": "2026-10-16T03:42:13.687017+00:00",
+  "backupDirectory": "/private/tmp/crewon-plugin-performance-20261015/before-native-current-runtime-20261016",
+  "originalRuntimeManifestVerification": "all seven original entries verified before archive",
+  "installedRuntimeManifestVerification": "all seven installed entries verified, including actual profiling header"
+}

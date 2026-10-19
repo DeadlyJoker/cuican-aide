@@ -1,0 +1,46 @@
+{
+  "recordedAt": "2026-10-15T16:48:00.478Z",
+  "node": "v24.18.1",
+  "openssl": "3.5.7",
+  "defaultCurve": "auto",
+  "scope": "TLS handshake only; no HTTP/model request or credentials, certificate verification enabled, no network/client configuration changed",
+  "host": "api.aicuican.com",
+  "results": [
+    {
+      "address": "104.21.29.91",
+      "curve": "default",
+      "tcpMs": 228,
+      "tlsMs": 1525,
+      "protocol": "TLSv1.3",
+      "error": null,
+      "elapsedMs": 1836
+    },
+    {
+      "address": "104.21.29.91",
+      "curve": "X25519",
+      "tcpMs": 267,
+      "tlsMs": 593,
+      "protocol": "TLSv1.3",
+      "error": null,
+      "elapsedMs": 899
+    },
+    {
+      "address": "172.67.148.182",
+      "curve": "default",
+      "tcpMs": 297,
+      "tlsMs": 6097,
+      "protocol": "TLSv1.3",
+      "error": null,
+      "elapsedMs": 6409
+    },
+    {
+      "address": "172.67.148.182",
+      "curve": "X25519",
+      "tcpMs": 290,
+      "tlsMs": 612,
+      "protocol": "TLSv1.3",
+      "error": null,
+      "elapsedMs": 917
+    }
+  ]
+}

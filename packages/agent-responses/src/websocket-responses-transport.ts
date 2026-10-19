@@ -1,5 +1,9 @@
 import { parseResponsesOutputTokenLimit } from "./responses-output-budget.ts";
 import {
+  ResponsesImageInputState,
+  planResponsesImageInput,
+} from "./responses-image-input.ts";
+import {
   ModelTransportError,
   beginModelCall,
   type ModelInputItem,
@@ -69,6 +73,7 @@ export class WebSocketResponsesTransport implements ModelTransportPort {
   readonly #factory: WebSocketFactory;
   readonly #scheduler: ResponsesTimerScheduler;
   readonly #turnStates: ResponsesTurnStateAuthority;
+  readonly #imageState = new ResponsesImageInputState();
   #socket: WebSocket | null = null;
   #socketRunId: string | null = null;
   #baseline: IncrementalBaseline | null = null;
@@ -237,6 +242,7 @@ export class WebSocketResponsesTransport implements ModelTransportPort {
           maxOutputTokens: this.maxOutputTokens,
           signal,
         });
+        const imageLineage = this.#imageState.capture(request);
         await sendFrame(
           socket,
           JSON.stringify({
@@ -249,6 +255,7 @@ export class WebSocketResponsesTransport implements ModelTransportPort {
               requestProfile: this.#requestProfile,
               inputItems: plan.inputItems,
               maxOutputTokens: this.maxOutputTokens,
+              imageState: this.#imageState,
             }),
           }),
         );
@@ -280,6 +287,7 @@ export class WebSocketResponsesTransport implements ModelTransportPort {
           throw protocolError("responses_event_after_terminal");
         }
         if (completed && decoder.completedResponseId !== null) {
+          this.#imageState.completed(imageLineage, decoder.completedResponseId);
           this.#baseline = {
             socket,
             runId: request.runId,
@@ -333,6 +341,7 @@ export class WebSocketResponsesTransport implements ModelTransportPort {
 
   releaseRun(runId: string): void {
     this.#turnStates.release(runId);
+    this.#imageState.releaseRun(runId);
     if (this.#socketRunId === runId) this.#dropSocket(this.#socket);
   }
 
@@ -342,6 +351,7 @@ export class WebSocketResponsesTransport implements ModelTransportPort {
 
   async close(): Promise<void> {
     this.#dropSocket(this.#socket);
+    this.#imageState.clear();
   }
 
   modelIdentity(): Readonly<{
@@ -416,6 +426,14 @@ export class WebSocketResponsesTransport implements ModelTransportPort {
   }
 
   #requestPlan(request: ModelRequest, socket: WebSocket): RequestPlan {
+    return planResponsesImageInput({
+      request,
+      ...this.#baseRequestPlan(request, socket),
+      imageState: this.#imageState,
+    });
+  }
+
+  #baseRequestPlan(request: ModelRequest, socket: WebSocket): RequestPlan {
     if (request.input.strategy === "providerCheckpoint") {
       return {
         previousResponseId: responseIdFromResponsesCheckpoint(

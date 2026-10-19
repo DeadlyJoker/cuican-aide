@@ -1,0 +1,54 @@
+{
+  "builtAt": "2026-10-16T09:25:08.361Z",
+  "output": "/private/tmp/crewon-plugin-performance-20261015/saved-api-profile-20261016.asar",
+  "sha256": "36a68ea41ede7b8c36d0c1ae47fa7a97afa5c7e80569db552bf883e3676cc0b1",
+  "headerSha256": "c107d7d5b0f5b45da6d208f45f44be7fd844f093762441c7d20e91a34ce2ddc8",
+  "nonUiAndNativeFilesIntegrityVerified": 17458,
+  "runtime": {
+    "schemaVersion": "crewon.extension-build-identity.v1",
+    "implementationDigest": "sha256:ee64f72e05d7d0282f6310eeb0463f0eee2fec11752e2f3c2c62391c42bdab23",
+    "bundles": [
+      {
+        "file": "control-api.mjs",
+        "digest": "sha256:7609b41d07672924eab1b62928992dccb18740b5cb7803a31b1aa8d32c8e69ff"
+      },
+      {
+        "file": "device-gateway.mjs",
+        "digest": "sha256:a75bcaee2d78fab139f01f4212d823dc0248a430df7c6e9650ee6eb12c6e0e52"
+      },
+      {
+        "file": "local-workspace-checks-mcp.mjs",
+        "digest": "sha256:00c30cb7aeb1699fc3c38a3a5e3318b03d8f9a8b97b22295ddd9671b6b0d5c64"
+      },
+      {
+        "file": "provider-model-catalog.mjs",
+        "digest": "sha256:a762f1e2f0e9bcd827505cff3443b3a5d826a8b7682963ce3227c9df2ed5f6f4"
+      },
+      {
+        "file": "provider-settings-coordinator.mjs",
+        "digest": "sha256:64d3d107b3a851c45c61f44c989d8d54fa68e606739cf5b74f06576857e16b96"
+      },
+      {
+        "file": "runtime-release.mjs",
+        "digest": "sha256:353fc32c9c7adfdeada67a3336cdbc93f91e0df9b49b0f6b3f931f663e776d5d"
+      },
+      {
+        "file": "runtime-worker.mjs",
+        "digest": "sha256:bebcf1985c10b0a5fba1477a869742f27cc6f9842f18993d9ebd170f139c7fcb"
+      }
+    ],
+    "historicalWorkItemScope": "crewon.extension-work-item-scope.v1"
+  },
+  "installed": true,
+  "acceptedInClient": false,
+  "installedAt": "2026-10-16T09:25:24.545858+00:00",
+  "backupDirectory": "/private/tmp/crewon-plugin-performance-20261015/before-saved-api-20261016",
+  "checks": {
+    "pluginTests": 516,
+    "nativeAndUiTests": 71,
+    "resultAndRouteTests": 19,
+    "uiLintAndNativeTypecheck": "passed",
+    "boundary": "passed",
+    "repositoryFormat": "passed"
+  }
+}

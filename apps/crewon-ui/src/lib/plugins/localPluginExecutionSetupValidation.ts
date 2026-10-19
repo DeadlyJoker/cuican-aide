@@ -4,7 +4,10 @@ import type {
   DesktopLocalPluginExecutionResult,
   DesktopLocalPluginExecutionStatus,
 } from "../desktop/desktopLocalPluginExecutionSetupProtocol";
-import { parseDesktopProjectHistoricalQueriesConfiguration } from "@crewon/contracts/plugins";
+import {
+  isPluginOperationPathPrefix,
+  parseDesktopProjectHistoricalQueriesConfiguration,
+} from "@crewon/contracts/plugins";
 
 export const executionIdentityKeys = [
   "pluginId",
@@ -163,7 +166,9 @@ export function captureExecutionSetupPreview(
       path.length > 256 ||
       !path.startsWith("/") ||
       path.startsWith("//") ||
-      /[\u0000-\u0020\u007f?#\\]/u.test(path) ||
+      (prefix
+        ? !isPluginOperationPathPrefix(path)
+        : /[\u0000-\u0020\u007f?#\\]/u.test(path)) ||
       (prefix
         ? value.method !== "GET"
         : value.method !== "GET" && value.method !== "POST")
@@ -334,13 +339,28 @@ export function captureExecutionSetupStatus(
       pluginId: expected.pluginId,
       state: "pending",
     });
-  if (fields.state === "committed")
+  if (fields.state === "committed") {
+    const resultFields = record(fields.result, [
+      ...executionIdentityKeys,
+      "state",
+      "runtimeStatus",
+      "stage",
+    ]);
+    // Main retains the last completed receipt for this plugin. Enabling it or
+    // updating the runtime changes its pins; without a live confirmation ticket
+    // that older completion is unrelated, rather than an unknown mutation.
+    if (
+      previewId === undefined &&
+      executionIdentityKeys.some((key) => resultFields[key] !== expected[key])
+    )
+      return null;
     return Object.freeze({
       previewId: id,
       pluginId: expected.pluginId,
       state: "committed",
       result: captureExecutionSetupResult(fields.result, expected),
     });
+  }
   if (
     fields.state === "failed" &&
     fields.code === "desktop_plugin_execution_setup_failed" &&
@@ -440,13 +460,17 @@ function captureMediaGenerationPreparation(
   const path = Object.getOwnPropertyDescriptor(paths, "0");
   if (!path?.enumerable || !("value" in path)) invalid();
   const rule = record(path.value, ["method", "path"]);
-  if (rule.method !== "POST" || rule.path !== "/upload/image") invalid();
+  if (
+    rule.method !== "POST" ||
+    (rule.path !== "/upload/image" && rule.path !== "/api/comfy/upload/file")
+  )
+    invalid();
   return Object.freeze({
     scope: "generate-from-adopted-references",
     alreadyApproved: value.alreadyApproved,
     workflows,
     additionalNetworkPaths: Object.freeze([
-      Object.freeze({ method: "POST", path: "/upload/image" }),
+      Object.freeze({ method: "POST", path: rule.path }),
     ] as const),
   });
 }

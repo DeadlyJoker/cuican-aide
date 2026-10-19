@@ -27,6 +27,46 @@ for (const backend of ["sqlite", "postgres"] as const) {
       ? test.skip
       : test;
   run(
+    `${backend}: verified query non-admission preserves the exact dispatch CAS and survives reopen`,
+    async (t) => {
+      const f = await intentJournalFixture(t, backend),
+        input = f.input("query", "stale-query");
+      const staged = await f.first.store.stageUiIntent(input, options);
+      for (let i = 0; i < 2; i++)
+        await f.first.store.markUiIntentDispatched(
+          { ...input, intentId: staged.intent.intentId },
+          options,
+        );
+      const command = {
+        account: f.account(),
+        intentId: staged.intent.intentId,
+        requestDigest: staged.intent.requestDigest,
+        expectedDispatchAttemptCount: 1,
+        reasonCode: "project_query_revision_not_admitted" as const,
+        at: timestamp,
+      };
+      assert.equal(
+        (await f.first.store.refuseUiIntentUnadmittedQuery!(command)).phase,
+        "dispatched",
+      );
+      assert.equal(
+        (
+          await f.first.store.refuseUiIntentUnadmittedQuery!({
+            ...command,
+            expectedDispatchAttemptCount: 2,
+          })
+        ).phase,
+        "refused",
+      );
+      const [saved] = await f.second.store.listUiIntentHints({
+        account: f.account(),
+      });
+      assert.equal(saved?.phase, "refused");
+      assert.equal(saved?.dispatchAttemptCount, 2);
+      assert.equal(saved?.requestJson, staged.intent.requestJson);
+    },
+  );
+  run(
     `${backend}: journal construction is default-off and migration persists a trusted realm without changing old schemas`,
     async (t) => {
       const f = await intentJournalFixture(t, backend, false),

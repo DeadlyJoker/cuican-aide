@@ -20,6 +20,7 @@ import {
   DESKTOP_PLUGIN_UI_VERSION,
   type DesktopPluginUiAssets,
   type DesktopPluginUiBinding,
+  type DesktopPluginUiRenewResult,
 } from "../src/lib/desktop/desktopPluginUiProtocol.ts";
 import {
   DESKTOP_LOCAL_PLUGIN_SOURCE_IMPORT_VERSION,
@@ -104,6 +105,11 @@ const bridge: CrewonDesktopBridge = {
       invoke<void>("crewon:plugin-ui:release-v1", bindingRef),
     renew: (bindingRef) =>
       invoke<PluginUiLease>("crewon:plugin-ui:renew-v1", bindingRef),
+    renewResult: (bindingRef) =>
+      invoke<DesktopPluginUiRenewResult>(
+        "crewon:plugin-ui:renew-result-v1",
+        bindingRef,
+      ),
     invalidate: () => invoke<void>("crewon:plugin-ui:invalidate-v1"),
   }),
   agentPlatformCredentials: {

@@ -8,6 +8,11 @@ import {
   createControlPluginUiHost,
 } from "./controlPluginUiHost";
 import type { InstalledPluginTaskReceiptEvent } from "./installedPluginTaskReceipt";
+import { subscribeProjectWorkspaceSourceChanges } from "./projectWorkspaceChanges";
+import {
+  textAdoptionRequest,
+  textAdoptionResponse,
+} from "./projectTextMutationChanges.test-support";
 import {
   controlUiClient,
   controlUiItem,
@@ -86,6 +91,55 @@ function fixture(
 }
 
 describe("authenticated Control plugin UI host (real client; explicit importer fixture)", () => {
+  it("refreshes text consumers after a validated adoption, but not a mismatched acknowledgement", async () => {
+    let output: unknown = textAdoptionResponse;
+    const f = fixture({ actionResponse: () => controlUiResponse({ output }) });
+    const changed = vi.fn();
+    const source = {
+      pluginId: f.lease.descriptor.pluginId,
+      publisherId: f.lease.descriptor.publisherId,
+      version: f.lease.descriptor.version,
+      packageDigest: f.lease.packageDigest,
+      selectionRevision: f.lease.selectionRevision,
+    };
+    const off = subscribeProjectWorkspaceSourceChanges(
+      f.client,
+      "project",
+      source,
+      "texts",
+      changed,
+    );
+    const lease = await f.acquire();
+    const handle = await f.host.loader.mount({
+      root: f.h.root,
+      lease,
+      props: uiProps(),
+    });
+    handles.push(handle);
+    try {
+      await f.h.instances[0].services.invoke(
+        textAdoptionRequest.action,
+        textAdoptionRequest.input,
+        {},
+      );
+      expect(changed).toHaveBeenCalledTimes(1);
+      output = {
+        ...textAdoptionResponse,
+        artifact: {
+          ...textAdoptionResponse.artifact,
+          projectId: "foreign-project",
+        },
+      };
+      await f.h.instances[0].services.invoke(
+        textAdoptionRequest.action,
+        textAdoptionRequest.input,
+        {},
+      );
+      expect(changed).toHaveBeenCalledTimes(1);
+    } finally {
+      off();
+    }
+  });
   it("uses the formal same-origin asset route and captured authenticated actions without actor fields", async () => {
     const f = fixture();
     const lease = await f.host.acquireMount(

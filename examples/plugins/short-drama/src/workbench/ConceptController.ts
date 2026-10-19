@@ -30,6 +30,7 @@ export class ConceptController {
   readonly images: ConceptImageSelectionController;
   #ports: ConceptPorts;
   #details: ProjectDetails | null = null;
+  #hostProjectId: string | null = null;
   #ready = false;
   #disposed = false;
   #epoch = 0;
@@ -52,8 +53,13 @@ export class ConceptController {
         this.#ports.lockChanged(this.locked);
         for (const listener of this.#listeners) listener();
       },
-      accepted: (request, receipt) =>
-        this.generations.expectReceipt(request.reference, receipt),
+      accepted: (request, receipt) => {
+        if (
+          this.#hostProjectId === null ||
+          request.reference.projectId === this.#hostProjectId
+        )
+          this.generations.expectReceipt(request.reference, receipt);
+      },
       restore: (request) => ports.restoreGenerationSource(request),
       restored: () => {
         if (!this.submissions.locked) void this.loadAssets();
@@ -66,8 +72,13 @@ export class ConceptController {
         this.#ports.lockChanged(this.locked);
         for (const listener of this.#listeners) listener();
       },
-      accepted: (request, receipt) =>
-        this.generations.expectQueryReceipt(request.reference, receipt),
+      accepted: (request, receipt) => {
+        if (
+          this.#hostProjectId === null ||
+          request.reference.projectId === this.#hostProjectId
+        )
+          this.generations.expectQueryReceipt(request.reference, receipt);
+      },
       restore: (request) => ports.restoreQuerySource(request),
       restored: () => {
         if (!this.queries.locked) void this.loadAssets();
@@ -81,8 +92,13 @@ export class ConceptController {
         this.#ports.lockChanged(this.locked);
         for (const listener of this.#listeners) listener();
       },
-      accepted: (request, receipt) =>
-        this.generations.expectQueryReceipt(request.reference, receipt),
+      accepted: (request, receipt) => {
+        if (
+          this.#hostProjectId === null ||
+          request.reference.projectId === this.#hostProjectId
+        )
+          this.generations.expectQueryReceipt(request.reference, receipt);
+      },
       restore: (request) => ports.restoreHistoricalQuerySource(request),
       restored: () => {
         if (!this.historicalQueries.locked) void this.loadAssets();
@@ -121,6 +137,28 @@ export class ConceptController {
     });
   }
   getSnapshot = (): ConceptSnapshot => this.#snapshot;
+  get localMutationPending(): boolean {
+    return this.#write !== null || this.#intent !== null;
+  }
+  recoveringProject(projectId: string): boolean {
+    return [
+      this.submissions,
+      this.queries,
+      this.historicalQueries,
+      this.images,
+    ].some(
+      (controller) =>
+        controller.locked &&
+        controller.getSnapshot().request?.reference.projectId === projectId,
+    );
+  }
+  setHostProjectScope(projectId: string | null) {
+    this.#hostProjectId = projectId;
+    this.submissions.setHostProjectScope(projectId);
+    this.queries.setHostProjectScope(projectId);
+    this.historicalQueries.setHostProjectScope(projectId);
+    this.images.setHostProjectScope(projectId);
+  }
   subscribe = (listener: () => void): (() => void) => {
     this.#listeners.add(listener);
     return () => this.#listeners.delete(listener);
@@ -398,6 +436,7 @@ export class ConceptController {
       revisions: [],
       nextAfterAssetRevision: null,
     });
+    void this.loadAssets();
   }
   async openAsset(assetId: string, assetRevision?: number) {
     if (!this.#available() || this.locked) return;

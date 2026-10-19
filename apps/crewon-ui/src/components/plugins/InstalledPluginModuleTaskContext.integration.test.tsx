@@ -258,7 +258,7 @@ describe.runIf(packageConfigured)(
       expect(
         f.container.querySelector('[aria-label="已受理任务"]'),
       ).not.toBeNull();
-      expect(f.container.textContent).toContain("任务 run-1：正在执行");
+      expect(f.container.textContent).toContain("任务 1 · 执行中");
       expect(f.diagnostics).toEqual([]);
     });
   },

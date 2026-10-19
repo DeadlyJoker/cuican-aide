@@ -1,0 +1,54 @@
+{
+  "sourceHashes": {
+    "apps/crewon-ui/src/lib/plugins/useInstalledPluginConfiguration.ts": "40aa8ec40a3db84f413d44504af9701f52ffce4988b9fc9af15a3bb1b53f6d7b",
+    "apps/crewon-ui/src/components/settings/InstalledPluginConfigurationPanel.tsx": "40b113d769898d38c0bd7a5b119c125d73d35736a1ce257579c63d03b27264b0",
+    "apps/crewon-ui/src/components/settings/InstalledPluginConfigurationPanel.test.tsx": "c78f2db08d9bd0afd9d94906d06ae92b76adda349739e89eeabe3f7b0c1b855f",
+    "apps/crewon-ui/src/lib/thread/threadListActions.ts": "45438742032a6ecff4e5c6f3a15e01c6f191cc0ee9e9f50f7801d16b5c767166",
+    "apps/crewon-ui/src/lib/thread/useThreadSelectionRead.test.tsx": "2b808fba4143aaea788465398ec5911812bda60b34260fc3fd45e5f4a0a0b8f9"
+  },
+  "checks": {
+    "uiRegression": 75,
+    "typecheck": "passed",
+    "boundary": "passed",
+    "format": "passed",
+    "diffCheck": "passed",
+    "isolatedOriginalOwnerPreview": "canonical config19 passed; original config18 failed; native policy unchanged"
+  },
+  "acceptedInClient": true,
+  "rendererPackage": {
+    "path": "/private/tmp/crewon-plugin-performance-20261015/config-origin-profile-20261016.asar",
+    "sha256": "9b0c6f564f33d34aab20e698fc650088d31aeab8269cc83212e3c5898d84f6c8",
+    "headerSha256": "96fd5c60d0b67d78f3ba45494064650e6d46c58a5f787fe922d409649446db01",
+    "nonRendererFilesVerified": 17464,
+    "startup": {
+      "entries": [
+        "assets/index-DKm_bUkg.js"
+      ],
+      "eagerChunks": [
+        "assets/index-DKm_bUkg.js",
+        "assets/runtime-PPVm8Dsz.js",
+        "assets/react-BPCV84d_.js",
+        "assets/icons-BKXws8yi.js",
+        "assets/desktopFetch-C6vSCXoG.js"
+      ],
+      "eagerBytes": 326474,
+      "javascriptLimitBytes": 524288,
+      "cloudflareEntryExcluded": true
+    }
+  },
+  "installed": true,
+  "deepStrictCodesign": "passed",
+  "client": {
+    "state": "OS authorization handled; configuration save, execution preparation and enable visibly passed",
+    "accepted": true,
+    "configurationRevision": 19,
+    "baseUrlCanonical": true,
+    "executionPreparation": "committed; observed explicit success message after restart",
+    "pluginSelectedVersion": "50.2.6",
+    "pluginEnabled": true,
+    "selectionRevision": 63,
+    "referenceGenerationOptIn": false,
+    "mediaSubmitted": false
+  },
+  "updatedAt": "2026-10-16T06:07:25.282176+00:00"
+}

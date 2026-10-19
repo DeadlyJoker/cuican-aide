@@ -26,6 +26,7 @@ import {
 } from "./plugins/installed-plugin-run-context.ts";
 import {
   captureProjectMediaExecutionReview,
+  MAX_PROJECT_MEDIA_EXECUTION_REVIEWS,
   expectedProjectMediaSubmission,
   mediaExecutionDigest,
   mediaExecutionFail as fail,
@@ -127,8 +128,9 @@ export class ProjectMediaExecutionBoundary {
       );
     if (
       !Array.isArray(input.reviews) ||
+      types.isProxy(input.reviews) ||
       !input.reviews.length ||
-      input.reviews.length > 32
+      input.reviews.length > MAX_PROJECT_MEDIA_EXECUTION_REVIEWS
     )
       fail("review_invalid");
     this.#reviews = Object.freeze(
@@ -223,7 +225,12 @@ export class ProjectMediaExecutionBoundary {
       new URL(prepared.targetServiceOrigin).origin !== configuredOrigin ||
       mediaExecutionDigest(request) !==
         mediaExecutionDigest(
-          expectedProjectMediaSubmission(review, prepared, operationId),
+          expectedProjectMediaSubmission(
+            review,
+            prepared,
+            operationId,
+            this.context.configuration.parameters.serviceProtocol,
+          ),
         )
     )
       fail("submission_mismatch");

@@ -1,0 +1,820 @@
+{
+  "scope": "Isolated real-client read-only acceptance; aggregate metadata only, excludes business bodies and credentials.",
+  "method": "Read-only SQLite transaction per snapshot; identical row-count, maximum revision/timestamp, phase and state aggregation over relevant tables. Aggregate equality does not assert byte-for-byte database equality.",
+  "baseline": {
+    "capturedAt": "2026-10-15T08:44:26.005Z",
+    "database": "/private/tmp/crewon-plugin-performance-20261015/final-profile/control-runtime-v1/control.sqlite",
+    "tables": [
+      {
+        "table": "creative_project_briefs",
+        "rowCount": 2,
+        "max_brief_revision": 1,
+        "record_json_createdAt": "2026-10-08T14:13:09.239Z"
+      },
+      {
+        "table": "creative_project_generation_links",
+        "rowCount": 1,
+        "max_brief_revision": 1,
+        "record_json_createdAt": "2026-10-04T17:45:03.520Z"
+      },
+      {
+        "table": "creative_project_historical_query_links",
+        "rowCount": 0
+      },
+      {
+        "table": "creative_project_mutation_receipts",
+        "rowCount": 2
+      },
+      {
+        "table": "creative_project_query_links",
+        "rowCount": 0
+      },
+      {
+        "table": "creative_projects",
+        "rowCount": 2,
+        "max_updated_at": "2026-10-08T14:13:09.239Z",
+        "max_revision": 3,
+        "record_json_createdAt": "2026-10-08T14:13:09.239Z",
+        "record_json_updatedAt": "2026-10-08T14:13:09.239Z",
+        "states": [
+          {
+            "state": "active",
+            "n": 2
+          }
+        ]
+      },
+      {
+        "table": "model_call_observations",
+        "rowCount": 119
+      },
+      {
+        "table": "plugin_query_task_admissions",
+        "rowCount": 0
+      },
+      {
+        "table": "plugin_task_admissions",
+        "rowCount": 18
+      },
+      {
+        "table": "plugin_task_unmetered_admissions",
+        "rowCount": 18
+      },
+      {
+        "table": "plugin_ui_intents",
+        "rowCount": 1,
+        "max_revision": 11,
+        "max_sequence": 1,
+        "max_dispatch_attempt_count": 9,
+        "record_json_createdAt": "2026-10-04T17:40:11.407Z",
+        "record_json_updatedAt": "2026-10-04T19:27:20.029Z",
+        "phases": [
+          {
+            "phase": "accepted",
+            "n": 1
+          }
+        ]
+      },
+      {
+        "table": "project_asset_media_adoption_receipts",
+        "rowCount": 0
+      },
+      {
+        "table": "project_asset_mutation_receipts",
+        "rowCount": 0
+      },
+      {
+        "table": "project_asset_reference_revisions",
+        "rowCount": 0
+      },
+      {
+        "table": "project_asset_revisions",
+        "rowCount": 0
+      },
+      {
+        "table": "project_asset_stage_run_admissions",
+        "rowCount": 0
+      },
+      {
+        "table": "project_asset_versioned_intents",
+        "rowCount": 0,
+        "phases": []
+      },
+      {
+        "table": "project_assets",
+        "rowCount": 0
+      },
+      {
+        "table": "project_conversation_bindings",
+        "rowCount": 2,
+        "max_revision": 6,
+        "record_json_createdAt": "2026-10-08T14:14:30.275Z",
+        "record_json_updatedAt": "2026-10-15T08:14:31.601Z",
+        "states": [
+          {
+            "state": "active",
+            "n": 2
+          }
+        ]
+      },
+      {
+        "table": "project_conversation_receipts",
+        "rowCount": 8
+      },
+      {
+        "table": "project_foundation_mutation_receipts",
+        "rowCount": 3
+      },
+      {
+        "table": "project_foundation_run_admissions",
+        "rowCount": 6,
+        "record_json_createdAt": "2026-10-09T02:57:35.389Z"
+      },
+      {
+        "table": "project_foundation_run_requirements",
+        "rowCount": 6
+      },
+      {
+        "table": "project_foundations",
+        "rowCount": 1,
+        "max_revision": 2,
+        "record_json_createdAt": "2026-10-08T14:13:09.239Z",
+        "record_json_updatedAt": "2026-10-08T15:36:12.301Z"
+      },
+      {
+        "table": "project_material_preparation_events",
+        "rowCount": 0,
+        "phases": []
+      },
+      {
+        "table": "project_material_preparation_heads",
+        "rowCount": 0,
+        "phases": []
+      },
+      {
+        "table": "project_material_preparations",
+        "rowCount": 0
+      },
+      {
+        "table": "project_media_generation_links",
+        "rowCount": 0
+      },
+      {
+        "table": "project_media_generation_materials",
+        "rowCount": 0,
+        "phases": []
+      },
+      {
+        "table": "project_media_input_receipts",
+        "rowCount": 0
+      },
+      {
+        "table": "project_media_input_revisions",
+        "rowCount": 0
+      },
+      {
+        "table": "project_media_input_stage_run_admissions",
+        "rowCount": 1,
+        "record_json_createdAt": "2026-10-15T08:33:56.451Z"
+      },
+      {
+        "table": "project_media_inputs",
+        "rowCount": 0
+      },
+      {
+        "table": "project_media_operations",
+        "rowCount": 0
+      },
+      {
+        "table": "project_media_result_candidates",
+        "rowCount": 0
+      },
+      {
+        "table": "project_proposals",
+        "rowCount": 1,
+        "max_proposal_revision": 1,
+        "record_json_createdAt": "2026-10-08T15:33:21.909Z"
+      },
+      {
+        "table": "project_source_chapters",
+        "rowCount": 3,
+        "max_source_revision": 1
+      },
+      {
+        "table": "project_source_chunks",
+        "rowCount": 1,
+        "max_source_revision": 1
+      },
+      {
+        "table": "project_source_upload_associations",
+        "rowCount": 1,
+        "max_source_revision": 1,
+        "record_json_createdAt": "2026-10-08T14:13:09.239Z"
+      },
+      {
+        "table": "project_source_upload_events",
+        "rowCount": 5,
+        "record_json_updatedAt": "2026-10-08T14:12:15.549Z",
+        "phases": [
+          {
+            "phase": "preparing",
+            "n": 1
+          },
+          {
+            "phase": "raw-sealed",
+            "n": 1
+          },
+          {
+            "phase": "ready",
+            "n": 1
+          },
+          {
+            "phase": "receiving",
+            "n": 2
+          }
+        ]
+      },
+      {
+        "table": "project_source_upload_heads",
+        "rowCount": 1,
+        "max_revision": 5,
+        "record_json_updatedAt": "2026-10-08T14:12:15.549Z",
+        "phases": [
+          {
+            "phase": "ready",
+            "n": 1
+          }
+        ]
+      },
+      {
+        "table": "project_source_upload_part_payloads",
+        "rowCount": 1
+      },
+      {
+        "table": "project_source_upload_parts",
+        "rowCount": 1
+      },
+      {
+        "table": "project_source_upload_prepared",
+        "rowCount": 1
+      },
+      {
+        "table": "project_source_upload_prepared_chapters",
+        "rowCount": 3
+      },
+      {
+        "table": "project_source_upload_prepared_chunks",
+        "rowCount": 1
+      },
+      {
+        "table": "project_source_upload_seals",
+        "rowCount": 1
+      },
+      {
+        "table": "project_source_uploads",
+        "rowCount": 1,
+        "record_json_createdAt": "2026-10-08T14:12:14.795Z"
+      },
+      {
+        "table": "project_sources",
+        "rowCount": 1,
+        "max_source_revision": 1,
+        "record_json_createdAt": "2026-10-08T14:13:09.239Z"
+      },
+      {
+        "table": "project_stage_run_admissions",
+        "rowCount": 16,
+        "record_json_createdAt": "2026-10-09T12:17:38.071Z"
+      },
+      {
+        "table": "project_text_artifacts",
+        "rowCount": 1,
+        "max_revision": 7,
+        "record_json_createdAt": "2026-10-08T16:44:49.490Z",
+        "record_json_updatedAt": "2026-10-09T11:58:52.534Z"
+      },
+      {
+        "table": "project_text_mutation_receipts",
+        "rowCount": 7
+      },
+      {
+        "table": "project_text_plan_receipts",
+        "rowCount": 0
+      },
+      {
+        "table": "project_text_plan_revisions",
+        "rowCount": 0
+      },
+      {
+        "table": "project_text_plan_run_admissions",
+        "rowCount": 0
+      },
+      {
+        "table": "project_text_plan_steps",
+        "rowCount": 0,
+        "states": []
+      },
+      {
+        "table": "project_text_plans",
+        "rowCount": 0,
+        "states": []
+      },
+      {
+        "table": "project_text_revisions",
+        "rowCount": 7,
+        "max_brief_revision": 1,
+        "max_content_revision": 7,
+        "record_json_createdAt": "2026-10-09T11:58:52.534Z"
+      },
+      {
+        "table": "project_text_ui_intents",
+        "rowCount": 1,
+        "max_revision": 3,
+        "record_json_createdAt": "2026-10-08T16:44:49.360Z",
+        "record_json_updatedAt": "2026-10-08T16:44:49.994Z",
+        "phases": [
+          {
+            "phase": "accepted",
+            "n": 1
+          }
+        ]
+      },
+      {
+        "table": "run_events",
+        "rowCount": 28761,
+        "max_sequence": 5873
+      },
+      {
+        "table": "run_snapshots",
+        "rowCount": 169,
+        "max_updated_at": "2026-10-15T08:35:35.089Z",
+        "max_revision": 5873
+      }
+    ],
+    "runStatuses": [
+      {
+        "status": "canceled",
+        "n": 10,
+        "latestUpdatedAt": "2026-10-15T07:19:53.330Z"
+      },
+      {
+        "status": "completed",
+        "n": 141,
+        "latestUpdatedAt": "2026-10-15T07:20:11.528Z"
+      },
+      {
+        "status": "failed",
+        "n": 18,
+        "latestUpdatedAt": "2026-10-15T08:35:35.089Z"
+      }
+    ]
+  },
+  "after": {
+    "capturedAt": "2026-10-15T08:52:27.047Z",
+    "database": "/private/tmp/crewon-plugin-performance-20261015/final-profile/control-runtime-v1/control.sqlite",
+    "tables": [
+      {
+        "table": "creative_project_briefs",
+        "rowCount": 2,
+        "max_brief_revision": 1,
+        "record_json_createdAt": "2026-10-08T14:13:09.239Z"
+      },
+      {
+        "table": "creative_project_generation_links",
+        "rowCount": 1,
+        "max_brief_revision": 1,
+        "record_json_createdAt": "2026-10-04T17:45:03.520Z"
+      },
+      {
+        "table": "creative_project_historical_query_links",
+        "rowCount": 0
+      },
+      {
+        "table": "creative_project_mutation_receipts",
+        "rowCount": 2
+      },
+      {
+        "table": "creative_project_query_links",
+        "rowCount": 0
+      },
+      {
+        "table": "creative_projects",
+        "rowCount": 2,
+        "max_updated_at": "2026-10-08T14:13:09.239Z",
+        "max_revision": 3,
+        "record_json_createdAt": "2026-10-08T14:13:09.239Z",
+        "record_json_updatedAt": "2026-10-08T14:13:09.239Z",
+        "states": [
+          {
+            "state": "active",
+            "n": 2
+          }
+        ]
+      },
+      {
+        "table": "model_call_observations",
+        "rowCount": 119
+      },
+      {
+        "table": "plugin_query_task_admissions",
+        "rowCount": 0
+      },
+      {
+        "table": "plugin_task_admissions",
+        "rowCount": 18
+      },
+      {
+        "table": "plugin_task_unmetered_admissions",
+        "rowCount": 18
+      },
+      {
+        "table": "plugin_ui_intents",
+        "rowCount": 1,
+        "max_revision": 11,
+        "max_sequence": 1,
+        "max_dispatch_attempt_count": 9,
+        "record_json_createdAt": "2026-10-04T17:40:11.407Z",
+        "record_json_updatedAt": "2026-10-04T19:27:20.029Z",
+        "phases": [
+          {
+            "phase": "accepted",
+            "n": 1
+          }
+        ]
+      },
+      {
+        "table": "project_asset_media_adoption_receipts",
+        "rowCount": 0
+      },
+      {
+        "table": "project_asset_mutation_receipts",
+        "rowCount": 0
+      },
+      {
+        "table": "project_asset_reference_revisions",
+        "rowCount": 0
+      },
+      {
+        "table": "project_asset_revisions",
+        "rowCount": 0
+      },
+      {
+        "table": "project_asset_stage_run_admissions",
+        "rowCount": 0
+      },
+      {
+        "table": "project_asset_versioned_intents",
+        "rowCount": 0,
+        "phases": []
+      },
+      {
+        "table": "project_assets",
+        "rowCount": 0
+      },
+      {
+        "table": "project_conversation_bindings",
+        "rowCount": 2,
+        "max_revision": 7,
+        "record_json_createdAt": "2026-10-08T14:14:30.275Z",
+        "record_json_updatedAt": "2026-10-15T08:46:52.524Z",
+        "states": [
+          {
+            "state": "active",
+            "n": 2
+          }
+        ]
+      },
+      {
+        "table": "project_conversation_receipts",
+        "rowCount": 10
+      },
+      {
+        "table": "project_foundation_mutation_receipts",
+        "rowCount": 3
+      },
+      {
+        "table": "project_foundation_run_admissions",
+        "rowCount": 6,
+        "record_json_createdAt": "2026-10-09T02:57:35.389Z"
+      },
+      {
+        "table": "project_foundation_run_requirements",
+        "rowCount": 6
+      },
+      {
+        "table": "project_foundations",
+        "rowCount": 1,
+        "max_revision": 2,
+        "record_json_createdAt": "2026-10-08T14:13:09.239Z",
+        "record_json_updatedAt": "2026-10-08T15:36:12.301Z"
+      },
+      {
+        "table": "project_material_preparation_events",
+        "rowCount": 0,
+        "phases": []
+      },
+      {
+        "table": "project_material_preparation_heads",
+        "rowCount": 0,
+        "phases": []
+      },
+      {
+        "table": "project_material_preparations",
+        "rowCount": 0
+      },
+      {
+        "table": "project_media_generation_links",
+        "rowCount": 0
+      },
+      {
+        "table": "project_media_generation_materials",
+        "rowCount": 0,
+        "phases": []
+      },
+      {
+        "table": "project_media_input_receipts",
+        "rowCount": 0
+      },
+      {
+        "table": "project_media_input_revisions",
+        "rowCount": 0
+      },
+      {
+        "table": "project_media_input_stage_run_admissions",
+        "rowCount": 1,
+        "record_json_createdAt": "2026-10-15T08:33:56.451Z"
+      },
+      {
+        "table": "project_media_inputs",
+        "rowCount": 0
+      },
+      {
+        "table": "project_media_operations",
+        "rowCount": 0
+      },
+      {
+        "table": "project_media_result_candidates",
+        "rowCount": 0
+      },
+      {
+        "table": "project_proposals",
+        "rowCount": 1,
+        "max_proposal_revision": 1,
+        "record_json_createdAt": "2026-10-08T15:33:21.909Z"
+      },
+      {
+        "table": "project_source_chapters",
+        "rowCount": 3,
+        "max_source_revision": 1
+      },
+      {
+        "table": "project_source_chunks",
+        "rowCount": 1,
+        "max_source_revision": 1
+      },
+      {
+        "table": "project_source_upload_associations",
+        "rowCount": 1,
+        "max_source_revision": 1,
+        "record_json_createdAt": "2026-10-08T14:13:09.239Z"
+      },
+      {
+        "table": "project_source_upload_events",
+        "rowCount": 5,
+        "record_json_updatedAt": "2026-10-08T14:12:15.549Z",
+        "phases": [
+          {
+            "phase": "preparing",
+            "n": 1
+          },
+          {
+            "phase": "raw-sealed",
+            "n": 1
+          },
+          {
+            "phase": "ready",
+            "n": 1
+          },
+          {
+            "phase": "receiving",
+            "n": 2
+          }
+        ]
+      },
+      {
+        "table": "project_source_upload_heads",
+        "rowCount": 1,
+        "max_revision": 5,
+        "record_json_updatedAt": "2026-10-08T14:12:15.549Z",
+        "phases": [
+          {
+            "phase": "ready",
+            "n": 1
+          }
+        ]
+      },
+      {
+        "table": "project_source_upload_part_payloads",
+        "rowCount": 1
+      },
+      {
+        "table": "project_source_upload_parts",
+        "rowCount": 1
+      },
+      {
+        "table": "project_source_upload_prepared",
+        "rowCount": 1
+      },
+      {
+        "table": "project_source_upload_prepared_chapters",
+        "rowCount": 3
+      },
+      {
+        "table": "project_source_upload_prepared_chunks",
+        "rowCount": 1
+      },
+      {
+        "table": "project_source_upload_seals",
+        "rowCount": 1
+      },
+      {
+        "table": "project_source_uploads",
+        "rowCount": 1,
+        "record_json_createdAt": "2026-10-08T14:12:14.795Z"
+      },
+      {
+        "table": "project_sources",
+        "rowCount": 1,
+        "max_source_revision": 1,
+        "record_json_createdAt": "2026-10-08T14:13:09.239Z"
+      },
+      {
+        "table": "project_stage_run_admissions",
+        "rowCount": 16,
+        "record_json_createdAt": "2026-10-09T12:17:38.071Z"
+      },
+      {
+        "table": "project_text_artifacts",
+        "rowCount": 1,
+        "max_revision": 7,
+        "record_json_createdAt": "2026-10-08T16:44:49.490Z",
+        "record_json_updatedAt": "2026-10-09T11:58:52.534Z"
+      },
+      {
+        "table": "project_text_mutation_receipts",
+        "rowCount": 7
+      },
+      {
+        "table": "project_text_plan_receipts",
+        "rowCount": 0
+      },
+      {
+        "table": "project_text_plan_revisions",
+        "rowCount": 0
+      },
+      {
+        "table": "project_text_plan_run_admissions",
+        "rowCount": 0
+      },
+      {
+        "table": "project_text_plan_steps",
+        "rowCount": 0,
+        "states": []
+      },
+      {
+        "table": "project_text_plans",
+        "rowCount": 0,
+        "states": []
+      },
+      {
+        "table": "project_text_revisions",
+        "rowCount": 7,
+        "max_brief_revision": 1,
+        "max_content_revision": 7,
+        "record_json_createdAt": "2026-10-09T11:58:52.534Z"
+      },
+      {
+        "table": "project_text_ui_intents",
+        "rowCount": 1,
+        "max_revision": 3,
+        "record_json_createdAt": "2026-10-08T16:44:49.360Z",
+        "record_json_updatedAt": "2026-10-08T16:44:49.994Z",
+        "phases": [
+          {
+            "phase": "accepted",
+            "n": 1
+          }
+        ]
+      },
+      {
+        "table": "run_events",
+        "rowCount": 28761,
+        "max_sequence": 5873
+      },
+      {
+        "table": "run_snapshots",
+        "rowCount": 169,
+        "max_updated_at": "2026-10-15T08:35:35.089Z",
+        "max_revision": 5873
+      }
+    ],
+    "runStatuses": [
+      {
+        "status": "canceled",
+        "n": 10,
+        "latestUpdatedAt": "2026-10-15T07:19:53.330Z"
+      },
+      {
+        "status": "completed",
+        "n": 141,
+        "latestUpdatedAt": "2026-10-15T07:20:11.528Z"
+      },
+      {
+        "status": "failed",
+        "n": 18,
+        "latestUpdatedAt": "2026-10-15T08:35:35.089Z"
+      }
+    ]
+  },
+  "diff": [
+    {
+      "table": "project_conversation_bindings",
+      "before": {
+        "table": "project_conversation_bindings",
+        "rowCount": 2,
+        "max_revision": 6,
+        "record_json_createdAt": "2026-10-08T14:14:30.275Z",
+        "record_json_updatedAt": "2026-10-15T08:14:31.601Z",
+        "states": [
+          {
+            "state": "active",
+            "n": 2
+          }
+        ]
+      },
+      "after": {
+        "table": "project_conversation_bindings",
+        "rowCount": 2,
+        "max_revision": 7,
+        "record_json_createdAt": "2026-10-08T14:14:30.275Z",
+        "record_json_updatedAt": "2026-10-15T08:46:52.524Z",
+        "states": [
+          {
+            "state": "active",
+            "n": 2
+          }
+        ]
+      }
+    },
+    {
+      "table": "project_conversation_receipts",
+      "before": {
+        "table": "project_conversation_receipts",
+        "rowCount": 8
+      },
+      "after": {
+        "table": "project_conversation_receipts",
+        "rowCount": 10
+      }
+    }
+  ],
+  "runStatusesUnchanged": true,
+  "result": {
+    "tablesCompared": 61,
+    "changedTables": 2,
+    "allAggregatesUnchanged": false,
+    "taskGenerationUploadAndProjectContentAggregatesUnchanged": true,
+    "changedTableNames": [
+      "project_conversation_bindings",
+      "project_conversation_receipts"
+    ],
+    "unchangedTableCount": 59
+  },
+  "observedMetadataWrites": {
+    "classification": "Two existing project conversation source bindings refreshed; these metadata updates are not generation submissions or uploads.",
+    "receiptKindsAfter": [
+      {
+        "kind": "create",
+        "count": 2
+      },
+      {
+        "kind": "refresh-source",
+        "count": 8
+      }
+    ],
+    "latestTwoReceiptKinds": ["refresh-source", "refresh-source"],
+    "latestTwoBindingUpdates": [
+      {
+        "revision": 3,
+        "updatedAt": "2026-10-15T08:46:19.061Z"
+      },
+      {
+        "revision": 7,
+        "updatedAt": "2026-10-15T08:46:52.524Z"
+      }
+    ],
+    "sourceReferences": [
+      "examples/plugins/short-drama/src/workbench/ProjectConversationController.ts:594",
+      "packages/store/src/project-conversation-sqlite-store.ts:254"
+    ]
+  }
+}

@@ -1,5 +1,6 @@
 import { TranscriptWindowControls } from "./TranscriptWindowControls";
 import { controlPendingReplyDraft } from "../lib/control-runtime/controlRunTerminalPresentation";
+import { controlRunModelActivity } from "../lib/control-runtime/controlRunModelActivity";
 import { useStreamingTextPreview } from "./StreamingTextScope";
 import { ProjectPlanningRunScope } from "./project-planning/ProjectPlanningScope";
 import { useHasTaskWorkbench } from "./workbench/TaskWorkbenchContext";
@@ -35,10 +36,7 @@ import {
   TranscriptFailureMessage,
   type TranscriptItemLabels,
 } from "./TranscriptMessage";
-import {
-  hasDisplayableReasoning,
-  isActionProcessItem,
-} from "./transcriptReasoning";
+import { isActionProcessItem } from "./transcriptReasoning";
 
 import { TranscriptTurn, hasFinalAgentResponse } from "./TranscriptTurn";
 
@@ -210,7 +208,9 @@ export function Transcript({
   streamingText,
   youLabel,
 }: TranscriptProps) {
-  const pendingSubmissions = usePendingThreadSubmissionsPresentation({ thread });
+  const pendingSubmissions = usePendingThreadSubmissionsPresentation({
+    thread,
+  });
   const streamingPreview = useStreamingTextPreview(thread?.id ?? null);
   const hasWorkbench = useHasTaskWorkbench();
   const pendingTeam = teamProgressForThread(thread, teamProgress);
@@ -249,19 +249,19 @@ export function Transcript({
   );
   const hasItems = rows.length > 0 || pendingSubmissions.length > 0;
   const lastTurn = thread?.turns[thread.turns.length - 1] ?? null;
-  const hasVisibleProcessActivity = Boolean(
+  const hasPendingTool = Boolean(
     lastTurn?.items.some((item) => {
-      if (isActionProcessItem(item)) {
-        return true;
-      }
-
-      if (item.type !== "reasoning") {
-        return false;
-      }
-
-      return hasDisplayableReasoning(item);
+      if (!isActionProcessItem(item)) return false;
+      if (item.type === "imageGeneration")
+        return (
+          item.status !== "completed" &&
+          item.status !== "succeeded" &&
+          item.status !== "failed"
+        );
+      return "status" in item && item.status === "inProgress";
     }),
   );
+  const modelActivity = controlRunModelActivity(lastTurn);
   const streamOwnedByPendingReply =
     !activeTurnId &&
     lastTurn !== null &&
@@ -274,9 +274,10 @@ export function Transcript({
   const shouldShowThinking =
     !pendingTeam &&
     Boolean(thread) &&
-    !streamingText &&
     lastTurn?.status === "inProgress" &&
-    !hasVisibleProcessActivity;
+    !hasPendingTool &&
+    (modelActivity !== null ||
+      (!streamingText.trim() && !hasFinalAgentResponse(lastTurn)));
   const shouldShowLoading =
     !pendingTeam &&
     Boolean(thread) &&
@@ -491,9 +492,7 @@ export function Transcript({
         role="log"
         aria-busy={
           shouldShowLoading ||
-          (showsLiveStream &&
-            Boolean(activeTurnId || lastTurn?.status === "inProgress")) ||
-          shouldShowThinking ||
+          lastTurn?.status === "inProgress" ||
           Boolean(pendingTeam && pendingTeam.phase !== "failed")
         }
         aria-live="polite"
@@ -559,7 +558,10 @@ export function Transcript({
           )
             return null;
           return (
-            <ProjectPlanningRunScope runId={turn.id} key={`${turn.id}:${row.itemIds[0] ?? "active"}`}>
+            <ProjectPlanningRunScope
+              runId={turn.id}
+              key={`${turn.id}:${row.itemIds[0] ?? "active"}`}
+            >
               {historyWindow && row.continuation && row.itemIds.length > 0 ? (
                 <p className="transcript-history-note">
                   {locale === "zh" ? "本页显示本轮的部分内容" : "This page shows part of this turn"}
@@ -586,7 +588,9 @@ export function Transcript({
               {row.firstFragment && controlPendingReplyDraft(sourceTurn) ? (
                 <section
                   data-pending-reply-run={sourceTurn.id}
-                  data-local-preview={controlPendingReplyDraft(sourceTurn)!.localId}
+                  data-local-preview={
+                    controlPendingReplyDraft(sourceTurn)!.localId
+                  }
                 >
                   <TranscriptStreamingMessage
                     crewonLabel={crewonLabel}
@@ -656,6 +660,7 @@ export function Transcript({
           <TranscriptThinkingMessage
             crewonLabel={crewonLabel}
             locale={locale}
+            retrying={modelActivity === "retrying"}
           />
         ) : null}
         <div

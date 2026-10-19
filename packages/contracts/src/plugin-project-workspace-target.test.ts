@@ -42,3 +42,33 @@ test("workspace target discovery identifies only the requested project and an op
   );
   assert.equal(called, false);
 });
+
+test("creation context is additive and rejects ambiguous mode and request fields", async () => {
+  const c = await import("./plugin-project-workspace-target.ts");
+  assert.deepEqual(c.parseProjectCreationContextRequest({}), {});
+  assert.throws(() =>
+    c.parseProjectCreationContextRequest({ projectId: "project" }),
+  );
+  for (const workspaceMode of ["legacy-nullable", "plugin-owned-explicit"]) {
+    assert.equal(
+      c.parseProjectCreationContextResponse({
+        schemaVersion: c.PROJECT_CREATION_CONTEXT_SCHEMA,
+        workspaceMode,
+      }).workspaceMode,
+      workspaceMode,
+    );
+  }
+  for (const workspaceMode of [null, undefined, "unknown", true])
+    assert.throws(() =>
+      c.parseProjectCreationContextResponse({
+        schemaVersion: c.PROJECT_CREATION_CONTEXT_SCHEMA,
+        workspaceMode,
+      }),
+    );
+  assert.throws(() =>
+    c.parseProjectCreationContextResponse({
+      schemaVersion: "old",
+      workspaceMode: "legacy-nullable",
+    }),
+  );
+});

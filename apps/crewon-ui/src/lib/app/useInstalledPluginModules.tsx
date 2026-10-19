@@ -710,6 +710,7 @@ export function useInstalledPluginModules({
     host,
     pageNavigation,
     enabled: taskContextEnabled,
+    localManagementAccess,
     currentScope: current,
     mountedScope,
     onDiagnostic,
@@ -764,6 +765,7 @@ export function useInstalledPluginModules({
           runIds={taskRunIds}
           projectConversationContext={projectConversationContext}
           projectPlanningDraft={planning.draftFor(module)}
+          projectWorkspaceChangeClient={scope?.client ?? null}
           onOpenTask={(threadId) => {
             taskPorts?.assertSessionCurrent();
             if (taskPorts) taskContextRef.current?.onOpenTask(threadId);

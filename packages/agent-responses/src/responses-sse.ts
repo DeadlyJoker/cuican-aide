@@ -1,3 +1,5 @@
+import { inspectPendingResponsesFrame } from "./responses-pending-frame-diagnostics.ts";
+import type { ResponsesStreamDiagnostics } from "./responses-stream-diagnostics.ts";
 import { ModelTransportError } from "@crewon/agent-kernel";
 
 const DEFAULT_MAX_EVENT_BYTES = 256 * 1024;
@@ -10,6 +12,10 @@ export async function* parseResponsesSse(
   body: ReadableStream<Uint8Array>,
   options: {
     maxEventBytes?: number;
+    diagnostics?: Pick<
+      ResponsesStreamDiagnostics,
+      "chunk" | "frame" | "pending" | "pendingInspection"
+    >;
     onActivity?: () => void;
     signal?: AbortSignal;
     /** Drain the received chunk, then stop future reads after a trusted protocol terminal. */
@@ -59,6 +65,7 @@ export async function* parseResponsesSse(
         break;
       }
       options.onActivity?.();
+      options.diagnostics?.chunk(result.value.byteLength);
       buffer += decoder.decode(result.value, { stream: true });
       while (true) {
         const boundary = findEventBoundary(buffer);
@@ -67,25 +74,32 @@ export async function* parseResponsesSse(
         }
         const frame = buffer.slice(0, boundary.index);
         buffer = buffer.slice(boundary.index + boundary.length);
-        const parsed = parseFrame(frame, maxEventBytes);
+        options.diagnostics?.pending(
+          new TextEncoder().encode(buffer).byteLength,
+        );
+        const parsed = parseFrame(frame, maxEventBytes, options.diagnostics);
         if (parsed !== null) {
           yield parsed;
         }
       }
+      options.diagnostics?.pending(new TextEncoder().encode(buffer).byteLength);
       assertBounded(buffer, maxEventBytes);
       if (options.stopAfterBufferedFrames?.() === true) {
         buffer += decoder.decode();
         // [DONE] is an optional trailer. Its received prefix cannot delay a trusted terminal.
         if (buffer.trim().length > 0 && !isOptionalDonePrefix(buffer)) {
-          const parsed = parseFrame(buffer, maxEventBytes);
+          const parsed = parseFrame(buffer, maxEventBytes, options.diagnostics);
+          buffer = "";
           if (parsed !== null) yield parsed;
         }
+        buffer = "";
         return;
       }
     }
     buffer += decoder.decode();
     if (buffer.trim().length > 0) {
-      const parsed = parseFrame(buffer, maxEventBytes);
+      const parsed = parseFrame(buffer, maxEventBytes, options.diagnostics);
+      buffer = "";
       if (parsed !== null) {
         yield parsed;
       }
@@ -96,6 +110,18 @@ export async function* parseResponsesSse(
     }
     throw protocolError("responses_stream_decode_failed", error);
   } finally {
+    try {
+      options.diagnostics?.pending(
+        buffer.length > 256 * 1024
+          ? 256 * 1024
+          : new TextEncoder().encode(buffer).byteLength,
+      );
+      options.diagnostics?.pendingInspection(
+        inspectPendingResponsesFrame(buffer),
+      );
+    } catch {
+      // Diagnostic classification cannot replace stream/protocol/cancellation outcomes.
+    }
     options.signal?.removeEventListener("abort", cancelRead);
     options.onReadClosed?.({ endOfBody: readLifetime.endOfBody });
     try {
@@ -125,6 +151,7 @@ function isOptionalDonePrefix(frame: string): boolean {
 function parseFrame(
   frame: string,
   maxEventBytes: number,
+  diagnostics?: Pick<ResponsesStreamDiagnostics, "frame" | "pending">,
 ): ResponsesSseItem | null {
   assertBounded(frame, maxEventBytes);
   const dataLines: string[] = [];
@@ -143,9 +170,15 @@ function parseFrame(
     }
   }
   if (dataLines.length === 0) {
+    diagnostics?.frame(
+      frame.split(/\r\n|\r|\n/).some((line) => line.startsWith(":"))
+        ? "comment"
+        : "ignored",
+    );
     return null;
   }
   const data = dataLines.join("\n");
+  diagnostics?.frame(data === "[DONE]" ? "done" : "data");
   if (data === "[DONE]") {
     return { kind: "done" };
   }
@@ -164,14 +197,23 @@ function parseFrame(
 function findEventBoundary(
   value: string,
 ): Readonly<{ index: number; length: number }> | null {
-  const matches = ["\n\n", "\r\n\r\n", "\r\r"]
-    .map((separator) => ({
-      index: value.indexOf(separator),
-      length: separator.length,
-    }))
-    .filter((match) => match.index !== -1)
-    .sort((left, right) => left.index - right.index);
-  return matches[0] ?? null;
+  // SSE lines may independently end in CRLF, CR or LF. Match an empty
+  // line using two line-ending tokens, never by treating CRLF as two lines.
+  let previous: Readonly<{ index: number; length: number }> | null = null;
+  for (let index = 0; index < value.length; ) {
+    const character = value[index];
+    if (character !== "\r" && character !== "\n") {
+      previous = null;
+      index++;
+      continue;
+    }
+    const length = character === "\r" && value[index + 1] === "\n" ? 2 : 1;
+    if (previous !== null)
+      return { index: previous.index, length: previous.length + length };
+    previous = { index, length };
+    index += length;
+  }
+  return null;
 }
 
 function assertBounded(value: string, maxEventBytes: number): void {

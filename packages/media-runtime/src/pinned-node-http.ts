@@ -220,7 +220,8 @@ function validateBounds(
     (profile === "imageUpload" &&
       (input.method !== "POST" ||
         !(input.body instanceof Uint8Array) ||
-        input.target.endpoint.pathname !== "/upload/image" ||
+        (input.target.endpoint.pathname !== "/upload/image" &&
+          input.target.endpoint.pathname !== "/api/comfy/upload/file") ||
         input.target.endpoint.search !== "" ||
         input.target.endpoint.hash !== "" ||
         !/^multipart\/form-data; boundary=[A-Za-z0-9-]{1,96}$/u.test(

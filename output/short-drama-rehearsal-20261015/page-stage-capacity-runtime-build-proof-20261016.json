@@ -1,0 +1,50 @@
+{
+  "builtAt": "2026-10-16T07:25:51.017Z",
+  "implementationDigest": "sha256:decb1f95d57b02056fb045398ad799864112b7b97d98eed7c1ac105914cfa973",
+  "identity": {
+    "schemaVersion": "crewon.extension-build-identity.v1",
+    "implementationDigest": "sha256:decb1f95d57b02056fb045398ad799864112b7b97d98eed7c1ac105914cfa973",
+    "bundles": [
+      {
+        "file": "control-api.mjs",
+        "digest": "sha256:c14677fce2b8d7857371b65e2f8415b70393f2b6609bc260407c1bbebf4c343f"
+      },
+      {
+        "file": "device-gateway.mjs",
+        "digest": "sha256:a75bcaee2d78fab139f01f4212d823dc0248a430df7c6e9650ee6eb12c6e0e52"
+      },
+      {
+        "file": "local-workspace-checks-mcp.mjs",
+        "digest": "sha256:00c30cb7aeb1699fc3c38a3a5e3318b03d8f9a8b97b22295ddd9671b6b0d5c64"
+      },
+      {
+        "file": "provider-model-catalog.mjs",
+        "digest": "sha256:a762f1e2f0e9bcd827505cff3443b3a5d826a8b7682963ce3227c9df2ed5f6f4"
+      },
+      {
+        "file": "provider-settings-coordinator.mjs",
+        "digest": "sha256:64d3d107b3a851c45c61f44c989d8d54fa68e606739cf5b74f06576857e16b96"
+      },
+      {
+        "file": "runtime-release.mjs",
+        "digest": "sha256:f7b3ff48e8979e64046e92d3a9567ceb44fd791689ebdafd294cd8c0a72dcace"
+      },
+      {
+        "file": "runtime-worker.mjs",
+        "digest": "sha256:c230e3763f6a4a22686b582f18a900b844874dceb78abe415e8d47ba778d7aee"
+      }
+    ],
+    "historicalWorkItemScope": "crewon.extension-work-item-scope.v1"
+  },
+  "bundles": {
+    "control-api.mjs": "c14677fce2b8d7857371b65e2f8415b70393f2b6609bc260407c1bbebf4c343f",
+    "runtime-worker.mjs": "c230e3763f6a4a22686b582f18a900b844874dceb78abe415e8d47ba778d7aee",
+    "runtime-release.mjs": "f7b3ff48e8979e64046e92d3a9567ceb44fd791689ebdafd294cd8c0a72dcace",
+    "provider-model-catalog.mjs": "a762f1e2f0e9bcd827505cff3443b3a5d826a8b7682963ce3227c9df2ed5f6f4",
+    "provider-settings-coordinator.mjs": "64d3d107b3a851c45c61f44c989d8d54fa68e606739cf5b74f06576857e16b96",
+    "device-gateway.mjs": "a75bcaee2d78fab139f01f4212d823dc0248a430df7c6e9650ee6eb12c6e0e52",
+    "local-workspace-checks-mcp.mjs": "00c30cb7aeb1699fc3c38a3a5e3318b03d8f9a8b97b22295ddd9671b6b0d5c64"
+  },
+  "status": "built, not installed or client-accepted",
+  "acceptanceOnly": true
+}

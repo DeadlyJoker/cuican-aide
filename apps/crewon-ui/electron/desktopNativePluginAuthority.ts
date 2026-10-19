@@ -1,4 +1,5 @@
 import { createHash, randomBytes } from "node:crypto";
+import { DESKTOP_PLUGIN_APPROVAL_MAX_BYTES } from "@crewon/contracts/plugins";
 import {
   chmodSync,
   openSync,
@@ -194,7 +195,7 @@ export function createDesktopNativePluginAuthority(
     join(dataDirectory, "plugin-approvals.json"),
     join(dataDirectory, "plugin-profile.json"),
   ].map((path) => {
-    const file = capture(path, 128 * 1024);
+    const file = capture(path, DESKTOP_PLUGIN_APPROVAL_MAX_BYTES);
     const digest = hash(readFileSync(path));
     file.assertCurrent();
     return { path, digest, file };

@@ -19,9 +19,13 @@ export type ComfyApiGraphOptions = Readonly<{
   prompt: Readonly<{ nodeId: string; input: string }>;
   outputPrefix: Readonly<{ nodeId: string; input: string }>;
   objectInfo?: Readonly<
-    Record<string, Readonly<{ output: readonly unknown[] }>>
+    Record<string, Readonly<{ output: readonly unknown[]; input?: unknown }>>
   >;
 }>;
+
+/** Composition and utility video graphs explicitly have no mutable text prompt. */
+export type ComfyApiVideoGraphOptions = Omit<ComfyApiGraphOptions, "prompt"> &
+  Readonly<{ prompt: ComfyApiGraphOptions["prompt"] | null }>;
 
 export function validateComfyApiGraph(
   graph: unknown,
@@ -32,4 +36,16 @@ export function renderComfyApiGraph(
   graph: unknown,
   options: ComfyApiGraphOptions,
   values: Readonly<{ prompt: string; outputPrefix: string }>,
+): ComfyApiGraph;
+
+/** SaveVideo authoring requires the current node declarations; it grants no execution authority. */
+export function validateComfyApiVideoGraph(
+  graph: unknown,
+  options: ComfyApiVideoGraphOptions,
+): ComfyApiGraph;
+
+export function renderComfyApiVideoGraph(
+  graph: unknown,
+  options: ComfyApiVideoGraphOptions,
+  values: Readonly<{ prompt: string | null; outputPrefix: string }>,
 ): ComfyApiGraph;

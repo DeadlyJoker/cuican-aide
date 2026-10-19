@@ -1,0 +1,749 @@
+{
+  "recordedAt": "2026-10-15T19:33:32.789626+00:00",
+  "boundary": "read-only saved seetacloud service /object_info/{node}; no credentials, redirects, generation, upload, configuration change or workflow dispatch",
+  "results": [
+    {
+      "nodeClass": "UNETLoader",
+      "status": 200,
+      "bytes": 27820,
+      "available": true,
+      "outputs": [
+        "MODEL"
+      ],
+      "outputNode": false,
+      "inputs": {
+        "required": {
+          "unet_name": {
+            "type": "COMBO",
+            "choices": [
+              "Chroma1/Chroma1-HD-fp8_scaled_rev2.safetensors",
+              "Chroma1/Chroma1-HD-fp8mixed.safetensors",
+              "Chroma1/Chroma1-Radiance-v0.3.safetensors",
+              "Chroma1/Chroma1-Radiance-v0.4.safetensors",
+              "Chroma1/chroma-radiance-x0.safetensors",
+              "Ditto/ditto_global.safetensors",
+              "Ditto/ditto_global_comfy.safetensors",
+              "Ditto/ditto_global_style.safetensors",
+              "Ditto/ditto_global_style_comfy.safetensors",
+              "Ditto/ditto_sim2real.safetensors",
+              "Ditto/ditto_sim2real_comfy.safetensors",
+              "Ernie-image/ernie-image-turbo.safetensors",
+              "Ernie-image/ernie-image.safetensors",
+              "FireRed/FireRed-Image-Edit-1.0-transformer.safetensors",
+              "FireRed/FireRed-Image-Edit-1.0_fp8mixed_comfy.safetensors",
+              "FireRed/FireRed-Image-Edit-1.1_fp8mixed_comfy.safetensors",
+              "Flux2-Klein-9B-True-V3-bf16.safetensors",
+              "Lens/lens_bf16.safetensors",
+              "Lens/lens_turbo_bf16.safetensors",
+              "Longcat/longcat_image_edit_bf16.safetensors",
+              "Longcat/longcat_image_edit_turbo_bf16.safetensors",
+              "Ltx-2.3/ltx-2-19b-dev-fp8_transformer_only.safetensors",
+              "Ltx-2.3/ltx-2-19b-dev_transformer_only_bf16.safetensors",
+              "Ltx-2.3/ltx-2-19b-distilled-fp8_transformer_only.safetensors",
+              "Ltx-2.3/ltx-2-3-22b-dev_transformer_only_fp8_input_scaled.safetensors",
+              "Ltx-2.3/ltx-2.3-22b-dev_transformer_only_bf16.safetensors",
+              "Ltx-2.3/ltx-2.3-22b-dev_transformer_only_fp8_scaled.safetensors",
+              "Ltx-2.3/ltx-2.3-22b-distilled-1.1_transformer_only_fp8_scaled.safetensors",
+              "Ltx-2.3/ltx-2.3-22b-distilled-1.1_transformer_only_mxfp8_block32.safetensors",
+              "Ltx-2.3/ltx-2.3-22b-distilled_transformer_only_bf16.safetensors",
+              "Ltx-2.3/ltx-2.3-22b-distilled_transformer_only_fp8_input_scaled.safetensors",
+              "Ltx-2.3/ltx-2.3-22b-distilled_transformer_only_fp8_input_scaled_v2.safetensors",
+              "Ltx-2.3/ltx-2.3-22b-distilled_transformer_only_fp8_input_scaled_v3.safetensors",
+              "Ltx-2.3/ltx-2.3-22b-distilled_transformer_only_fp8_scaled.safetensors",
+              "Ltx-2.3/ltx-2.3-22b-distilled_transformer_only_mxfp8_block32.safetensors",
+              "Ltx/DasiwaLTX23Lightspeed_solsticecoinV2.safetensors",
+              "Ltx/ltx-2-19b-dev-fp8_transformer_only.safetensors",
+              "Ltx/ltx-2-19b-dev_transformer_only_bf16.safetensors",
+              "Ltx/ltx-2-19b-distilled-fp8_transformer_only.safetensors",
+              "Ltx/ltx-2-3-22b-dev_transformer_only_fp8_input_scaled.safetensors",
+              "Ltx/ltx-2.3-22b-dev_transformer_only_bf16.safetensors",
+              "Ltx/ltx-2.3-22b-dev_transformer_only_fp8_scaled.safetensors",
+              "Ltx/ltx-2.3-22b-distilled-1.1_transformer_only-int4_convrot.safetensors",
+              "Ltx/ltx-2.3-22b-distilled-1.1_transformer_only_bf16.safetensors",
+              "Ltx/ltx-2.3-22b-distilled-1.1_transformer_only_fp8_scaled.safetensors",
+              "Ltx/ltx-2.3-22b-distilled-1.1_transformer_only_int8_convrot.safetensors",
+              "Ltx/ltx-2.3-22b-distilled-1.1_transformer_only_mxfp8_block32.safetensors",
+              "Ltx/ltx-2.3-22b-distilled_transformer_only_bf16.safetensors",
+              "Ltx/ltx-2.3-22b-distilled_transformer_only_fp8_input_scaled.safetensors",
+              "Ltx/ltx-2.3-22b-distilled_transformer_only_fp8_input_scaled_v2.safetensors",
+              "Ltx/ltx-2.3-22b-distilled_transformer_only_fp8_input_scaled_v3.safetensors",
+              "Ltx/ltx-2.3-22b-distilled_transformer_only_fp8_scaled.safetensors",
+              "Ltx/ltx-2.3-22b-distilled_transformer_only_mxfp8_block32.safetensors",
+              "Ltx/ltx-2.5-22b-dev-transformer-bf16.safetensors",
+              "Ltx/ltx-2.5-22b-dev-transformer-comfy-int8-convrot.safetensors",
+              "Ltx/ltx-2.5-22b-distilled-transformer-bf16.safetensors",
+              "Ltx/ltx-2.5-22b-distilled-transformer-comfy-int8-convrot.safetensors",
+              "Ltx/ltx-2.5-22b-distilled-transformer-nvfp4.safetensors",
+              "Ltx/ltx2522BCutDownToFit_24gbGpus.safetensors",
+              "MelRoFormer/MelBandRoformer_fp16.safetensors",
+              "MelRoFormer/MelBandRoformer_fp32.safetensors",
+              "NewBie/NewBie-Image-Exp0.1-bf16.safetensors",
+              "OpenVDN/vdn-minimax-h3/stage-dmd-step-250/adapters/default/adapter_model.safetensors",
+              "OpenVDN/vdn-minimax-h3/stage-dmd-step-250/adapters/turbo/adapter_model.safetensors",
+              "OpenVDN/vdn-minimax-h3/stage-dmd-step-250/adapters/turbo_pruned_curve_fl2va/adapter_model.safetensors",
+              "OpenVDN/vdn-minimax-h3/stage-dmd-step-250/linear_branch/model.safetensors",
+              "PixelDiT/pixeldit_1300m_1024px_bf16.safetensors",
+              "QuantFunc/nunchaku_qwen_image_2512_best_quality_fp4.safetensors",
+              "Triposplat/triposplat_fp16.safetensors",
+              "Wan/Chroma1-HD-fp8_scaled_rev2.safetensors",
+              "Wan/Chroma1-Radiance-v0.4.safetensors",
+              "Wan/DasiwaWAN22I2V14BLightspeed_boundbiteHighV10.safetensors",
+              "Wan/DasiwaWAN22I2V14BLightspeed_boundbiteHighV10_NVFP4.safetensors",
+              "Wan/DasiwaWAN22I2V14BLightspeed_boundbiteLowV10.safetensors",
+              "Wan/DasiwaWAN22I2V14BLightspeed_boundbiteLowV10_NVFP4.safetensors",
+              "Wan/DasiwaWAN22I2V14BV8V1_tastysinHighV81.safetensors",
+              "Wan/DasiwaWAN22I2V14BV8V1_tastysinLowV81.safetensors",
+              "Wan/Magic-Wan-Image-V3-fp8mixed.safetensors",
+              "Wan/TurboWan2.2-I2V-A14B-high-720P-quant.pth",
+              "Wan/TurboWan2.2-I2V-A14B-high-720P.pth",
+              "Wan/TurboWan2.2-I2V-A14B-low-720P-quant.pth",
+              "Wan/TurboWan2.2-I2V-A14B-low-720P.pth",
+              "Wan/Wan2.1_i2v_720p_scaled_fp8_e4m3_lightx2v.safetensors",
+              "Wan/Wan2.2-Animate-14B-fp8_v2.safetensors",
+              "Wan/Wan2.2-ti2v-5b-4step-nvfp4.safetensors",
+              "Wan/Wan2.2_Remix_NSFW_i2v_14b_high_lighting_fp8_e4m3fn_v2.1.safetensors",
+              "Wan/Wan2.2_Remix_NSFW_i2v_14b_high_lighting_v2.0.safetensors",
+              "Wan/Wan2.2_Remix_NSFW_i2v_14b_low_lighting_fp8_e4m3fn_v2.1.safetensors",
+              "Wan/Wan2.2_Remix_NSFW_i2v_14b_low_lighting_v2.0.safetensors",
+              "Wan/Wan21-14B-SCAIL-preview_fp8_e4m3fn_scaled_KJ.safetensors",
+              "Wan/Wan21-SkyReelsV3-A2V_fp8_scaled_mixed.safetensors",
+              "Wan/Wan21-WanMove_fp8_scaled_e4m3fn_KJ.safetensors",
+              "Wan/Wan21_I2V_SteadyDancer_fp16.safetensors",
+              "Wan/Wan21_SteadyDancer_fp8_e4m3fn_scaled_KJ.safetensors",
+              "Wan/Wan22_Bernini_HIGH_fp8_e4m3fn_scaled.safetensors",
+              "Wan/Wan22_Bernini_LOW_fp8_e4m3fn_scaled.safetensors",
+              "Wan/Wan2_1-I2V-14B-480P_fp8_e4m3fn.safetensors",
+              "Wan/Wan2_1-I2V-14B-480p_fp8_e4m3fn_scaled_KJ.safetensors",
+              "Wan/Wan2_1-I2V-14B-Bindweave_fp8_scaled_KJ.safetensors",
+              "Wan/Wan2_1-I2V-ATI-14B_fp8_e4m3fn.safetensors"
+            ],
+            "choiceCount": 499,
+            "truncated": true
+          },
+          "weight_dtype": {
+            "type": "COMBO",
+            "choices": [
+              "default",
+              "fp8_e4m3fn",
+              "fp8_e4m3fn_fast",
+              "fp8_e5m2"
+            ],
+            "choiceCount": 4,
+            "truncated": false,
+            "parameters": {}
+          }
+        },
+        "optional": {}
+      },
+      "elapsedMs": 149
+    },
+    {
+      "nodeClass": "CLIPLoader",
+      "status": 200,
+      "bytes": 4396,
+      "available": true,
+      "outputs": [
+        "CLIP"
+      ],
+      "outputNode": false,
+      "inputs": {
+        "required": {
+          "clip_name": {
+            "type": "COMBO",
+            "choices": [
+              "Qwen3-VL-32B-Instruct-layer50_quanto_bf16_int8.safetensors",
+              "Qwen3-VL-8B-Instruct-int4_convrot.safetensors",
+              "awq-int4-flux.1-t5xxl.safetensors",
+              "byt5_small_glyphxl_fp16.safetensors",
+              "clip_g.safetensors",
+              "clip_l.safetensors",
+              "connector.safetensors",
+              "ernie-image-prompt-enhancer.safetensors",
+              "gemma-3-12b-it-heretic-v2_fp8_e4m3fn.safetensors",
+              "gemma4-12b-with-proj-ltx-2.5-bf16.safetensors",
+              "gemma4-12b-with-proj-ltx-2.5-comfy-int8-convrot.safetensors",
+              "gemma4_e4b_it_fp8_scaled.safetensors",
+              "gemma_2_2b_it_elm_bf16.safetensors",
+              "gemma_3_12B_it-int4_convrot.safetensors",
+              "gemma_3_12B_it-int8tensormixed.safetensors",
+              "gemma_3_12B_it.safetensors",
+              "gemma_3_12B_it_fp4_mixed.safetensors",
+              "gemma_3_12B_it_fp8_e4m3fn.safetensors",
+              "gemma_3_12B_it_fp8_scaled.safetensors",
+              "gemma_3_4b_it_bf16.safetensors",
+              "gpt_oss_20b_mxfp4.safetensors",
+              "llama_3.1_8b_instruct_fp8_scaled.safetensors",
+              "llava_llama3_fp16.safetensors",
+              "llava_llama3_fp8_scaled.safetensors",
+              "llava_llama3_vision.safetensors",
+              "ltx-2-19b-embeddings_connector_dev_bf16.safetensors",
+              "ltx-2-19b-embeddings_connector_distill_bf16.safetensors",
+              "ltx-2.3_text_projection_bf16.safetensors",
+              "minimax_music3_text_encoder_bf16.safetensors",
+              "mistral_3_small_flux2-int4_convrot.safetensors",
+              "mistral_3_small_flux2_bf16.safetensors",
+              "mistral_3_small_flux2_fp8.safetensors",
+              "nsfw_wan_umt5-xxl_bf16.safetensors",
+              "nsfw_wan_umt5-xxl_fp8_scaled.safetensors",
+              "open-clip-xlm-roberta-large-vit-huge-14_visual_fp16.safetensors",
+              "qwen3-8b-heretic.safetensors",
+              "qwen3-vl-4b-heretic_int8.safetensors",
+              "qwen3-vl-8b-int8_convrot.safetensors",
+              "qwen3.5_4b_bf16.safetensors",
+              "qwen3.5_9b_bf16.safetensors",
+              "qwen3.5_9b_qwen_image_2.1_pe_i2i.int8_convrot.safetensors",
+              "qwen3.5_9b_qwen_image_2.1_pe_t2i.int8_convrot.safetensors",
+              "qwen3vl_32b_minimax_h3_bf16.safetensors",
+              "qwen3vl_32b_minimax_h3_int4_convrot.safetensors",
+              "qwen3vl_32b_minimax_h3_int8_convrot.safetensors",
+              "qwen3vl_32b_minimax_h3_int8_convrot_uncensored_FeiHou.safetensors",
+              "qwen3vl_32b_minimax_h3_nvfp4_awq.safetensors",
+              "qwen3vl_32b_minimax_h3_ultra_uncensored_heretic_int8_convrot.safetensors",
+              "qwen3vl_4b_bf16.safetensors",
+              "qwen3vl_4b_fp8_scaled.safetensors",
+              "qwen3vl_4b_uncensored_int8_convrot.safetensors",
+              "qwen3vl_8b_bf16.safetensors",
+              "qwen3vl_8b_fp8_scaled.safetensors",
+              "qwen3vl_8b_int8_convrot.safetensors",
+              "qwen3vl_8b_nvfp4.safetensors",
+              "qwen3vl_8b_w4a8.safetensors",
+              "qwen_0.6b_ace15.safetensors",
+              "qwen_1.7b_ace15.safetensors",
+              "qwen_2.5_vl_7b.safetensors",
+              "qwen_2.5_vl_7b_fp8_scaled.safetensors",
+              "qwen_2.5_vl_fp16.safetensors",
+              "qwen_3_06b_base.safetensors",
+              "qwen_3_4b.safetensors",
+              "qwen_3_4b_int8_convrot.safetensors",
+              "qwen_3_8b.safetensors",
+              "qwen_3_8b_fp8mixed.safetensors",
+              "qwen_4b_ace15.safetensors",
+              "qwen_image_edit_2511_fp8_e4m3fn.safetensors",
+              "t5-base.safetensors",
+              "t5-v1_1-xxl/pytorch_model.bin",
+              "t5gemma_b_b_ul2.safetensors",
+              "t5xxl_fp16.safetensors",
+              "t5xxl_fp8_e4m3fn.safetensors",
+              "t5xxl_fp8_e4m3fn_scaled.safetensors",
+              "umt5-xxl-enc-bf16.safetensors",
+              "umt5-xxl-enc-fp8_e4m3fn.safetensors",
+              "umt5_xxl_fp16.safetensors",
+              "umt5_xxl_fp8_e4m3fn_scaled.safetensors",
+              "umt5_xxl_int8_convrot.safetensors"
+            ],
+            "choiceCount": 79,
+            "truncated": false
+          },
+          "type": {
+            "type": "COMBO",
+            "choices": [
+              "stable_diffusion",
+              "stable_cascade",
+              "sd3",
+              "stable_audio",
+              "mochi",
+              "ltxv",
+              "pixart",
+              "cosmos",
+              "lumina2",
+              "wan",
+              "hidream",
+              "chroma",
+              "ace",
+              "omnigen2",
+              "qwen_image",
+              "hunyuan_image",
+              "flux2",
+              "ovis",
+              "longcat_image",
+              "cogvideox",
+              "lens",
+              "pixeldit",
+              "ideogram4",
+              "boogu",
+              "krea2",
+              "joyimage",
+              "mage",
+              "minimax",
+              "yue2"
+            ],
+            "choiceCount": 29,
+            "truncated": false
+          }
+        },
+        "optional": {
+          "device": {
+            "type": "COMBO",
+            "choices": [
+              "default",
+              "cpu"
+            ],
+            "choiceCount": 2,
+            "truncated": false,
+            "parameters": {}
+          }
+        }
+      },
+      "elapsedMs": 122
+    },
+    {
+      "nodeClass": "VAELoader",
+      "status": 200,
+      "bytes": 2143,
+      "available": true,
+      "outputs": [
+        "VAE"
+      ],
+      "outputNode": false,
+      "inputs": {
+        "required": {
+          "vae_name": {
+            "type": "COMBO",
+            "choices": [
+              "Krea2-HD-vae.safetensors",
+              "LTX23_audio_vae_bf16.safetensors",
+              "LTX23_video_vae_bf16.safetensors",
+              "LTX2_audio_vae_bf16.safetensors",
+              "LTX2_video_vae_bf16.safetensors",
+              "MiniMax-H3-X2-Detail-v1.safetensors",
+              "NewBie_vae.safetensors",
+              "Qwen-Image-Layered.safetensors",
+              "Wan2_1_FlashVSR_TCDecoder_fp32.safetensors",
+              "Wan2_1_VAE_bf16.safetensors",
+              "Wan2_1_VAE_fp32.safetensors",
+              "Z-VAE.safetensors",
+              "ace_1.5_vae.safetensors",
+              "ae.safetensors",
+              "ae.sft",
+              "anythingKlF8Anime2VaeFtMse840000_klF8Anime2.safetensors",
+              "ema_vae_fp16.safetensors",
+              "flux1_vae_bf16.safetensors",
+              "flux2-vae.safetensors",
+              "flux_ultra_vae.safetensors",
+              "full_encoder_small_decoder.safetensors",
+              "hunyuan_video_vae_bf16.safetensors",
+              "hunyuanvideo15_vae_fp16.safetensors",
+              "hyperVAEKrea2Minimax_v20MinimaxX2Upscale.safetensors",
+              "klF8Anime2_klF8Anime2VAE.pt",
+              "ltx-2.3-22b-distilled_audio_vae.safetensors",
+              "ltx-2.3-22b-distilled_video_vae.safetensors",
+              "ltx-2.5-audio-vae-bf16.safetensors",
+              "ltx-2.5-video-vae-bf16.safetensors",
+              "ltx-2.5-video-vae-conv-bf16.safetensors",
+              "minimax_h3_audio_vae_fp32.safetensors",
+              "minimax_h3_video_vae_fp16.safetensors",
+              "minimax_h3_video_vae_int8_convrot-v2.safetensors",
+              "minimax_h3_video_vae_int8_convrot.safetensors",
+              "minimax_music3_dav.safetensors",
+              "mochi_vae.safetensors",
+              "qwen_image_2.1_vae_bf16.safetensors",
+              "qwen_image_HDR_vae_fp32_comfy.safetensors",
+              "qwen_image_vae.safetensors",
+              "sdxl_vae.safetensors",
+              "sdxl_vae_fp16_fix.safetensors",
+              "taeh3.safetensors",
+              "taeltx2_3.safetensors",
+              "triposplat_vae_decoder_fp16.safetensors",
+              "vae-ft-mse-840000-ema-pruned.safetensors",
+              "vaeKlF8Anime2_klF8Anime2VAE.safetensors",
+              "wan2.2_vae.safetensors",
+              "wan_2.1_vae.safetensors",
+              "z_image_vae.safetensors",
+              "taeh3.safetensors",
+              "pixel_space"
+            ],
+            "choiceCount": 51,
+            "truncated": false
+          }
+        },
+        "optional": {}
+      },
+      "elapsedMs": 119
+    },
+    {
+      "nodeClass": "WanImageToVideo",
+      "status": 200,
+      "bytes": 1261,
+      "available": true,
+      "outputs": [
+        "CONDITIONING",
+        "CONDITIONING",
+        "LATENT"
+      ],
+      "outputNode": false,
+      "inputs": {
+        "required": {
+          "positive": {
+            "type": "CONDITIONING",
+            "parameters": {}
+          },
+          "negative": {
+            "type": "CONDITIONING",
+            "parameters": {}
+          },
+          "vae": {
+            "type": "VAE",
+            "parameters": {}
+          },
+          "width": {
+            "type": "INT",
+            "parameters": {
+              "default": 832,
+              "min": 16,
+              "max": 16384,
+              "step": 16
+            }
+          },
+          "height": {
+            "type": "INT",
+            "parameters": {
+              "default": 480,
+              "min": 16,
+              "max": 16384,
+              "step": 16
+            }
+          },
+          "length": {
+            "type": "INT",
+            "parameters": {
+              "default": 81,
+              "min": 1,
+              "max": 16384,
+              "step": 4
+            }
+          },
+          "batch_size": {
+            "type": "INT",
+            "parameters": {
+              "default": 1,
+              "min": 1,
+              "max": 4096
+            }
+          }
+        },
+        "optional": {
+          "clip_vision_output": {
+            "type": "CLIP_VISION_OUTPUT",
+            "parameters": {}
+          },
+          "start_image": {
+            "type": "IMAGE",
+            "parameters": {}
+          }
+        }
+      },
+      "elapsedMs": 83
+    },
+    {
+      "nodeClass": "KSampler",
+      "status": 200,
+      "bytes": 3298,
+      "available": true,
+      "outputs": [
+        "LATENT"
+      ],
+      "outputNode": false,
+      "inputs": {
+        "required": {
+          "model": {
+            "type": "MODEL",
+            "parameters": {}
+          },
+          "seed": {
+            "type": "INT",
+            "parameters": {
+              "default": 0,
+              "min": 0,
+              "max": 18446744073709551615
+            }
+          },
+          "steps": {
+            "type": "INT",
+            "parameters": {
+              "default": 20,
+              "min": 1,
+              "max": 10000
+            }
+          },
+          "cfg": {
+            "type": "FLOAT",
+            "parameters": {
+              "default": 8.0,
+              "min": 0.0,
+              "max": 100.0,
+              "step": 0.1
+            }
+          },
+          "sampler_name": {
+            "type": "COMBO",
+            "choices": [
+              "euler",
+              "euler_cfg_pp",
+              "euler_ancestral",
+              "euler_ancestral_cfg_pp",
+              "heun",
+              "heunpp2",
+              "exp_heun_2_x0",
+              "exp_heun_2_x0_sde",
+              "dpm_2",
+              "dpm_2_ancestral",
+              "lms",
+              "dpm_fast",
+              "dpm_adaptive",
+              "dpmpp_2s_ancestral",
+              "dpmpp_2s_ancestral_cfg_pp",
+              "dpmpp_sde",
+              "dpmpp_sde_gpu",
+              "dpmpp_2m",
+              "dpmpp_2m_cfg_pp",
+              "dpmpp_2m_sde",
+              "dpmpp_2m_sde_gpu",
+              "dpmpp_2m_sde_heun",
+              "dpmpp_2m_sde_heun_gpu",
+              "dpmpp_3m_sde",
+              "dpmpp_3m_sde_gpu",
+              "ddpm",
+              "lcm",
+              "ipndm",
+              "ipndm_v",
+              "deis",
+              "cfgpp_ud10_ab",
+              "res_multistep",
+              "res_multistep_cfg_pp",
+              "res_multistep_ancestral",
+              "res_multistep_ancestral_cfg_pp",
+              "gradient_estimation",
+              "gradient_estimation_cfg_pp",
+              "er_sde",
+              "seeds_2",
+              "seeds_3",
+              "sa_solver",
+              "sa_solver_pece",
+              "ddim",
+              "uni_pc",
+              "uni_pc_bh2",
+              "legacy_rk",
+              "rk",
+              "rk_beta",
+              "deis_3m_ode",
+              "deis_2m_ode",
+              "deis_3m",
+              "deis_2m",
+              "res_6s_ode",
+              "res_5s_ode",
+              "res_3s_ode",
+              "res_2s_ode",
+              "res_3m_ode",
+              "res_2m_ode",
+              "res_6s",
+              "res_5s",
+              "res_3s",
+              "res_2s",
+              "res_3m",
+              "res_2m"
+            ],
+            "choiceCount": 64,
+            "truncated": false,
+            "parameters": {}
+          },
+          "scheduler": {
+            "type": "COMBO",
+            "choices": [
+              "simple",
+              "sgm_uniform",
+              "karras",
+              "exponential",
+              "ddim_uniform",
+              "beta",
+              "normal",
+              "linear_quadratic",
+              "kl_optimal",
+              "FlowMatchEulerDiscreteScheduler",
+              "bong_tangent",
+              "beta57"
+            ],
+            "choiceCount": 12,
+            "truncated": false,
+            "parameters": {}
+          },
+          "positive": {
+            "type": "CONDITIONING",
+            "parameters": {}
+          },
+          "negative": {
+            "type": "CONDITIONING",
+            "parameters": {}
+          },
+          "latent_image": {
+            "type": "LATENT",
+            "parameters": {}
+          },
+          "denoise": {
+            "type": "FLOAT",
+            "parameters": {
+              "default": 1.0,
+              "min": 0.0,
+              "max": 1.0,
+              "step": 0.01
+            }
+          }
+        },
+        "optional": {}
+      },
+      "elapsedMs": 80
+    },
+    {
+      "nodeClass": "CreateVideo",
+      "status": 200,
+      "bytes": 1596,
+      "available": true,
+      "outputs": [
+        "VIDEO"
+      ],
+      "outputNode": false,
+      "inputs": {
+        "required": {
+          "images": {
+            "type": "IMAGE",
+            "parameters": {}
+          },
+          "fps": {
+            "type": "FLOAT",
+            "parameters": {
+              "default": 30.0,
+              "min": 1.0,
+              "max": 120.0,
+              "step": 1.0
+            }
+          }
+        },
+        "optional": {
+          "audio": {
+            "type": "AUDIO",
+            "parameters": {}
+          },
+          "bit_depth": {
+            "type": "COMBO",
+            "parameters": {
+              "default": "auto"
+            }
+          },
+          "color_space": {
+            "type": "COMBO",
+            "parameters": {
+              "default": "sRGB"
+            }
+          },
+          "codec": {
+            "type": "COMBO",
+            "parameters": {
+              "default": "none"
+            }
+          }
+        }
+      },
+      "elapsedMs": 80
+    },
+    {
+      "nodeClass": "SaveVideo",
+      "status": 200,
+      "bytes": 7074,
+      "available": true,
+      "outputs": [
+        "VIDEO"
+      ],
+      "outputNode": true,
+      "inputs": {
+        "required": {
+          "video": {
+            "type": "VIDEO",
+            "parameters": {}
+          },
+          "filename_prefix": {
+            "type": "STRING",
+            "parameters": {
+              "default": "video/ComfyUI"
+            }
+          },
+          "format": {
+            "type": "COMFY_DYNAMICCOMBO_V3",
+            "parameters": {}
+          }
+        },
+        "optional": {
+          "codec": {
+            "type": "COMFY_DYNAMICCOMBO_V3",
+            "parameters": {}
+          }
+        }
+      },
+      "elapsedMs": 88
+    },
+    {
+      "nodeClass": "LoadAudio",
+      "status": 200,
+      "bytes": 2586,
+      "available": true,
+      "outputs": [
+        "AUDIO"
+      ],
+      "outputNode": false,
+      "inputs": {
+        "required": {
+          "audio": {
+            "type": "COMBO",
+            "parameters": {}
+          }
+        },
+        "optional": {}
+      },
+      "elapsedMs": 88
+    },
+    {
+      "nodeClass": "SaveAudio",
+      "status": 200,
+      "bytes": 845,
+      "available": true,
+      "outputs": [
+        "AUDIO"
+      ],
+      "outputNode": true,
+      "inputs": {
+        "required": {
+          "audio": {
+            "type": "AUDIO",
+            "parameters": {}
+          },
+          "filename_prefix": {
+            "type": "STRING",
+            "parameters": {
+              "default": "audio/ComfyUI"
+            }
+          }
+        },
+        "optional": {}
+      },
+      "elapsedMs": 81
+    },
+    {
+      "nodeClass": "LTXVAudioVAELoader",
+      "status": 200,
+      "bytes": 5475,
+      "available": true,
+      "outputs": [
+        "VAE"
+      ],
+      "outputNode": false,
+      "inputs": {
+        "required": {
+          "ckpt_name": {
+            "type": "COMBO",
+            "parameters": {}
+          }
+        },
+        "optional": {}
+      },
+      "elapsedMs": 83
+    }
+  ]
+}

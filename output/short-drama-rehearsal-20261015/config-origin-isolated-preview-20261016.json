@@ -1,0 +1,8 @@
+{
+  "kind": "isolated backup diagnostic, not real client acceptance",
+  "version": "50.2.6",
+  "configurationRevision": 19,
+  "baseUrl": "https://u564342-7908818e1ac4.westd.seetacloud.com:8443/",
+  "policyUnchanged": true,
+  "nativeAuthorityRelaxed": false
+}

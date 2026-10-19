@@ -1,0 +1,76 @@
+{
+  "schemaVersion": "crewon.acceptance.video-authoring.v1",
+  "recordedAt": "2026-10-15T19:51:41.076052+00:00",
+  "previousGoalTurnClassification": "progress: actual Go terminal/HTTP ownership defects reproduced and isolated-source patch verified",
+  "thisTurnClassification": "progress: current saved service video/audio nodes and V3 SaveVideo declarations verified; explicit video authoring validation implemented without weakening v1 image path",
+  "boundary": "Read-only saved seetacloud object_info, pure authoring validation with actual SaveVideo schema and named producer fixture. No GPU generation, upload, actual model review, executable publication, Native approval change or client UI acceptance.",
+  "capabilities": {
+    "nodeReads": 10,
+    "available": 10,
+    "weightChoices": "Wan/LTX diffusion and audio VAE catalogs are listed; loading and Chinese speech are unproven",
+    "saveVideoInput": "flattened selected V3 dynamic-combo branches"
+  },
+  "verified": [
+    "SaveVideo requires registered VIDEO source port and bounded metadata snapshot",
+    "actual MP4/H264 re-encode branch with range-checked CRF",
+    "missing required parameters, unknown choices, inactive branches and hidden legacy codec conflict rejected",
+    "metadata getters, proxies and array accessors do not execute",
+    "graph limits and image validation path retained",
+    "renderer changes only declared prompt and output-prefix slots"
+  ],
+  "tests": {
+    "oldImageAuthoring": 17,
+    "newVideoAuthoring": 6,
+    "totalPassed": 23,
+    "failed": 0,
+    "skipped": 0
+  },
+  "checks": {
+    "shortDramaNodeTypecheck": "exit 0 (session 10977)",
+    "boundary": "passed",
+    "sourceFormat": "passed",
+    "repositoryFormat": "passed",
+    "gitDiffCheck": "passed"
+  },
+  "sourceSha256": {
+    "examples/plugins/short-drama/build-support/comfyui-api-workflow-validation.mjs": "sha256:1f06b7b8659e0e96f4e2266c239096c183198e7810d4c40f5b0539db426eea2c",
+    "examples/plugins/short-drama/build-support/comfyui-api-workflow-validation.d.mts": "sha256:ddfa7adbc6a009c0d5b8f32bd89c4c56a5a9f32a72a03a4d72271d57eef587c1",
+    "examples/plugins/short-drama/test/video-workflow-validation.test.mjs": "sha256:df89f1577e55a7fec7254cb77ba4c884a56fa5846127647e5d133fec12c9626c",
+    "examples/plugins/short-drama/test/fixtures/save-video-object-info.json": "sha256:587e35e8f3fab6ee0c3bbfbff1c35d47050eeb1091a6aa18669965c53fdd7307",
+    "docs/comfy-video-workflow-authoring.md": "sha256:99ca695f49c63f09f437164b19808c3e82d92cb7c1ae369a56e37db53dfbd8cb"
+  },
+  "evidenceSha256": {
+    "video-authoring-validation-tests.log": "sha256:ce5f921987a066bb0d0c2e88b585a6355fe4fff224d07d339c883af134bcf45b",
+    "video-authoring-boundary.log": "sha256:9ca051bf69b76010b6bdde6c73202e042b6c69e932667cbdacb0353047bf50a4",
+    "video-authoring-repository-format.log": "sha256:afd0d265f84b3b6c0e01a95fba9476bb8eb9d3df85f728960450995b0da10c3e"
+  },
+  "sourceCaptureSha256": {
+    "media-video-audio-node-capabilities-20261016.json": "sha256:2338a20d0a912cbb3857804a66301732384655109a106c8bec8346c9404030ef",
+    "save-video-object-info-20261016.json": "sha256:3bb3fb669f9567562ae81cf1ac31c06ac10912b2f4425dba53b43065f6471efb"
+  },
+  "liveClientState": {
+    "recordedAt": "2026-10-15T19:49:57.703651+00:00",
+    "readOnly": true,
+    "projectId": "01a13f43-094c-767a-9414-b5622b236255",
+    "foundationRevision": 3,
+    "parametersRevision": 2,
+    "textArtifacts": 0,
+    "latestRun": {
+      "runId": "plugin-7DebIFmDWoV0jmAkgi1mhBYp5eV0jJkKx6zyeqJcPLE",
+      "revision": 19,
+      "status": "canceled"
+    },
+    "liveProfileWrites": false,
+    "realModelOrMediaSubmission": false
+  },
+  "notEstablished": [
+    "video generation/result business contract and native execution registration",
+    "actual model weight loading and speech/video generation",
+    "saved complete script and shootable shot plan in the real client",
+    "timeline composition and qualified saved MP4",
+    "real AI review repair re-review",
+    "final playback and commercial usage rights",
+    "live upstream SSE repair and full client acceptance"
+  ],
+  "goalStatus": "active"
+}

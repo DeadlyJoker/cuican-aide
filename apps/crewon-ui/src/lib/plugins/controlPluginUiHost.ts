@@ -1,4 +1,5 @@
 import { isPluginUiNavigationAction } from "@crewon/contracts/plugins";
+import { observeProjectTextMutation } from "./projectTextMutationChanges";
 import {
   invokePluginUiNavigation,
   type PluginUiNavigationHandler,
@@ -324,6 +325,7 @@ export function createControlPluginUiHost(
             ? taskReceiptTransport(lease, input.signal, request)
             : pluginUiControlRequest(request, input.signal));
           assertPluginUiCurrent(assertCurrent, input.signal);
+          observeProjectTextMutation(client, lease, input, response.output);
           return response.output;
         });
       },

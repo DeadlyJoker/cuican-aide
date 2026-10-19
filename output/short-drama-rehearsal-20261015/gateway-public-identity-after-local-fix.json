@@ -1,0 +1,11 @@
+{
+  "purpose": "Unauthenticated public root identity only; no model endpoint, token or production change",
+  "recordedAt": "2026-10-15T18:23:51.597Z",
+  "origin": "https://api.aicuican.com",
+  "status": 200,
+  "headersMs": 2601,
+  "contentType": "text/html; charset=utf-8",
+  "title": "璀璨API",
+  "bytesExamined": 572,
+  "elapsedMs": 2604
+}

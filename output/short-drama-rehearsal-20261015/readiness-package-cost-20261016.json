@@ -1,0 +1,45 @@
+{
+  "scope": "Read-only isolated package verification; not an end-to-end invocation benchmark",
+  "times": [
+    {
+      "iteration": 1,
+      "ms": 429.02,
+      "digest": "sha256:508d825100aeb6dbfeb7a267b68f926ef1b071cffcc376eafe0c44d31fc503a3"
+    },
+    {
+      "iteration": 2,
+      "ms": 175.27,
+      "digest": "sha256:508d825100aeb6dbfeb7a267b68f926ef1b071cffcc376eafe0c44d31fc503a3"
+    },
+    {
+      "iteration": 3,
+      "ms": 144.45,
+      "digest": "sha256:508d825100aeb6dbfeb7a267b68f926ef1b071cffcc376eafe0c44d31fc503a3"
+    },
+    {
+      "iteration": 4,
+      "ms": 1771.72,
+      "digest": "sha256:508d825100aeb6dbfeb7a267b68f926ef1b071cffcc376eafe0c44d31fc503a3"
+    },
+    {
+      "iteration": 5,
+      "ms": 612.39,
+      "digest": "sha256:508d825100aeb6dbfeb7a267b68f926ef1b071cffcc376eafe0c44d31fc503a3"
+    },
+    {
+      "iteration": 6,
+      "ms": 1150.13,
+      "digest": "sha256:508d825100aeb6dbfeb7a267b68f926ef1b071cffcc376eafe0c44d31fc503a3"
+    },
+    {
+      "iteration": 7,
+      "ms": 488.71,
+      "digest": "sha256:508d825100aeb6dbfeb7a267b68f926ef1b071cffcc376eafe0c44d31fc503a3"
+    },
+    {
+      "iteration": 8,
+      "ms": 461.92,
+      "digest": "sha256:508d825100aeb6dbfeb7a267b68f926ef1b071cffcc376eafe0c44d31fc503a3"
+    }
+  ]
+}

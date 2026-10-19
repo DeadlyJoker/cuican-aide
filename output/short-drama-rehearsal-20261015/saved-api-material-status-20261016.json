@@ -1,0 +1,22 @@
+{
+  "recordedAt": "2026-10-16T09:37:30.326Z",
+  "clientAcceptance": {
+    "complete": false,
+    "blocker": "Mac is locked; waiting for manual unlock",
+    "generationSubmitted": false,
+    "configurationRevision": 23,
+    "pluginVersion": "50.2.12"
+  },
+  "sourceFollowup": {
+    "file": "packages/media-runtime/src/comfyui-project-reference-material-adapter.ts",
+    "change": "Derive the exact canonical view path from the original frozen configuration protocol; reject unknown protocols and mismatched result URLs",
+    "installedInAcceptanceApp": false,
+    "verification": {
+      "regressionTests": 2,
+      "mediaRuntimeTypecheck": "passed",
+      "controlApiTypecheck": "passed",
+      "boundaryCheck": "passed",
+      "diffCheck": "passed"
+    }
+  }
+}

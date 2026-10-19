@@ -24,6 +24,8 @@ export async function setPluginInstallationSelection(
     request: SelectPluginPackageRequest;
     idempotencyKey: string;
     signal: AbortSignal;
+    /** Native owns its operation deadline; this signal only withdraws the UI owner. */
+    ownerSignal: AbortSignal;
   }>,
 ) {
   input.signal.throwIfAborted();
@@ -46,7 +48,9 @@ export async function setPluginInstallationSelection(
   } catch (cause) {
     throw new NativePluginSelectionOutcomeUnknownError(cause);
   }
-  input.signal.throwIfAborted();
+  // Main reconciles selection and business activation under its own bounded deadline.
+  // A shorter HTTP deadline cannot invalidate an authenticated Native receipt.
+  input.ownerSignal.throwIfAborted();
   if (getDesktopBridge()?.runtime !== runtime)
     throw new Error("desktop_plugin_selection_owner_changed");
   const reply = record(result);

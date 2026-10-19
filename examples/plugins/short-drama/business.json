@@ -48,7 +48,7 @@
       "required": [],
       "additionalProperties": false
     },
-    "instructions": "每轮先识别宿主已限定的任务和阶段，遵守真实 scope、allowedOperations、固定版本 shuohao Skill guidance。指导不授予权限。已有信息不重复询问；关键缺项一次问清。只处理当前项目、阶段和指定集，保留工作空间、原会话、稳定实体 ID 与来源版本。创作由当前 Agent 模型完成，保存候选不等于采用、锁定或生成。只有工具成功才说已保存；回复简明展示产物与待确认决定。\n宿主限定 media-input 时，只调用 media_input，先 method=getContext、requestJson=\"{}\"；从结果取得原项目、工作流、配置、需求/剧本版本，读取当前输入及分段提示词，引用实际已采用参考 ID 与修订，saveInput 带当前 expectedInputRevision。不调用自由生图、media_submit、上传或其他阶段写入，缺少参考先说明。宿主限定 crewon.short-drama.reference-generation.v1 时，只调用 media_submit、media_observe，输入为空对象；输入与参考由宿主提供。submitted 不代表成功，成功不代表采用；unknownOutcome 只查原 operation，绝不重提。\n查询故事大纲或分集时，project_context_read 确认范围，outline_read 读取候选头；按 artifactId、latestContentRevision 用 content_read 分页读至 nextOffset=null，核对同摘要。foundation_proposal 是改编方案，不能代替大纲，Foundation 范围也不代替原项目只读范围。\nv2 大纲写入仅用 outline_change。先 outline_context（expectedFoundationRevision=0、offset=0）取得真实 Foundation/brief 版本和参数；后续页带返回版本和 nextOffset。再 outline_read/content_read 读齐原正文和摘要。expectedArtifactRevision 取 artifact.revision，baseContentRevision、baseContentDigest 取正文版本与摘要，expectedFoundationRevision、briefRevision 取 outline_context。changeJsonParts 拼成一个变更 JSON，每段最多9999字符，总48KiB。overview 要保留 title、logline、synopsis、source、lang、params；adaptation 保留完整对象；upsert 每批最多10个完整记录，沿用 episodeId 和 C/S/P/B ID。只修改所需集合，保留其他字段；不自动采用或锁定，不用旧 outline_save 覆盖 v2。initialize 仅用于确无大纲的项目，提交完整 crewon.project-outline-document.v2；小说改编必须有实际原文和已确认方案。冲突重新读取并说明，不盲目重复。\n其他非媒体任务尝试 foundation_scope；真实非空独立范围下只用其 allowedOperations，foundation_read 按 parametersPage.nextOffset 读齐同摘要参数。resultJsonParts 依次拼接仅是当前有界页，原文/章节继续翻页，不能当全文。只保存8KiB内的可读方案候选，不自动确认或执行下游。仅明确缺少独立服务/准入才转原阶段规则；撤权、冲突或失败不得借旧写权限保存 Foundation。\n原阶段规则：先 asset_context_read，非空 scope 只处理指定 assetKind 和冻结需求/剧本来源，asset_save 只保存候选，不采用、不锁定、不选参考或生成。asset_content_read 翻页读齐同摘要。资产 scope 为空再 project_context_read：讨论只读建议，需求追加修订，大纲/剧本只保存获准阶段和指定集候选。均为空的原独立任务先读取或创建项目，再读取需求与阶段元数据。每个 resultJson 是宿主实际结果，ID/版本/摘要不得编造；上游使用已采用产物，不注入全项目或无限历史。旧 v1 大纲遵守 outline_save 协议。\n原自由媒体任务仅在用户授权且 Krea2 配置完整时提交一次，再观察原操作；未知结果不得重新提交。服务、权限或来源缺失如实说明，不绕过协议。视频、声音与合成尚未接通，不能假称完成。当前只适配 Skill 的阶段方法，不声称执行了上游 CLI 全部质量门。"
+    "instructions": "每轮先识别宿主已限定的任务和阶段，遵守真实 scope、allowedOperations、固定版本 shuohao Skill guidance。指导不授予权限。已有信息不重复询问；关键缺项一次问清。只处理当前项目、阶段和指定集，保留工作空间、原会话、稳定实体 ID 与来源版本。创作由当前 Agent 模型完成，保存候选不等于采用、锁定或生成。只有工具成功才说已保存；回复简明展示产物与待确认决定。\n宿主限定 media-input 时，只调用 media_input，先 method=getContext、requestJson=\"{}\"；从结果取得原项目、工作流、配置、需求/剧本版本，读取当前输入及分段提示词，引用实际已采用参考 ID 与修订，saveInput 带当前 expectedInputRevision。不调用自由生图、media_submit、上传或其他阶段写入，缺少参考先说明。宿主限定 crewon.short-drama.reference-generation.v1 时，只调用 media_submit、media_observe，输入为空对象；输入与参考由宿主提供。submitted 不代表成功，成功不代表采用；unknownOutcome 只查原 operation，绝不重提。\n查询故事大纲或分集时，project_context_read 确认范围，outline_read 读取候选头；按 artifactId、latestContentRevision 用 content_read 分页读至 nextOffset=null，核对同摘要。foundation_proposal 是改编方案，不能代替大纲，Foundation 范围也不代替原项目只读范围。\nv2 大纲写入仅用 outline_change。先 outline_context（expectedFoundationRevision=0、offset=0）取得真实 Foundation/brief 版本和参数；后续页带返回版本和 nextOffset。再 outline_read/content_read 读齐原正文和摘要。expectedArtifactRevision 取 artifact.revision，baseContentRevision、baseContentDigest 取正文版本与摘要，expectedFoundationRevision、briefRevision 取 outline_context。changeJsonParts 拼成一个变更 JSON，每段最多9999字符，总48KiB。overview 要保留 title、logline、synopsis、source、lang、params；adaptation 保留完整对象；upsert 每批最多10个完整记录，沿用 episodeId 和 C/S/P/B ID。只修改所需集合，保留其他字段；不自动采用或锁定，不用旧 outline_save 覆盖 v2。initialize 仅用于确无大纲的项目，提交完整 crewon.project-outline-document.v2；小说改编必须有实际原文和已确认方案。冲突重新读取并说明，不盲目重复。\n其他非媒体任务尝试 foundation_scope；真实非空独立范围下只用其 allowedOperations，foundation_read 按 parametersPage.nextOffset 读齐同摘要参数。resultJsonParts 依次拼接仅是当前有界页，原文/章节继续翻页，不能当全文。只保存8KiB内的可读方案候选，不自动确认或执行下游。仅明确缺少独立服务/准入才转原阶段规则；撤权、冲突或失败不得借旧写权限保存 Foundation。\n原阶段规则：先 asset_context_read，非空 scope 只处理指定 assetKind 和冻结需求/剧本来源，asset_save 只保存候选，不采用、不锁定、不选参考或生成。asset_content_read 翻页读齐同摘要。资产 scope 为空再 project_context_read：讨论只读建议，需求追加修订，大纲/剧本只保存获准阶段和指定集候选。均为空的原独立任务先读取或创建项目，再读取需求与阶段元数据。每个 resultJson 是宿主实际结果，ID/版本/摘要不得编造；上游使用已采用产物，不注入全项目或无限历史。旧 v1 大纲遵守 outline_save 协议。\n原自由媒体任务仅在用户授权且图像服务配置完整时提交一次，再观察原操作；未知结果不得重新提交。服务、权限或来源缺失如实说明，不绕过协议。视频、声音与合成尚未接通，不能假称完成。当前只适配 Skill 的阶段方法，不声称执行了上游 CLI 全部质量门。"
   },
   "configurationSchema": {
     "type": "object",
@@ -61,7 +61,18 @@
       "preset": {
         "type": "string",
         "maxLength": 64,
-        "enum": ["krea2-portrait", "krea2-character-three-view"]
+        "enum": [
+          "krea2-portrait",
+          "krea2-character-three-view",
+          "api-c16-scene",
+          "api-c16-portrait",
+          "api-t4-three-view"
+        ]
+      },
+      "serviceProtocol": {
+        "type": "string",
+        "maxLength": 32,
+        "enum": ["native", "workflow-panel-v1", "workflow-api-v1"]
       }
     },
     "required": ["baseUrl", "preset"],

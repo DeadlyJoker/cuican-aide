@@ -11,6 +11,7 @@ import { ProjectMediaRunContext } from "../project-media-run-context.ts";
 import { ProjectMediaExecutionBoundary } from "../project-media-execution-boundary.ts";
 import {
   captureProjectMediaExecutionReview,
+  MAX_PROJECT_MEDIA_EXECUTION_REVIEWS,
   mediaExecutionFail as fail,
   type ProjectMediaExecutionReview,
 } from "../project-media-execution-review.ts";
@@ -46,8 +47,9 @@ export function captureInstalledPluginMediaExecution(
     ) ||
     [input.contexts, input.operations].some((v) => types.isProxy(v)) ||
     !Array.isArray(input.reviews) ||
+    types.isProxy(input.reviews) ||
     !input.reviews.length ||
-    input.reviews.length > 32
+    input.reviews.length > MAX_PROJECT_MEDIA_EXECUTION_REVIEWS
   )
     fail("dependency_invalid");
   return Object.freeze({

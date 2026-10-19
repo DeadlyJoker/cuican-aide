@@ -1,0 +1,325 @@
+{
+  "recordedAt": "2026-10-15T12:12:59.514654+00:00",
+  "source": "read-only actual control.sqlite + user screenshot",
+  "runId": "plugin-pq2c_Oq7jkxFp_40avEupfXOUgtdn484rKCwbspZOSs",
+  "runSeconds": 656.45,
+  "clientCallCount": 12,
+  "http200Count": 8,
+  "networkFailureCount": 4,
+  "serviceScreenshotSeconds": 147,
+  "httpClientSeconds": 578.926,
+  "clientCallsSeconds": 645.02,
+  "exclusiveClientPhases": {
+    "networkFailuresSeconds": 66.094,
+    "httpBeforeHeadersSeconds": 72.702,
+    "httpHeadersToLastByteSeconds": 326.092,
+    "httpLastByteToFinishSeconds": 180.132,
+    "nonCallSeconds": 11.43
+  },
+  "tools": [
+    {
+      "name": "update_plan",
+      "startedAt": "2026-10-15T11:46:19.484Z",
+      "finishedAt": "2026-10-15T11:46:19.506Z",
+      "seconds": 0.022
+    },
+    {
+      "name": "crewon_short_drama__project_context_read",
+      "startedAt": "2026-10-15T11:51:54.417Z",
+      "finishedAt": "2026-10-15T11:51:54.878Z",
+      "seconds": 0.461
+    },
+    {
+      "name": "crewon_short_drama__project_read",
+      "startedAt": "2026-10-15T11:53:12.681Z",
+      "finishedAt": "2026-10-15T11:53:13.345Z",
+      "seconds": 0.664
+    },
+    {
+      "name": "crewon_short_drama__content_read",
+      "startedAt": "2026-10-15T11:55:04.795Z",
+      "finishedAt": "2026-10-15T11:55:05.446Z",
+      "seconds": 0.651
+    },
+    {
+      "name": "update_plan",
+      "startedAt": "2026-10-15T11:55:35.701Z",
+      "finishedAt": "2026-10-15T11:55:35.710Z",
+      "seconds": 0.009
+    }
+  ],
+  "toolTotalSeconds": 1.807,
+  "rows": [
+    {
+      "screenshotTimeChina": "19:45:57",
+      "serviceSeconds": 15,
+      "clientSeconds": 44.837,
+      "extraSeconds": 29.837,
+      "callId": "0d2dc911-deaf-4bd0-bee6-02e62def9989",
+      "startedAt": "2026-10-15T11:45:34.640Z",
+      "finishedAt": "2026-10-15T11:46:19.477Z",
+      "requestIdTimePrefix": "2026-10-15T11:45:42+00:00",
+      "prefixMatchesScreenshotStartToSecond": true,
+      "httpTiming": {
+        "admittedMs": 4,
+        "dispatchedMs": 4,
+        "finishedMs": 44837,
+        "firstByteMs": 10485,
+        "firstCompletedItemMs": 27010,
+        "headersMs": 10482,
+        "lastByteMs": 44772,
+        "readClosedMs": 44775,
+        "streamEndMs": 44837,
+        "terminalMs": 44837
+      },
+      "outcome": "completed",
+      "termination": {
+        "reason": "protocolTerminal"
+      },
+      "serviceBeforeSecondsApprox": 7.36,
+      "serviceAfterSecondsApprox": 22.477,
+      "liveServerRequestId": "202610151145426566458708268d9d6DcX5RW4s",
+      "exactRequestIdMatch": true,
+      "serviceDetailNativeFormat": true,
+      "serviceDetailPath": "/v1/responses"
+    },
+    {
+      "screenshotTimeChina": "19:46:39",
+      "serviceSeconds": 10,
+      "clientSeconds": 153.26,
+      "extraSeconds": 143.26,
+      "callId": "2265acd3-7440-413c-9c94-c62f8a2c2d6b",
+      "startedAt": "2026-10-15T11:46:21.048Z",
+      "finishedAt": "2026-10-15T11:48:54.308Z",
+      "requestIdTimePrefix": "2026-10-15T11:46:29+00:00",
+      "prefixMatchesScreenshotStartToSecond": true,
+      "httpTiming": {
+        "admittedMs": 1,
+        "dispatchedMs": 1,
+        "finishedMs": 153260,
+        "firstByteMs": 25221,
+        "headersMs": 25220,
+        "lastByteMs": 93252,
+        "readClosedMs": 153259
+      },
+      "outcome": "failed",
+      "termination": {
+        "code": "responses_idle_timeout",
+        "reason": "idleTimeout"
+      },
+      "serviceBeforeSecondsApprox": 7.952,
+      "serviceAfterSecondsApprox": 135.308,
+      "liveServerRequestId": "202610151146295552751628268d9d6zsJFesZu",
+      "exactRequestIdMatch": true,
+      "serviceDetailNativeFormat": true,
+      "serviceDetailPath": "/v1/responses"
+    },
+    {
+      "screenshotTimeChina": "19:49:10",
+      "serviceSeconds": 10,
+      "clientSeconds": 71.345,
+      "extraSeconds": 61.345,
+      "callId": "51c091be-a8a9-4296-aeea-c1c7de5d8c59",
+      "startedAt": "2026-10-15T11:48:54.507Z",
+      "finishedAt": "2026-10-15T11:50:05.852Z",
+      "requestIdTimePrefix": "2026-10-15T11:49:00+00:00",
+      "prefixMatchesScreenshotStartToSecond": true,
+      "httpTiming": {
+        "admittedMs": 2,
+        "dispatchedMs": 2,
+        "finishedMs": 71345,
+        "firstByteMs": 6957,
+        "headersMs": 6957,
+        "lastByteMs": 11344,
+        "readClosedMs": 71345
+      },
+      "outcome": "failed",
+      "termination": {
+        "code": "responses_idle_timeout",
+        "reason": "idleTimeout"
+      },
+      "serviceBeforeSecondsApprox": 5.493,
+      "serviceAfterSecondsApprox": 55.852,
+      "liveServerRequestId": "202610151149004811729628268d9d6foFeJqqx",
+      "exactRequestIdMatch": true,
+      "serviceDetailNativeFormat": true,
+      "serviceDetailPath": "/v1/responses"
+    },
+    {
+      "screenshotTimeChina": "19:50:18",
+      "serviceSeconds": 10,
+      "clientSeconds": 108.127,
+      "extraSeconds": 98.127,
+      "callId": "504f1702-ae03-496d-9c42-1c24bc1ccf34",
+      "startedAt": "2026-10-15T11:50:06.287Z",
+      "finishedAt": "2026-10-15T11:51:54.414Z",
+      "requestIdTimePrefix": "2026-10-15T11:50:08+00:00",
+      "prefixMatchesScreenshotStartToSecond": true,
+      "httpTiming": {
+        "admittedMs": 3,
+        "dispatchedMs": 3,
+        "finishedMs": 108127,
+        "firstByteMs": 3140,
+        "firstCompletedItemMs": 22906,
+        "headersMs": 3140,
+        "lastByteMs": 48123,
+        "readClosedMs": 108126
+      },
+      "outcome": "failed",
+      "termination": {
+        "code": "responses_idle_timeout",
+        "reason": "idleTimeout"
+      },
+      "serviceBeforeSecondsApprox": 1.713,
+      "serviceAfterSecondsApprox": 96.414,
+      "liveServerRequestId": "202610151150085042032908268d9d66qJMQvrQ",
+      "exactRequestIdMatch": true,
+      "serviceDetailNativeFormat": true,
+      "serviceDetailPath": "/v1/responses"
+    },
+    {
+      "screenshotTimeChina": "19:52:56",
+      "serviceSeconds": 56,
+      "clientSeconds": 77.141,
+      "extraSeconds": 21.141,
+      "callId": "f0b38f71-ce0c-4763-9e35-2cffa67a0a83",
+      "startedAt": "2026-10-15T11:51:55.535Z",
+      "finishedAt": "2026-10-15T11:53:12.676Z",
+      "requestIdTimePrefix": "2026-10-15T11:52:00+00:00",
+      "prefixMatchesScreenshotStartToSecond": true,
+      "httpTiming": {
+        "admittedMs": 1,
+        "dispatchedMs": 1,
+        "finishedMs": 77140,
+        "firstByteMs": 9104,
+        "firstCompletedItemMs": 60051,
+        "headersMs": 9104,
+        "lastByteMs": 77128,
+        "readClosedMs": 77131,
+        "streamEndMs": 77140,
+        "terminalMs": 77140
+      },
+      "outcome": "completed",
+      "termination": {
+        "reason": "protocolTerminal"
+      },
+      "serviceBeforeSecondsApprox": 4.465,
+      "serviceAfterSecondsApprox": 16.676,
+      "liveServerRequestId": "202610151152007657440678268d9d6sDNcV6Lj",
+      "exactRequestIdMatch": true,
+      "serviceDetailNativeFormat": true,
+      "serviceDetailPath": "/v1/responses"
+    },
+    {
+      "screenshotTimeChina": "19:54:17",
+      "serviceSeconds": 12,
+      "clientSeconds": 65.085,
+      "extraSeconds": 53.085,
+      "callId": "19d65c4e-e855-42ab-a555-79ccbf1aa5b3",
+      "startedAt": "2026-10-15T11:53:59.703Z",
+      "finishedAt": "2026-10-15T11:55:04.788Z",
+      "requestIdTimePrefix": "2026-10-15T11:54:05+00:00",
+      "prefixMatchesScreenshotStartToSecond": true,
+      "httpTiming": {
+        "admittedMs": 1,
+        "dispatchedMs": 1,
+        "finishedMs": 65085,
+        "firstByteMs": 6861,
+        "firstCompletedItemMs": 38448,
+        "headersMs": 6861,
+        "lastByteMs": 65078,
+        "readClosedMs": 65079,
+        "streamEndMs": 65085,
+        "terminalMs": 65085
+      },
+      "outcome": "completed",
+      "termination": {
+        "reason": "protocolTerminal"
+      },
+      "serviceBeforeSecondsApprox": 5.297,
+      "serviceAfterSecondsApprox": 47.788,
+      "liveServerRequestId": "202610151154057440490078268d9d6tDFXYxZv",
+      "exactRequestIdMatch": true,
+      "serviceDetailNativeFormat": true,
+      "serviceDetailPath": "/v1/responses"
+    },
+    {
+      "screenshotTimeChina": "19:55:33",
+      "serviceSeconds": 14,
+      "clientSeconds": 18.925,
+      "extraSeconds": 4.925,
+      "callId": "fe5027d1-9284-4dcb-af65-56628cfa8b37",
+      "startedAt": "2026-10-15T11:55:16.767Z",
+      "finishedAt": "2026-10-15T11:55:35.692Z",
+      "requestIdTimePrefix": "2026-10-15T11:55:19+00:00",
+      "prefixMatchesScreenshotStartToSecond": true,
+      "httpTiming": {
+        "admittedMs": 2,
+        "dispatchedMs": 2,
+        "finishedMs": 18926,
+        "firstByteMs": 5275,
+        "firstCompletedItemMs": 18602,
+        "headersMs": 5275,
+        "lastByteMs": 18918,
+        "readClosedMs": 18919,
+        "streamEndMs": 18926,
+        "terminalMs": 18926
+      },
+      "outcome": "completed",
+      "termination": {
+        "reason": "protocolTerminal"
+      },
+      "serviceBeforeSecondsApprox": 2.233,
+      "serviceAfterSecondsApprox": 2.692,
+      "liveServerRequestId": "202610151155197306332388268d9d6L9LslyFP",
+      "exactRequestIdMatch": true,
+      "serviceDetailNativeFormat": true,
+      "serviceDetailPath": "/v1/responses"
+    },
+    {
+      "screenshotTimeChina": "19:56:00",
+      "serviceSeconds": 20,
+      "clientSeconds": 40.206,
+      "extraSeconds": 20.206,
+      "callId": "2db36eeb-a56b-4832-ac02-b8809e3dd30c",
+      "startedAt": "2026-10-15T11:55:37.120Z",
+      "finishedAt": "2026-10-15T11:56:17.326Z",
+      "requestIdTimePrefix": "2026-10-15T11:55:40+00:00",
+      "prefixMatchesScreenshotStartToSecond": true,
+      "httpTiming": {
+        "admittedMs": 1,
+        "dispatchedMs": 1,
+        "finishedMs": 40205,
+        "firstByteMs": 5663,
+        "firstCompletedItemMs": 40178,
+        "headersMs": 5663,
+        "lastByteMs": 40179,
+        "readClosedMs": 40180,
+        "streamEndMs": 40205,
+        "terminalMs": 40205
+      },
+      "outcome": "completed",
+      "termination": {
+        "reason": "protocolTerminal"
+      },
+      "serviceBeforeSecondsApprox": 2.88,
+      "serviceAfterSecondsApprox": 17.326,
+      "liveServerRequestId": "202610151155403093259998268d9d6yPmZnJyV",
+      "exactRequestIdMatch": true,
+      "serviceDetailNativeFormat": true,
+      "serviceDetailPath": "/v1/responses"
+    }
+  ],
+  "limits": [
+    "All eight request identities confirmed by exact oneApiRequestId match in live service UI; service timing display rounded to seconds.",
+    "Client duration includes connection, forwarding, protocol progress, silent waits; it cannot all be attributed to model inference.",
+    "Old run has no SSE frame type counters. 180 seconds silence is verified, exact location of forwarding or parsing delay needs new bounded diagnostics.",
+    "Local tool durations are included in nonCallSeconds, not added twice."
+  ],
+  "liveUiVerification": {
+    "allEightRequestIdsMatch": true,
+    "source": "Actual Google Chrome logged-in New API usage-log detail dialogs",
+    "upstreamManager": "Actual CodexManager v0.6.3 existing request-log tab; same timestamps/model/token quantities; reported approximate durations 15/10/9.6/9.5/56/12/13/20 seconds",
+    "noServerMutation": true
+  }
+}

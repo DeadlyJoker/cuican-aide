@@ -1,3 +1,4 @@
+import type { DesktopShortDramaImagePreset } from "../src/lib/desktop/desktopLocalPluginExecutionSetupProtocol.ts";
 import { createHash } from "node:crypto";
 import {
   chmodSync,
@@ -29,6 +30,8 @@ export const fixtureHash = (value: string | Buffer) =>
 export async function executionSetupFixture(
   options: Readonly<{
     version?: string;
+    serviceProtocol?: "native" | "workflow-panel-v1" | "workflow-api-v1";
+    preset?: DesktopShortDramaImagePreset;
     /** Copied into the owned fixture source; the supplied package is never mutated. */
     packageDirectory?: string;
     /** Test-only immutable package data; cannot replace the original entrypoints or business manifest. */
@@ -85,6 +88,36 @@ export async function executionSetupFixture(
       };
   const business = {
     ...baseBusiness,
+    ...(options.serviceProtocol === undefined
+      ? {}
+      : {
+          configurationSchema: {
+            ...baseBusiness.configurationSchema,
+            properties: {
+              ...baseBusiness.configurationSchema.properties,
+              ...(options.preset?.startsWith("api-")
+                ? {
+                    preset: {
+                      type: "string",
+                      maxLength: 64,
+                      enum: [
+                        "krea2-portrait",
+                        "krea2-character-three-view",
+                        "api-c16-scene",
+                        "api-c16-portrait",
+                        "api-t4-three-view",
+                      ],
+                    },
+                  }
+                : {}),
+              serviceProtocol: {
+                type: "string",
+                maxLength: 32,
+                enum: ["native", "workflow-panel-v1", "workflow-api-v1"],
+              },
+            },
+          },
+        }),
     tools: baseBusiness.tools.filter(
       (tool: { operationId: string }) =>
         !options.omitOperations?.includes(tool.operationId) &&
@@ -319,7 +352,10 @@ export async function executionSetupFixture(
       implementationDigest: registration.implementationDigest,
       parameters: {
         baseUrl: "https://comfy.example:8443/",
-        preset: "krea2-portrait",
+        preset: options.preset ?? "krea2-portrait",
+        ...(options.serviceProtocol === undefined
+          ? {}
+          : { serviceProtocol: options.serviceProtocol }),
       },
       credentialBindings: [],
       createdByActorId: actor.actorId,

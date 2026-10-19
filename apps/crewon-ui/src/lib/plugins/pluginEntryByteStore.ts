@@ -1,5 +1,6 @@
 const DATABASE = "crewon-plugin-entry-code-v1";
 const STORE = "entries";
+const STORED_AT_INDEX = "storedAt";
 const MAXIMUM_ENTRIES = 8;
 export const MAXIMUM_PLUGIN_ENTRY_BYTES = 4 * 1024 * 1024;
 
@@ -12,15 +13,28 @@ export interface PluginEntryByteStore {
 export function createPluginEntryByteStore(): PluginEntryByteStore {
   const open = () =>
     new Promise<IDBDatabase | null>((resolve) => {
+      let settled = false;
+      const finish = (db: IDBDatabase | null) => {
+        if (settled) {
+          db?.close();
+          return;
+        }
+        settled = true;
+        resolve(db);
+      };
       try {
-        const request = indexedDB.open(DATABASE, 1);
+        const request = indexedDB.open(DATABASE, 2);
         request.onupgradeneeded = () => {
-          request.result.createObjectStore(STORE, { keyPath: "key" });
+          const store = request.result.objectStoreNames.contains(STORE)
+            ? request.transaction!.objectStore(STORE)
+            : request.result.createObjectStore(STORE, { keyPath: "key" });
+          if (!store.indexNames.contains(STORED_AT_INDEX))
+            store.createIndex(STORED_AT_INDEX, "storedAt");
         };
-        request.onsuccess = () => resolve(request.result);
-        request.onerror = request.onblocked = () => resolve(null);
+        request.onsuccess = () => finish(request.result);
+        request.onerror = request.onblocked = () => finish(null);
       } catch {
-        resolve(null);
+        finish(null);
       }
     });
   return {
@@ -29,10 +43,9 @@ export function createPluginEntryByteStore(): PluginEntryByteStore {
       if (!db) return null;
       try {
         return await new Promise<ArrayBuffer | null>((resolve) => {
-          const request = db
-            .transaction(STORE, "readonly")
-            .objectStore(STORE)
-            .get(key);
+          const transaction = db.transaction(STORE, "readonly");
+          transaction.onabort = transaction.onerror = () => resolve(null);
+          const request = transaction.objectStore(STORE).get(key);
           request.onsuccess = () => {
             const bytes: unknown = request.result?.bytes;
             resolve(
@@ -59,18 +72,19 @@ export function createPluginEntryByteStore(): PluginEntryByteStore {
           const transaction = db.transaction(STORE, "readwrite");
           const store = transaction.objectStore(STORE);
           store.put({ key, bytes, storedAt: Date.now() });
-          const request = store.getAll();
+          const request = store.count();
           request.onsuccess = () => {
-            const entries = request.result as {
-              key: string;
-              storedAt: number;
-            }[];
-            entries.sort((a, b) => a.storedAt - b.storedAt);
-            for (const entry of entries.slice(
-              0,
-              Math.max(0, entries.length - MAXIMUM_ENTRIES),
-            ))
-              store.delete(entry.key);
+            let excess = request.result - MAXIMUM_ENTRIES;
+            if (excess <= 0) return;
+            // Read only sorted keys; cloning cached JavaScript to evict it can
+            // otherwise allocate up to 36 MiB for a single new entry.
+            const cursor = store.index(STORED_AT_INDEX).openKeyCursor();
+            cursor.onsuccess = () => {
+              const entry = cursor.result;
+              if (!entry || excess <= 0) return;
+              store.delete(entry.primaryKey);
+              if (--excess > 0) entry.continue();
+            };
           };
           transaction.oncomplete =
             transaction.onerror =

@@ -34,12 +34,16 @@ export type ComfyMaterialUploadPlan = Readonly<{
     width: number;
     height: number;
   }>;
-  output: Readonly<{ filename: string; subfolder: string; type: "output" }>;
+  output: Readonly<{
+    filename: string;
+    subfolder: string;
+    type: "output" | "input";
+  }>;
   viewPath: string;
   requestDigest: string;
   request: Readonly<{
     method: "POST";
-    path: "/upload/image";
+    path: "/upload/image" | "/api/comfy/upload/file";
     headers: Readonly<Record<string, string>>;
     body: Uint8Array;
     maxRequestBytes: number;
@@ -54,9 +58,24 @@ export function renderComfyMaterialUpload(
     preparationId: string;
     targetServiceOrigin: string;
     content: FrozenProjectReferenceMaterialContent;
+    adapter?: "comfyui-image-upload.v1" | "comfyui-workflow-file-upload.v1";
   }>,
 ): ComfyMaterialUploadPlan {
-  const q = fields(input, ["preparationId", "targetServiceOrigin", "content"]);
+  if (!input || typeof input !== "object" || types.isProxy(input))
+    fail("input_invalid");
+  const q = fields(input, [
+    "preparationId",
+    "targetServiceOrigin",
+    "content",
+    ...(Object.hasOwn(input, "adapter") ? ["adapter"] : []),
+  ]);
+  if (
+    q.adapter !== undefined &&
+    q.adapter !== "comfyui-image-upload.v1" &&
+    q.adapter !== "comfyui-workflow-file-upload.v1"
+  )
+    fail("adapter_invalid");
+  const workflowApi = q.adapter === "comfyui-workflow-file-upload.v1";
   if (
     typeof q.preparationId !== "string" ||
     !/^[a-f0-9]{8}-[a-f0-9]{4}-4[a-f0-9]{3}-[89ab][a-f0-9]{3}-[a-f0-9]{12}$/u.test(
@@ -105,9 +124,11 @@ export function renderComfyMaterialUpload(
     fail("bytes_invalid");
   const preparationId = q.preparationId,
     output = Object.freeze({
-      filename: `material-${record.source.byteDigest.slice(7)}.png`,
-      subfolder: `crewon-materials/${preparationId}`,
-      type: "output" as const,
+      filename: workflowApi
+        ? `material-${preparationId}-${record.source.byteDigest.slice(7)}.png`
+        : `material-${record.source.byteDigest.slice(7)}.png`,
+      subfolder: workflowApi ? "" : `crewon-materials/${preparationId}`,
+      type: workflowApi ? ("input" as const) : ("output" as const),
     }),
     boundary = `crewon-${preparationId}`;
   if (bytes.includes(Buffer.from(`\r\n--${boundary}`)))
@@ -116,10 +137,11 @@ export function renderComfyMaterialUpload(
     `--${boundary}\r\nContent-Disposition: form-data; name="${name}"\r\n\r\n${value}\r\n`;
   const body = Buffer.concat([
     Buffer.from(
-      form("type", "output") +
-        form("subfolder", output.subfolder) +
+      (workflowApi
+        ? ""
+        : form("type", "output") + form("subfolder", output.subfolder)) +
         form("overwrite", "false") +
-        `--${boundary}\r\nContent-Disposition: form-data; name="image"; filename="${output.filename}"\r\nContent-Type: image/png\r\n\r\n`,
+        `--${boundary}\r\nContent-Disposition: form-data; name="${workflowApi ? "file" : "image"}"; filename="${output.filename}"\r\nContent-Type: image/png\r\n\r\n`,
     ),
     bytes,
     Buffer.from(`\r\n--${boundary}--\r\n`),
@@ -140,13 +162,15 @@ export function renderComfyMaterialUpload(
   });
   const request = Object.freeze({
     method: "POST" as const,
-    path: "/upload/image" as const,
+    path: workflowApi
+      ? ("/api/comfy/upload/file" as const)
+      : ("/upload/image" as const),
     headers,
     body,
     maxRequestBytes: MAX_COMFY_MATERIAL_UPLOAD_BYTES,
     maxResponseBytes: MAX_COMFY_MATERIAL_UPLOAD_RESPONSE_BYTES,
   });
-  const viewPath = `/view?${new URLSearchParams(output)}`,
+  const viewPath = `${workflowApi ? "/api/comfy/view" : "/view"}?${new URLSearchParams(output)}`,
     requestDigest = sha(
       extensionCanonicalJson({
         preparationId,

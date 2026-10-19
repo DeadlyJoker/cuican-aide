@@ -5,6 +5,7 @@ import {
   ioJson,
   ioPath,
   PluginExecutionJsonHttp,
+  PluginExecutionIoHttpResourceError,
   type PluginIoHttpRequest,
 } from "./plugins/plugin-execution-io-network.ts";
 import type { NetworkDnsResolver } from "./network-egress.ts";
@@ -29,6 +30,48 @@ const ok: PinnedHttpResponse = {
 };
 const signal = () => new AbortController().signal;
 const allowed = async () => {};
+
+test("404/410 resources produce a terminal typed error without exposing bodies; 429/500 remain recoverable", async () => {
+  for (const status of [404, 410, 429, 500]) {
+    let sends = 0;
+    const http = new PluginExecutionJsonHttp({
+      ...identity,
+      dns: publicDns,
+      transport: {
+        request: async () => {
+          sends++;
+          return {
+            ...ok,
+            status,
+            body: Buffer.from("<html>private provider body</html>"),
+          };
+        },
+      },
+    });
+    await assert.rejects(
+      http.request(
+        { method: "GET", path: "/history/original" },
+        signal(),
+        allowed,
+      ),
+      (error) => {
+        assert.ok(error instanceof Error);
+        assert.equal(
+          error instanceof PluginExecutionIoHttpResourceError,
+          status === 404 || status === 410,
+        );
+        assert.equal(
+          error.message,
+          status === 404 || status === 410
+            ? `plugin_execution_io_http_${status}`
+            : "plugin_execution_io_http_failed",
+        );
+        return true;
+      },
+    );
+    assert.equal(sends, 1);
+  }
+});
 
 test("plugin HTTP requires a root HTTPS origin without URL credentials and valid scoped network identity", () => {
   for (const baseUrl of [
@@ -85,7 +128,7 @@ test("approved network metadata is detached, bounded, and narrows operation rout
     { ...input, paths: [{ method: "POST", operationPathPrefix: "/history/" }] },
     {
       ...input,
-      paths: [{ method: "GET", operationPathPrefix: "/history/?id=" }],
+      paths: [{ method: "GET", operationPathPrefix: "/history/?id=&all=" }],
     },
     { ...input, paths: [{ method: "GET", operationPathPrefix: "/history" }] },
     {

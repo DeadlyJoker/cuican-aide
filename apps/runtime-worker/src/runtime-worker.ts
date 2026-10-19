@@ -1,4 +1,10 @@
 import { RuntimePreflight } from "./runtime-preflight.ts";
+import { installedPluginInvocationContext } from "./plugins/installed-plugin-invocation-context.ts";
+import {
+  PluginExecutionIoPolicyError,
+  PluginExecutionIoHttpResourceError,
+} from "./plugins/plugin-execution-io-network.ts";
+import { mediaImageReviewRuntimeFence } from "./media-image-review-runtime-fence.ts";
 import { AgentRuntimeCapacityError } from "./agent-runtime-capacity.ts";
 import { RuntimeStoreAccess } from "./runtime-store-access.ts";
 import { RuntimeWorkItemClaims } from "./runtime-work-item-claims.ts";
@@ -294,6 +300,7 @@ export class RuntimeWorker {
   readonly #execution: RunExecutionService;
   readonly #projectPlanning: ProjectPlanningRuntimeToolsOwner | undefined;
   readonly #kernel: AgentKernelPort;
+  readonly #reviewRuntimeFence: ReturnType<typeof mediaImageReviewRuntimeFence>;
   readonly #policy: RunExecutionPolicyPort;
   readonly #toolRuntime: ToolRuntimePort;
   readonly #artifacts: ToolOutputArtifactPort | undefined;
@@ -415,6 +422,7 @@ export class RuntimeWorker {
         ? undefined
         : new ProjectPlanningRuntimeToolsOwner(dependencies.projectPlanning);
     this.#kernel = dependencies.kernel;
+    this.#reviewRuntimeFence = mediaImageReviewRuntimeFence(dependencies.store);
     this.#policy = dependencies.policy;
     this.#toolRuntime = dependencies.toolRuntime ?? new InMemoryToolBroker();
     this.#artifacts = dependencies.artifacts;
@@ -806,7 +814,11 @@ export class RuntimeWorker {
           throw retryError;
         }
       }
-      if (error instanceof PermanentWorkerError) {
+      if (
+        error instanceof PermanentWorkerError ||
+        error instanceof PluginExecutionIoPolicyError ||
+        error instanceof PluginExecutionIoHttpResourceError
+      ) {
         const run = await this.#execution.loadRun(claim);
         if (run.cancelRequested) {
           return this.#cancel(claim);
@@ -866,6 +878,12 @@ export class RuntimeWorker {
     } catch (error) {
       if (error instanceof InstalledPluginRuntimeError)
         throw new PermanentWorkerError(error.code);
+      if (
+        error instanceof AgentKernelError &&
+        !error.retryable &&
+        error.code.startsWith("media_image_review_")
+      )
+        throw new PermanentWorkerError(error.code);
       throw error;
     }
   }
@@ -893,6 +911,7 @@ export class RuntimeWorker {
         throw new InstalledPluginRuntimeError(
           "installed_plugin_materialization_unavailable",
         );
+      await this.#reviewRuntimeFence(run, this.#kernel);
       return this.#applyTeamRuntime(run, {
         executionAuthority: "crewonKernel",
         installedPluginAdmission: "none",
@@ -922,6 +941,7 @@ export class RuntimeWorker {
       throw new PermanentWorkerError("agent_version_runtime_identity_mismatch");
     }
     const runtime = this.#projectAgentVersionRuntime(resolved);
+    await this.#reviewRuntimeFence(run, runtime.kernel);
     if (admission === null) return this.#applyTeamRuntime(run, runtime);
     const toolRuntime = await this.#preflight.run({
       identity: {
@@ -953,10 +973,30 @@ export class RuntimeWorker {
           }
         }),
     });
+    const invocationContext = installedPluginInvocationContext(run, admission);
+    const governedContextItems = [
+      ...runtime.governedContextItems,
+      ...invocationContext,
+    ];
+    const governedContextBytes =
+      runtime.governedContextBytes +
+      invocationContext.reduce(
+        (total, item) =>
+          total + (item.type === "message" ? utf8ByteLength(item.content) : 0),
+        0,
+      );
+    if (
+      governedContextItems.length > this.#maxContextItems - 2 ||
+      governedContextBytes >=
+        this.#maxContextBytes - utf8ByteLength(CONTEXT_COMPACTION_PROMPT)
+    )
+      throw new PermanentWorkerError("worker_governed_context_limit_exceeded");
     return this.#applyTeamRuntime(run, {
       ...runtime,
       toolRuntime,
       installedPluginAdmission: "present",
+      governedContextItems,
+      governedContextBytes,
     });
   }
 
@@ -969,6 +1009,7 @@ export class RuntimeWorker {
       base,
       resolver: this.#teamRunRuntimeResolver,
     });
+
   }
 
   #projectAgentVersionRuntime(

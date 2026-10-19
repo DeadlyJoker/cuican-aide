@@ -71,6 +71,40 @@ describe("installed plugin task context (actual Control client, named HTTP fixtu
     vi.useRealTimers();
   });
 
+  it("loads eight task snapshots in two bounded waves and preserves list order", async () => {
+    const ids = Array.from({ length: 8 }, (_, index) => `run-${index + 1}`);
+    const gates = ids.map(() => taskContextDeferred<Response>());
+    f.setHandler(({ path }) => {
+      const index = ids.findIndex((id) => path.endsWith(`/tasks/${id}`));
+      return index < 0 ? undefined : gates[index]!.promise;
+    });
+    const taskRequests = () =>
+      f.requests.filter(({ path }) => path.includes("/tasks/"));
+    await render({ runIds: ids });
+    await vi.waitFor(() => expect(taskRequests()).toHaveLength(4));
+    await change(() => {
+      // Reverse completion must not reorder the final list.
+      for (const index of [3, 2, 1, 0])
+        gates[index]!.resolve(
+          taskContextJson({
+            task: taskContextTask(ids[index]!, { operations: [] }),
+          }),
+        );
+    });
+    await vi.waitFor(() => expect(taskRequests()).toHaveLength(8));
+    await change(() => {
+      for (const index of [7, 6, 5, 4])
+        gates[index]!.resolve(
+          taskContextJson({
+            task: taskContextTask(ids[index]!, { operations: [] }),
+          }),
+        );
+    });
+    await ready();
+    expect(state.tasks.map((task) => task.runId)).toEqual(ids);
+    expect(container.textContent).toContain("run-8");
+  });
+
   it("opens using actual GET revision, skips ordinary Runs and never implicitly creates a Thread", async () => {
     f.runs.set("thread-1", [
       taskContextRun("ordinary-run"),
@@ -422,6 +456,8 @@ describe("installed plugin task context (actual Control client, named HTTP fixtu
   it("ignores other contribution or publisher receipts", async () => {
     await render();
     await ready();
+    const initial = state;
+    const requestCount = f.requests.length;
     const event = taskContextReceipt();
     await change(() => {
       f.emit({
@@ -440,6 +476,8 @@ describe("installed plugin task context (actual Control client, named HTTP fixtu
       });
     });
     await ready();
+    expect(state).toBe(initial);
+    expect(f.requests).toHaveLength(requestCount);
     expect(state.tasks).toHaveLength(0);
     expect(f.adopt).not.toHaveBeenCalled();
   });
@@ -487,8 +525,17 @@ describe("installed plugin task context (actual Control client, named HTTP fixtu
     );
     await render();
     await render({ selectedThreadId: "thread-2" });
-    expect(state.thread).toBeNull();
-    expect(f.requests).toHaveLength(1);
+    // A cancelled old GET retains its physical slot, but cannot stall an
+    // independent verified read for the newly selected conversation.
+    await ready();
+    expect(state.thread).toEqual({
+      threadId: "thread-2",
+      revision: 41,
+      provisional: false,
+    });
+    expect(
+      f.requests.some((request) => request.path === "/api/v1/threads/thread-2"),
+    ).toBe(true);
     await change(() =>
       late.resolve(
         taskContextJson({

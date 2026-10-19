@@ -1,6 +1,4 @@
-import { composeDesktopLocalProjectAssetV2Approval } from "./desktopLocalProjectAssetV2Approval.ts";
-import { composeDesktopLocalShortDramaMediaInputApproval } from "./desktopLocalShortDramaMediaInputs.ts";
-import { composeDesktopLocalShortDramaMediaGenerationApproval } from "./desktopLocalShortDramaMediaGenerations.ts";
+import { composeDesktopLocalPluginExecutionMapping } from "./desktopLocalPluginExecutionMapping.ts";
 import { randomBytes } from "node:crypto";
 import { isDeepStrictEqual } from "node:util";
 import { performance } from "node:perf_hooks";
@@ -17,17 +15,16 @@ import type {
   DesktopInstalledPluginExpectedCatalogEntry,
   DesktopInstalledPluginRuntime,
 } from "./desktopInstalledPluginRuntime.ts";
-import { composeDesktopLocalComfyProjectExecutionApproval } from "./desktopLocalComfyProjectExecutionApproval.ts";
 import {
   captureDesktopLocalHistoricalProjectQueryTarget,
   isDesktopLocalHistoricalProjectQueryTargetUnavailable,
   assertDesktopLocalHistoricalProjectQueryTargetCurrent,
   assertDesktopLocalHistoricalProjectQueryTargetSynchronous,
-  composeDesktopLocalHistoricalProjectQueryApproval,
   type DesktopLocalHistoricalProjectQueryTarget,
 } from "./desktopLocalHistoricalProjectQueryApproval.ts";
 import {
   absolutePath,
+  MAX_APPROVAL_BYTES,
   assertApproval,
   assertParents,
   commitApproval,
@@ -44,7 +41,7 @@ import {
   setupHash,
   setupInvalid,
   setupPaths,
-  SHORT_NETWORK_PATHS,
+  shortDramaNetworkPaths,
   SHORT_PLUGIN_ID,
   type SetupSnapshot,
 } from "./desktopLocalPluginExecutionSetupSnapshot.ts";
@@ -92,6 +89,10 @@ export type DesktopLocalPluginExecutionSetupOwner = Readonly<{
     claim: DesktopLocalPluginExecutionSetupClaim,
     runtime: DesktopInstalledPluginRuntime,
   ): Promise<DesktopLocalPluginExecutionProjectMappingClaim>;
+  reuseProjectMappingWhileRunning(
+    claim: DesktopLocalPluginExecutionProjectMappingClaim,
+    runtime: DesktopInstalledPluginRuntime,
+  ): Promise<"current" | "commitRequired">;
   commitProjectMappingWhileStopped(
     claim: DesktopLocalPluginExecutionProjectMappingClaim,
   ): Promise<void>;
@@ -202,7 +203,8 @@ export function createDesktopLocalPluginExecutionSetupOwner(
   ) => {
     const path = setupPaths(dataDirectory)[kind];
     const bytes = Buffer.from(JSON.stringify(document));
-    if (bytes.length > 128 * 1024) setupInvalid("document_limit");
+    if (bytes.length > (kind === "approval" ? MAX_APPROVAL_BYTES : 128 * 1024))
+      setupInvalid("document_limit");
     const old =
       kind === "policy"
         ? value.snapshot.policyFile
@@ -250,46 +252,51 @@ export function createDesktopLocalPluginExecutionSetupOwner(
     const matches = runtime.expectedCatalogEntries.filter(
       (entry) => entry.identity.pluginId === SHORT_PLUGIN_ID,
     );
-    if (matches.length !== 1) setupInvalid("runtime_unprepared");
-    const raw = matches[0]!;
-    const identity = fields(raw.identity, [
-      "pluginId",
-      "publisherId",
-      "version",
-      "packageDigest",
-      "manifestDigest",
-      "implementationDigest",
-    ]);
+    if (matches.length === 0) setupInvalid("runtime_unprepared");
+    // Native publishes the prepared default first, followed by independently
+    // checked model siblings. Every sibling must retain this approved package
+    // and configuration; only its execution target may differ.
     const expected = identityPins(value.snapshot);
-    for (const key of [
-      "pluginId",
-      "publisherId",
-      "version",
-      "packageDigest",
-      "manifestDigest",
-      "implementationDigest",
-    ] as const)
-      if (identity[key] !== expected[key]) setupInvalid("runtime_identity");
-    const configuration = parseExtensionConfiguration(raw.configuration, {
-      sha256: setupHash,
-    });
-    if (!isDeepStrictEqual(configuration, value.snapshot.configuration))
-      setupInvalid("runtime_configuration");
-    const configuredTarget = parseExtensionExecutionTarget(
-      raw.configuredTarget,
-    );
-    if (configuredTarget.workspaceBindingId !== null)
-      setupInvalid("runtime_workspace");
-    const entry = Object.freeze({
-      identity: Object.freeze({ ...raw.identity }),
-      configuration:
-        configuration as unknown as DesktopInstalledPluginExpectedCatalogEntry["configuration"],
-      configuredTarget:
-        configuredTarget as unknown as DesktopInstalledPluginExpectedCatalogEntry["configuredTarget"],
+    const entries = matches.map((raw) => {
+      const identity = fields(raw.identity, [
+        "pluginId",
+        "publisherId",
+        "version",
+        "packageDigest",
+        "manifestDigest",
+        "implementationDigest",
+      ]);
+      for (const key of [
+        "pluginId",
+        "publisherId",
+        "version",
+        "packageDigest",
+        "manifestDigest",
+        "implementationDigest",
+      ] as const)
+        if (identity[key] !== expected[key]) setupInvalid("runtime_identity");
+      const configuration = parseExtensionConfiguration(raw.configuration, {
+        sha256: setupHash,
+      });
+      if (!isDeepStrictEqual(configuration, value.snapshot.configuration))
+        setupInvalid("runtime_configuration");
+      const configuredTarget = parseExtensionExecutionTarget(
+        raw.configuredTarget,
+      );
+      if (configuredTarget.workspaceBindingId !== null)
+        setupInvalid("runtime_workspace");
+      const entry = Object.freeze({
+        identity: Object.freeze({ ...raw.identity }),
+        configuration:
+          configuration as unknown as DesktopInstalledPluginExpectedCatalogEntry["configuration"],
+        configuredTarget:
+          configuredTarget as unknown as DesktopInstalledPluginExpectedCatalogEntry["configuredTarget"],
+      });
+      return entry;
     });
     runtime.assertCurrent();
     active();
-    return entry;
+    return entries[0]!;
   };
   return Object.freeze({
     preview(request) {
@@ -347,11 +354,15 @@ export function createDesktopLocalPluginExecutionSetupOwner(
           baseUrl: snapshot.baseUrl,
           preset: snapshot.preset,
           networkPaths:
-            snapshot.policy?.networkGrants.find(
+            mergeSetupPolicy(
+              dataDirectory,
+              snapshot,
+              request.bootstrap.bootstrapPath,
+            ).networkGrants.find(
               (grant) =>
                 grant.packageDigest === snapshot.pkg.packageDigest &&
                 grant.baseUrlParameter === "baseUrl",
-            )?.paths ?? SHORT_NETWORK_PATHS,
+            )?.paths ?? shortDramaNetworkPaths(snapshot.configuration),
           approvalRequirement: "none" as const,
           ...(snapshot.mediaInputs === null
             ? {}
@@ -498,6 +509,42 @@ export function createDesktopLocalPluginExecutionSetupOwner(
         return mapping;
       });
     },
+    reuseProjectMappingWhileRunning(mapping, runtime) {
+      return tracked(async () => {
+        const value = mappings.get(mapping);
+        if (
+          !value ||
+          value !== claimed ||
+          !value.entry ||
+          value.mappingCommitted
+        )
+          setupInvalid("mapping_unavailable");
+        await assertSnapshot(value);
+        active();
+        const next = composeDesktopLocalPluginExecutionMapping({
+          snapshot: value.snapshot,
+          entry: value.entry,
+          approveMediaGenerations: value.approveMediaGenerations,
+          historyQuery: value.historyQuery,
+        });
+        if (!isDeepStrictEqual(next, value.snapshot.approval))
+          return "commitRequired" as const;
+        if (value.historyQuery !== null)
+          await assertDesktopLocalHistoricalProjectQueryTargetCurrent(
+            value.historyQuery,
+            {
+              approval: value.snapshot.approval,
+              policy: value.snapshot.policy,
+              runtime,
+            },
+          );
+        await assertSnapshot(value);
+        active();
+        runtime.assertCurrent();
+        value.mappingCommitted = true;
+        return "current" as const;
+      });
+    },
     commitProjectMappingWhileStopped(mapping) {
       return tracked(async () => {
         const value = mappings.get(mapping);
@@ -511,38 +558,6 @@ export function createDesktopLocalPluginExecutionSetupOwner(
         active();
         await assertSnapshot(value);
         active();
-        const source = {
-          descriptor: value.snapshot.descriptor,
-          packageDigest: value.snapshot.pkg.packageDigest,
-          contributionId: "workbench",
-        };
-        const generationApproval =
-          composeDesktopLocalComfyProjectExecutionApproval({
-            approval: value.snapshot.approval,
-            source,
-            target: {
-              descriptor: value.snapshot.descriptor,
-              contributionId: "workbench",
-              entry: value.entry,
-            },
-          });
-        const inputApproval = composeDesktopLocalShortDramaMediaInputApproval({
-          approval: generationApproval,
-          descriptor: source.descriptor,
-          packageDigest: source.packageDigest,
-          declaration: value.snapshot.mediaInputs,
-        });
-        const mediaApproval = value.approveMediaGenerations
-          ? composeDesktopLocalShortDramaMediaGenerationApproval({
-              approval: inputApproval,
-              packageDigest: source.packageDigest,
-            })
-          : inputApproval;
-        const selfApproval = composeDesktopLocalProjectAssetV2Approval({
-          approval: mediaApproval,
-          descriptor: source.descriptor,
-          packageDigest: source.packageDigest,
-        });
         if (value.historyQuery !== null)
           await assertDesktopLocalHistoricalProjectQueryTargetCurrent(
             value.historyQuery,
@@ -551,14 +566,12 @@ export function createDesktopLocalPluginExecutionSetupOwner(
               policy: value.snapshot.policy,
             },
           );
-        const next =
-          value.historyQuery === null
-            ? selfApproval
-            : composeDesktopLocalHistoricalProjectQueryApproval({
-                claim: value.historyQuery,
-                approval: selfApproval,
-                policy: value.snapshot.policy,
-              });
+        const next = composeDesktopLocalPluginExecutionMapping({
+          snapshot: value.snapshot,
+          entry: value.entry,
+          approveMediaGenerations: value.approveMediaGenerations,
+          historyQuery: value.historyQuery,
+        });
         // The saved entry is an opaque Main claim captured before stop. Its old runtime is now withdrawn.
         write(value, "approval", next, () => {
           value.mappingCommitted = true;
@@ -645,6 +658,16 @@ export async function runDesktopLocalPluginExecutionSetup(
   const runtime = port.preparedRuntime();
   if (runtime === null) setupInvalid("runtime_unprepared");
   const mapping = await owner.captureProjectMappingWhileRunning(claim, runtime);
+  if (
+    (await owner.reuseProjectMappingWhileRunning(mapping, runtime)) ===
+    "current"
+  ) {
+    await owner.verifyPreparedWhileRunning(claim, runtime);
+    return owner.result(claim, {
+      stage: "mappingCommitted",
+      runtimeStatus: "ready",
+    });
+  }
   const publication = await port.mutateWhileStopped({
     mutation: () => owner.commitProjectMappingWhileStopped(mapping),
     onStopInvalidation,

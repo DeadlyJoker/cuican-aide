@@ -5,8 +5,11 @@
   "minimumPackageMajorVersion": 12,
   "sdkVersion": "0.1.0",
   "configuration": {
-    "exactKeys": ["baseUrl", "preset"],
-    "defaultPreset": null
+    "requiredKeys": ["baseUrl", "preset"],
+    "optionalKeys": ["serviceProtocol"],
+    "defaultPreset": null,
+    "historicalMissingProtocol": "native",
+    "serviceProtocols": ["native", "workflow-panel-v1", "workflow-api-v1"]
   },
   "presets": [
     {
@@ -55,5 +58,39 @@
     }
   ],
   "policy": "Every original graph node, input, model selector, system prompt, cached frontend metadata, seed and link remains fixed. Only the declared prompt and output-prefix slots vary. Full graph request digest protects same-operation replay. Unknown submissions recover by read only.",
-  "verificationScope": "Static source and graph validation; not current provider/model availability, successful generation, prices or supplier billing."
+  "verificationScope": "Static source and graph validation; not current provider/model availability, successful generation, prices or supplier billing.",
+  "savedApiProfiles": [
+    {
+      "preset": "api-c16-scene",
+      "workflowId": "API-C16-短剧文生图专用-支持场景-角色",
+      "promptParameter": "prompt_2",
+      "parameters": {
+        "value": 1280,
+        "value_2": 720
+      },
+      "outputNodeId": "58"
+    },
+    {
+      "preset": "api-c16-portrait",
+      "workflowId": "API-C16-短剧文生图专用-支持场景-角色",
+      "promptParameter": "prompt_2",
+      "parameters": {
+        "value": 768,
+        "value_2": 1024
+      },
+      "outputNodeId": "58"
+    },
+    {
+      "preset": "api-t4-three-view",
+      "workflowId": "API-T4-Krea2-int8-角色设定三视图",
+      "promptParameter": "prompt",
+      "parameters": {
+        "width": 1920,
+        "height": 1080,
+        "value": false
+      },
+      "outputNodeId": "29"
+    }
+  ],
+  "savedApiNotes": "Provider-owned saved API definitions; request IDs and aliases are explicit, output paths are qualified, and completion still requires the original provider operation. Metadata is not proof of successful execution."
 }

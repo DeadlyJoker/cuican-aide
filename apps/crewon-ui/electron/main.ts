@@ -48,7 +48,8 @@ import {
 import { loadLocalEnvironment } from "./localEnvironment.ts";
 import { bindDesktopWindowActivation } from "./desktopWindowActivation.ts";
 import { providerModelCatalogForForm } from "./providerModelCatalog.ts";
-import { desktopRuntimeModelDiscovery } from "./desktopRuntimeModelDiscovery.ts";
+import { DesktopRuntimeModelCatalogDiscovery } from "./desktopRuntimeModelCatalogDiscovery.ts";
+import { desktopPluginCreditSettlementSharedEnvironment } from "./desktopPluginCreditSettlementEnvironment.ts";
 import { ProviderCredentialStore } from "./providerCredentials.ts";
 import { loadDesktopInstalledPluginRuntimeConfiguration } from "./desktopInstalledPluginRuntimeConfiguration.ts";
 import { RuntimeSupervisor, runtimePaths } from "./runtimeSupervisor.ts";
@@ -152,6 +153,38 @@ async function launch(): Promise<void> {
       await runtime?.restart();
     },
   );
+  const runtimeModelCatalog = new DesktopRuntimeModelCatalogDiscovery({
+    discover: (provider) =>
+      providerModelCatalogForForm(
+        {
+          apiKey: provider.apiKey,
+          defaultModelId: provider.modelId,
+          endpoint: provider.endpoint,
+          environmentVariable: null,
+          providerId: provider.providerId,
+        },
+        { paths, providers },
+      ),
+    context: (provider) => {
+      const binding = providers
+        .catalog()
+        .bindings.find((value) => value.providerId === provider.providerId);
+      return {
+        entry: paths.modelCatalog,
+        source: paths.source === true,
+        environment: desktopPluginCreditSettlementSharedEnvironment({
+          ...process.env,
+          ELECTRON_RUN_AS_NODE: "1",
+        }),
+        credentialSource: binding
+          ? {
+              kind: binding.credentialKind,
+              environmentVariable: binding.environmentVariable,
+            }
+          : null,
+      };
+    },
+  });
   runtime = new RuntimeSupervisor({
     workspaceAuthority: authority,
     agentPlatformApiKeyForOrigin: (origin) =>
@@ -170,19 +203,7 @@ async function launch(): Promise<void> {
     paths,
     repositoryRoot,
     provider: () => providers.active(),
-    providerModelCatalog: async (provider) => {
-      const result = await providerModelCatalogForForm(
-        {
-          apiKey: provider.apiKey,
-          defaultModelId: provider.modelId,
-          endpoint: provider.endpoint,
-          environmentVariable: null,
-          providerId: provider.providerId,
-        },
-        { paths, providers },
-      );
-      return desktopRuntimeModelDiscovery(result);
-    },
+    providerModelCatalog: (provider) => runtimeModelCatalog.discover(provider),
   });
   desktopLog(`provider=${providers.active()?.providerId ?? "unconfigured"}`);
   await runtime.start().catch((error) => {

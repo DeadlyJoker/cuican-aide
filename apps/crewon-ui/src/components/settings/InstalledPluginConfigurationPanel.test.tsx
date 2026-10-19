@@ -83,6 +83,78 @@ function snapshot() {
 }
 
 describe("installed plugin configuration panel", () => {
+  it("repairs a saved Short Drama origin missing its trailing slash through one normal configuration save", async () => {
+    const f = new ConfigurationPanelFetchFixture();
+    f.selection = { ...f.selection, pluginId: "crewon.short-drama" };
+    f.package = { ...f.package, pluginId: "crewon.short-drama" };
+    f.schema = {
+      type: "object",
+      additionalProperties: false,
+      required: ["baseUrl", "preset"],
+      properties: {
+        baseUrl: { type: "string", maxLength: 2048, enum: null },
+        preset: { type: "string", maxLength: 64, enum: ["krea2-portrait"] },
+      },
+    };
+    f.configuration = f.saved(
+      { baseUrl: "https://named-comfy.example:8443", preset: "krea2-portrait" },
+      18,
+    );
+    await mount(f);
+    expect(f.mutations).toHaveLength(0);
+    expect(button("保存参数").disabled).toBe(false);
+    await click("保存参数");
+    expect(f.mutations).toHaveLength(1);
+    expect(f.mutations[0]!.body).toMatchObject({
+      expectedRevision: 18,
+      parameters: {
+        baseUrl: "https://named-comfy.example:8443/",
+        preset: "krea2-portrait",
+      },
+    });
+    expect(
+      container.querySelector<HTMLInputElement>('input[aria-label="baseUrl"]')!
+        .value,
+    ).toBe("https://named-comfy.example:8443/");
+    expect(button("保存参数").disabled).toBe(true);
+    expect(container.textContent).toContain("已保存版本 19");
+  });
+
+  it.each([
+    "http://named-comfy.example/",
+    "https://user:secret@named-comfy.example/",
+    "https://named-comfy.example/path",
+    "https://named-comfy.example/?key=x",
+    "https://named-comfy.example/#x",
+    " https://named-comfy.example/",
+    "https://NAMED-comfy.example/",
+    "https://named-comfy.example:443/",
+  ])(
+    "rejects an unusable Short Drama origin before saving: %s",
+    async (baseUrl) => {
+      const f = new ConfigurationPanelFetchFixture();
+      f.selection = { ...f.selection, pluginId: "crewon.short-drama" };
+      f.package = { ...f.package, pluginId: "crewon.short-drama" };
+      f.schema = {
+        type: "object",
+        additionalProperties: false,
+        required: ["baseUrl"],
+        properties: {
+          baseUrl: { type: "string", maxLength: 2048, enum: null },
+        },
+      };
+      f.configuration = f.saved({ baseUrl }, 18);
+      await mount(f);
+      expect(
+        container
+          .querySelector('input[aria-label="baseUrl"]')!
+          .getAttribute("aria-invalid"),
+      ).toBe("true");
+      expect(button("保存参数").disabled).toBe(true);
+      await click("保存参数");
+      expect(f.mutations).toHaveLength(0);
+    },
+  );
   it("reads the selected package and saves through the actual typed configuration client", async () => {
     const fixture = new ConfigurationPanelFetchFixture();
     await mount(fixture);

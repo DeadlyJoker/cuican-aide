@@ -447,6 +447,7 @@ type CommandWorkspaceProps = {
   onOpenTaskChanges?: () => void;
   taskDetailTrigger?: ReactNode;
   projectConversationComposer?: ReactNode;
+  projectConversationSubmitBlocked?: boolean;
   projectConversationProjectId?: string | null;
   onPluginConversationPageChange?(
     page: Readonly<{ pluginId: string; context: unknown }> | null,
@@ -918,6 +919,7 @@ export function CommandWorkspace({
   onOpenTaskChanges,
   taskDetailTrigger = null,
   projectConversationComposer = null,
+  projectConversationSubmitBlocked = false,
   projectConversationProjectId = null,
   onPluginConversationPageChange,
   onTaskDetailAvailabilityChange,
@@ -4021,7 +4023,10 @@ export function CommandWorkspace({
                   stateId="composer-status"
                   stopLabel={locale === "zh" ? "停止" : "Stop"}
                   submitBehavior="enter"
-                  submitBlocked={Boolean(executionIntentBlocked)}
+                  submitBlocked={
+                    Boolean(executionIntentBlocked) ||
+                    (showCommandThread && projectConversationSubmitBlocked)
+                  }
                   submitting={isSending}
                   textareaDataOdId="composer-input"
                   textareaRef={textareaRef}

@@ -1,0 +1,20 @@
+{
+  "input": {
+    "required": {
+      "audio": ["AUDIO", {}],
+      "filename_prefix": [
+        "STRING",
+        {
+          "default": "audio/ComfyUI",
+          "multiline": false
+        }
+      ]
+    },
+    "hidden": {
+      "prompt": ["PROMPT"],
+      "extra_pnginfo": ["EXTRA_PNGINFO"]
+    }
+  },
+  "output": ["AUDIO"],
+  "output_node": true
+}

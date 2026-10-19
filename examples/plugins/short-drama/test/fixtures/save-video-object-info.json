@@ -1,0 +1,455 @@
+{
+  "output": ["VIDEO"],
+  "input": {
+    "required": {
+      "video": ["VIDEO", {}],
+      "filename_prefix": [
+        "STRING",
+        {
+          "default": "video/ComfyUI",
+          "multiline": false
+        }
+      ],
+      "format": [
+        "COMFY_DYNAMICCOMBO_V3",
+        {
+          "options": [
+            {
+              "key": "auto",
+              "inputs": {
+                "required": {
+                  "codec": [
+                    "COMFY_DYNAMICCOMBO_V3",
+                    {
+                      "options": [
+                        {
+                          "key": "auto",
+                          "inputs": {
+                            "required": {}
+                          }
+                        },
+                        {
+                          "key": "h264",
+                          "inputs": {
+                            "required": {},
+                            "optional": {
+                              "encoding": [
+                                "COMFY_DYNAMICCOMBO_V3",
+                                {
+                                  "options": [
+                                    {
+                                      "key": "auto",
+                                      "inputs": {
+                                        "required": {}
+                                      }
+                                    },
+                                    {
+                                      "key": "re-encode",
+                                      "inputs": {
+                                        "required": {
+                                          "crf": [
+                                            "FLOAT",
+                                            {
+                                              "default": 23.0,
+                                              "min": 0.0,
+                                              "max": 51.0,
+                                              "step": 1.0
+                                            }
+                                          ]
+                                        }
+                                      }
+                                    }
+                                  ]
+                                }
+                              ]
+                            }
+                          }
+                        },
+                        {
+                          "key": "av1",
+                          "inputs": {
+                            "required": {},
+                            "optional": {
+                              "encoding": [
+                                "COMFY_DYNAMICCOMBO_V3",
+                                {
+                                  "options": [
+                                    {
+                                      "key": "auto",
+                                      "inputs": {
+                                        "required": {}
+                                      }
+                                    },
+                                    {
+                                      "key": "re-encode",
+                                      "inputs": {
+                                        "required": {
+                                          "crf": [
+                                            "FLOAT",
+                                            {
+                                              "default": 30.0,
+                                              "min": 0.0,
+                                              "max": 63.0,
+                                              "step": 1.0
+                                            }
+                                          ]
+                                        }
+                                      }
+                                    }
+                                  ]
+                                }
+                              ]
+                            }
+                          }
+                        }
+                      ]
+                    }
+                  ]
+                }
+              }
+            },
+            {
+              "key": "mp4",
+              "inputs": {
+                "required": {
+                  "codec": [
+                    "COMFY_DYNAMICCOMBO_V3",
+                    {
+                      "options": [
+                        {
+                          "key": "auto",
+                          "inputs": {
+                            "required": {}
+                          }
+                        },
+                        {
+                          "key": "h264",
+                          "inputs": {
+                            "required": {},
+                            "optional": {
+                              "encoding": [
+                                "COMFY_DYNAMICCOMBO_V3",
+                                {
+                                  "options": [
+                                    {
+                                      "key": "auto",
+                                      "inputs": {
+                                        "required": {}
+                                      }
+                                    },
+                                    {
+                                      "key": "re-encode",
+                                      "inputs": {
+                                        "required": {
+                                          "crf": [
+                                            "FLOAT",
+                                            {
+                                              "default": 23.0,
+                                              "min": 0.0,
+                                              "max": 51.0,
+                                              "step": 1.0
+                                            }
+                                          ]
+                                        }
+                                      }
+                                    }
+                                  ]
+                                }
+                              ]
+                            }
+                          }
+                        },
+                        {
+                          "key": "av1",
+                          "inputs": {
+                            "required": {},
+                            "optional": {
+                              "encoding": [
+                                "COMFY_DYNAMICCOMBO_V3",
+                                {
+                                  "options": [
+                                    {
+                                      "key": "auto",
+                                      "inputs": {
+                                        "required": {}
+                                      }
+                                    },
+                                    {
+                                      "key": "re-encode",
+                                      "inputs": {
+                                        "required": {
+                                          "crf": [
+                                            "FLOAT",
+                                            {
+                                              "default": 30.0,
+                                              "min": 0.0,
+                                              "max": 63.0,
+                                              "step": 1.0
+                                            }
+                                          ]
+                                        }
+                                      }
+                                    }
+                                  ]
+                                }
+                              ]
+                            }
+                          }
+                        }
+                      ]
+                    }
+                  ]
+                }
+              }
+            },
+            {
+              "key": "mkv",
+              "inputs": {
+                "required": {
+                  "codec": [
+                    "COMFY_DYNAMICCOMBO_V3",
+                    {
+                      "options": [
+                        {
+                          "key": "auto",
+                          "inputs": {
+                            "required": {}
+                          }
+                        },
+                        {
+                          "key": "h264",
+                          "inputs": {
+                            "required": {},
+                            "optional": {
+                              "encoding": [
+                                "COMFY_DYNAMICCOMBO_V3",
+                                {
+                                  "options": [
+                                    {
+                                      "key": "auto",
+                                      "inputs": {
+                                        "required": {}
+                                      }
+                                    },
+                                    {
+                                      "key": "re-encode",
+                                      "inputs": {
+                                        "required": {
+                                          "crf": [
+                                            "FLOAT",
+                                            {
+                                              "default": 23.0,
+                                              "min": 0.0,
+                                              "max": 51.0,
+                                              "step": 1.0
+                                            }
+                                          ]
+                                        }
+                                      }
+                                    }
+                                  ]
+                                }
+                              ]
+                            }
+                          }
+                        },
+                        {
+                          "key": "av1",
+                          "inputs": {
+                            "required": {},
+                            "optional": {
+                              "encoding": [
+                                "COMFY_DYNAMICCOMBO_V3",
+                                {
+                                  "options": [
+                                    {
+                                      "key": "auto",
+                                      "inputs": {
+                                        "required": {}
+                                      }
+                                    },
+                                    {
+                                      "key": "re-encode",
+                                      "inputs": {
+                                        "required": {
+                                          "crf": [
+                                            "FLOAT",
+                                            {
+                                              "default": 30.0,
+                                              "min": 0.0,
+                                              "max": 63.0,
+                                              "step": 1.0
+                                            }
+                                          ]
+                                        }
+                                      }
+                                    }
+                                  ]
+                                }
+                              ]
+                            }
+                          }
+                        }
+                      ]
+                    }
+                  ]
+                }
+              }
+            },
+            {
+              "key": "webm",
+              "inputs": {
+                "required": {
+                  "codec": [
+                    "COMFY_DYNAMICCOMBO_V3",
+                    {
+                      "options": [
+                        {
+                          "key": "auto",
+                          "inputs": {
+                            "required": {}
+                          }
+                        },
+                        {
+                          "key": "av1",
+                          "inputs": {
+                            "required": {},
+                            "optional": {
+                              "encoding": [
+                                "COMFY_DYNAMICCOMBO_V3",
+                                {
+                                  "options": [
+                                    {
+                                      "key": "auto",
+                                      "inputs": {
+                                        "required": {}
+                                      }
+                                    },
+                                    {
+                                      "key": "re-encode",
+                                      "inputs": {
+                                        "required": {
+                                          "crf": [
+                                            "FLOAT",
+                                            {
+                                              "default": 30.0,
+                                              "min": 0.0,
+                                              "max": 63.0,
+                                              "step": 1.0
+                                            }
+                                          ]
+                                        }
+                                      }
+                                    }
+                                  ]
+                                }
+                              ]
+                            }
+                          }
+                        }
+                      ]
+                    }
+                  ]
+                }
+              }
+            }
+          ]
+        }
+      ]
+    },
+    "optional": {
+      "codec": [
+        "COMFY_DYNAMICCOMBO_V3",
+        {
+          "hidden": true,
+          "options": [
+            {
+              "key": "auto",
+              "inputs": {
+                "required": {}
+              }
+            },
+            {
+              "key": "h264",
+              "inputs": {
+                "required": {},
+                "optional": {
+                  "encoding": [
+                    "COMFY_DYNAMICCOMBO_V3",
+                    {
+                      "options": [
+                        {
+                          "key": "auto",
+                          "inputs": {
+                            "required": {}
+                          }
+                        },
+                        {
+                          "key": "re-encode",
+                          "inputs": {
+                            "required": {
+                              "crf": [
+                                "FLOAT",
+                                {
+                                  "default": 23.0,
+                                  "min": 0.0,
+                                  "max": 51.0,
+                                  "step": 1.0
+                                }
+                              ]
+                            }
+                          }
+                        }
+                      ]
+                    }
+                  ]
+                }
+              }
+            },
+            {
+              "key": "av1",
+              "inputs": {
+                "required": {},
+                "optional": {
+                  "encoding": [
+                    "COMFY_DYNAMICCOMBO_V3",
+                    {
+                      "options": [
+                        {
+                          "key": "auto",
+                          "inputs": {
+                            "required": {}
+                          }
+                        },
+                        {
+                          "key": "re-encode",
+                          "inputs": {
+                            "required": {
+                              "crf": [
+                                "FLOAT",
+                                {
+                                  "default": 30.0,
+                                  "min": 0.0,
+                                  "max": 63.0,
+                                  "step": 1.0
+                                }
+                              ]
+                            }
+                          }
+                        }
+                      ]
+                    }
+                  ]
+                }
+              }
+            }
+          ]
+        }
+      ]
+    },
+    "hidden": {
+      "prompt": ["PROMPT"],
+      "extra_pnginfo": ["EXTRA_PNGINFO"]
+    }
+  }
+}

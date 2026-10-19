@@ -1,0 +1,520 @@
+{
+  "observedAt": "2026-10-16T10:09:17.263Z",
+  "fixtureOnly": false,
+  "uiReady": true,
+  "completed": true,
+  "records": [
+    {
+      "requestId": "req-gw",
+      "pid": 17345,
+      "elapsedMs": 0.989,
+      "sequence": 1,
+      "phase": "route.invoke",
+      "status": "start"
+    },
+    {
+      "requestId": "req-gw",
+      "pid": 17345,
+      "elapsedMs": 2830.978,
+      "sequence": 2,
+      "phase": "readiness.invocation-current",
+      "status": "start"
+    },
+    {
+      "requestId": "req-gw",
+      "pid": 17345,
+      "elapsedMs": 2836.15,
+      "sequence": 3,
+      "phase": "readiness.invocation-current",
+      "status": "end"
+    },
+    {
+      "requestId": "req-gw",
+      "pid": 17345,
+      "elapsedMs": 2837.784,
+      "sequence": 4,
+      "phase": "readiness.target-package",
+      "status": "start"
+    },
+    {
+      "requestId": "req-gw",
+      "pid": 17345,
+      "elapsedMs": 2842.343,
+      "sequence": 5,
+      "phase": "readiness.target-package",
+      "status": "end"
+    },
+    {
+      "requestId": "req-gw",
+      "pid": 17345,
+      "elapsedMs": 2842.401,
+      "sequence": 6,
+      "phase": "readiness.source-bytes",
+      "status": "start"
+    },
+    {
+      "requestId": "req-gw",
+      "pid": 17345,
+      "elapsedMs": 2915.4,
+      "sequence": 7,
+      "phase": "readiness.source-bytes",
+      "status": "end"
+    },
+    {
+      "requestId": "req-gw",
+      "pid": 17345,
+      "elapsedMs": 2915.438,
+      "sequence": 8,
+      "phase": "readiness.target-bytes",
+      "status": "start"
+    },
+    {
+      "requestId": "req-gw",
+      "pid": 17345,
+      "elapsedMs": 2963.239,
+      "sequence": 9,
+      "phase": "readiness.target-bytes",
+      "status": "end"
+    },
+    {
+      "requestId": "req-gw",
+      "pid": 17345,
+      "elapsedMs": 2964.835,
+      "sequence": 10,
+      "phase": "readiness.target-policy",
+      "status": "start"
+    },
+    {
+      "requestId": "req-gw",
+      "pid": 17345,
+      "elapsedMs": 2969.246,
+      "sequence": 11,
+      "phase": "readiness.target-policy",
+      "status": "end"
+    },
+    {
+      "requestId": "req-gw",
+      "pid": 17345,
+      "elapsedMs": 2969.297,
+      "sequence": 12,
+      "phase": "readiness.current",
+      "status": "start"
+    },
+    {
+      "requestId": "req-gw",
+      "pid": 17345,
+      "elapsedMs": 2970.947,
+      "sequence": 13,
+      "phase": "readiness.identity",
+      "status": "start"
+    },
+    {
+      "requestId": "req-gw",
+      "pid": 17345,
+      "elapsedMs": 2972.819,
+      "sequence": 14,
+      "phase": "readiness.identity",
+      "status": "end"
+    },
+    {
+      "requestId": "req-gw",
+      "pid": 17345,
+      "elapsedMs": 2974.216,
+      "sequence": 15,
+      "phase": "readiness.profile",
+      "status": "start"
+    },
+    {
+      "requestId": "req-gw",
+      "pid": 17345,
+      "elapsedMs": 2976.704,
+      "sequence": 16,
+      "phase": "readiness.profile",
+      "status": "end"
+    },
+    {
+      "requestId": "req-gw",
+      "pid": 17345,
+      "elapsedMs": 2978.394,
+      "sequence": 17,
+      "phase": "readiness.policy",
+      "status": "start"
+    },
+    {
+      "requestId": "req-gw",
+      "pid": 17345,
+      "elapsedMs": 2981.052,
+      "sequence": 18,
+      "phase": "readiness.policy",
+      "status": "end"
+    },
+    {
+      "requestId": "req-gw",
+      "pid": 17345,
+      "elapsedMs": 2981.082,
+      "sequence": 19,
+      "phase": "readiness.bytes",
+      "status": "start"
+    },
+    {
+      "requestId": "req-gw",
+      "pid": 17345,
+      "elapsedMs": 3023.682,
+      "sequence": 20,
+      "phase": "readiness.bytes",
+      "status": "end"
+    },
+    {
+      "requestId": "req-gw",
+      "pid": 17345,
+      "elapsedMs": 3024.609,
+      "sequence": 21,
+      "phase": "readiness.access",
+      "status": "start"
+    },
+    {
+      "requestId": "req-gw",
+      "pid": 17345,
+      "elapsedMs": 3030.312,
+      "sequence": 22,
+      "phase": "readiness.access",
+      "status": "end"
+    },
+    {
+      "requestId": "req-gw",
+      "pid": 17345,
+      "elapsedMs": 3031.103,
+      "sequence": 23,
+      "phase": "readiness.policy",
+      "status": "start"
+    },
+    {
+      "requestId": "req-gw",
+      "pid": 17345,
+      "elapsedMs": 3033.232,
+      "sequence": 24,
+      "phase": "readiness.policy",
+      "status": "end"
+    },
+    {
+      "requestId": "req-gw",
+      "pid": 17345,
+      "elapsedMs": 3033.287,
+      "sequence": 25,
+      "phase": "readiness.bytes",
+      "status": "start"
+    },
+    {
+      "requestId": "req-gw",
+      "pid": 17345,
+      "elapsedMs": 3112.974,
+      "sequence": 26,
+      "phase": "readiness.bytes",
+      "status": "end"
+    },
+    {
+      "requestId": "req-gw",
+      "pid": 17345,
+      "elapsedMs": 3113.969,
+      "sequence": 27,
+      "phase": "readiness.access",
+      "status": "start"
+    },
+    {
+      "requestId": "req-gw",
+      "pid": 17345,
+      "elapsedMs": 3118.052,
+      "sequence": 28,
+      "phase": "readiness.access",
+      "status": "end"
+    },
+    {
+      "requestId": "req-gw",
+      "pid": 17345,
+      "elapsedMs": 3120.675,
+      "sequence": 29,
+      "phase": "readiness.source-selection",
+      "status": "start"
+    },
+    {
+      "requestId": "req-gw",
+      "pid": 17345,
+      "elapsedMs": 3123.598,
+      "sequence": 30,
+      "phase": "readiness.source-selection",
+      "status": "end"
+    },
+    {
+      "requestId": "req-gw",
+      "pid": 17345,
+      "elapsedMs": 3123.634,
+      "sequence": 31,
+      "phase": "readiness.target-selection",
+      "status": "start"
+    },
+    {
+      "requestId": "req-gw",
+      "pid": 17345,
+      "elapsedMs": 3125.527,
+      "sequence": 32,
+      "phase": "readiness.target-selection",
+      "status": "end"
+    },
+    {
+      "requestId": "req-gw",
+      "pid": 17345,
+      "elapsedMs": 3125.568,
+      "sequence": 33,
+      "phase": "readiness.invocation-current",
+      "status": "start"
+    },
+    {
+      "requestId": "req-gw",
+      "pid": 17345,
+      "elapsedMs": 3131.274,
+      "sequence": 34,
+      "phase": "readiness.invocation-current",
+      "status": "end"
+    },
+    {
+      "requestId": "req-gw",
+      "pid": 17345,
+      "elapsedMs": 3132.342,
+      "sequence": 35,
+      "phase": "readiness.current",
+      "status": "end"
+    },
+    {
+      "requestId": "req-gw",
+      "pid": 17345,
+      "elapsedMs": 3132.425,
+      "sequence": 36,
+      "phase": "readiness.saved-input",
+      "status": "start"
+    },
+    {
+      "requestId": "req-gw",
+      "pid": 17345,
+      "elapsedMs": 3134.238,
+      "sequence": 37,
+      "phase": "readiness.current",
+      "status": "start"
+    },
+    {
+      "requestId": "req-gw",
+      "pid": 17345,
+      "elapsedMs": 3321.998,
+      "sequence": 38,
+      "phase": "readiness.current",
+      "status": "end"
+    },
+    {
+      "requestId": "req-gw",
+      "pid": 17345,
+      "elapsedMs": 3327.607,
+      "sequence": 39,
+      "phase": "readiness.current",
+      "status": "start"
+    },
+    {
+      "requestId": "req-gw",
+      "pid": 17345,
+      "elapsedMs": 3479.658,
+      "sequence": 40,
+      "phase": "readiness.current",
+      "status": "end"
+    },
+    {
+      "requestId": "req-gw",
+      "pid": 17345,
+      "elapsedMs": 3483.972,
+      "sequence": 41,
+      "phase": "readiness.current",
+      "status": "start"
+    },
+    {
+      "requestId": "req-gw",
+      "pid": 17345,
+      "elapsedMs": 3624.213,
+      "sequence": 42,
+      "phase": "readiness.current",
+      "status": "end"
+    },
+    {
+      "requestId": "req-gw",
+      "pid": 17345,
+      "elapsedMs": 3634.623,
+      "sequence": 43,
+      "phase": "readiness.current",
+      "status": "start"
+    },
+    {
+      "requestId": "req-gw",
+      "pid": 17345,
+      "elapsedMs": 3765.453,
+      "sequence": 44,
+      "phase": "readiness.current",
+      "status": "end"
+    },
+    {
+      "requestId": "req-gw",
+      "pid": 17345,
+      "elapsedMs": 3766.962,
+      "sequence": 45,
+      "phase": "readiness.current",
+      "status": "start"
+    },
+    {
+      "requestId": "req-gw",
+      "pid": 17345,
+      "elapsedMs": 4257.627,
+      "sequence": 46,
+      "phase": "readiness.current",
+      "status": "end"
+    },
+    {
+      "requestId": "req-gw",
+      "pid": 17345,
+      "elapsedMs": 4259.296,
+      "sequence": 47,
+      "phase": "readiness.current",
+      "status": "start"
+    },
+    {
+      "requestId": "req-gw",
+      "pid": 17345,
+      "elapsedMs": 4449.429,
+      "sequence": 48,
+      "phase": "readiness.current",
+      "status": "end"
+    },
+    {
+      "requestId": "req-gw",
+      "pid": 17345,
+      "elapsedMs": 9482.619,
+      "sequence": 49,
+      "phase": "readiness.current",
+      "status": "start"
+    },
+    {
+      "requestId": "req-gw",
+      "pid": 17345,
+      "elapsedMs": 9634.52,
+      "sequence": 50,
+      "phase": "readiness.current",
+      "status": "end"
+    },
+    {
+      "requestId": "req-gw",
+      "pid": 17345,
+      "elapsedMs": 9641.383,
+      "sequence": 51,
+      "phase": "readiness.current",
+      "status": "start"
+    },
+    {
+      "requestId": "req-gw",
+      "pid": 17345,
+      "elapsedMs": 9791.511,
+      "sequence": 52,
+      "phase": "readiness.current",
+      "status": "end"
+    },
+    {
+      "requestId": "req-gw",
+      "pid": 17345,
+      "elapsedMs": 9792.884,
+      "sequence": 53,
+      "phase": "readiness.current",
+      "status": "start"
+    },
+    {
+      "requestId": "req-gw",
+      "pid": 17345,
+      "elapsedMs": 9937.554,
+      "sequence": 54,
+      "phase": "readiness.current",
+      "status": "end"
+    },
+    {
+      "requestId": "req-gw",
+      "pid": 17345,
+      "elapsedMs": 9939.186,
+      "sequence": 55,
+      "phase": "readiness.current",
+      "status": "start"
+    },
+    {
+      "requestId": "req-gw",
+      "pid": 17345,
+      "elapsedMs": 10084.697,
+      "sequence": 56,
+      "phase": "readiness.current",
+      "status": "end"
+    },
+    {
+      "requestId": "req-gw",
+      "pid": 17345,
+      "elapsedMs": 10086.644,
+      "sequence": 57,
+      "phase": "readiness.current",
+      "status": "start"
+    },
+    {
+      "requestId": "req-gw",
+      "pid": 17345,
+      "elapsedMs": 10432.874,
+      "sequence": 58,
+      "phase": "readiness.current",
+      "status": "end"
+    },
+    {
+      "requestId": "req-gw",
+      "pid": 17345,
+      "elapsedMs": 10437.931,
+      "sequence": 59,
+      "phase": "readiness.current",
+      "status": "start"
+    },
+    {
+      "requestId": "req-gw",
+      "pid": 17345,
+      "elapsedMs": 10575.248,
+      "sequence": 60,
+      "phase": "readiness.current",
+      "status": "end"
+    },
+    {
+      "requestId": "req-gw",
+      "pid": 17345,
+      "elapsedMs": 10576.148,
+      "sequence": 61,
+      "phase": "readiness.saved-input",
+      "status": "end"
+    },
+    {
+      "requestId": "req-gw",
+      "pid": 17345,
+      "elapsedMs": 10576.168,
+      "sequence": 62,
+      "phase": "readiness.current",
+      "status": "start"
+    },
+    {
+      "requestId": "req-gw",
+      "pid": 17345,
+      "elapsedMs": 10905.344,
+      "sequence": 63,
+      "phase": "readiness.current",
+      "status": "end"
+    },
+    {
+      "requestId": "req-gw",
+      "pid": 17345,
+      "elapsedMs": 10910.887,
+      "sequence": 64,
+      "phase": "route.invoke",
+      "status": "end"
+    }
+  ]
+}

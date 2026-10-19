@@ -1,0 +1,26 @@
+{
+  "recordedAt": "2026-10-16T10:53:09.070962+00:00",
+  "configurationRevision": 23,
+  "policyQueryPrefixUpgradePublished": true,
+  "changedApprovalPaths": [],
+  "newGenerationSubmitted": false,
+  "originalOperationId": "81932a4d-5f2e-d919-13a4-e8794aff833d",
+  "clientStatus": "Settings unavailable after the second runtime restart",
+  "rootStartupFailure": "The second restart failed. Exact cause not yet captured; safe startup diagnostic is bundled for real-client investigation.",
+  "diagnosticSourceAdded": true,
+  "diagnosticHostBuildPassed": true,
+  "diagnosticHostTypecheckPassed": true,
+  "supervisorTestsPassedOnSerialRerun": 22,
+  "diagnosticPrivacyTestsPassed": 1,
+  "concurrentFirstRunFailures": [
+    "crashed Worker recovery child audit timing",
+    "cleanup rejection child audit timing"
+  ],
+  "currentInstalledAsar": "operation-query-upgrade-profile-20261016.asar",
+  "nextAsar": "native-preparation-noop-profile-20261016.asar",
+  "nextBuildInstalled": false,
+  "currentBlock": "Mac locked; awaiting requested manual unlock before closing and installing through the normal client workflow.",
+  "provenUnnecessarySecondRestart": true,
+  "sameApprovalBeforeAndAfter": true,
+  "reuseMappingRegressionPassed": 72
+}

@@ -17,7 +17,7 @@ import {
 } from "./direct-responses-transport.ts";
 
 const encoder = new TextEncoder();
-const request: ModelRequest = {
+const request = {
   schemaVersion: "crewon.model-request.v0",
   runId: "terminal-read-run",
   segmentId: "terminal-read-segment",
@@ -29,7 +29,7 @@ const request: ModelRequest = {
   },
   tools: [],
   maxOutputBytes: 4096,
-};
+} satisfies ModelRequest;
 
 const created = {
   type: "response.created",

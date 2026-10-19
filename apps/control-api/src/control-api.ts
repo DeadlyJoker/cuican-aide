@@ -209,6 +209,7 @@ import {
   readinessErrorResponse,
   WorkspaceControlUnavailableError,
 } from "./control-api-errors.ts";
+import { reportInstalledPluginHttpError } from "./installed-plugin-http-error-diagnostics.ts";
 import type {
   ControlApiIdentityPort,
   ControlApiReadinessPort,
@@ -391,6 +392,15 @@ export function buildControlApi(
 
   app.setErrorHandler((error, request, reply) => {
     const mapped = errorResponse(error, request.id);
+    if (
+      request.routeOptions.url ===
+      "/api/v1/plugins/ui/mounts/:mountRef/actions"
+    )
+      reportInstalledPluginHttpError(
+        request.id,
+        mapped.body.error.code,
+        mapped.statusCode,
+      );
     void reply.code(mapped.statusCode).send(mapped.body);
   });
 

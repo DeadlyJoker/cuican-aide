@@ -4,6 +4,7 @@ import { ApplicationError } from "@crewon/application";
 import { PROJECT_GENERATION_CONTEXT_UI_ACTIONS } from "@crewon/contracts/plugins";
 import { assertPluginUiHostServiceAvailability } from "@crewon/plugin-host";
 import { InstalledPluginProjectGenerationOwner } from "./installed-plugin-project-generation-owner.ts";
+import { runPluginGenerationDiagnostics } from "./installed-plugin-invocation-diagnostics.ts";
 import {
   installedGenerationFixture,
   actor,
@@ -26,7 +27,11 @@ for (const backend of ["sqlite", "postgres"] as const) {
       });
       const before = await f.counts(),
         account = await f.credits.getAccount(creditScope);
-      const output = await f.invoke({ reference: f.reference }, action);
+      const output = await runPluginGenerationDiagnostics(
+        `req-readiness${backend}`,
+        action,
+        () => f.invoke({ reference: f.reference }, action),
+      );
       assert.deepEqual(output, {
         reference: f.reference,
         readiness: { outcome: "ready" },

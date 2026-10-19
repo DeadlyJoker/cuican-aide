@@ -5,6 +5,15 @@ import type { PluginTaskAdmission } from "@crewon/domain";
 import { nativeActor } from "../installed-plugin-native-authority.test-support.ts";
 import { nativeOutlineFixture } from "./native-project-outline-runtime.test-support.ts";
 
+test("Outline declarations load an approved catalogue above 128 KiB through the actual Native Worker", async (t) => {
+  const f = await nativeOutlineFixture(t, true, {
+    approvalPaddingBytes: 129 * 1024,
+  });
+  assert.ok(f.config);
+  const created = await f.createProject();
+  assert.ok(created.project.projectId);
+});
+
 test("old Main publication does not implicitly enable structured outline writes", async (t) => {
   const f = await nativeOutlineFixture(t, false);
   assert.equal(f.config, undefined);

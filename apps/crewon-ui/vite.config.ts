@@ -1,3 +1,4 @@
+import { DEFAULT_AGENT_PLATFORM_ORIGIN } from "./src/lib/agent-platform/agentPlatformRuntimeBaseUrl";
 import { defineConfig, loadEnv, type Plugin } from "vite";
 import react from "@vitejs/plugin-react";
 import tailwindcss from "@tailwindcss/vite";
@@ -183,7 +184,7 @@ export default defineConfig(({ mode }) => {
   const appServerTarget = env.CREWON_APP_SERVER_TARGET ?? "ws://127.0.0.1:6176";
   const appServerDisabled = env.CREWON_APP_SERVER_DISABLED === "1";
   const agentPlatformTarget =
-    env.CREWON_AGENT_PLATFORM_TARGET ?? "http://127.0.0.1:8000";
+    env.CREWON_AGENT_PLATFORM_TARGET ?? DEFAULT_AGENT_PLATFORM_ORIGIN;
   const agentPlatformProxy = createAgentPlatformDevProxy(agentPlatformTarget);
   const agentPlatformRuntimeBaseUrl =
     env.VITE_AGENT_PLATFORM_RUNTIME_BASE_URL ?? agentPlatformTarget;

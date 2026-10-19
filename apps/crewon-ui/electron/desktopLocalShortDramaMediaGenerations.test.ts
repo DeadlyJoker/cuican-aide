@@ -15,14 +15,26 @@ const owned: Awaited<ReturnType<typeof executionSetupFixture>>[] = [];
 afterEach(async () => {
   for (const f of owned.splice(0)) await f.cleanup();
 });
-async function fixture(withMedia = true) {
+async function fixture(
+  withMedia = true,
+  serviceProtocol?: "workflow-panel-v1" | "workflow-api-v1",
+) {
   const f = await executionSetupFixture(
     withMedia
       ? {
           packageDirectory: resolve(
-            "../../output/extensions/installable-plugins/short-drama-object-pages-20261006/short-drama/26.0.0",
+            process.env.CREWON_TEST_SHORT_DRAMA_MEDIA_PLUGIN_DIR ??
+              "../../examples/plugins/short-drama/dist/50.2.13",
           ),
           contract: "assets",
+          ...(serviceProtocol
+            ? {
+                serviceProtocol,
+                ...(serviceProtocol === "workflow-api-v1"
+                  ? { preset: "api-c16-scene" as const }
+                  : {}),
+              }
+            : {}),
           projectContext: true,
         }
       : {},
@@ -104,12 +116,10 @@ it("only independent consent widens the exact installed grant; cold setup retain
   expect(repeated.networkPaths).toEqual(paths(f));
   expect(readFileSync(f.approvalPath)).toEqual(before);
   expect(
-    await f.store
-      .extensionStore()
-      .loadLatestExtensionConfiguration({
-        ...f.scope,
-        pluginId: f.identity.pluginId,
-      }),
+    await f.store.extensionStore().loadLatestExtensionConfiguration({
+      ...f.scope,
+      pluginId: f.identity.pluginId,
+    }),
   ).toEqual(f.configuration);
 });
 
@@ -246,3 +256,36 @@ it("explicit consent does not repair an unrelated or broader existing network po
   ).rejects.toThrow("policy_conflict");
   expect(readFileSync(f.policyPath)).toEqual(before);
 });
+
+it.each(["workflow-panel-v1", "workflow-api-v1"] as const)(
+  "%s offers its exact file upload only through separate Main consent and retains it on cold preparation",
+  async (protocol) => {
+    const f = await fixture(true, protocol);
+    const first = await prepare(f);
+    expect(first.mediaGenerationPreparation?.additionalNetworkPaths).toEqual([
+      { method: "POST", path: "/api/comfy/upload/file" },
+    ]);
+    expect(paths(f)).not.toContainEqual({
+      method: "POST",
+      path: "/api/comfy/upload/file",
+    });
+    expect(projects(f).mediaGenerations).toBeUndefined();
+    await prepare(f, true);
+    expect(paths(f)).toContainEqual({
+      method: "POST",
+      path: "/api/comfy/upload/file",
+    });
+    expect(paths(f)).not.toContainEqual({
+      method: "POST",
+      path: "/upload/image",
+    });
+    expect(paths(f)).not.toContainEqual({ method: "POST", path: "/prompt" });
+    const repeated = await prepare(f);
+    expect(repeated.mediaGenerationPreparation?.alreadyApproved).toBe(true);
+    expect(
+      paths(f).filter(
+        (p: { path?: string }) => p.path === "/api/comfy/upload/file",
+      ),
+    ).toHaveLength(1);
+  },
+);

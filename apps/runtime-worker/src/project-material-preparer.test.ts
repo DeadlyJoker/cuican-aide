@@ -3,7 +3,10 @@ import test from "node:test";
 import { readdirSync, rmSync, writeFileSync } from "node:fs";
 import { join } from "node:path";
 import { createExtensionConfiguration } from "@crewon/domain";
-import { ProjectMaterialTargetApplicationService } from "@crewon/application";
+import {
+  ProjectMaterialTargetApplicationService,
+  parseProjectMaterialPreparationInitial,
+} from "@crewon/application";
 import { assetTestOptions } from "../../../packages/store/src/project-asset.test-support.ts";
 import { selectionRecipe } from "../../../packages/store/src/plugin-installation-store.test-support.ts";
 import { observeMaterialPreparationSql } from "../../../packages/store/src/project-material-preparation.test-support.ts";
@@ -665,3 +668,52 @@ for (const backend of ["sqlite", "postgres"] as const) {
     },
   );
 }
+
+for (const protocol of ["workflow-panel-v1", "workflow-api-v1"] as const)
+  test(`${protocol}: real v3 preparation retains the immutable input transfer on cold observe and never uploads twice`, async (t) => {
+    const f = await fixture(t, "sqlite", { serviceProtocol: protocol });
+    f.state.onPost = async () => {
+      throw Error("named_response_lost_after_upload");
+    };
+    const first = await f.preparer.prepareSelectedReference(
+      f.actor,
+      f.input,
+      signal(),
+    );
+    assert.equal(first.disposition, "pending");
+    assert.equal(first.state.event.phase, "unknownOutcome");
+    assert.equal(
+      first.state.initial.schemaVersion,
+      "crewon.project-material-preparation.v3",
+    );
+    assert.equal(
+      first.state.initial.transfer.adapter,
+      "comfyui-workflow-file-upload.v1",
+    );
+    assert.equal(first.state.initial.transfer.output.type, "input");
+    assert.equal(f.state.uploads, 1);
+    const cold = await f.cold();
+    const observed = await cold.preparer.observePreparedReference(
+      f.actor,
+      f.input,
+      signal(),
+    );
+    assert.equal(observed.disposition, "verified");
+    assert.deepEqual(observed.state.initial, first.state.initial);
+    assert.equal(observed.state.event.phase, "verified");
+    await cold.preparer.prepareSelectedReference(f.actor, f.input, signal());
+    assert.equal(f.state.uploads, 1);
+    assert.equal(f.state.sourceGets, 1);
+    const initial = observed.state.initial;
+    for (const output of [
+      { ...initial.transfer.output, type: "output" },
+      { ...initial.transfer.output, filename: "foreign.png" },
+    ]) {
+      assert.throws(() =>
+        parseProjectMaterialPreparationInitial({
+          ...initial,
+          transfer: { ...initial.transfer, output },
+        }),
+      );
+    }
+  });

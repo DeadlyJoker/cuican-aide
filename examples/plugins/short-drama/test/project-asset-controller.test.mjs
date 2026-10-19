@@ -32,6 +32,107 @@ test("the new asset phase stays dormant until explicit exploration; activation a
   }
 });
 
+test("returning to an asset page rechecks another workbench's completed journal without repeating its write", async () => {
+  const f = fixture(),
+    owner = await open(f);
+  let other;
+  try {
+    draft(owner, "scene");
+    f.loss("before");
+    await owner.save();
+    other = await open(f);
+    assert.equal(other.locked, true);
+    await owner.retry();
+    assert.equal(f.record, null);
+    const writes = f.calls.filter(
+      ([method]) => method === "saveCandidate",
+    ).length;
+    other.activate();
+    await settle();
+    assert.equal(other.locked, false);
+    assert.equal(other.canEdit, true);
+    assert.equal(other.getSnapshot().assets[0].assetId, "asset-a");
+    assert.equal(
+      f.calls.filter(([method]) => method === "saveCandidate").length,
+      writes,
+    );
+  } finally {
+    other?.dispose();
+    owner.dispose();
+  }
+});
+
+test("returning to an asset page preserves unsaved edits and its own unresolved request", async () => {
+  const f = fixture(),
+    c = await open(f);
+  try {
+    draft(c);
+    const draftBefore = copy(c.getSnapshot().draft);
+    const reads = f.calls.length;
+    c.activate();
+    await settle();
+    assert.equal(f.calls.length, reads);
+    assert.deepEqual(c.getSnapshot().draft, draftBefore);
+    f.loss("before");
+    await c.save();
+    const pending = copy(c.getSnapshot().pending);
+    c.activate();
+    await settle();
+    assert.deepEqual(c.getSnapshot().pending, pending);
+    assert.equal(
+      f.calls.filter(([method]) => method === "saveCandidate").length,
+      1,
+    );
+    assert.equal(c.canEdit, false);
+  } finally {
+    c.dispose();
+  }
+});
+
+test("returning observes another workbench's adopted reference without replacing the displayed setting draft", async () => {
+  const f = fixture(),
+    owner = await open(f);
+  let other;
+  try {
+    draft(owner, "scene");
+    await owner.save();
+    await owner.selectContent();
+    await owner.attachReference({
+      conceptAssetId: "concept-a",
+      selectionRevision: 1,
+    });
+    other = await open(f);
+    await other.open("asset-a");
+    const originalDraft = copy(other.getSnapshot().draft);
+    assert.equal(other.getSnapshot().view.selectedReferenceRevision, null);
+    await owner.selectReference(1);
+    const before = f.calls.length;
+    other.activate();
+    other.activate();
+    await settle();
+    assert.equal(
+      other.getSnapshot().view.selectedReferenceRevision.referenceRevision,
+      1,
+    );
+    assert.deepEqual(other.getSnapshot().draft, originalDraft);
+    assert.equal(
+      f.calls.slice(before).filter(([method]) => method === "getPending")
+        .length,
+      1,
+    );
+    assert.ok(
+      f.calls
+        .slice(before)
+        .every(([method]) =>
+          ["getPending", "listAssets", "getAsset"].includes(method),
+        ),
+    );
+  } finally {
+    other?.dispose();
+    owner.dispose();
+  }
+});
+
 test("warm candidates preserve content and do not select; exact immutable review clears the journal", async () => {
   const f = fixture(),
     c = await open(f);

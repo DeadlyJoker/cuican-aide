@@ -2,6 +2,12 @@ import { toResponsesToolDefinition } from "./responses-tool-definition.ts";
 export { toResponsesToolDefinition } from "./responses-tool-definition.ts";
 import { parseResponsesOutputTokenLimit } from "./responses-output-budget.ts";
 import {
+  ResponsesImageInputState,
+  planResponsesImageInput,
+  responsesImageInputItem,
+  validateResponsesImageObservations,
+} from "./responses-image-input.ts";
+import {
   ModelTransportError,
   beginModelCall,
   modelTransportFailureUsage,
@@ -108,6 +114,7 @@ export class DirectResponsesTransport implements ModelTransportPort {
   readonly #fetch: ResponsesFetch;
   readonly #scheduler: ResponsesTimerScheduler;
   readonly #turnStates: ResponsesTurnStateAuthority;
+  readonly #imageState = new ResponsesImageInputState();
 
   constructor(
     config: DirectResponsesTransportConfig,
@@ -237,6 +244,7 @@ export class DirectResponsesTransport implements ModelTransportPort {
     };
     let call: Awaited<ReturnType<typeof beginModelCall>> = null;
     let responseStatus: number | null = null;
+    let completedResponseId: string | null = null;
     let outcome: "completed" | "failed" | "canceled" | "interrupted" =
       "interrupted";
     try {
@@ -251,6 +259,7 @@ export class DirectResponsesTransport implements ModelTransportPort {
         maxOutputTokens: this.maxOutputTokens,
         signal: idle.signal,
       });
+      const imageLineage = this.#imageState.capture(request);
       call?.httpPhase("dispatchedMs");
       const response = await this.#fetch(this.#endpoint, {
         method: "POST",
@@ -268,6 +277,7 @@ export class DirectResponsesTransport implements ModelTransportPort {
             storeResponses: this.#storeResponses,
             requestProfile: this.#requestProfile,
             maxOutputTokens: this.maxOutputTokens,
+            imageState: this.#imageState,
           }),
         ),
         signal: idle.signal,
@@ -329,6 +339,17 @@ export class DirectResponsesTransport implements ModelTransportPort {
         throw protocolError("responses_body_missing");
       }
       const events = responsesProtocolEvents(response.body, {
+        ...(call === null
+          ? {}
+          : {
+              diagnostics: {
+                chunk: call.httpStreamChunk,
+                frame: call.httpStreamFrame,
+                pending: call.httpStreamPending,
+                pendingInspection: call.httpStreamPendingInspection,
+                event: call.httpStreamEvent,
+              },
+            }),
         onResponseIdentity: (id) => call?.responseIdentity(id),
         sequencePolicy: this.#sequencePolicy,
         identityPolicy: this.#identityPolicy,
@@ -363,6 +384,11 @@ export class DirectResponsesTransport implements ModelTransportPort {
       });
       for await (const event of events) {
         if (event.type === "completed") {
+          if (event.checkpoint !== null)
+            completedResponseId = responseIdFromResponsesCheckpoint(
+              event.checkpoint,
+              this.modelIdentity(),
+            );
           const providerTurnState = this.#turnStates.get(request.runId);
           const completed =
             providerTurnState === null
@@ -374,6 +400,8 @@ export class DirectResponsesTransport implements ModelTransportPort {
         }
       }
       call?.httpPhase("streamEndMs");
+      if (completedResponseId !== null)
+        this.#imageState.completed(imageLineage, completedResponseId);
       outcome = "completed";
     } catch (error) {
       outcome = signal.aborted ? "canceled" : "failed";
@@ -445,6 +473,7 @@ export class DirectResponsesTransport implements ModelTransportPort {
 
   releaseRun(runId: string): void {
     this.#turnStates.release(runId);
+    this.#imageState.releaseRun(runId);
   }
 
   async *#retrieve(
@@ -706,6 +735,7 @@ export function validateResponsesRequest(request: ModelRequest): void {
       throw protocolError("responses_provider_checkpoint_invalid", error);
     }
   }
+  validateResponsesImageObservations(request);
   let contextBytes = 0;
   for (const item of input.items) {
     validateInputItem(item);
@@ -760,6 +790,9 @@ function validateInputItem(item: ModelInputItem): void {
     throw protocolError("responses_input_item_invalid");
   }
   switch (item.type) {
+    case "image_observation":
+      // The complete request validates the private capture and its Run scope.
+      return;
     case "message":
       if (
         !sameKeys(item, ["content", "role", "type"]) ||
@@ -871,6 +904,8 @@ export function toResponsesInputItem(
   item: ModelInputItem,
 ): Readonly<Record<string, unknown>> {
   switch (item.type) {
+    case "image_observation":
+      throw protocolError("responses_image_scope_required");
     case "message":
       return { role: item.role, content: item.content };
     case "tool_call":
@@ -1015,6 +1050,7 @@ export function responsesRequestBody(options: {
   requestProfile?: ResponsesRequestProfile;
   inputItems?: readonly ModelInputItem[];
   maxOutputTokens?: number | undefined;
+  imageState?: ResponsesImageInputState;
 }): Readonly<Record<string, unknown>> {
   const inputItems =
     options.inputItems ??
@@ -1023,11 +1059,21 @@ export function responsesRequestBody(options: {
           options.request.input.newHistoryStartIndex,
         )
       : options.request.input.items);
+  const plan = planResponsesImageInput({
+    request: options.request,
+    previousResponseId: options.previousResponseId,
+    inputItems,
+    imageState: options.imageState,
+  });
   const body: Record<string, unknown> = {
     model: options.modelId,
     stream: true,
     store: options.storeResponses,
-    input: inputItems.map(toResponsesInputItem),
+    input: plan.inputItems.map((item) =>
+      item.type === "image_observation"
+        ? responsesImageInputItem(item, options.request)
+        : toResponsesInputItem(item),
+    ),
     tools: options.request.tools.map(toResponsesToolDefinition),
   };
   const maxOutputTokens = parseResponsesOutputTokenLimit(
@@ -1041,8 +1087,8 @@ export function responsesRequestBody(options: {
     body.reasoning = { context: "all_turns" };
     body.parallel_tool_calls = false;
   }
-  if (options.previousResponseId !== null) {
-    body.previous_response_id = options.previousResponseId;
+  if (plan.previousResponseId !== null) {
+    body.previous_response_id = plan.previousResponseId;
   }
   return body;
 }

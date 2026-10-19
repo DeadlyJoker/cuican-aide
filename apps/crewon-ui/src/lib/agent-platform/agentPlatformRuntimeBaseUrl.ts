@@ -1,10 +1,10 @@
 /** Fallback when Vite's runtime backend is not explicitly configured. */
-const DEFAULT_RUNTIME_BASE_URL = "http://127.0.0.1:8000";
+export const DEFAULT_AGENT_PLATFORM_ORIGIN = "https://pim.aicuican.com";
 
 /** Resolves an absolute backend without carrying the development proxy prefix. */
 export function resolveAgentPlatformRuntimeBaseUrl(value: string): string {
   const configured = value.trim();
-  if (!configured) return DEFAULT_RUNTIME_BASE_URL;
+  if (!configured) return DEFAULT_AGENT_PLATFORM_ORIGIN;
   if (
     configured.length > 2_048 ||
     /[\u0000-\u0020\u007f?#]/u.test(configured) ||

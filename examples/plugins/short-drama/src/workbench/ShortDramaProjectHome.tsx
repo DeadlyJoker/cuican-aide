@@ -69,6 +69,25 @@ export function ShortDramaProjectHome({
             ? "在中间告诉 Agent 你的故事想法，发送后建立项目。这里查看和修改各阶段成果。"
             : "写下创作想法，确认后建立项目。进入项目，与 Agent 创作或逐项编辑成果。"}
         </p>
+        {integrated && (
+          <div className="drama-home-steps" aria-label="短剧制作流程">
+            <div className="drama-home-step">
+              <span>01</span>
+              <strong>提出想法</strong>
+              <small>在主对话里描述故事与目标</small>
+            </div>
+            <div className="drama-home-step">
+              <span>02</span>
+              <strong>建立项目</strong>
+              <small>需求确认后形成可追踪版本</small>
+            </div>
+            <div className="drama-home-step">
+              <span>03</span>
+              <strong>分阶段制作</strong>
+              <small>大纲、剧本、角色和画面逐步推进</small>
+            </div>
+          </div>
+        )}
         {!integrated && (
           <form
             className="drama-idea-composer"

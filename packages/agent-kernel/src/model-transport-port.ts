@@ -2,8 +2,9 @@ import type { ModelCallObservationSink } from "@crewon/domain";
 import type { ProviderCheckpoint, RateLimitSnapshot } from "@crewon/contracts";
 import type { ToolCallKind, ToolDefinition } from "@crewon/tool-broker";
 import type { AgentHistoryItem } from "./agent-kernel-port.ts";
+import type { ModelImageObservation } from "./model-image-observation.ts";
 
-export type ModelInputItem = AgentHistoryItem;
+export type ModelInputItem = AgentHistoryItem | ModelImageObservation;
 
 export type ModelInput =
   | Readonly<{
@@ -53,7 +54,7 @@ export type ModelTransportEvent =
       channel: "summary";
       index: number;
     }>
-  | Readonly<{ type: "output.item.completed"; item: ModelInputItem }>
+  | Readonly<{ type: "output.item.completed"; item: AgentHistoryItem }>
   | Readonly<{
       type: "usage";
       /** Physical adapter call identity; private accounting metadata. */

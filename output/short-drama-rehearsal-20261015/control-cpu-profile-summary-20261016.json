@@ -1,0 +1,1294 @@
+{
+  "recordedAt": "2026-10-16T03:36:16.097Z",
+  "profiles": [
+    {
+      "file": "control-13979-1.cpuprofile",
+      "durationMs": 45431,
+      "samples": 5980,
+      "self": [
+        {
+          "milliseconds": 7710,
+          "function": "(idle)",
+          "url": "",
+          "line": 0
+        },
+        {
+          "milliseconds": 3039,
+          "function": "open",
+          "url": "",
+          "line": 0
+        },
+        {
+          "milliseconds": 1515,
+          "function": "open",
+          "url": "",
+          "line": 0
+        },
+        {
+          "milliseconds": 1235,
+          "function": "open",
+          "url": "",
+          "line": 0
+        },
+        {
+          "milliseconds": 1124,
+          "function": "open",
+          "url": "",
+          "line": 0
+        },
+        {
+          "milliseconds": 1019,
+          "function": "open",
+          "url": "",
+          "line": 0
+        },
+        {
+          "milliseconds": 850,
+          "function": "open",
+          "url": "",
+          "line": 0
+        },
+        {
+          "milliseconds": 701,
+          "function": "open",
+          "url": "",
+          "line": 0
+        },
+        {
+          "milliseconds": 635,
+          "function": "open",
+          "url": "",
+          "line": 0
+        },
+        {
+          "milliseconds": 584,
+          "function": "open",
+          "url": "",
+          "line": 0
+        },
+        {
+          "milliseconds": 582,
+          "function": "(garbage collector)",
+          "url": "",
+          "line": 0
+        },
+        {
+          "milliseconds": 579,
+          "function": "open",
+          "url": "",
+          "line": 0
+        },
+        {
+          "milliseconds": 527,
+          "function": "open",
+          "url": "",
+          "line": 0
+        },
+        {
+          "milliseconds": 496,
+          "function": "open",
+          "url": "",
+          "line": 0
+        },
+        {
+          "milliseconds": 487,
+          "function": "open",
+          "url": "",
+          "line": 0
+        },
+        {
+          "milliseconds": 469,
+          "function": "open",
+          "url": "",
+          "line": 0
+        },
+        {
+          "milliseconds": 464,
+          "function": "open",
+          "url": "",
+          "line": 0
+        },
+        {
+          "milliseconds": 462,
+          "function": "open",
+          "url": "",
+          "line": 0
+        },
+        {
+          "milliseconds": 457,
+          "function": "open",
+          "url": "",
+          "line": 0
+        },
+        {
+          "milliseconds": 433,
+          "function": "open",
+          "url": "",
+          "line": 0
+        },
+        {
+          "milliseconds": 427,
+          "function": "open",
+          "url": "",
+          "line": 0
+        },
+        {
+          "milliseconds": 422,
+          "function": "open",
+          "url": "",
+          "line": 0
+        },
+        {
+          "milliseconds": 395,
+          "function": "open",
+          "url": "",
+          "line": 0
+        },
+        {
+          "milliseconds": 373,
+          "function": "open",
+          "url": "",
+          "line": 0
+        },
+        {
+          "milliseconds": 348,
+          "function": "(program)",
+          "url": "",
+          "line": 0
+        },
+        {
+          "milliseconds": 303,
+          "function": "open",
+          "url": "",
+          "line": 0
+        },
+        {
+          "milliseconds": 296,
+          "function": "open",
+          "url": "",
+          "line": 0
+        },
+        {
+          "milliseconds": 287,
+          "function": "open",
+          "url": "",
+          "line": 0
+        },
+        {
+          "milliseconds": 286,
+          "function": "open",
+          "url": "",
+          "line": 0
+        },
+        {
+          "milliseconds": 284,
+          "function": "open",
+          "url": "",
+          "line": 0
+        },
+        {
+          "milliseconds": 249,
+          "function": "open",
+          "url": "",
+          "line": 0
+        },
+        {
+          "milliseconds": 245,
+          "function": "open",
+          "url": "",
+          "line": 0
+        },
+        {
+          "milliseconds": 237,
+          "function": "open",
+          "url": "",
+          "line": 0
+        },
+        {
+          "milliseconds": 233,
+          "function": "open",
+          "url": "",
+          "line": 0
+        },
+        {
+          "milliseconds": 221,
+          "function": "open",
+          "url": "",
+          "line": 0
+        }
+      ],
+      "inclusive": [
+        {
+          "milliseconds": 45425,
+          "function": "(root)",
+          "url": "",
+          "line": 0
+        },
+        {
+          "milliseconds": 15159,
+          "function": "processTicksAndRejections",
+          "url": "node:internal/process/task_queues",
+          "line": 72
+        },
+        {
+          "milliseconds": 14983,
+          "function": "runMicrotasks",
+          "url": "",
+          "line": 0
+        },
+        {
+          "milliseconds": 8968,
+          "function": "",
+          "url": "file:///private/tmp/crewon-plugin-performance-20261015/CrewON%E9%AA%8C%E6%94%B6.app/Contents/Resources/runtime/control-api.mjs",
+          "line": 250908
+        },
+        {
+          "milliseconds": 8349,
+          "function": "#owner",
+          "url": "file:///private/tmp/crewon-plugin-performance-20261015/CrewON%E9%AA%8C%E6%94%B6.app/Contents/Resources/runtime/control-api.mjs",
+          "line": 251021
+        },
+        {
+          "milliseconds": 8344,
+          "function": "validateNativeOwnership",
+          "url": "file:///private/tmp/crewon-plugin-performance-20261015/CrewON%E9%AA%8C%E6%94%B6.app/Contents/Resources/runtime/control-api.mjs",
+          "line": 209343
+        },
+        {
+          "milliseconds": 7710,
+          "function": "(idle)",
+          "url": "",
+          "line": 0
+        },
+        {
+          "milliseconds": 5804,
+          "function": "",
+          "url": "file:///private/tmp/crewon-plugin-performance-20261015/CrewON%E9%AA%8C%E6%94%B6.app/Contents/Resources/runtime/control-api.mjs",
+          "line": 250908
+        },
+        {
+          "milliseconds": 5315,
+          "function": "#owner",
+          "url": "file:///private/tmp/crewon-plugin-performance-20261015/CrewON%E9%AA%8C%E6%94%B6.app/Contents/Resources/runtime/control-api.mjs",
+          "line": 251021
+        },
+        {
+          "milliseconds": 5309,
+          "function": "validateNativeOwnership",
+          "url": "file:///private/tmp/crewon-plugin-performance-20261015/CrewON%E9%AA%8C%E6%94%B6.app/Contents/Resources/runtime/control-api.mjs",
+          "line": 209343
+        },
+        {
+          "milliseconds": 4454,
+          "function": "assertCurrent",
+          "url": "file:///private/tmp/crewon-plugin-performance-20261015/CrewON%E9%AA%8C%E6%94%B6.app/Contents/Resources/runtime/control-api.mjs",
+          "line": 224010
+        },
+        {
+          "milliseconds": 3599,
+          "function": "",
+          "url": "file:///private/tmp/crewon-plugin-performance-20261015/CrewON%E9%AA%8C%E6%94%B6.app/Contents/Resources/runtime/control-api.mjs",
+          "line": 251022
+        },
+        {
+          "milliseconds": 3456,
+          "function": "validateNativeOwnership",
+          "url": "file:///private/tmp/crewon-plugin-performance-20261015/CrewON%E9%AA%8C%E6%94%B6.app/Contents/Resources/runtime/control-api.mjs",
+          "line": 209343
+        },
+        {
+          "milliseconds": 3456,
+          "function": "assertOwner2",
+          "url": "file:///private/tmp/crewon-plugin-performance-20261015/CrewON%E9%AA%8C%E6%94%B6.app/Contents/Resources/runtime/control-api.mjs",
+          "line": 247620
+        },
+        {
+          "milliseconds": 3456,
+          "function": "resolveCurrentActor",
+          "url": "file:///private/tmp/crewon-plugin-performance-20261015/CrewON%E9%AA%8C%E6%94%B6.app/Contents/Resources/runtime/control-api.mjs",
+          "line": 247678
+        },
+        {
+          "milliseconds": 3355,
+          "function": "assertCurrent",
+          "url": "file:///private/tmp/crewon-plugin-performance-20261015/CrewON%E9%AA%8C%E6%94%B6.app/Contents/Resources/runtime/control-api.mjs",
+          "line": 223776
+        },
+        {
+          "milliseconds": 3306,
+          "function": "assertCurrent",
+          "url": "file:///private/tmp/crewon-plugin-performance-20261015/CrewON%E9%AA%8C%E6%94%B6.app/Contents/Resources/runtime/control-api.mjs",
+          "line": 223698
+        },
+        {
+          "milliseconds": 3208,
+          "function": "read4",
+          "url": "file:///private/tmp/crewon-plugin-performance-20261015/CrewON%E9%AA%8C%E6%94%B6.app/Contents/Resources/runtime/control-api.mjs",
+          "line": 223668
+        },
+        {
+          "milliseconds": 3039,
+          "function": "open",
+          "url": "",
+          "line": 0
+        },
+        {
+          "milliseconds": 3039,
+          "function": "openSync",
+          "url": "node:fs",
+          "line": 560
+        },
+        {
+          "milliseconds": 3039,
+          "function": "func",
+          "url": "node:electron/js2c/node_init",
+          "line": 2
+        },
+        {
+          "milliseconds": 2579,
+          "function": "",
+          "url": "file:///private/tmp/crewon-plugin-performance-20261015/CrewON%E9%AA%8C%E6%94%B6.app/Contents/Resources/runtime/control-api.mjs",
+          "line": 251022
+        },
+        {
+          "milliseconds": 2505,
+          "function": "resolve",
+          "url": "file:///private/tmp/crewon-plugin-performance-20261015/CrewON%E9%AA%8C%E6%94%B6.app/Contents/Resources/runtime/control-api.mjs",
+          "line": 247647
+        },
+        {
+          "milliseconds": 2494,
+          "function": "validateNativeOwnership",
+          "url": "file:///private/tmp/crewon-plugin-performance-20261015/CrewON%E9%AA%8C%E6%94%B6.app/Contents/Resources/runtime/control-api.mjs",
+          "line": 209343
+        },
+        {
+          "milliseconds": 2494,
+          "function": "assertOwner2",
+          "url": "file:///private/tmp/crewon-plugin-performance-20261015/CrewON%E9%AA%8C%E6%94%B6.app/Contents/Resources/runtime/control-api.mjs",
+          "line": 247620
+        },
+        {
+          "milliseconds": 2465,
+          "function": "checkNativeOwnershipFile",
+          "url": "file:///private/tmp/crewon-plugin-performance-20261015/CrewON%E9%AA%8C%E6%94%B6.app/Contents/Resources/runtime/control-api.mjs",
+          "line": 209358
+        },
+        {
+          "milliseconds": 2465,
+          "function": "assertDesktopNativePluginControlConfigCurrent",
+          "url": "file:///private/tmp/crewon-plugin-performance-20261015/CrewON%E9%AA%8C%E6%94%B6.app/Contents/Resources/runtime/control-api.mjs",
+          "line": 223878
+        },
+        {
+          "milliseconds": 2453,
+          "function": "assertCurrent",
+          "url": "file:///private/tmp/crewon-plugin-performance-20261015/CrewON%E9%AA%8C%E6%94%B6.app/Contents/Resources/runtime/control-api.mjs",
+          "line": 224010
+        },
+        {
+          "milliseconds": 2422,
+          "function": "assertCurrent",
+          "url": "file:///private/tmp/crewon-plugin-performance-20261015/CrewON%E9%AA%8C%E6%94%B6.app/Contents/Resources/runtime/control-api.mjs",
+          "line": 224010
+        },
+        {
+          "milliseconds": 1982,
+          "function": "checkNativeOwnershipFile",
+          "url": "file:///private/tmp/crewon-plugin-performance-20261015/CrewON%E9%AA%8C%E6%94%B6.app/Contents/Resources/runtime/control-api.mjs",
+          "line": 209358
+        },
+        {
+          "milliseconds": 1982,
+          "function": "assertDesktopNativePluginControlConfigCurrent",
+          "url": "file:///private/tmp/crewon-plugin-performance-20261015/CrewON%E9%AA%8C%E6%94%B6.app/Contents/Resources/runtime/control-api.mjs",
+          "line": 223878
+        },
+        {
+          "milliseconds": 1976,
+          "function": "assertCurrent",
+          "url": "file:///private/tmp/crewon-plugin-performance-20261015/CrewON%E9%AA%8C%E6%94%B6.app/Contents/Resources/runtime/control-api.mjs",
+          "line": 224010
+        },
+        {
+          "milliseconds": 1778,
+          "function": "assertCurrent",
+          "url": "file:///private/tmp/crewon-plugin-performance-20261015/CrewON%E9%AA%8C%E6%94%B6.app/Contents/Resources/runtime/control-api.mjs",
+          "line": 223776
+        },
+        {
+          "milliseconds": 1723,
+          "function": "assertCurrent",
+          "url": "file:///private/tmp/crewon-plugin-performance-20261015/CrewON%E9%AA%8C%E6%94%B6.app/Contents/Resources/runtime/control-api.mjs",
+          "line": 223698
+        },
+        {
+          "milliseconds": 1669,
+          "function": "read4",
+          "url": "file:///private/tmp/crewon-plugin-performance-20261015/CrewON%E9%AA%8C%E6%94%B6.app/Contents/Resources/runtime/control-api.mjs",
+          "line": 223668
+        }
+      ]
+    },
+    {
+      "file": "control-13979-2.cpuprofile",
+      "durationMs": 45242,
+      "samples": 6104,
+      "self": [
+        {
+          "milliseconds": 21446,
+          "function": "(idle)",
+          "url": "",
+          "line": 0
+        },
+        {
+          "milliseconds": 1173,
+          "function": "open",
+          "url": "",
+          "line": 0
+        },
+        {
+          "milliseconds": 1151,
+          "function": "open",
+          "url": "",
+          "line": 0
+        },
+        {
+          "milliseconds": 906,
+          "function": "open",
+          "url": "",
+          "line": 0
+        },
+        {
+          "milliseconds": 704,
+          "function": "open",
+          "url": "",
+          "line": 0
+        },
+        {
+          "milliseconds": 675,
+          "function": "open",
+          "url": "",
+          "line": 0
+        },
+        {
+          "milliseconds": 654,
+          "function": "open",
+          "url": "",
+          "line": 0
+        },
+        {
+          "milliseconds": 641,
+          "function": "open",
+          "url": "",
+          "line": 0
+        },
+        {
+          "milliseconds": 592,
+          "function": "open",
+          "url": "",
+          "line": 0
+        },
+        {
+          "milliseconds": 570,
+          "function": "open",
+          "url": "",
+          "line": 0
+        },
+        {
+          "milliseconds": 555,
+          "function": "open",
+          "url": "",
+          "line": 0
+        },
+        {
+          "milliseconds": 492,
+          "function": "open",
+          "url": "",
+          "line": 0
+        },
+        {
+          "milliseconds": 481,
+          "function": "open",
+          "url": "",
+          "line": 0
+        },
+        {
+          "milliseconds": 358,
+          "function": "open",
+          "url": "",
+          "line": 0
+        },
+        {
+          "milliseconds": 333,
+          "function": "open",
+          "url": "",
+          "line": 0
+        },
+        {
+          "milliseconds": 327,
+          "function": "open",
+          "url": "",
+          "line": 0
+        },
+        {
+          "milliseconds": 316,
+          "function": "open",
+          "url": "",
+          "line": 0
+        },
+        {
+          "milliseconds": 307,
+          "function": "open",
+          "url": "",
+          "line": 0
+        },
+        {
+          "milliseconds": 267,
+          "function": "(program)",
+          "url": "",
+          "line": 0
+        },
+        {
+          "milliseconds": 257,
+          "function": "open",
+          "url": "",
+          "line": 0
+        },
+        {
+          "milliseconds": 240,
+          "function": "open",
+          "url": "",
+          "line": 0
+        },
+        {
+          "milliseconds": 237,
+          "function": "open",
+          "url": "",
+          "line": 0
+        },
+        {
+          "milliseconds": 232,
+          "function": "post",
+          "url": "node:inspector",
+          "line": 115
+        },
+        {
+          "milliseconds": 225,
+          "function": "open",
+          "url": "",
+          "line": 0
+        },
+        {
+          "milliseconds": 224,
+          "function": "open",
+          "url": "",
+          "line": 0
+        },
+        {
+          "milliseconds": 218,
+          "function": "open",
+          "url": "",
+          "line": 0
+        },
+        {
+          "milliseconds": 207,
+          "function": "open",
+          "url": "",
+          "line": 0
+        },
+        {
+          "milliseconds": 200,
+          "function": "open",
+          "url": "",
+          "line": 0
+        },
+        {
+          "milliseconds": 192,
+          "function": "open",
+          "url": "",
+          "line": 0
+        },
+        {
+          "milliseconds": 188,
+          "function": "open",
+          "url": "",
+          "line": 0
+        },
+        {
+          "milliseconds": 186,
+          "function": "open",
+          "url": "",
+          "line": 0
+        },
+        {
+          "milliseconds": 182,
+          "function": "open",
+          "url": "",
+          "line": 0
+        },
+        {
+          "milliseconds": 182,
+          "function": "open",
+          "url": "",
+          "line": 0
+        },
+        {
+          "milliseconds": 180,
+          "function": "open",
+          "url": "",
+          "line": 0
+        },
+        {
+          "milliseconds": 177,
+          "function": "open",
+          "url": "",
+          "line": 0
+        }
+      ],
+      "inclusive": [
+        {
+          "milliseconds": 45233,
+          "function": "(root)",
+          "url": "",
+          "line": 0
+        },
+        {
+          "milliseconds": 21446,
+          "function": "(idle)",
+          "url": "",
+          "line": 0
+        },
+        {
+          "milliseconds": 17590,
+          "function": "processTicksAndRejections",
+          "url": "node:internal/process/task_queues",
+          "line": 72
+        },
+        {
+          "milliseconds": 17542,
+          "function": "runMicrotasks",
+          "url": "",
+          "line": 0
+        },
+        {
+          "milliseconds": 5314,
+          "function": "",
+          "url": "file:///private/tmp/crewon-plugin-performance-20261015/CrewON%E9%AA%8C%E6%94%B6.app/Contents/Resources/runtime/control-api.mjs",
+          "line": 250908
+        },
+        {
+          "milliseconds": 5048,
+          "function": "validateNativeOwnership",
+          "url": "file:///private/tmp/crewon-plugin-performance-20261015/CrewON%E9%AA%8C%E6%94%B6.app/Contents/Resources/runtime/control-api.mjs",
+          "line": 209343
+        },
+        {
+          "milliseconds": 5048,
+          "function": "#owner",
+          "url": "file:///private/tmp/crewon-plugin-performance-20261015/CrewON%E9%AA%8C%E6%94%B6.app/Contents/Resources/runtime/control-api.mjs",
+          "line": 251021
+        },
+        {
+          "milliseconds": 2742,
+          "function": "validateNativeOwnership",
+          "url": "file:///private/tmp/crewon-plugin-performance-20261015/CrewON%E9%AA%8C%E6%94%B6.app/Contents/Resources/runtime/control-api.mjs",
+          "line": 209343
+        },
+        {
+          "milliseconds": 2742,
+          "function": "assertOwner2",
+          "url": "file:///private/tmp/crewon-plugin-performance-20261015/CrewON%E9%AA%8C%E6%94%B6.app/Contents/Resources/runtime/control-api.mjs",
+          "line": 247620
+        },
+        {
+          "milliseconds": 2742,
+          "function": "resolveCurrentActor",
+          "url": "file:///private/tmp/crewon-plugin-performance-20261015/CrewON%E9%AA%8C%E6%94%B6.app/Contents/Resources/runtime/control-api.mjs",
+          "line": 247678
+        },
+        {
+          "milliseconds": 2668,
+          "function": "",
+          "url": "file:///private/tmp/crewon-plugin-performance-20261015/CrewON%E9%AA%8C%E6%94%B6.app/Contents/Resources/runtime/control-api.mjs",
+          "line": 251022
+        },
+        {
+          "milliseconds": 2387,
+          "function": "resolve",
+          "url": "file:///private/tmp/crewon-plugin-performance-20261015/CrewON%E9%AA%8C%E6%94%B6.app/Contents/Resources/runtime/control-api.mjs",
+          "line": 247647
+        },
+        {
+          "milliseconds": 2375,
+          "function": "validateNativeOwnership",
+          "url": "file:///private/tmp/crewon-plugin-performance-20261015/CrewON%E9%AA%8C%E6%94%B6.app/Contents/Resources/runtime/control-api.mjs",
+          "line": 209343
+        },
+        {
+          "milliseconds": 2375,
+          "function": "assertOwner2",
+          "url": "file:///private/tmp/crewon-plugin-performance-20261015/CrewON%E9%AA%8C%E6%94%B6.app/Contents/Resources/runtime/control-api.mjs",
+          "line": 247620
+        },
+        {
+          "milliseconds": 2087,
+          "function": "assertCurrent",
+          "url": "file:///private/tmp/crewon-plugin-performance-20261015/CrewON%E9%AA%8C%E6%94%B6.app/Contents/Resources/runtime/control-api.mjs",
+          "line": 224010
+        },
+        {
+          "milliseconds": 2015,
+          "function": "",
+          "url": "file:///private/tmp/crewon-plugin-performance-20261015/CrewON%E9%AA%8C%E6%94%B6.app/Contents/Resources/runtime/control-api.mjs",
+          "line": 234548
+        },
+        {
+          "milliseconds": 1956,
+          "function": "assertCurrent",
+          "url": "file:///private/tmp/crewon-plugin-performance-20261015/CrewON%E9%AA%8C%E6%94%B6.app/Contents/Resources/runtime/control-api.mjs",
+          "line": 224010
+        },
+        {
+          "milliseconds": 1956,
+          "function": "checkNativeOwnershipFile",
+          "url": "file:///private/tmp/crewon-plugin-performance-20261015/CrewON%E9%AA%8C%E6%94%B6.app/Contents/Resources/runtime/control-api.mjs",
+          "line": 209358
+        },
+        {
+          "milliseconds": 1956,
+          "function": "assertDesktopNativePluginControlConfigCurrent",
+          "url": "file:///private/tmp/crewon-plugin-performance-20261015/CrewON%E9%AA%8C%E6%94%B6.app/Contents/Resources/runtime/control-api.mjs",
+          "line": 223878
+        },
+        {
+          "milliseconds": 1885,
+          "function": "available",
+          "url": "file:///private/tmp/crewon-plugin-performance-20261015/CrewON%E9%AA%8C%E6%94%B6.app/Contents/Resources/runtime/control-api.mjs",
+          "line": 251530
+        },
+        {
+          "milliseconds": 1885,
+          "function": "call2",
+          "url": "file:///private/tmp/crewon-plugin-performance-20261015/CrewON%E9%AA%8C%E6%94%B6.app/Contents/Resources/runtime/control-api.mjs",
+          "line": 246504
+        },
+        {
+          "milliseconds": 1885,
+          "function": "validateMount",
+          "url": "file:///private/tmp/crewon-plugin-performance-20261015/CrewON%E9%AA%8C%E6%94%B6.app/Contents/Resources/runtime/control-api.mjs",
+          "line": 246521
+        },
+        {
+          "milliseconds": 1565,
+          "function": "",
+          "url": "file:///private/tmp/crewon-plugin-performance-20261015/CrewON%E9%AA%8C%E6%94%B6.app/Contents/Resources/runtime/control-api.mjs",
+          "line": 246506
+        },
+        {
+          "milliseconds": 1423,
+          "function": "",
+          "url": "file:///private/tmp/crewon-plugin-performance-20261015/CrewON%E9%AA%8C%E6%94%B6.app/Contents/Resources/runtime/control-api.mjs",
+          "line": 247620
+        },
+        {
+          "milliseconds": 1390,
+          "function": "assertCurrent",
+          "url": "file:///private/tmp/crewon-plugin-performance-20261015/CrewON%E9%AA%8C%E6%94%B6.app/Contents/Resources/runtime/control-api.mjs",
+          "line": 223776
+        },
+        {
+          "milliseconds": 1388,
+          "function": "assertCurrent",
+          "url": "file:///private/tmp/crewon-plugin-performance-20261015/CrewON%E9%AA%8C%E6%94%B6.app/Contents/Resources/runtime/control-api.mjs",
+          "line": 224010
+        },
+        {
+          "milliseconds": 1388,
+          "function": "checkNativeOwnershipFile",
+          "url": "file:///private/tmp/crewon-plugin-performance-20261015/CrewON%E9%AA%8C%E6%94%B6.app/Contents/Resources/runtime/control-api.mjs",
+          "line": 209358
+        },
+        {
+          "milliseconds": 1388,
+          "function": "assertDesktopNativePluginControlConfigCurrent",
+          "url": "file:///private/tmp/crewon-plugin-performance-20261015/CrewON%E9%AA%8C%E6%94%B6.app/Contents/Resources/runtime/control-api.mjs",
+          "line": 223878
+        },
+        {
+          "milliseconds": 1363,
+          "function": "assertCurrent",
+          "url": "file:///private/tmp/crewon-plugin-performance-20261015/CrewON%E9%AA%8C%E6%94%B6.app/Contents/Resources/runtime/control-api.mjs",
+          "line": 223698
+        },
+        {
+          "milliseconds": 1355,
+          "function": "assertCurrent",
+          "url": "file:///private/tmp/crewon-plugin-performance-20261015/CrewON%E9%AA%8C%E6%94%B6.app/Contents/Resources/runtime/control-api.mjs",
+          "line": 223776
+        },
+        {
+          "milliseconds": 1315,
+          "function": "assertCurrent",
+          "url": "file:///private/tmp/crewon-plugin-performance-20261015/CrewON%E9%AA%8C%E6%94%B6.app/Contents/Resources/runtime/control-api.mjs",
+          "line": 223698
+        },
+        {
+          "milliseconds": 1288,
+          "function": "read4",
+          "url": "file:///private/tmp/crewon-plugin-performance-20261015/CrewON%E9%AA%8C%E6%94%B6.app/Contents/Resources/runtime/control-api.mjs",
+          "line": 223668
+        },
+        {
+          "milliseconds": 1271,
+          "function": "read4",
+          "url": "file:///private/tmp/crewon-plugin-performance-20261015/CrewON%E9%AA%8C%E6%94%B6.app/Contents/Resources/runtime/control-api.mjs",
+          "line": 223668
+        },
+        {
+          "milliseconds": 1267,
+          "function": "available",
+          "url": "file:///private/tmp/crewon-plugin-performance-20261015/CrewON%E9%AA%8C%E6%94%B6.app/Contents/Resources/runtime/control-api.mjs",
+          "line": 251530
+        },
+        {
+          "milliseconds": 1205,
+          "function": "",
+          "url": "file:///private/tmp/crewon-plugin-performance-20261015/CrewON%E9%AA%8C%E6%94%B6.app/Contents/Resources/runtime/control-api.mjs",
+          "line": 247620
+        }
+      ]
+    },
+    {
+      "file": "control-13979-3.cpuprofile",
+      "durationMs": 45173,
+      "samples": 7203,
+      "self": [
+        {
+          "milliseconds": 33243,
+          "function": "(idle)",
+          "url": "",
+          "line": 0
+        },
+        {
+          "milliseconds": 551,
+          "function": "open",
+          "url": "",
+          "line": 0
+        },
+        {
+          "milliseconds": 470,
+          "function": "open",
+          "url": "",
+          "line": 0
+        },
+        {
+          "milliseconds": 427,
+          "function": "open",
+          "url": "",
+          "line": 0
+        },
+        {
+          "milliseconds": 323,
+          "function": "(program)",
+          "url": "",
+          "line": 0
+        },
+        {
+          "milliseconds": 262,
+          "function": "open",
+          "url": "",
+          "line": 0
+        },
+        {
+          "milliseconds": 256,
+          "function": "open",
+          "url": "",
+          "line": 0
+        },
+        {
+          "milliseconds": 255,
+          "function": "open",
+          "url": "",
+          "line": 0
+        },
+        {
+          "milliseconds": 246,
+          "function": "open",
+          "url": "",
+          "line": 0
+        },
+        {
+          "milliseconds": 220,
+          "function": "open",
+          "url": "",
+          "line": 0
+        },
+        {
+          "milliseconds": 214,
+          "function": "open",
+          "url": "",
+          "line": 0
+        },
+        {
+          "milliseconds": 188,
+          "function": "open",
+          "url": "",
+          "line": 0
+        },
+        {
+          "milliseconds": 186,
+          "function": "open",
+          "url": "",
+          "line": 0
+        },
+        {
+          "milliseconds": 180,
+          "function": "open",
+          "url": "",
+          "line": 0
+        },
+        {
+          "milliseconds": 176,
+          "function": "open",
+          "url": "",
+          "line": 0
+        },
+        {
+          "milliseconds": 175,
+          "function": "open",
+          "url": "",
+          "line": 0
+        },
+        {
+          "milliseconds": 167,
+          "function": "post",
+          "url": "node:inspector",
+          "line": 115
+        },
+        {
+          "milliseconds": 163,
+          "function": "open",
+          "url": "",
+          "line": 0
+        },
+        {
+          "milliseconds": 158,
+          "function": "open",
+          "url": "",
+          "line": 0
+        },
+        {
+          "milliseconds": 149,
+          "function": "open",
+          "url": "",
+          "line": 0
+        },
+        {
+          "milliseconds": 130,
+          "function": "(garbage collector)",
+          "url": "",
+          "line": 0
+        },
+        {
+          "milliseconds": 126,
+          "function": "open",
+          "url": "",
+          "line": 0
+        },
+        {
+          "milliseconds": 117,
+          "function": "open",
+          "url": "",
+          "line": 0
+        },
+        {
+          "milliseconds": 112,
+          "function": "open",
+          "url": "",
+          "line": 0
+        },
+        {
+          "milliseconds": 111,
+          "function": "open",
+          "url": "",
+          "line": 0
+        },
+        {
+          "milliseconds": 96,
+          "function": "open",
+          "url": "",
+          "line": 0
+        },
+        {
+          "milliseconds": 95,
+          "function": "open",
+          "url": "",
+          "line": 0
+        },
+        {
+          "milliseconds": 94,
+          "function": "open",
+          "url": "",
+          "line": 0
+        },
+        {
+          "milliseconds": 93,
+          "function": "open",
+          "url": "",
+          "line": 0
+        },
+        {
+          "milliseconds": 86,
+          "function": "open",
+          "url": "",
+          "line": 0
+        },
+        {
+          "milliseconds": 84,
+          "function": "open",
+          "url": "",
+          "line": 0
+        },
+        {
+          "milliseconds": 79,
+          "function": "open",
+          "url": "",
+          "line": 0
+        },
+        {
+          "milliseconds": 78,
+          "function": "open",
+          "url": "",
+          "line": 0
+        },
+        {
+          "milliseconds": 77,
+          "function": "readPackageFile",
+          "url": "file:///private/tmp/crewon-plugin-performance-20261015/CrewON%E9%AA%8C%E6%94%B6.app/Contents/Resources/runtime/control-api.mjs",
+          "line": 118982
+        },
+        {
+          "milliseconds": 72,
+          "function": "open",
+          "url": "",
+          "line": 0
+        }
+      ],
+      "inclusive": [
+        {
+          "milliseconds": 45173,
+          "function": "(root)",
+          "url": "",
+          "line": 0
+        },
+        {
+          "milliseconds": 33243,
+          "function": "(idle)",
+          "url": "",
+          "line": 0
+        },
+        {
+          "milliseconds": 8360,
+          "function": "processTicksAndRejections",
+          "url": "node:internal/process/task_queues",
+          "line": 72
+        },
+        {
+          "milliseconds": 8322,
+          "function": "runMicrotasks",
+          "url": "",
+          "line": 0
+        },
+        {
+          "milliseconds": 2418,
+          "function": "",
+          "url": "file:///private/tmp/crewon-plugin-performance-20261015/CrewON%E9%AA%8C%E6%94%B6.app/Contents/Resources/runtime/control-api.mjs",
+          "line": 250908
+        },
+        {
+          "milliseconds": 2238,
+          "function": "validateNativeOwnership",
+          "url": "file:///private/tmp/crewon-plugin-performance-20261015/CrewON%E9%AA%8C%E6%94%B6.app/Contents/Resources/runtime/control-api.mjs",
+          "line": 209343
+        },
+        {
+          "milliseconds": 2238,
+          "function": "#owner",
+          "url": "file:///private/tmp/crewon-plugin-performance-20261015/CrewON%E9%AA%8C%E6%94%B6.app/Contents/Resources/runtime/control-api.mjs",
+          "line": 251021
+        },
+        {
+          "milliseconds": 1396,
+          "function": "validateNativeOwnership",
+          "url": "file:///private/tmp/crewon-plugin-performance-20261015/CrewON%E9%AA%8C%E6%94%B6.app/Contents/Resources/runtime/control-api.mjs",
+          "line": 209343
+        },
+        {
+          "milliseconds": 1396,
+          "function": "assertOwner2",
+          "url": "file:///private/tmp/crewon-plugin-performance-20261015/CrewON%E9%AA%8C%E6%94%B6.app/Contents/Resources/runtime/control-api.mjs",
+          "line": 247620
+        },
+        {
+          "milliseconds": 1396,
+          "function": "resolve",
+          "url": "file:///private/tmp/crewon-plugin-performance-20261015/CrewON%E9%AA%8C%E6%94%B6.app/Contents/Resources/runtime/control-api.mjs",
+          "line": 247647
+        },
+        {
+          "milliseconds": 1302,
+          "function": "validateNativeOwnership",
+          "url": "file:///private/tmp/crewon-plugin-performance-20261015/CrewON%E9%AA%8C%E6%94%B6.app/Contents/Resources/runtime/control-api.mjs",
+          "line": 209343
+        },
+        {
+          "milliseconds": 1302,
+          "function": "assertOwner2",
+          "url": "file:///private/tmp/crewon-plugin-performance-20261015/CrewON%E9%AA%8C%E6%94%B6.app/Contents/Resources/runtime/control-api.mjs",
+          "line": 247620
+        },
+        {
+          "milliseconds": 1302,
+          "function": "resolveCurrentActor",
+          "url": "file:///private/tmp/crewon-plugin-performance-20261015/CrewON%E9%AA%8C%E6%94%B6.app/Contents/Resources/runtime/control-api.mjs",
+          "line": 247678
+        },
+        {
+          "milliseconds": 1185,
+          "function": "",
+          "url": "file:///private/tmp/crewon-plugin-performance-20261015/CrewON%E9%AA%8C%E6%94%B6.app/Contents/Resources/runtime/control-api.mjs",
+          "line": 251022
+        },
+        {
+          "milliseconds": 960,
+          "function": "",
+          "url": "file:///private/tmp/crewon-plugin-performance-20261015/CrewON%E9%AA%8C%E6%94%B6.app/Contents/Resources/runtime/control-api.mjs",
+          "line": 247620
+        },
+        {
+          "milliseconds": 924,
+          "function": "assertCurrent",
+          "url": "file:///private/tmp/crewon-plugin-performance-20261015/CrewON%E9%AA%8C%E6%94%B6.app/Contents/Resources/runtime/control-api.mjs",
+          "line": 224010
+        },
+        {
+          "milliseconds": 839,
+          "function": "validateNativeOwnership",
+          "url": "file:///private/tmp/crewon-plugin-performance-20261015/CrewON%E9%AA%8C%E6%94%B6.app/Contents/Resources/runtime/control-api.mjs",
+          "line": 209343
+        },
+        {
+          "milliseconds": 839,
+          "function": "#assertOwner",
+          "url": "file:///private/tmp/crewon-plugin-performance-20261015/CrewON%E9%AA%8C%E6%94%B6.app/Contents/Resources/runtime/control-api.mjs",
+          "line": 224988
+        },
+        {
+          "milliseconds": 839,
+          "function": "assertBinding",
+          "url": "file:///private/tmp/crewon-plugin-performance-20261015/CrewON%E9%AA%8C%E6%94%B6.app/Contents/Resources/runtime/control-api.mjs",
+          "line": 224796
+        },
+        {
+          "milliseconds": 833,
+          "function": "",
+          "url": "file:///private/tmp/crewon-plugin-performance-20261015/CrewON%E9%AA%8C%E6%94%B6.app/Contents/Resources/runtime/control-api.mjs",
+          "line": 224989
+        },
+        {
+          "milliseconds": 828,
+          "function": "assertCurrent",
+          "url": "file:///private/tmp/crewon-plugin-performance-20261015/CrewON%E9%AA%8C%E6%94%B6.app/Contents/Resources/runtime/control-api.mjs",
+          "line": 224010
+        },
+        {
+          "milliseconds": 828,
+          "function": "checkNativeOwnershipFile",
+          "url": "file:///private/tmp/crewon-plugin-performance-20261015/CrewON%E9%AA%8C%E6%94%B6.app/Contents/Resources/runtime/control-api.mjs",
+          "line": 209358
+        },
+        {
+          "milliseconds": 828,
+          "function": "assertDesktopNativePluginControlConfigCurrent",
+          "url": "file:///private/tmp/crewon-plugin-performance-20261015/CrewON%E9%AA%8C%E6%94%B6.app/Contents/Resources/runtime/control-api.mjs",
+          "line": 223878
+        },
+        {
+          "milliseconds": 775,
+          "function": "assertCurrent",
+          "url": "file:///private/tmp/crewon-plugin-performance-20261015/CrewON%E9%AA%8C%E6%94%B6.app/Contents/Resources/runtime/control-api.mjs",
+          "line": 224010
+        },
+        {
+          "milliseconds": 775,
+          "function": "checkNativeOwnershipFile",
+          "url": "file:///private/tmp/crewon-plugin-performance-20261015/CrewON%E9%AA%8C%E6%94%B6.app/Contents/Resources/runtime/control-api.mjs",
+          "line": 209358
+        },
+        {
+          "milliseconds": 775,
+          "function": "assertDesktopNativePluginControlConfigCurrent",
+          "url": "file:///private/tmp/crewon-plugin-performance-20261015/CrewON%E9%AA%8C%E6%94%B6.app/Contents/Resources/runtime/control-api.mjs",
+          "line": 223878
+        },
+        {
+          "milliseconds": 775,
+          "function": "assertActivation",
+          "url": "file:///private/tmp/crewon-plugin-performance-20261015/CrewON%E9%AA%8C%E6%94%B6.app/Contents/Resources/runtime/control-api.mjs",
+          "line": 225157
+        },
+        {
+          "milliseconds": 711,
+          "function": "",
+          "url": "file:///private/tmp/crewon-plugin-performance-20261015/CrewON%E9%AA%8C%E6%94%B6.app/Contents/Resources/runtime/control-api.mjs",
+          "line": 234548
+        },
+        {
+          "milliseconds": 679,
+          "function": "",
+          "url": "file:///private/tmp/crewon-plugin-performance-20261015/CrewON%E9%AA%8C%E6%94%B6.app/Contents/Resources/runtime/control-api.mjs",
+          "line": 246506
+        },
+        {
+          "milliseconds": 657,
+          "function": "",
+          "url": "file:///private/tmp/crewon-plugin-performance-20261015/CrewON%E9%AA%8C%E6%94%B6.app/Contents/Resources/runtime/control-api.mjs",
+          "line": 247620
+        },
+        {
+          "milliseconds": 650,
+          "function": "validateNativeOwnership",
+          "url": "file:///private/tmp/crewon-plugin-performance-20261015/CrewON%E9%AA%8C%E6%94%B6.app/Contents/Resources/runtime/control-api.mjs",
+          "line": 209343
+        },
+        {
+          "milliseconds": 650,
+          "function": "#owner",
+          "url": "file:///private/tmp/crewon-plugin-performance-20261015/CrewON%E9%AA%8C%E6%94%B6.app/Contents/Resources/runtime/control-api.mjs",
+          "line": 251021
+        },
+        {
+          "milliseconds": 650,
+          "function": "#request",
+          "url": "file:///private/tmp/crewon-plugin-performance-20261015/CrewON%E9%AA%8C%E6%94%B6.app/Contents/Resources/runtime/control-api.mjs",
+          "line": 251061
+        },
+        {
+          "milliseconds": 639,
+          "function": "available",
+          "url": "file:///private/tmp/crewon-plugin-performance-20261015/CrewON%E9%AA%8C%E6%94%B6.app/Contents/Resources/runtime/control-api.mjs",
+          "line": 251530
+        },
+        {
+          "milliseconds": 639,
+          "function": "call2",
+          "url": "file:///private/tmp/crewon-plugin-performance-20261015/CrewON%E9%AA%8C%E6%94%B6.app/Contents/Resources/runtime/control-api.mjs",
+          "line": 246504
+        }
+      ]
+    }
+  ],
+  "functionalBaselineValid": false,
+  "limitation": "The added sampling header changed control-api.mjs but its extension-build-identity entry was not updated. Profiles identify synchronous ownership file work; this run cannot establish normal feature latency or serve as an A/B functional baseline."
+}

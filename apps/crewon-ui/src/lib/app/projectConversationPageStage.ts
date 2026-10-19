@@ -24,9 +24,11 @@ export function projectConversationPageStage(
     return null;
   switch (value.stage) {
     case "overview":
-      return { kind: "brief" as const, label: "创作方案" };
+      return { kind: "discussion" as const, label: "创作方案" };
     case "source":
       return { kind: "discussion" as const, label: "小说原文" };
+    case "concepts":
+      return { kind: "discussion" as const, label: "概念图" };
     case "outline":
       return { kind: "outline" as const, label: "改编大纲" };
     case "script":

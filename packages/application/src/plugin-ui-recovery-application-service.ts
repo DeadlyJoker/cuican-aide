@@ -28,6 +28,7 @@ import {
   type PluginUiIntentRecord,
 } from "@crewon/domain";
 import { ApplicationError } from "./application-error.ts";
+import { isQueryRevisionNotAdmitted } from "./project-query-nonadmission.ts";
 import { uiRecord } from "./plugin-ui-application-support.ts";
 import type {
   ApplicationClock,
@@ -316,6 +317,30 @@ export class PluginUiRecoveryApplicationService
       observeFailure: async (error) => {
         if (completed) invalid();
         completed = true;
+        if (
+          request.action ===
+            "crewon.project-generation-queries.v1.queryConceptGeneration" &&
+          isQueryRevisionNotAdmitted(
+            error,
+            request.input,
+            captured.pin,
+            this.#digester,
+          )
+        ) {
+          try {
+            await this.#store.refuseUiIntentUnadmittedQuery?.({
+              account: captured.account,
+              intentId: intent.intentId,
+              requestDigest: intent.requestDigest,
+              expectedDispatchAttemptCount: result.dispatchAttemptCount,
+              reasonCode: "project_query_revision_not_admitted",
+              at: this.#clock.now(),
+            });
+          } catch (failure) {
+            this.#report(failure);
+          }
+          return;
+        }
         if (
           intent.kind !== "selection" ||
           !(error instanceof ApplicationError) ||
@@ -615,6 +640,17 @@ function method<T extends object, K extends keyof T>(owner: T, key: K): T[K] {
 function captureStore(
   store: PluginUiIntentJournalStore,
 ): PluginUiIntentJournalStore {
+  let target: object | null = store;
+  let queryRefusal: PluginUiIntentJournalStore["refuseUiIntentUnadmittedQuery"];
+  for (let depth = 0; target !== null && depth < 32; depth++) {
+    if (
+      Object.getOwnPropertyDescriptor(target, "refuseUiIntentUnadmittedQuery")
+    ) {
+      queryRefusal = method(store, "refuseUiIntentUnadmittedQuery");
+      break;
+    }
+    target = Object.getPrototypeOf(target);
+  }
   return Object.freeze({
     uiIntentJournalVersion: store.uiIntentJournalVersion,
     uiIntentJournalReadVersion: store.uiIntentJournalReadVersion,
@@ -624,6 +660,7 @@ function captureStore(
     markUiIntentDispatched: method(store, "markUiIntentDispatched"),
     confirmUiIntentAccepted: method(store, "confirmUiIntentAccepted"),
     refuseUiIntentFirstDispatch: method(store, "refuseUiIntentFirstDispatch"),
+    ...(queryRefusal ? { refuseUiIntentUnadmittedQuery: queryRefusal } : {}),
   });
 }
 function unavailable(): never {

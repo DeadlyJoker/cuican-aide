@@ -42,6 +42,7 @@ export class ConceptImageSelectionController {
   #snapshot = initial();
   #host: ProjectGenerationSelectionHostContext | null = null;
   #seenIntent: string | null = null;
+  #hostProjectId: string | null = null;
   #source: ProjectGenerationUiReference | null = null;
   #record: ConceptGenerationSnapshot | null = null;
   #binding: string | null = null;
@@ -281,6 +282,25 @@ export class ConceptImageSelectionController {
       )
     );
   }
+  /** A page switch drops no durable request and cannot release an in-flight write. */
+  setHostProjectScope(projectId: string | null) {
+    this.#hostProjectId = projectId;
+    if (
+      this.#disposed ||
+      !projectId ||
+      this.#write ||
+      !this.#snapshot.request ||
+      this.#snapshot.request.reference.projectId === projectId
+    )
+      return;
+    ++this.#lifetime;
+    ++this.#recoveryEpoch;
+    this.#read?.abort();
+    this.#host = null;
+    this.#seenIntent = null;
+    this.#binding = null;
+    this.#update(initial());
+  }
   isCurrent(choice: ConceptImageChoice): boolean {
     const selected =
       this.#snapshot.phase === "ready" ? this.#snapshot.current?.current : null;
@@ -381,6 +401,7 @@ export class ConceptImageSelectionController {
       if (this.#write === controller) {
         const locked = this.locked;
         this.#write = null;
+        this.setHostProjectScope(this.#hostProjectId);
         this.#update();
         if (locked !== this.locked) this.#ports.lockChanged();
       }

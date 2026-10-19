@@ -269,3 +269,64 @@ test("target proof requires actual exact bytes, valid PNG and dimensions, not ju
   ])
     assert.throws(() => verifyComfyMaterialTargetBytes(p, wrong));
 });
+
+test("workflow API uploads one exact uniquely named input file and validates its own namespace before byte proof", async () => {
+  const q = fixture();
+  const p = renderComfyMaterialUpload({
+    ...q,
+    adapter: "comfyui-workflow-file-upload.v1",
+  });
+  assert.equal(p.request.path, "/api/comfy/upload/file");
+  assert.equal(p.output.type, "input");
+  assert.equal(p.output.subfolder, "");
+  assert.equal(
+    p.output.filename,
+    `material-${preparationId}-${q.content.record.source.byteDigest.slice(7)}.png`,
+  );
+  const form = await new Request(new URL(p.request.path, p.origin), {
+    method: "POST",
+    headers: p.request.headers,
+    body: Buffer.from(p.request.body),
+  }).formData();
+  const names: string[] = [];
+  form.forEach((_value, name) => names.push(name));
+  assert.deepEqual(names, ["overwrite", "file"]);
+  assert.equal(form.get("overwrite"), "false");
+  const file = form.get("file") as File;
+  assert.equal(file.name, p.output.filename);
+  assert.deepEqual(Buffer.from(await file.arrayBuffer()), q.content.bytes);
+  assert.equal(new URL(p.viewPath, p.origin).pathname, "/api/comfy/view");
+  assert.equal(new URL(p.viewPath, p.origin).searchParams.get("type"), "input");
+  assert.doesNotThrow(() =>
+    verifyComfyMaterialUploadAcknowledgement(p, acknowledgement(p)),
+  );
+  for (const overrides of [
+    { type: "output" },
+    { name: "renamed.png" },
+    { subfolder: "foreign" },
+  ])
+    assert.throws(() =>
+      verifyComfyMaterialUploadAcknowledgement(
+        p,
+        acknowledgement(p, overrides),
+      ),
+    );
+  const native = renderComfyMaterialUpload(q);
+  assert.notEqual(native.requestDigest, p.requestDigest);
+  assert.deepEqual(
+    renderComfyMaterialUpload({ ...q, adapter: "comfyui-image-upload.v1" }),
+    native,
+  );
+});
+
+test("optional adapter detection never evaluates a caller proxy", () => {
+  let traps = 0;
+  const value = new Proxy(fixture(), {
+    getOwnPropertyDescriptor() {
+      traps++;
+      throw Error("proxy_trap");
+    },
+  });
+  assert.throws(() => renderComfyMaterialUpload(value), /input_invalid/);
+  assert.equal(traps, 0);
+});

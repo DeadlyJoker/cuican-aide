@@ -1,7 +1,10 @@
 // @vitest-environment happy-dom
 import { describe, it, expect, vi, afterEach } from "vitest";
 import pageDocument from "../../../index.html?raw";
-import { createPluginEntryByteImporter } from "./pluginEntryByteImporter";
+import {
+  createPluginEntryByteImporter,
+  PLUGIN_ENTRY_CACHE_READ_DEADLINE_MS,
+} from "./pluginEntryByteImporter";
 import { uiLease } from "./pluginUiLoader.test-support";
 const bytes = new TextEncoder().encode(
   "export default {apiVersion:'crewon.plugin-ui.v1',pluginId:'example.workbench',mount(){return{update(){},dispose(){}}}};",
@@ -62,7 +65,66 @@ describe("immutable entry bytes across page reload", () => {
     expect(scriptPolicy).not.toContain("'unsafe-eval'");
     expect(scriptPolicy).not.toContain("'unsafe-inline'");
   });
-  afterEach(() => vi.unstubAllGlobals());
+  afterEach(() => {
+    vi.unstubAllGlobals();
+    vi.useRealTimers();
+  });
+  it("falls back to an authenticated online read when optional cache storage stays pending", async () => {
+    vi.useFakeTimers();
+    const f = fixture();
+    let release!: (value: ArrayBuffer) => void;
+    f.store.get.mockImplementation(
+      () =>
+        new Promise((resolve) => {
+          release = resolve;
+        }),
+    );
+    f.fetch.mockResolvedValueOnce(
+      new Response(bytes, {
+        headers: { "content-type": "application/javascript" },
+      }),
+    );
+    const loading = f.make()(request());
+    await vi.waitFor(() => expect(f.store.get).toHaveBeenCalledOnce());
+    expect(f.fetch).not.toHaveBeenCalled();
+    await vi.advanceTimersByTimeAsync(PLUGIN_ENTRY_CACHE_READ_DEADLINE_MS);
+    await loading;
+    expect(f.fetch).toHaveBeenCalledWith(
+      request().url,
+      expect.objectContaining({
+        credentials: "same-origin",
+        headers: { "x-crewon-plugin-ui-code-cache": "entry-bytes.v2" },
+      }),
+    );
+    expect(f.importer).toHaveBeenCalledOnce();
+    release(new ArrayBuffer(1));
+    await vi.advanceTimersByTimeAsync(0);
+    expect(f.importer).toHaveBeenCalledOnce();
+  });
+  it("cancels a pending cache read without fetching or importing late cached bytes", async () => {
+    vi.useFakeTimers();
+    const f = fixture(),
+      controller = new AbortController();
+    let release!: (value: ArrayBuffer) => void;
+    f.store.get.mockImplementation(
+      () =>
+        new Promise((resolve) => {
+          release = resolve;
+        }),
+    );
+    const loading = f.make()({ ...request(), signal: controller.signal });
+    const rejected = expect(loading).rejects.toThrow(
+      "plugin_ui_operation_aborted",
+    );
+    await vi.waitFor(() => expect(f.store.get).toHaveBeenCalledOnce());
+    controller.abort();
+    await rejected;
+    release(bytes);
+    await vi.advanceTimersByTimeAsync(PLUGIN_ENTRY_CACHE_READ_DEADLINE_MS);
+    expect(f.fetch).not.toHaveBeenCalled();
+    expect(f.importer).not.toHaveBeenCalled();
+    expect(f.createUrl).not.toHaveBeenCalled();
+  });
   it("uses persisted verified bytes only after revalidating the new exact mount, including a new importer instance", async () => {
     const f = fixture();
     f.fetch.mockResolvedValueOnce(

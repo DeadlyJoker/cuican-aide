@@ -47,6 +47,7 @@ export async function projectMaterialPreparerFixture(
   t: TestContext,
   backend: "sqlite" | "postgres",
   options: {
+    serviceProtocol?: "native" | "workflow-panel-v1" | "workflow-api-v1";
     targetFixture?: import("../../../packages/store/src/project-material-preparation.test-support.ts").MaterialTargetFixture;
   } = {},
 ) {
@@ -259,16 +260,24 @@ export async function projectMaterialPreparerFixture(
           state.uploads++;
           state.requests.push(request);
           assert.equal(request.method, "POST");
-          assert.equal(request.target.endpoint.pathname, "/upload/image");
+          const workflowApi =
+            options.serviceProtocol === "workflow-panel-v1" ||
+            options.serviceProtocol === "workflow-api-v1";
+          assert.equal(
+            request.target.endpoint.pathname,
+            workflowApi ? "/api/comfy/upload/file" : "/upload/image",
+          );
           assert.equal(request.target.address, "8.8.8.8");
           const body = Buffer.from(request.body!),
             boundary = request.headers!["content-type"]!.split("boundary=")[1]!,
-            name = /name="image"; filename="([^"\r\n]+)"/u.exec(
+            name = /name="(?:image|file)"; filename="([^"\r\n]+)"/u.exec(
               body.toString("latin1"),
             )![1]!,
-            subfolder = /name="subfolder"\r\n\r\n([^\r\n]+)/u.exec(
-              body.toString("latin1"),
-            )![1]!,
+            subfolder = workflowApi
+              ? ""
+              : /name="subfolder"\r\n\r\n([^\r\n]+)/u.exec(
+                  body.toString("latin1"),
+                )![1]!,
             imageStart =
               body.indexOf(Buffer.from("Content-Type: image/png\r\n\r\n")) +
               Buffer.byteLength("Content-Type: image/png\r\n\r\n"),
@@ -276,10 +285,14 @@ export async function projectMaterialPreparerFixture(
               Buffer.from(`\r\n--${boundary}--`),
               imageStart,
             ),
-            output = { filename: name, subfolder, type: "output" };
+            output = {
+              filename: name,
+              subfolder,
+              type: workflowApi ? "input" : "output",
+            };
           assert.ok(imageStart > 0 && imageEnd > imageStart);
           state.files.set(
-            `/view?${new URLSearchParams(output)}`,
+            `${workflowApi ? "/api/comfy/view" : "/view"}?${new URLSearchParams(output)}`,
             Buffer.from(body.subarray(imageStart, imageEnd)),
           );
           await state.onPost?.();
@@ -287,7 +300,7 @@ export async function projectMaterialPreparerFixture(
             status: 200,
             headers: { "content-type": "application/json" },
             body: Buffer.from(
-              JSON.stringify({ name, subfolder, type: "output" }),
+              JSON.stringify({ name, subfolder, type: output.type }),
             ),
           };
           return state.reply?.(response) ?? response;

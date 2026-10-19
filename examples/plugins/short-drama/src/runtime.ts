@@ -25,7 +25,8 @@ import {
   observeJob,
 } from "./protocol.js";
 import { RetainedResults } from "./retained-results.js";
-import { krea2Workflow, parseKreaPreset } from "./workflow.js";
+import { captureImageExecutionProfile } from "./image-execution-profile.js";
+import { comfyObservationPath } from "./comfy-service.js";
 
 /** Business code only: the host supplies durable operation evidence, current authority and bounded JSON transport. */
 export function createKreaRuntime(
@@ -42,26 +43,8 @@ export function createKreaRuntime(
   const operations = services.externalOperations;
   const http = services.jsonHttp;
   const approval = services.approvalRequirement;
-  const parameters = context.configuration.parameters;
-  if (
-    Object.keys(parameters).length !== 2 ||
-    !Object.hasOwn(parameters, "baseUrl") ||
-    !Object.hasOwn(parameters, "preset") ||
-    typeof parameters.baseUrl !== "string" ||
-    context.configuration.credentialBindings.length !== 0
-  )
-    throw new Error("krea_plugin_configuration_invalid");
-  const preset = parseKreaPreset(parameters.preset);
-  const base = new URL(parameters.baseUrl);
-  if (
-    base.protocol !== "https:" ||
-    base.username ||
-    base.password ||
-    base.search ||
-    base.hash ||
-    base.pathname !== "/"
-  )
-    throw new Error("krea_plugin_service_url_invalid");
+  const profile = captureImageExecutionProfile(context.configuration);
+  const { base, protocol: serviceProtocol } = profile;
   const retained = new RetainedResults(context);
   const pending = new Set<Promise<PluginToolExecutionResolution>>();
   let activeExecutionId: string | null = null;
@@ -79,16 +62,7 @@ export function createKreaRuntime(
     prompt: string,
     id: string,
   ): PluginJsonHttpSubmission {
-    return {
-      method: "POST",
-      path: "/prompt",
-      body: {
-        prompt: krea2Workflow(prompt, id, preset),
-        prompt_id: id,
-        client_id: id,
-        extra_data: { crewon_request_id: id },
-      },
-    };
+    return profile.submission(prompt, id);
   }
   function assertIdentity(
     command: PluginToolExecutionCommand,
@@ -147,15 +121,16 @@ export function createKreaRuntime(
           command,
           operationId: operation.operationId,
           method: "GET",
-          path,
+          path: comfyObservationPath(serviceProtocol, path),
         }),
+      { outputNodeId: profile.outputNodeId },
     );
     const resultJson =
       observed.status === "succeeded"
         ? JSON.stringify({
             images: observed.images.map((image) => ({
               ...image,
-              url: imageUrl(image, base.href),
+              url: imageUrl(image, base.href, serviceProtocol),
             })),
           })
         : null;
@@ -200,7 +175,7 @@ export function createKreaRuntime(
       throw new Error("krea_plugin_images_invalid");
     const images = data.images.map((value) => {
       const reference = imageReference(value);
-      const url = imageUrl(reference, base.href);
+      const url = imageUrl(reference, base.href, serviceProtocol);
       if (object(value).url !== url)
         throw new Error("krea_plugin_image_url_invalid");
       return { ...reference, url };

@@ -1,0 +1,45 @@
+{
+  "capturedAt": "2026-10-16T10:25:49.879Z",
+  "operationId": "81932a4d-5f2e-d919-13a4-e8794aff833d",
+  "requestMethod": "GET",
+  "latencyMs": 217,
+  "status": {
+    "status_str": "success",
+    "completed": true,
+    "messages": [
+      [
+        "execution_start",
+        {
+          "prompt_id": "81932a4d-5f2e-d919-13a4-e8794aff833d",
+          "timestamp": 1792145478717
+        }
+      ],
+      [
+        "execution_cached",
+        {
+          "nodes": [],
+          "prompt_id": "81932a4d-5f2e-d919-13a4-e8794aff833d",
+          "timestamp": 1792145478734
+        }
+      ],
+      [
+        "execution_success",
+        {
+          "prompt_id": "81932a4d-5f2e-d919-13a4-e8794aff833d",
+          "timestamp": 1792145538825
+        }
+      ]
+    ]
+  },
+  "outputNodes": [
+    "58"
+  ],
+  "expectedNodeImages": [
+    {
+      "filename": "comfyui_00003_.png",
+      "subfolder": "",
+      "type": "output"
+    }
+  ],
+  "clientAcceptance": false
+}

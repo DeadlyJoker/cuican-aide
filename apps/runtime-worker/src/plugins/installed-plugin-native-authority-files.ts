@@ -13,6 +13,7 @@ import { isDeepStrictEqual } from "node:util";
 import {
   parseDesktopNativePluginAuthority,
   DESKTOP_NATIVE_PLUGIN_AUTHORITY_MAX_BYTES,
+  DESKTOP_PLUGIN_APPROVAL_MAX_BYTES,
   type DesktopNativePluginAuthority,
 } from "@crewon/contracts/plugins";
 
@@ -188,9 +189,12 @@ export function captureNativePluginAuthority(path: string): Readonly<{
   assertUnwithdrawn();
   const bootstrap = captureNativeAuthorityFile(
       authority.bootstrapPath,
-      128 * 1024,
+      DESKTOP_PLUGIN_APPROVAL_MAX_BYTES,
     ),
-    approval = captureNativeAuthorityFile(authority.approvalPath, 128 * 1024),
+    approval = captureNativeAuthorityFile(
+      authority.approvalPath,
+      DESKTOP_PLUGIN_APPROVAL_MAX_BYTES,
+    ),
     policy = captureNativeAuthorityFile(authority.policyPath, 128 * 1024),
     profile = captureNativeAuthorityFile(authority.profilePath, 16 * 1024);
   if (

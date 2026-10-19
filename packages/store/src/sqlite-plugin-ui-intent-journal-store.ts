@@ -102,6 +102,11 @@ export class SqlitePluginUiIntentJournalStore
   ): Promise<Output<"refuseUiIntentFirstDispatch">> {
     return this.#write("refuse", input);
   }
+  async refuseUiIntentUnadmittedQuery(
+    input: Input<"refuseUiIntentUnadmittedQuery">,
+  ): Promise<Output<"refuseUiIntentUnadmittedQuery">> {
+    return this.#write("refuseQuery", input);
+  }
   async listUiIntentHints(
     input: Input<"listUiIntentHints">,
   ): Promise<Output<"listUiIntentHints">> {

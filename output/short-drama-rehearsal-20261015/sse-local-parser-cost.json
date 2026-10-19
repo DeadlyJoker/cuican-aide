@@ -1,0 +1,155 @@
+{
+  "recordedAt": "2026-10-15T13:15:50.866157+00:00",
+  "environment": {
+    "node": "v24.18.1",
+    "platform": "darwin",
+    "architecture": "arm64",
+    "timer": "performance.now(); process.cpuUsage() user+system",
+    "process": "local Node process, no network/server/UI"
+  },
+  "parser": {
+    "source": "packages/agent-responses/src/responses-sse.ts",
+    "sha256": "1d147deca4ec4aa703812af7c1841113a2f2a469181109cd62d8ecc4082fa241",
+    "included": "boundary scan, diagnostics byte/chunk/frame/pending updates, finally pending inspection"
+  },
+  "input": "synthetic ASCII JSON only; a 200KiB padding string in one response.created frame, or 600 short legal function_call_arguments.delta frames; LF delimiters; no user content/wire",
+  "procedure": "one warmup, then three rounds per scenario; pre-enqueued in-memory ReadableStream; parser events consumed immediately",
+  "results": [
+    {
+      "scenario": "200KiB-single-frame/8KiB-chunks",
+      "inputBytes": 204907,
+      "chunkBytes": 8192,
+      "chunkCount": 26,
+      "frameCount": 1,
+      "pendingBytesAtEnd": 0,
+      "finallyInspectionCount": 1,
+      "trials": [
+        {
+          "wallMs": 25.951,
+          "cpuMs": 24.925
+        },
+        {
+          "wallMs": 24.63,
+          "cpuMs": 22.447
+        },
+        {
+          "wallMs": 26.781,
+          "cpuMs": 23.075
+        }
+      ],
+      "medianWallMs": 25.951,
+      "maxWallMs": 26.781,
+      "medianCpuMs": 23.075
+    },
+    {
+      "scenario": "200KiB-single-frame/512B-chunks",
+      "inputBytes": 204907,
+      "chunkBytes": 512,
+      "chunkCount": 401,
+      "frameCount": 1,
+      "pendingBytesAtEnd": 0,
+      "finallyInspectionCount": 1,
+      "trials": [
+        {
+          "wallMs": 397.706,
+          "cpuMs": 327.502
+        },
+        {
+          "wallMs": 409.236,
+          "cpuMs": 333.189
+        },
+        {
+          "wallMs": 406.623,
+          "cpuMs": 326.681
+        }
+      ],
+      "medianWallMs": 406.623,
+      "maxWallMs": 409.236,
+      "medianCpuMs": 327.502
+    },
+    {
+      "scenario": "200KiB-single-frame/128B-chunks",
+      "inputBytes": 204907,
+      "chunkBytes": 128,
+      "chunkCount": 1601,
+      "frameCount": 1,
+      "pendingBytesAtEnd": 0,
+      "finallyInspectionCount": 1,
+      "trials": [
+        {
+          "wallMs": 1847.78,
+          "cpuMs": 1353.321
+        },
+        {
+          "wallMs": 1650.297,
+          "cpuMs": 1377.517
+        },
+        {
+          "wallMs": 1746.027,
+          "cpuMs": 1409.362
+        }
+      ],
+      "medianWallMs": 1746.027,
+      "maxWallMs": 1847.78,
+      "medianCpuMs": 1377.517
+    },
+    {
+      "scenario": "600-delta-frames/4KiB-chunks",
+      "inputBytes": 80892,
+      "chunkBytes": 4096,
+      "chunkCount": 20,
+      "frameCount": 600,
+      "pendingBytesAtEnd": 0,
+      "finallyInspectionCount": 1,
+      "trials": [
+        {
+          "wallMs": 3.925,
+          "cpuMs": 3.607
+        },
+        {
+          "wallMs": 2.453,
+          "cpuMs": 3.481
+        },
+        {
+          "wallMs": 2.205,
+          "cpuMs": 2.157
+        }
+      ],
+      "medianWallMs": 2.453,
+      "maxWallMs": 3.925,
+      "medianCpuMs": 3.481
+    },
+    {
+      "scenario": "600-delta-frames/128B-chunks",
+      "inputBytes": 80892,
+      "chunkBytes": 128,
+      "chunkCount": 632,
+      "frameCount": 600,
+      "pendingBytesAtEnd": 0,
+      "finallyInspectionCount": 1,
+      "trials": [
+        {
+          "wallMs": 11.226,
+          "cpuMs": 4.274
+        },
+        {
+          "wallMs": 4.779,
+          "cpuMs": 10.804
+        },
+        {
+          "wallMs": 9.06,
+          "cpuMs": 13.138
+        }
+      ],
+      "medianWallMs": 9.06,
+      "maxWallMs": 11.226,
+      "medianCpuMs": 10.804
+    }
+  ],
+  "limits": [
+    "Synthetic parser timings are not substituted into actual Run latency ledger.",
+    "Wall time includes scheduling/GC; process CPU can differ from wall due to background engine threads.",
+    "This does not prove the cause of any upstream SSE missing terminal.",
+    "Observed extreme median wall1.746s and CPU1.378s are below60s idle wait; no timeout/source/product dependency was changed."
+  ]
+}

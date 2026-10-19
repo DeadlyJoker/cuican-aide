@@ -25,13 +25,6 @@ export function notifyInstalledPluginSelectionChanged(
   );
 }
 
-/** A scoped refresh hint, never evidence of a current selection or permission. */
-export function installedPluginSelectionChangePluginId(
-  event: Event,
-): string | null {
-  return installedPluginSelectionChange(event)?.pluginId ?? null;
-}
-
 export function installedPluginSelectionChange(event: Event): Readonly<{
   pluginId: string;
   selection: PluginSelectionView | null;

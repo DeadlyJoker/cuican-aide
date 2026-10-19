@@ -1,0 +1,103 @@
+{
+  "observedAt": "2026-10-16T07:19:33.191Z",
+  "projectId": "01a13f43-094c-767a-9414-b5622b236255",
+  "threadId": "01a13f61-7f59-77ed-bd1e-c5c7c2a4d67f",
+  "originalRoleRunId": "plugin-rZfhgYn329RJuFT6nYzwh-da2HY9CWxfaTuNi6U2iZ4",
+  "runs": [
+    {
+      "runId": "plugin-pq2c_Oq7jkxFp_40avEupfXOUgtdn484rKCwbspZOSs",
+      "status": "completed",
+      "createdAt": "2026-10-15T11:45:20.906Z"
+    },
+    {
+      "runId": "plugin-PD7Shp2-C0w4j-rDGrHyIMvqOREoCBafMnAuoCgOoro",
+      "status": "canceled",
+      "createdAt": "2026-10-15T12:16:18.938Z"
+    },
+    {
+      "runId": "plugin-gN8k3c92VXmzJdCB9_SX-ZXwLv-euCx9TbpbJ0VQ2go",
+      "status": "completed",
+      "createdAt": "2026-10-15T12:50:01.613Z"
+    },
+    {
+      "runId": "plugin-zzyXsjJywNSaQWm7ALzWSw3XpAgkL6Inq3PEriQeBso",
+      "status": "completed",
+      "createdAt": "2026-10-15T14:31:15.697Z"
+    },
+    {
+      "runId": "plugin-7DebIFmDWoV0jmAkgi1mhBYp5eV0jJkKx6zyeqJcPLE",
+      "status": "canceled",
+      "createdAt": "2026-10-15T14:37:07.173Z"
+    },
+    {
+      "runId": "plugin-izj3PanFGkpcJfgwFCjPnpcl72yfe21VMZTSZ1jpfZ4",
+      "status": "completed",
+      "createdAt": "2026-10-16T02:11:01.031Z"
+    },
+    {
+      "runId": "plugin-jC2jEeM_rTi3tk4DMtmlYbgc9pGuXor8OIaSaMMttl8",
+      "status": "completed",
+      "createdAt": "2026-10-16T02:16:08.375Z"
+    },
+    {
+      "runId": "plugin-0owxtUH9uZ1oLO7Akmpy9554lR7eXHBCxBcZZw33x7A",
+      "status": "completed",
+      "createdAt": "2026-10-16T02:18:20.817Z"
+    },
+    {
+      "runId": "plugin-I8ZkBHzRr8WJd_dBDMAwF19pjhTiG_ts2DuEX2Y6tvc",
+      "status": "completed",
+      "createdAt": "2026-10-16T03:54:55.706Z"
+    },
+    {
+      "runId": "plugin-HVgpnstxv4S7_L_ZX8kliRFVHU71znSTYdh2hCcny_M",
+      "status": "completed",
+      "createdAt": "2026-10-16T06:09:04.507Z"
+    },
+    {
+      "runId": "plugin-rZfhgYn329RJuFT6nYzwh-da2HY9CWxfaTuNi6U2iZ4",
+      "status": "completed",
+      "createdAt": "2026-10-16T06:49:32.306Z"
+    }
+  ],
+  "assets": [
+    {
+      "tenant_id": "standalone-tenant",
+      "space_id": "standalone-space",
+      "project_id": "01a13f43-094c-767a-9414-b5622b236255",
+      "asset_id": "01a1437f-5f1e-7599-8e99-9ad1bf2a3f4d",
+      "owner_principal_id": "standalone-principal",
+      "kind": "character",
+      "revision": 1,
+      "latest_content_revision": 1,
+      "selected_content_revision": null,
+      "latest_reference_revision": 0,
+      "selected_reference_revision": null,
+      "locked": 0,
+      "record_json": "{\"assetId\":\"01a1437f-5f1e-7599-8e99-9ad1bf2a3f4d\",\"createdAt\":\"2026-10-16T06:56:23.326Z\",\"createdByActorId\":\"standalone-actor\",\"kind\":\"character\",\"latestContentRevision\":1,\"latestReferenceRevision\":0,\"locked\":false,\"ownerPrincipalId\":\"standalone-principal\",\"projectId\":\"01a13f43-094c-767a-9414-b5622b236255\",\"revision\":1,\"schemaVersion\":\"crewon.project-asset.v1\",\"selectedContentRevision\":null,\"selectedReferenceRevision\":null,\"spaceId\":\"standalone-space\",\"tenantId\":\"standalone-tenant\",\"updatedAt\":\"2026-10-16T06:56:23.326Z\",\"updatedByActorId\":\"standalone-actor\"}"
+    },
+    {
+      "tenant_id": "standalone-tenant",
+      "space_id": "standalone-space",
+      "project_id": "01a13f43-094c-767a-9414-b5622b236255",
+      "asset_id": "01a14380-46c6-727b-8dd7-121ef91e4afb",
+      "owner_principal_id": "standalone-principal",
+      "kind": "character",
+      "revision": 1,
+      "latest_content_revision": 1,
+      "selected_content_revision": null,
+      "latest_reference_revision": 0,
+      "selected_reference_revision": null,
+      "locked": 0,
+      "record_json": "{\"assetId\":\"01a14380-46c6-727b-8dd7-121ef91e4afb\",\"createdAt\":\"2026-10-16T06:57:22.630Z\",\"createdByActorId\":\"standalone-actor\",\"kind\":\"character\",\"latestContentRevision\":1,\"latestReferenceRevision\":0,\"locked\":false,\"ownerPrincipalId\":\"standalone-principal\",\"projectId\":\"01a13f43-094c-767a-9414-b5622b236255\",\"revision\":1,\"schemaVersion\":\"crewon.project-asset.v1\",\"selectedContentRevision\":null,\"selectedReferenceRevision\":null,\"spaceId\":\"standalone-space\",\"tenantId\":\"standalone-tenant\",\"updatedAt\":\"2026-10-16T06:57:22.630Z\",\"updatedByActorId\":\"standalone-actor\"}"
+    }
+  ],
+  "client": {
+    "originalRequestRecovered": true,
+    "originalRunAndAssetIdsVisible": true,
+    "composerCleared": true,
+    "roleStageSelected": true,
+    "manualAssetRefreshRequiredBeforeFix": true
+  },
+  "newProductionRequests": 0
+}

@@ -25,6 +25,10 @@ import {
   generationSelectionMatches,
 } from "./installed-plugin-project-generation-support.ts";
 import { pluginSecurityActor } from "./plugin-security-validation.ts";
+import {
+  observePluginGenerationPhase as observe,
+  type PluginGenerationDiagnosticPhase,
+} from "./installed-plugin-invocation-diagnostics.ts";
 
 type Dispatch = Parameters<
   PluginProjectGenerationContextDispatchPort["getReadiness"]
@@ -88,25 +92,33 @@ export async function installedProjectGenerationReadiness(
     authority.assertActive();
   };
   active();
-  await authority.assertCurrent();
+  await observe("readiness.invocation-current", () =>
+    authority.assertCurrent(),
+  );
   active();
-  const target = await generationInstalledPackage({
-    installations: dependencies.installations,
-    scope,
-    pluginId: publication.target.pluginId,
-    packageDigest: publication.target.packageDigest,
-    assertActive: active,
-  });
-  const sourceCandidate = await generationCandidate({
-    installRoot: dependencies.installRoot,
-    package: sourcePackage,
-    signal,
-  });
-  const targetCandidate = await generationCandidate({
-    installRoot: dependencies.installRoot,
-    package: target.package,
-    signal,
-  });
+  const target = await observe("readiness.target-package", () =>
+    generationInstalledPackage({
+      installations: dependencies.installations,
+      scope,
+      pluginId: publication.target.pluginId,
+      packageDigest: publication.target.packageDigest,
+      assertActive: active,
+    }),
+  );
+  const sourceCandidate = await observe("readiness.source-bytes", () =>
+    generationCandidate({
+      installRoot: dependencies.installRoot,
+      package: sourcePackage,
+      signal,
+    }),
+  );
+  const targetCandidate = await observe("readiness.target-bytes", () =>
+    generationCandidate({
+      installRoot: dependencies.installRoot,
+      package: target.package,
+      signal,
+    }),
+  );
   active();
   if (
     !sourceCandidate.descriptor.requires.some(
@@ -150,22 +162,33 @@ export async function installedProjectGenerationReadiness(
     selectionRevision: target.selection.revision,
     contributionId: publication.target.contributionId,
     action: publication.target.action,
-    authorityEpoch: await policy({
-      pluginId: target.package.pluginId,
-      packageDigest: target.package.packageDigest,
-      selectionRevision: target.selection.revision,
-      contributionId: publication.target.contributionId,
-    }),
+    authorityEpoch: await observe("readiness.target-policy", () =>
+      policy({
+        pluginId: target.package.pluginId,
+        packageDigest: target.package.packageDigest,
+        selectionRevision: target.selection.revision,
+        contributionId: publication.target.contributionId,
+      }),
+    ),
   });
+  // Keep every fence's duration but detail only the first one, so repeated
+  // authorization cannot exhaust the bounded trace before peer readiness.
+  let detailCurrent = true;
+  const detail = <T>(
+    phase: PluginGenerationDiagnosticPhase,
+    work: () => Promise<T>,
+  ) => (detailCurrent ? observe(phase, work) : work());
   const current = async () => {
     active();
-    const currentActor = await dependencies.resolveActor(
-      {
-        tenantId: actor.tenantId,
-        spaceId: actor.spaceId,
-        actorId: actor.actorId,
-      },
-      signal,
+    const currentActor = await detail("readiness.identity", () =>
+      dependencies.resolveActor(
+        {
+          tenantId: actor.tenantId,
+          spaceId: actor.spaceId,
+          actorId: actor.actorId,
+        },
+        signal,
+      ),
     );
     active();
     if (
@@ -174,7 +197,9 @@ export async function installedProjectGenerationReadiness(
     )
       generationDenied("project_generation_identity_changed");
     const currentScope = parsePluginProfileScope(
-      await dependencies.profiles.resolve(actor),
+      await detail("readiness.profile", () =>
+        dependencies.profiles.resolve(actor),
+      ),
     );
     active();
     if (!generationSame(currentScope, scope))
@@ -183,53 +208,67 @@ export async function installedProjectGenerationReadiness(
       [sourcePin, sourcePackage, sourceCandidate, "read"],
       [executionPin, target.package, targetCandidate, "submit"],
     ] as const) {
-      if ((await policy(pin)) !== pin.authorityEpoch)
+      if (
+        (await detail("readiness.policy", () => policy(pin))) !==
+        pin.authorityEpoch
+      )
         generationDenied("project_generation_plugin_authority_changed");
-      await generationCandidate({
-        installRoot: dependencies.installRoot,
-        package: pkg,
-        signal,
-        expected: candidate,
-      });
+      await detail("readiness.bytes", () =>
+        generationCandidate({
+          installRoot: dependencies.installRoot,
+          package: pkg,
+          signal,
+          expected: candidate,
+        }),
+      );
       active();
       if (
-        (await dependencies.authorizePackage(
-          { actor, scope, candidate, purpose },
-          signal,
+        (await detail("readiness.access", () =>
+          dependencies.authorizePackage(
+            { actor, scope, candidate, purpose },
+            signal,
+          ),
         )) !== "allow"
       )
         generationDenied("project_generation_execution_package_denied");
       active();
     }
-    await generationInstalledPackage({
-      installations: dependencies.installations,
-      scope,
-      pluginId: sourcePin.pluginId,
-      packageDigest: sourcePin.packageDigest,
-      expectedSelection: sourceSelection,
-      expectedPackage: sourcePackage,
-      assertActive: active,
-    });
-    await generationInstalledPackage({
-      installations: dependencies.installations,
-      scope,
-      pluginId: executionPin.pluginId,
-      packageDigest: executionPin.packageDigest,
-      expectedSelection: target.selection,
-      expectedPackage: target.package,
-      assertActive: active,
-    });
-    await authority.assertCurrent();
+    await detail("readiness.source-selection", () =>
+      generationInstalledPackage({
+        installations: dependencies.installations,
+        scope,
+        pluginId: sourcePin.pluginId,
+        packageDigest: sourcePin.packageDigest,
+        expectedSelection: sourceSelection,
+        expectedPackage: sourcePackage,
+        assertActive: active,
+      }),
+    );
+    await detail("readiness.target-selection", () =>
+      generationInstalledPackage({
+        installations: dependencies.installations,
+        scope,
+        pluginId: executionPin.pluginId,
+        packageDigest: executionPin.packageDigest,
+        expectedSelection: target.selection,
+        expectedPackage: target.package,
+        assertActive: active,
+      }),
+    );
+    await detail("readiness.invocation-current", () =>
+      authority.assertCurrent(),
+    );
     active();
   };
-  await current();
+  await observe("readiness.current", current);
+  detailCurrent = false;
   if (
     targetCandidate.descriptor.entrypoints.node === null ||
     !targetCandidate.descriptor.contributions.some(
       (item) => item.id === publication.target.contributionId,
     )
   ) {
-    await current();
+    await observe("readiness.current", current);
     return parseProjectGenerationContextUiActionResponse(parsed, {
       reference: parsed.input.reference,
       readiness: {
@@ -238,19 +277,21 @@ export async function installedProjectGenerationReadiness(
       },
     });
   }
-  const output = await read({
-    actor,
-    reference: parsed.input.reference,
-    publication,
-    sourcePin,
-    executionPin,
-    authority: Object.freeze({
-      assertCurrent: current,
-      assertTransactionCurrent: current,
-      assertActive: active,
+  const output = await observe("readiness.saved-input", () =>
+    read({
+      actor,
+      reference: parsed.input.reference,
+      publication,
+      sourcePin,
+      executionPin,
+      authority: Object.freeze({
+        assertCurrent: () => observe("readiness.current", current),
+        assertTransactionCurrent: () => observe("readiness.current", current),
+        assertActive: active,
+      }),
     }),
-  });
+  );
   // Plain JSON readiness never inherits the durable generation acknowledgement exception.
-  await current();
+  await observe("readiness.current", current);
   return parseProjectGenerationContextUiActionResponse(parsed, output);
 }

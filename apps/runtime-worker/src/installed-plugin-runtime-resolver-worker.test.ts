@@ -7,6 +7,70 @@ import { timestamp } from "../../../packages/store/src/extension-store.test-supp
 import { RuntimeWorker } from "./runtime-worker.ts";
 import { PinnedRunExecutionPolicy } from "./standalone-adapters.ts";
 import { installedResolverFixture } from "./installed-plugin-runtime-resolver.test-support.ts";
+import {
+  PluginExecutionIoPolicyError,
+  PluginExecutionIoHttpResourceError,
+} from "./plugins/plugin-execution-io-network.ts";
+
+for (const failure of [
+  new PluginExecutionIoPolicyError(),
+  new PluginExecutionIoHttpResourceError(404),
+  new PluginExecutionIoHttpResourceError(410),
+])
+  test(`installed tool ${failure.code} ends the Run instead of repeatedly reconciling an impossible request`, async (t) => {
+    const f = await installedResolverFixture(t);
+    const resolver = f.compositionResolver();
+    f.controls.onExecute = async () => {
+      throw failure;
+    };
+    const worker = new RuntimeWorker(
+      {
+        store: f.first.parent,
+        execution: new RunExecutionService({
+          store: f.first.parent,
+          clock: { now: () => timestamp },
+          ids: { nextId: () => randomUUID() },
+          digester,
+        }),
+        kernel: f.base.kernel,
+        policy: new PinnedRunExecutionPolicy(f.target),
+        toolRuntime: f.base.toolRuntime,
+        agentVersionRuntimeResolver: { resolve: () => f.base },
+        pluginTaskAdmissions: f.first.store,
+        installedPluginRuntimeResolver: resolver,
+      },
+      {
+        ownerId: randomUUID(),
+        nextLeaseId: randomUUID,
+        leaseDurationMs: 30_000,
+        retryAfterMs: 0,
+        approvalRecheckMs: 1,
+        scanIntervalMs: null,
+      },
+    );
+    try {
+      const outcome = await worker.wake();
+      assert.deepEqual(outcome, {
+        kind: "failed",
+        runId: f.run.runId,
+        code: failure.code,
+      });
+      assert.equal((await worker.wake()).kind, "idle");
+      assert.equal(
+        f.controls.records.filter((value) => value === "execute").length,
+        1,
+      );
+      assert.equal(
+        f.controls.records.filter((value) => value === "reconcile").length,
+        0,
+      );
+      const events = await f.first.parent.listRunEvents(f.task.binding, 0, 100);
+      assert.ok(events.some((event) => event.type === "run.failed"));
+    } finally {
+      await worker.close();
+      await resolver.close();
+    }
+  });
 
 for (const backend of ["sqlite", "postgres"] as const)
   test(

@@ -1,4 +1,5 @@
 // @vitest-environment happy-dom
+import { ControlApiTransportError } from "@crewon/control-client";
 import { afterEach, describe, expect, it, vi } from "vitest";
 import { PLUGIN_UI_RECOVERY_VERSION } from "@crewon/contracts/plugins";
 import type { PluginUiMountHandle } from "./trustedPluginUiLoader";
@@ -184,14 +185,19 @@ describe.each([false, true])(
     it("a lost stage ACK leaves the original key UNKNOWN and performs no business invoke", async () => {
       const f = recoveryHostFixture(native);
       handles.push(await f.mount());
+      const lostResponse = new Error("stage_ack_lost");
       f.setStage(() => {
-        throw new Error("stage_ack_lost");
+        throw lostResponse;
       });
       const original = recoveryRequests[2],
         service = f.h.instances[0].services;
       await expect(
         service.invoke(original.action, original.input, {}),
-      ).rejects.toThrow("stage_ack_lost");
+      ).rejects.toMatchObject({
+        constructor: ControlApiTransportError,
+        message: "control_api_transport_unavailable",
+        cause: lostResponse,
+      });
       expect(f.wire("/actions")).toHaveLength(0);
       expect(f.selectionJournal.snapshot()[0]).toMatchObject({
         phase: "uncertain",

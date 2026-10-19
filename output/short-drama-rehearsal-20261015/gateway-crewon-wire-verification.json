@@ -1,0 +1,14 @@
+{
+  "boundary": "Actual Rust captured synthetic byte output, real CrewON SSE parser and direct HTTP transport; no live model, store, tool or commercial footage.",
+  "before": {
+    "bytes": 161,
+    "outcome": "responses_event_json_invalid"
+  },
+  "after": {
+    "bytes": 125,
+    "sseEvents": 1,
+    "protocolCompleted": 1,
+    "responseKeptOpen": true,
+    "elapsedMs": 19.105
+  }
+}

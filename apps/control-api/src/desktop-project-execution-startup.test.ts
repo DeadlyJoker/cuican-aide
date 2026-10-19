@@ -448,3 +448,32 @@ test(
     );
   },
 );
+
+test(
+  "Native metadata remains available without an execution owner while generation and query grants stay absent",
+  nativeOnly,
+  async (t) => {
+    const f = await executionStartupFixture(t);
+    const startup = composeDesktopProjectStartup({
+      configuration: f.input.configuration,
+      actor: f.input.actor,
+    });
+    assert.ok(startup.creativeProjects?.pluginUi);
+    assert.equal(startup.uiRecovery, undefined);
+    assert.equal(startup.creativeProjects.pluginGenerations, undefined);
+    assert.equal(startup.creativeProjects.pluginQueries, undefined);
+    assert.equal(startup.creativeProjects.historicalQueries, undefined);
+    assert.doesNotThrow(() =>
+      captureStandaloneCreativeProjectCompositionConfig(
+        startup.creativeProjects,
+      ),
+    );
+    // A copied DTO cannot select this fallback or issue any Native capability.
+    assert.throws(() =>
+      composeDesktopProjectStartup({
+        configuration: structuredClone(f.input.configuration),
+        actor: f.input.actor,
+      }),
+    );
+  },
+);

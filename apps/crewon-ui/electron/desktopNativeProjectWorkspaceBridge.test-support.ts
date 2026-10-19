@@ -103,8 +103,17 @@ export async function nativeProjectWorkspaceBridgeFixture(
     child.stdout?.resume();
     child.stderr?.resume();
     children.push({ child, terminated });
-    await waitMessage(child, (value) => value.kind === "fixture.ready");
-    return child;
+    try {
+      await waitMessage(child, (value) => value.kind === "fixture.ready");
+      return child;
+    } catch (error) {
+      // No caller receives the fixture on startup failure, so this owner must
+      // join its real process and pipes before releasing the Native resources.
+      if (child.exitCode === null && child.signalCode === null)
+        child.kill("SIGTERM");
+      await terminated;
+      throw error;
+    }
   }
   let control: ChildProcess;
   try {

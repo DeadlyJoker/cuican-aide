@@ -1,0 +1,132 @@
+{
+  "recordedAt": "2026-10-15T11:32:36.624000+00:00",
+  "database": "/private/tmp/crewon-plugin-performance-20261015/final-profile/control-runtime-v1/control.sqlite",
+  "projectId": "01a13f43-094c-767a-9414-b5622b236255",
+  "status": "created and brief saved; conversation blocked before model execution; no adopted outline or script",
+  "counts": {
+    "creative_projects": 1,
+    "creative_project_briefs": 1,
+    "project_foundations": 1,
+    "project_conversation_bindings": 0,
+    "project_text_artifacts": 0,
+    "project_text_revisions": 0
+  },
+  "records": {
+    "creative_projects": [
+      {
+        "tenant_id": "standalone-tenant",
+        "space_id": "standalone-space",
+        "project_id": "01a13f43-094c-767a-9414-b5622b236255",
+        "owner_principal_id": "standalone-principal",
+        "revision": 2,
+        "state": "active",
+        "latest_brief_revision": 1,
+        "updated_at": "2026-10-15T11:12:00.332Z",
+        "record_json": {
+          "createdAt": "2026-10-15T11:12:00.332Z",
+          "createdByActorId": "standalone-actor",
+          "kind": "short-drama",
+          "latestBriefRevision": 1,
+          "ownerPrincipalId": "standalone-principal",
+          "projectId": "01a13f43-094c-767a-9414-b5622b236255",
+          "revision": 2,
+          "schemaVersion": "crewon.creative-project.v0",
+          "spaceId": "standalone-space",
+          "state": "active",
+          "tenantId": "standalone-tenant",
+          "title": "重录",
+          "updatedAt": "2026-10-15T11:12:00.332Z",
+          "updatedByActorId": "standalone-actor"
+        }
+      }
+    ],
+    "creative_project_briefs": [
+      {
+        "tenant_id": "standalone-tenant",
+        "space_id": "standalone-space",
+        "project_id": "01a13f43-094c-767a-9414-b5622b236255",
+        "brief_revision": 1,
+        "content_digest": "sha256:196c53948a151398a9054667aaab83841aae20b171accaf658fbefe5f09d4106",
+        "record_json": {
+          "briefRevision": 1,
+          "contentDigest": "sha256:196c53948a151398a9054667aaab83841aae20b171accaf658fbefe5f09d4106",
+          "createdAt": "2026-10-15T11:12:00.332Z",
+          "createdByActorId": "standalone-actor",
+          "projectId": "01a13f43-094c-767a-9414-b5622b236255",
+          "schemaVersion": "crewon.project-brief-revision.v0",
+          "spaceId": "standalone-space",
+          "tenantId": "standalone-tenant",
+          "text": "新建短剧《重录》。1集90秒，16:9，现实职场悬疑，克制、可实拍。最终交付完整剧本和12镜可拍摄分镜，镜头含起止时间码、时长、景别、机位与动作、对白、声音及剪辑，合计90秒。只做文字，不生图、不上传、不制作视频。请先按当前阶段保存真实创作方案候选，等我确认后再继续大纲、剧本；不要只在聊天里写方案，不修改其他项目。\n\n故事：关门后的小店柜台，仅成年员工林夏和店主周成两人。周成先说“明天不用来了。钥匙留下”，掌心压着写有“林夏3200”的工资信封。他说“欠你的三千二，念完给。一口气录完”，逼她用自己的手机前置录像，念“自愿离职，感谢店里培养，工资已经结清”。林夏为了今天拿到钱先配合，却在“工资已经……”处看向仍在他手边的信封，停下问“钱呢？”他让她重来、笑一下；她挤出笑再念到“自愿……”时被催“别停啊”。她的笑落下，手机从开始后始终没有停止录像。她转动整部手机，让前置镜头与屏幕一起朝周成，问“这三千二，什么时候给？”他看见录制计时，收回一点信封：“你非要这么弄，今天就别拿了。”她看钱、犹豫，再把整部手机转回自己：“明天不用来，是你说的。三千二，我没拿到。‘自愿’，我不念。”她这才停止录像，左手把一直攥着的店钥匙放下，右手带自己的手机离开。结尾柜台是钥匙、正面朝上的虚假结清台词纸、周成手边未交付的信封，脚步声远去。她没有拿到工资，选择有代价。\n\n连续性：一处柜台，两名演员，手机一部，纸、钥匙、信封、普通桌灯。右手持机、左手攥钥匙，不翻纸、不换手机、不切出录像查账。“重来”只重念，不停录。45秒左右整机转向周成，64秒左右转回，80秒后才停录；外部摄影机始终在柜台同一端取角。工资靠台词与未交付动作交代，不数现金，不搞法条、取证逼款、第三人救场、云备份、巧合或鸡汤旁白。剧本将镜头表保存于scenes[].action、对白保存于dialogue。先保证因果、节奏与人物选择。"
+        }
+      }
+    ],
+    "project_foundations": [
+      {
+        "tenant_id": "standalone-tenant",
+        "space_id": "standalone-space",
+        "project_id": "01a13f43-094c-767a-9414-b5622b236255",
+        "owner_principal_id": "standalone-principal",
+        "origin": "creative",
+        "revision": 1,
+        "parameters_revision": 1,
+        "record_json": {
+          "confirmedProposal": null,
+          "createdAt": "2026-10-15T11:12:00.332Z",
+          "createdByActorId": "standalone-actor",
+          "creativeStartMode": "confirm-plan",
+          "origin": "creative",
+          "ownerPrincipalId": "standalone-principal",
+          "parameters": {
+            "adaptation": null,
+            "aspectRatio": "16:9",
+            "episodeCount": null,
+            "episodeDurationSeconds": null,
+            "episodeMode": "series",
+            "genre": null,
+            "needsArt": true,
+            "needsCharacters": true,
+            "visualStyle": null
+          },
+          "parametersRevision": 1,
+          "projectId": "01a13f43-094c-767a-9414-b5622b236255",
+          "revision": 1,
+          "schemaVersion": "crewon.project-foundation.v1",
+          "source": null,
+          "spaceId": "standalone-space",
+          "tenantId": "standalone-tenant",
+          "updatedAt": "2026-10-15T11:12:00.332Z",
+          "updatedByActorId": "standalone-actor"
+        }
+      }
+    ],
+    "project_conversation_bindings": [],
+    "project_text_artifacts": [],
+    "project_text_revisions": []
+  },
+  "existingProjectCheckpoint": {
+    "creative_projects": {
+      "count": 2,
+      "sha256": "e59b2ee73712633edb99138812641fe6ec59fa938f6bbd7339185b5f4b296548"
+    },
+    "creative_project_briefs": {
+      "count": 2,
+      "sha256": "732b61fbc1e06b7386c6fd417b277cfd66a8dae4dfc2e9b8bd84c24f7253e266"
+    },
+    "project_foundations": {
+      "count": 1,
+      "sha256": "dd5f439a55b5a073cdd5762b959012642258327c2b0e3cd7b807f21cf4506f61"
+    },
+    "project_conversation_bindings": {
+      "count": 2,
+      "sha256": "d0c96eec60cf8e219104816804c9fb38f6bbf5dbb12f46790f35aba8dd39a619"
+    },
+    "project_text_artifacts": {
+      "count": 1,
+      "sha256": "5acc3953bbe8f59f18c3b61e6f95e3e34851b950e44b950dfcb37e2ec37612fa"
+    },
+    "project_text_revisions": {
+      "count": 7,
+      "sha256": "0cc0d4249c1b66f365ff630ffaa21b056c28891b478badf2bbb26a9d51795425"
+    }
+  }
+}

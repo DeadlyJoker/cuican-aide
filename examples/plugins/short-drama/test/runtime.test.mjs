@@ -66,7 +66,7 @@ function context(overrides = {}) {
     ...overrides,
   };
 }
-function factory(tasks) {
+function factory(tasks, mediaExecution) {
   let factory;
   let actions;
   const disposers = [];
@@ -78,6 +78,7 @@ function factory(tasks) {
     },
     services: {
       getOptional(service, apiVersion) {
+        if (service === "crewon.project-media-execution") return mediaExecution;
         if (service === "crewon.tasks") {
           assert.equal(apiVersion, "2");
           return tasks;
@@ -183,7 +184,10 @@ function fixture(options = {}) {
       },
     },
   };
-  const runtime = factory().factory.create(ctx, services);
+  const runtime = factory(undefined, options.mediaExecution).factory.create(
+    ctx,
+    services,
+  );
   function command(
     name = SUBMIT,
     input = { prompt: "写实人物照片" },
@@ -927,3 +931,400 @@ test("an old unknown ACK cannot release the same execution while physical reconc
   assert.equal(f.runtime.canRetire(), true);
   await f.runtime.close();
 });
+
+function panelContext() {
+  const value = context();
+  value.configuration.parameters.serviceProtocol = "workflow-panel-v1";
+  return value;
+}
+
+test("workflow panel submits the fixed graph once and observes the provider's returned id with canonical image URLs", async () => {
+  const f = fixture({
+    context: panelContext(),
+    request(request) {
+      if (request.method === "POST") {
+        assert.equal(request.path, "/api/workflow/generate");
+        assert.equal(request.body.source, "quick");
+        assert.equal(
+          request.body.workflow_template["29"].class_type,
+          "SaveImage",
+        );
+        assert.equal(
+          request.body.workflow_template["51"].inputs.text,
+          "测试剧情角色",
+        );
+        assert.equal(request.body.prompt_id, request.body.client_id);
+        assert.equal(Object.hasOwn(request.body, "workflow_id"), false);
+        return { success: true, prompt_id: providerId };
+      }
+      assert.equal(
+        request.path,
+        "/api/comfy/proxy/history?prompt_id=" + providerId,
+      );
+      return {
+        [providerId]: {
+          status: { completed: true, status_str: "success" },
+          outputs: {
+            29: {
+              images: [
+                {
+                  filename: "image one.png",
+                  subfolder: "scene",
+                  type: "output",
+                },
+              ],
+            },
+          },
+        },
+      };
+    },
+  });
+  const command = f.command(SUBMIT, { prompt: "测试剧情角色" });
+  const submitted = await f.runtime.execute(command, signal());
+  const observed = await f.runtime.execute(
+    f.command(OBSERVE, { operationId: submitted.providerReceiptId }, 2),
+    signal(),
+  );
+  const output = JSON.parse(observed.result.output);
+  assert.equal(output.status, "succeeded");
+  assert.equal(
+    output.images[0].url,
+    "https://comfy.example/api/comfy/view?filename=image+one.png&subfolder=scene&type=output",
+  );
+  await f.runtime.execute(command, signal());
+  assert.equal(f.requests.filter((r) => r.method === "POST").length, 1);
+  await f.runtime.close();
+});
+
+test("panel lost response and missing process history stay unknown after cold reconciliation without resubmission", async () => {
+  const f = fixture({
+    context: panelContext(),
+    request() {
+      throw new Error("lost panel reply");
+    },
+  });
+  const command = f.command();
+  const submitted = await f.runtime.execute(command, signal());
+  assert.equal(submitted.status, "unknownOutcome");
+  await f.runtime.close();
+  const cold = fixture({
+    context: panelContext(),
+    operations: f.operations,
+    request(r) {
+      assert.equal(r.method, "GET");
+      return r.path.includes("/history?")
+        ? {}
+        : { queue_running: [], queue_pending: [] };
+    },
+  });
+  assert.equal(
+    (await cold.runtime.reconcile(command, signal())).status,
+    "unknownOutcome",
+  );
+  assert.deepEqual(
+    cold.requests.map((r) => r.path),
+    [
+      "/api/comfy/proxy/history?prompt_id=" + submitted.providerReceiptId,
+      "/api/comfy/proxy/queue",
+    ],
+  );
+  await cold.runtime.close();
+  const native = fixture({ operations: f.operations });
+  await assert.rejects(
+    () => native.runtime.reconcile(command, signal()),
+    /operation_identity_conflict/,
+  );
+  assert.equal(native.requests.length, 0);
+  await native.runtime.close();
+});
+
+test("unknown service protocols fail before network IO", () => {
+  for (const serviceProtocol of [
+    null,
+    true,
+    "https://other.example/api",
+    "workflow-panel-v2",
+  ]) {
+    const ctx = context();
+    ctx.configuration.parameters.serviceProtocol = serviceProtocol;
+    assert.throws(() => fixture({ context: ctx }), /service_protocol_invalid/);
+  }
+});
+
+function savedApiContext(preset = "api-c16-scene") {
+  const ctx = context();
+  ctx.configuration.parameters = {
+    ...ctx.configuration.parameters,
+    preset,
+    serviceProtocol: "workflow-api-v1",
+  };
+  return ctx;
+}
+
+test("saved C16 API uses its actual aliases and exact output58; one operation never dispatches twice", async () => {
+  const f = fixture({
+    context: savedApiContext(),
+    request(r) {
+      if (r.method === "POST") {
+        assert.equal(r.path, "/api/workflow/generate");
+        assert.equal(
+          r.body.workflow_id,
+          "API-C16-短剧文生图专用-支持场景-角色",
+        );
+        assert.deepEqual(Object.keys(r.body.input_values).sort(), [
+          "prompt_2",
+          "seed",
+          "value",
+          "value_2",
+        ]);
+        assert.equal(r.body.input_values.prompt_2, "闭店柜台，无人空场");
+        assert.equal(r.body.input_values.value, 1280);
+        assert.equal(r.body.input_values.value_2, 720);
+        assert.equal(Object.hasOwn(r.body, "workflow_template"), false);
+        assert.equal(Object.hasOwn(r.body, "source"), false);
+        assert.equal(r.body.prompt_id, r.body.client_id);
+        return { success: true, prompt_id: providerId };
+      }
+      assert.equal(r.path, "/api/comfy/proxy/history?prompt_id=" + providerId);
+      return {
+        [providerId]: {
+          status: { completed: true, status_str: "success" },
+          outputs: {
+            29: {
+              images: [
+                { filename: "unrelated.png", subfolder: "", type: "output" },
+              ],
+            },
+            58: {
+              images: [
+                {
+                  filename: "saved-scene.png",
+                  subfolder: "crewon",
+                  type: "output",
+                },
+              ],
+            },
+          },
+        },
+      };
+    },
+  });
+  const command = f.command(SUBMIT, { prompt: "闭店柜台，无人空场" });
+  const accepted = await f.runtime.execute(command, signal());
+  const observed = await f.runtime.execute(
+    f.command(OBSERVE, { operationId: accepted.providerReceiptId }, 2),
+    signal(),
+  );
+  const output = JSON.parse(observed.result.output);
+  assert.equal(output.status, "succeeded");
+  assert.equal(output.images.length, 1);
+  assert.equal(
+    output.images[0].url,
+    "https://comfy.example/api/comfy/view?filename=saved-scene.png&subfolder=crewon&type=output",
+  );
+  await f.runtime.execute(command, signal());
+  assert.equal(f.requests.filter((r) => r.method === "POST").length, 1);
+  await f.runtime.close();
+});
+
+test("saved portrait and T4 APIs keep their distinct dimensions and prompt aliases", async () => {
+  for (const [preset, expected] of [
+    [
+      "api-c16-portrait",
+      { value: 768, value_2: 1024, prompt_2: "原创成年角色" },
+    ],
+    [
+      "api-t4-three-view",
+      { width: 1920, height: 1080, value: false, prompt: "原创成年角色" },
+    ],
+  ]) {
+    const f = fixture({ context: savedApiContext(preset) });
+    await f.runtime.execute(
+      f.command(SUBMIT, { prompt: "原创成年角色" }),
+      signal(),
+    );
+    const values = f.requests[0].body.input_values;
+    for (const [k, v] of Object.entries(expected)) assert.equal(values[k], v);
+    assert.equal(Object.hasOwn(values, "seed"), preset !== "api-t4-three-view");
+    await f.runtime.close();
+  }
+});
+
+test("lost saved-API replies recover the original operation and cannot be reinterpreted as a local graph", async () => {
+  const f = fixture({
+    context: savedApiContext(),
+    request() {
+      throw new Error("lost saved API reply");
+    },
+  });
+  const command = f.command();
+  const accepted = await f.runtime.execute(command, signal());
+  assert.equal(accepted.status, "unknownOutcome");
+  await f.runtime.close();
+  const cold = fixture({
+    context: savedApiContext(),
+    operations: f.operations,
+    request(r) {
+      assert.equal(r.method, "GET");
+      return r.path.includes("history?")
+        ? {}
+        : { queue_running: [], queue_pending: [] };
+    },
+  });
+  assert.equal(
+    (await cold.runtime.reconcile(command, signal())).status,
+    "unknownOutcome",
+  );
+  assert.equal(
+    cold.requests.some((r) => r.method === "POST"),
+    false,
+  );
+  await cold.runtime.close();
+  const different = fixture({
+    context: panelContext(),
+    operations: f.operations,
+  });
+  await assert.rejects(
+    () => different.runtime.reconcile(command, signal()),
+    /operation_identity_conflict/,
+  );
+  assert.equal(different.requests.length, 0);
+  await different.runtime.close();
+});
+
+test("saved API and local graph presets cannot silently cross protocols", () => {
+  for (const [preset, serviceProtocol] of [
+    ["api-c16-scene", "native"],
+    ["api-c16-scene", "workflow-panel-v1"],
+    ["krea2-portrait", "workflow-api-v1"],
+    ["unknown-api", "workflow-api-v1"],
+  ]) {
+    const ctx = context();
+    ctx.configuration.parameters = {
+      ...ctx.configuration.parameters,
+      preset,
+      serviceProtocol,
+    };
+    assert.throws(() => fixture({ context: ctx }), /configuration_invalid/);
+  }
+});
+
+for (const protocol of ["native", "workflow-panel-v1", "workflow-api-v1"])
+  test(`project media ${protocol}: packaged Tool runtime submits the reviewed graph once and cold observation never re-submits`, async () => {
+    const module = await import(
+      process.env.CREWON_SHORT_DRAMA_PLUGIN_DIR
+        ? pathToFileURL(
+            join(process.env.CREWON_SHORT_DRAMA_PLUGIN_DIR, "node.mjs"),
+          ).href
+        : `../dist/${version}/node.mjs`
+    );
+    const reviewed = module.referenceWorkflowCatalog.find(
+      (w) => w.workflowId === "krea2-reference-four-view",
+    );
+    const workflow = {
+      workflowId: reviewed.workflowId,
+      workflowDigest: reviewed.workflowDigest,
+      output: { kind: "image", nodeId: "129", dimensions: "workflow-native" },
+    };
+    const reference = {
+      schemaVersion: "crewon.project-media-generation-reference.v1",
+      projectId: "project",
+      mediaInputId: "media",
+      executionId: "media-execution",
+      inputRevision: 1,
+      expectedInputRevision: 1,
+      mediaInputDigest: digest("media"),
+      workflowId: workflow.workflowId,
+      materials: [{ role: "character" }],
+    };
+    const operations = new Map();
+    const mediaExecution = {
+      async readInput() {
+        const operation = [...operations.values()][0];
+        return operation
+          ? { kind: "existing", reference, workflow, operation }
+          : {
+              kind: "new",
+              reference,
+              workflow,
+              prompt: "同一原创成年角色四视图",
+              targetServiceOrigin: "https://comfy.example/",
+              images: {
+                character: {
+                  filename: "material-prepared.png",
+                  subfolder: "",
+                  type: "input",
+                },
+              },
+            };
+      },
+      async readOperation() {
+        const operation = [...operations.values()][0];
+        return operation
+          ? { kind: "existing", reference, workflow, operation }
+          : null;
+      },
+    };
+    const ctx = context();
+    ctx.configuration.parameters.serviceProtocol = protocol;
+    const options = {
+      context: ctx,
+      operations,
+      mediaExecution,
+      request(q) {
+        if (q.method === "POST") {
+          assert.equal(
+            q.path,
+            protocol === "native" ? "/prompt" : "/api/workflow/generate",
+          );
+          const graph =
+            protocol === "native" ? q.body.prompt : q.body.workflow_template;
+          assert.equal(
+            graph["146"].inputs.image,
+            "material-prepared.png [input]",
+          );
+          if (protocol !== "native") {
+            assert.equal(q.body.source, "quick");
+            assert.equal(Object.hasOwn(q.body, "workflow_id"), false);
+          }
+          return { success: true, prompt_id: providerId };
+        }
+        assert.equal(
+          q.path,
+          protocol === "native"
+            ? `/history/${providerId}`
+            : `/api/comfy/proxy/history?prompt_id=${providerId}`,
+        );
+        return {
+          [providerId]: {
+            status: { completed: true, status_str: "success" },
+            outputs: {
+              129: {
+                images: [
+                  { filename: "four-view.png", subfolder: "", type: "output" },
+                ],
+              },
+            },
+          },
+        };
+      },
+    };
+    const f = fixture(options),
+      command = f.command("crewon_short_drama__media_submit", {});
+    assert.equal(
+      (await f.runtime.execute(command, signal())).status,
+      "completed",
+    );
+    assert.equal(f.requests.filter((q) => q.method === "POST").length, 1);
+    const cold = fixture(options);
+    assert.equal(
+      (await cold.runtime.reconcile(command, signal())).status,
+      "completed",
+    );
+    assert.equal(cold.requests.filter((q) => q.method === "POST").length, 0);
+    const result = JSON.parse([...operations.values()][0].resultJson);
+    assert.equal(
+      result.images[0].url,
+      `https://comfy.example${protocol === "native" ? "/view" : "/api/comfy/view"}?filename=four-view.png&subfolder=&type=output`,
+    );
+  });

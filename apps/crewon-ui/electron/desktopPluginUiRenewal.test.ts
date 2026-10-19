@@ -381,6 +381,206 @@ describe("native asset owner lease renewal", () => {
   );
 });
 
+describe("authenticated renewal reconciliation", () => {
+  it("defers an interrupted preflight only after Control confirms the same unexpired lease, and resumes queued asset reads", async () => {
+    vi.useFakeTimers();
+    const f = fixture(),
+      binding = await f.adopt();
+    let first = true;
+    f.state.handler = (url, init) => {
+      if (first) {
+        first = false;
+        throw new TypeError("named preflight transport interrupted");
+      }
+      if (url.pathname.includes("/assets/"))
+        return new Response(f.bytes, {
+          headers: { "content-type": "text/javascript; charset=utf-8" },
+        });
+      return json(f.state.lease);
+    };
+    const renewal = f.owner.renewResult(binding.bindingRef);
+    await flush();
+    const reading = f.owner.read(new Request(binding.entryUrl));
+    await vi.advanceTimersByTimeAsync(5_001);
+    expect(await renewal).toEqual({ kind: "deferred", lease: f.lease });
+    expect(new Uint8Array(await (await reading).arrayBuffer())).toEqual(
+      f.bytes,
+    );
+    expect(f.state.lease.expiresAt).toBe(f.lease.expiresAt);
+    expect(f.posts()).toHaveLength(0);
+    expect(f.owner.allows(binding.entryUrl)).toBe(true);
+    expect(f.owner.usage).toMatchObject({
+      bindings: 1,
+      requests: 0,
+      operations: 0,
+      reservedBytes: 0,
+    });
+  });
+
+  it("reconciles a lost renewal acknowledgement from the authenticated current lease without another POST", async () => {
+    const f = fixture(),
+      binding = await f.adopt();
+    f.state.handler = (_url, init) => {
+      if (init.method === "POST") {
+        f.state.lease = {
+          ...f.state.lease,
+          expiresAt: new Date(
+            Date.parse(f.lease.expiresAt) + 60_000,
+          ).toISOString(),
+        };
+        throw new TypeError("named response connection lost after CAS");
+      }
+      return json(f.state.lease);
+    };
+    expect(await f.owner.renewResult(binding.bindingRef)).toEqual({
+      kind: "renewed",
+      lease: f.state.lease,
+    });
+    expect(f.posts()).toHaveLength(1);
+    expect(f.owner.allows(binding.entryUrl)).toBe(true);
+    expect(f.owner.usage.bindings).toBe(1);
+  });
+
+  it("reconciles a body deadline after its reader cancellation physically succeeds", async () => {
+    const f = fixture(),
+      binding = await f.adopt();
+    const deadline = new AbortController();
+    const timeout = vi
+      .spyOn(AbortSignal, "timeout")
+      .mockReturnValueOnce(deadline.signal);
+    let reads = 0;
+    f.state.handler = () =>
+      ++reads === 1
+        ? new Response(new ReadableStream({ cancel() {} }), {
+            headers: { "content-type": "application/json" },
+          })
+        : json(f.lease);
+    try {
+      const renewal = f.owner.renewResult(binding.bindingRef);
+      await flush();
+      deadline.abort(new DOMException("fixture deadline", "TimeoutError"));
+      expect(await renewal).toEqual({ kind: "deferred", lease: f.lease });
+      expect(reads).toBe(2);
+      expect(f.posts()).toHaveLength(0);
+      expect(f.owner.allows(binding.entryUrl)).toBe(true);
+    } finally {
+      timeout.mockRestore();
+    }
+  });
+
+  it("never defers a body timeout when cancelling its physical reader fails", async () => {
+    const f = fixture(),
+      binding = await f.adopt();
+    const deadline = new AbortController();
+    const timeout = vi
+      .spyOn(AbortSignal, "timeout")
+      .mockReturnValue(deadline.signal);
+    f.state.handler = () =>
+      new Response(
+        new ReadableStream({
+          cancel() {
+            throw new Error("named physical reader cancellation failed");
+          },
+        }),
+        { headers: { "content-type": "application/json" } },
+      );
+    try {
+      const refusal = expect(
+        f.owner.renewResult(binding.bindingRef),
+      ).rejects.toThrow();
+      await flush();
+      deadline.abort(new DOMException("fixture deadline", "TimeoutError"));
+      await refusal;
+      expect(f.owner.allows(binding.entryUrl)).toBe(false);
+      expect(f.owner.usage.bindings).toBe(1);
+      expect(f.posts()).toHaveLength(0);
+      await expect(f.owner.close()).rejects.toThrow();
+    } finally {
+      timeout.mockRestore();
+      owners.splice(owners.indexOf(f.owner), 1);
+    }
+  });
+
+  it("can defer an interrupted pre-renewal validation without sending a POST", async () => {
+    const f = fixture(),
+      binding = await f.adopt();
+    let reads = 0;
+    f.state.handler = () => {
+      if (++reads === 1)
+        throw new TypeError("named validation connection lost");
+      return json(f.state.lease);
+    };
+    expect(await f.owner.renewResult(binding.bindingRef)).toEqual({
+      kind: "deferred",
+      lease: f.lease,
+    });
+    expect(reads).toBe(2);
+    expect(f.posts()).toHaveLength(0);
+    expect(f.owner.allows(binding.entryUrl)).toBe(true);
+  });
+
+  for (const refusal of ["permission", "pin", "offline", "session"] as const)
+    it(`never defers a transient failure when reconciliation loses ${refusal}`, async () => {
+      const f = fixture(),
+        binding = await f.adopt();
+      let failed = false;
+      f.state.handler = (_url, init) => {
+        if (init.method === "POST") {
+          failed = true;
+          if (refusal === "session") f.state.generation++;
+          throw new TypeError("named renewal connection lost");
+        }
+        if (failed) {
+          if (refusal === "permission") return json({}, 403);
+          if (refusal === "offline")
+            throw new TypeError("named reconciliation still offline");
+          if (refusal === "pin")
+            return json({
+              ...f.state.lease,
+              selectionRevision: f.lease.selectionRevision + 1,
+              expiresAt: new Date(
+                Date.parse(f.lease.expiresAt) + 60_000,
+              ).toISOString(),
+            });
+        }
+        return json(f.state.lease);
+      };
+      await expect(f.owner.renewResult(binding.bindingRef)).rejects.toThrow();
+      expect(f.posts()).toHaveLength(1);
+      expect(f.owner.allows(binding.entryUrl)).toBe(false);
+      expect(f.owner.usage.bindings).toBe(0);
+    });
+
+  it("retains an abort-ignoring physical renewal until it really settles before reconciling", async () => {
+    vi.useFakeTimers();
+    const f = fixture(),
+      binding = await f.adopt(),
+      held = deferred<Response>();
+    let reads = 0,
+      settled = false;
+    f.state.handler = (_url, init) =>
+      init.method === "POST" ? held.promise : (reads++, json(f.state.lease));
+    const renewal = f.owner.renewResult(binding.bindingRef).finally(() => {
+      settled = true;
+    });
+    const rejected = expect(renewal).rejects.toThrow("renewal_outcome_unknown");
+    await flush();
+    await vi.advanceTimersByTimeAsync(5_001);
+    expect(settled).toBe(false);
+    expect(reads).toBe(1);
+    expect(f.owner.usage).toMatchObject({ requests: 1, operations: 1 });
+    held.reject(new TypeError("named physical transport finally ended"));
+    await rejected;
+    expect(reads).toBe(2);
+    expect(f.posts()).toHaveLength(1);
+    expect(f.owner.usage).toMatchObject({
+      requests: 0,
+      operations: 0,
+      bindings: 0,
+    });
+  });
+});
+
 describe("renewal IPC registration and original preload wire", () => {
   it("uses the original file main-frame sender guard and removes the new handler on destruction", async () => {
     const f = fixture(),
@@ -406,17 +606,20 @@ describe("renewal IPC registration and original preload wire", () => {
       ipc as unknown as IpcMain,
     );
     const renew = handlers.get("crewon:plugin-ui:renew-v1")!;
-    for (const event of [
-      { sender: {}, senderFrame: frame },
-      { sender: contents, senderFrame: {} },
-    ])
-      expect(() => renew(event, binding.bindingRef)).toThrow(
-        "desktop_plugin_ui_sender_invalid",
-      );
+    const renewResult = handlers.get("crewon:plugin-ui:renew-result-v1")!;
+    for (const handler of [renew, renewResult])
+      for (const event of [
+        { sender: {}, senderFrame: frame },
+        { sender: contents, senderFrame: {} },
+      ])
+        expect(() => handler(event, binding.bindingRef)).toThrow(
+          "desktop_plugin_ui_sender_invalid",
+        );
     frame.url = "https://foreign.example/";
-    expect(() =>
-      renew({ sender: contents, senderFrame: frame }, binding.bindingRef),
-    ).toThrow("desktop_plugin_ui_sender_invalid");
+    for (const handler of [renew, renewResult])
+      expect(() =>
+        handler({ sender: contents, senderFrame: frame }, binding.bindingRef),
+      ).toThrow("desktop_plugin_ui_sender_invalid");
     expect(f.posts()).toHaveLength(0);
     frame.url = "file:///named-fixture/index.html";
     const renewed = await renew(
@@ -425,7 +628,7 @@ describe("renewal IPC registration and original preload wire", () => {
     );
     expect(renewed).toEqual(f.state.lease);
     expect(f.posts()).toHaveLength(1);
-    expect(handlers.size).toBe(4);
+    expect(handlers.size).toBe(5);
     const onDestroyed = destroyed as (() => void) | null;
     expect(onDestroyed).not.toBeNull();
     onDestroyed!();
@@ -445,6 +648,16 @@ describe("renewal IPC registration and original preload wire", () => {
     expect(await bridge.pluginUiAssets?.renew?.("a".repeat(64))).toBe(lease);
     expect(wire.invoke).toHaveBeenCalledExactlyOnceWith(
       "crewon:plugin-ui:renew-v1",
+      "a".repeat(64),
+    );
+    wire.invoke.mockClear();
+    const deferred = { kind: "deferred", lease } as const;
+    wire.invoke.mockResolvedValueOnce(deferred);
+    expect(await bridge.pluginUiAssets?.renewResult?.("a".repeat(64))).toBe(
+      deferred,
+    );
+    expect(wire.invoke).toHaveBeenCalledExactlyOnceWith(
+      "crewon:plugin-ui:renew-result-v1",
       "a".repeat(64),
     );
   });

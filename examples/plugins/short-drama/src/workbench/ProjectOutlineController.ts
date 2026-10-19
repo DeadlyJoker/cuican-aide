@@ -39,11 +39,18 @@ export class ProjectOutlineController {
   #ready = false;
   #disposed = false;
   #epoch = 0;
+  #invalidated = false;
+  #historySelected = false;
+  #physicalWritesPending: () => boolean;
   #snapshot = initial();
   #reads = new Map<string, AbortController>();
   #listeners = new Set<() => void>();
-  constructor(client: PluginProjectOutlineUiClient) {
+  constructor(
+    client: PluginProjectOutlineUiClient,
+    ports: { physicalWritesPending?: () => boolean } = {},
+  ) {
     this.#client = client;
+    this.#physicalWritesPending = ports.physicalWritesPending ?? (() => false);
   }
   getSnapshot = () => this.#snapshot;
   subscribe = (listener: () => void) => {
@@ -72,20 +79,46 @@ export class ProjectOutlineController {
     this.#epoch++;
     this.#abort();
     this.#projectId = projectId;
+    this.#invalidated = false;
+    this.#historySelected = false;
     this.#snapshot = initial();
     this.#emit();
   }
-  async refresh() {
+  invalidate(projectId: string) {
+    if (this.#disposed || projectId !== this.#projectId) return;
+    this.#invalidated = true;
+    this.#drainInvalidation();
+  }
+  refreshWriteActivity() {
+    this.#drainInvalidation();
+  }
+  #drainInvalidation() {
+    if (
+      !this.#invalidated ||
+      !this.#ready ||
+      this.#disposed ||
+      this.#reads.size ||
+      this.#physicalWritesPending()
+    )
+      return;
+    this.#invalidated = false;
+    void this.refresh("background");
+  }
+  async refresh(mode: "foreground" | "background" = "foreground") {
     const projectId = this.#projectId;
     if (!this.#ready || this.#disposed || !projectId) return;
-    const epoch = ++this.#epoch;
-    this.#abort();
-    this.#update({
-      state: "loading",
-      pending: new Set(),
-      historyLoading: false,
-      error: null,
-    });
+    const background = mode === "background";
+    const epoch = background ? this.#epoch : ++this.#epoch;
+    if (!background) {
+      this.#historySelected = false;
+      this.#abort();
+      this.#update({
+        state: "loading",
+        pending: new Set(),
+        historyLoading: false,
+        error: null,
+      });
+    }
     const read = this.#begin("head");
     try {
       const { view } = await this.#client.getOutline(
@@ -93,6 +126,16 @@ export class ProjectOutlineController {
         { signal: read.signal },
       );
       if (!this.#current(epoch, read)) return;
+      if (background && this.#physicalWritesPending()) {
+        this.#invalidated = true;
+        return;
+      }
+      if (
+        background &&
+        this.#historySelected &&
+        view?.artifact.artifactId !== this.#snapshot.view?.artifact.artifactId
+      )
+        return;
       if (!view || view.latestRevision.format !== "structured-v2") {
         this.#snapshot = initial();
         this.#update({
@@ -103,9 +146,11 @@ export class ProjectOutlineController {
         return;
       }
       const revision =
-        view.selectedRevision?.format === "structured-v2"
-          ? view.selectedRevision
-          : view.latestRevision;
+        background && this.#historySelected && this.#snapshot.revision
+          ? this.#snapshot.revision
+          : view.selectedRevision?.format === "structured-v2"
+            ? view.selectedRevision
+            : view.latestRevision;
       const same =
         this.#snapshot.revision?.contentDigest === revision.contentDigest;
       this.#update({
@@ -150,6 +195,7 @@ export class ProjectOutlineController {
       return;
     this.#epoch++;
     this.#abort();
+    this.#historySelected = true;
     this.#update({
       revision,
       state: "ready",
@@ -280,6 +326,7 @@ export class ProjectOutlineController {
   }
   #finish(key: string, read: AbortController) {
     if (this.#reads.get(key) === read) this.#reads.delete(key);
+    queueMicrotask(() => this.#drainInvalidation());
   }
   #current(epoch: number, read: AbortController) {
     return (

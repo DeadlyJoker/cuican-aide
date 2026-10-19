@@ -395,8 +395,11 @@ export async function createFixture(
   let worker: RuntimeWorker;
   let claimQueries = 0;
   const openWorker = () => {
-    const interceptedBase = new Proxy(store, {
-      get(target, key) {
+    // Fault injection exposes the DomainStore port, not a forged SqliteRunStore
+    // identity. Concrete media-review admission is covered with original stores.
+    const interceptedBase = new Proxy({} as DomainStore, {
+      get(_port, key) {
+        const target = store;
         if (key === "listRunEvents" && options.observeRunEventReads)
           return async (...args: Parameters<DomainStore["listRunEvents"]>) => {
             runEventReads.push({ afterSequence: args[1], limit: args[2] });

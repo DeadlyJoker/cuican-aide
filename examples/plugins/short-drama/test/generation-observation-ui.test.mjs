@@ -90,6 +90,34 @@ function assertNoAutomaticMutations(service, generated = 1, queried = 0) {
   );
 }
 
+test("a completed conversation without a supplier operation is shown as not generated, without an automatic resubmission", async (t) => {
+  const time = clock(t);
+  const service = generationService();
+  const saved = savedConcept(service);
+  const f = await open(service, saved);
+  try {
+    await f.click(f.button("生成概念图"));
+    const receipt = accepted(service);
+    service.setGeneration(
+      locator(saved),
+      stored(saved, receipt, "completed", null),
+    );
+    await time.tick(2000);
+    const panel = generationPanel(f);
+    assert.match(panel.textContent, /任务状态：未执行生成/u);
+    assert.match(
+      panel.querySelector('[role="alert"]').textContent,
+      /未提交生成，尚未产生图片/u,
+    );
+    assert.doesNotMatch(panel.textContent, /任务状态：已完成/u);
+    assert.equal(panel.querySelector("img"), null);
+    assertNoAutomaticMutations(service);
+  } finally {
+    service.watch(() => {});
+    await f.dispose();
+  }
+});
+
 test("actual UI displays running and resulting images after one explicit generation without a refresh click or more dispatch", async (t) => {
   const time = clock(t);
   const service = generationService();

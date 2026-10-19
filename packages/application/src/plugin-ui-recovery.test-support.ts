@@ -17,6 +17,7 @@ import {
   pluginUiIntentIdentity,
   pluginUiIntentStablePin,
   refusePluginUiIntentFirstDispatch,
+  refusePluginUiIntentUnadmittedQuery,
   type PluginUiIntentRecord,
 } from "@crewon/domain";
 import { PluginUiApplicationService } from "./plugin-ui-application-service.ts";
@@ -279,6 +280,18 @@ export function recoveryFixture(
       const intent = refusePluginUiIntentFirstDispatch(
         current,
         input.reasonCode,
+        input.at,
+        recoveryDigester,
+      );
+      records.set(intent.intentId, intent);
+      return intent;
+    },
+    async refuseUiIntentUnadmittedQuery(input) {
+      const current = records.get(input.intentId)!;
+      assert.equal(current.requestDigest, input.requestDigest);
+      const intent = refusePluginUiIntentUnadmittedQuery(
+        current,
+        input.expectedDispatchAttemptCount,
         input.at,
         recoveryDigester,
       );

@@ -59,7 +59,7 @@ export type ProjectMediaRenderInput = Readonly<{
         Readonly<{
           filename: string;
           subfolder: string;
-          type: "output";
+          type: "output" | "input";
         }>
       >
     >

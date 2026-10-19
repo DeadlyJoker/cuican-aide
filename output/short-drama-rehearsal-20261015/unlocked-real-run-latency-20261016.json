@@ -1,0 +1,312 @@
+{
+  "recordedAt": "2026-10-16T02:16:28.890938+00:00",
+  "readOnly": true,
+  "runSnapshot": {
+    "agentVersionId": "native-plugin-agent-07d635668b84638e0753c7874c68b7d2c2b290450b23d4aa76a32a1e7da015c5",
+    "authorityId": "standalone-authority",
+    "cancelRequested": false,
+    "collaborationMode": "default",
+    "createdAt": "2026-10-16T02:11:01.031Z",
+    "createdByActorId": "standalone-actor",
+    "failure": null,
+    "goalAccounting": null,
+    "goalBinding": null,
+    "lastSequence": 129,
+    "origin": null,
+    "outputRef": "message:01a1427e-5e2d-712e-828e-3cd181011748",
+    "policySnapshotId": "native-plugin-policy-07d635668b84638e0753c7874c68b7d2c2b290450b23d4aa76a32a1e7da015c5",
+    "reconciliationReceiptId": null,
+    "revision": 129,
+    "runId": "plugin-izj3PanFGkpcJfgwFCjPnpcl72yfe21VMZTSZ1jpfZ4",
+    "runtimeGeneration": "native-plugin-runtime-07d635668b84638e0753c7874c68b7d2c2b290450b23d4aa76a32a1e7da015c5",
+    "spaceId": "standalone-space",
+    "status": "completed",
+    "suspensionReasonCode": null,
+    "tenantId": "standalone-tenant",
+    "terminalAt": "2026-10-16T02:15:40.332Z",
+    "threadId": "01a13f61-7f59-77ed-bd1e-c5c7c2a4d67f",
+    "updatedAt": "2026-10-16T02:15:40.332Z",
+    "usage": {
+      "cachedInputTokens": 16768,
+      "inputTokens": 32992,
+      "outputTokens": 138,
+      "totalTokens": 33130
+    },
+    "waitingApproval": null,
+    "workspaceBindingId": null
+  },
+  "modelCalls": [
+    {
+      "callOrder": 173,
+      "attemptId": "01a1427a-30e9-73ae-b74f-b784cb31ceb6",
+      "goalAttribution": null,
+      "observation": {
+        "adapterName": "direct-responses",
+        "adapterVersion": "1",
+        "agentVersionId": "native-plugin-agent-07d635668b84638e0753c7874c68b7d2c2b290450b23d4aa76a32a1e7da015c5",
+        "callId": "4e14a5d6-9f05-4007-993a-c5ff05decd56",
+        "finishedAt": "2026-10-16T02:13:20.717Z",
+        "firstOutputLatencyMs": null,
+        "httpDiagnostics": {
+          "read": {
+            "end": "releasedBeforeEof"
+          },
+          "response": {
+            "cfRay": "a4b3880aeb952abf-LAX",
+            "contentType": "text/event-stream",
+            "oneApiRequestId": "202610160211134295913428268d9d6a8j3KN17",
+            "server": "cloudflare",
+            "status": 200
+          },
+          "stream": {
+            "byteCount": 108000,
+            "chunkCount": 57,
+            "commentFrameCount": 0,
+            "completedItemCount": 1,
+            "dataFrameCount": 10,
+            "frameCount": 10,
+            "lastEventType": "response.completed",
+            "pendingFrameBytes": 0,
+            "pendingJsonState": "empty",
+            "reasoningDeltaCount": 0,
+            "terminalEventCount": 1,
+            "textDeltaCount": 0,
+            "toolArgumentDeltaCount": 1,
+            "unknownEventCount": 1
+          },
+          "termination": {
+            "reason": "protocolTerminal"
+          }
+        },
+        "httpTiming": {
+          "admittedMs": 4,
+          "dispatchedMs": 4,
+          "finishedMs": 134092,
+          "firstByteMs": 10610,
+          "firstCompletedItemMs": 35853,
+          "firstSemanticMs": 35851,
+          "headersMs": 10610,
+          "lastByteMs": 134041,
+          "lastSemanticMs": 134058,
+          "readClosedMs": 134058,
+          "streamEndMs": 134092,
+          "terminalMs": 134092
+        },
+        "modelId": "gpt-6-astra",
+        "operation": "generate",
+        "outcome": "completed",
+        "providerResponseId": "resp_029adf7bb2bfe48b016ad187c3f3a48191bf8608462226aa61",
+        "purpose": "agent",
+        "schemaVersion": "crewon.model-call-observation.v0",
+        "startedAt": "2026-10-16T02:11:06.625Z",
+        "transport": "http",
+        "usageEventObserved": true
+      },
+      "runId": "plugin-izj3PanFGkpcJfgwFCjPnpcl72yfe21VMZTSZ1jpfZ4",
+      "stepId": "plugin-GW3Jd_bAvo5ooyJphay3-VDAXSxq6amCK9G6_fEklMg",
+      "tenantId": "standalone-tenant"
+    },
+    {
+      "callOrder": 174,
+      "attemptId": "01a1427c-77a3-75de-819b-1a5b83eddedf",
+      "goalAttribution": null,
+      "observation": {
+        "adapterName": "direct-responses",
+        "adapterVersion": "1",
+        "agentVersionId": "native-plugin-agent-07d635668b84638e0753c7874c68b7d2c2b290450b23d4aa76a32a1e7da015c5",
+        "callId": "d5610391-4ccf-4a41-bb86-f6845e3f4e7c",
+        "finishedAt": "2026-10-16T02:14:50.539Z",
+        "firstOutputLatencyMs": 11652,
+        "httpDiagnostics": {
+          "read": {
+            "end": "releasedBeforeEof"
+          },
+          "response": {
+            "cfRay": "a4b38b9bacce1f10-LAX",
+            "contentType": "text/event-stream",
+            "oneApiRequestId": "202610160213385728444098268d9d62XBmKRGa",
+            "server": "cloudflare",
+            "status": 200
+          },
+          "stream": {
+            "byteCount": 122224,
+            "chunkCount": 69,
+            "commentFrameCount": 0,
+            "completedItemCount": 1,
+            "dataFrameCount": 68,
+            "frameCount": 68,
+            "lastEventType": "response.output_item.done",
+            "pendingFrameBytes": 37244,
+            "pendingJsonState": "not-complete-json",
+            "reasoningDeltaCount": 0,
+            "terminalEventCount": 0,
+            "textDeltaCount": 58,
+            "toolArgumentDeltaCount": 0,
+            "unknownEventCount": 1
+          },
+          "termination": {
+            "code": "responses_idle_timeout",
+            "reason": "idleTimeout"
+          }
+        },
+        "httpTiming": {
+          "admittedMs": 3,
+          "dispatchedMs": 3,
+          "finishedMs": 74747,
+          "firstByteMs": 3870,
+          "firstCompletedItemMs": 14569,
+          "firstSemanticMs": 11652,
+          "headersMs": 3869,
+          "lastByteMs": 14614,
+          "lastSemanticMs": 14569,
+          "readClosedMs": 74743
+        },
+        "modelId": "gpt-6-astra",
+        "operation": "generate",
+        "outcome": "failed",
+        "providerResponseId": "resp_084a4a6c2c36ac4a016ad188530cec81918c16e33b5bb383fd",
+        "purpose": "agent",
+        "schemaVersion": "crewon.model-call-observation.v0",
+        "startedAt": "2026-10-16T02:13:35.791Z",
+        "transport": "http",
+        "usageEventObserved": false
+      },
+      "runId": "plugin-izj3PanFGkpcJfgwFCjPnpcl72yfe21VMZTSZ1jpfZ4",
+      "stepId": "model:plugin-GW3Jd_bAvo5ooyJphay3-VDAXSxq6amCK9G6_fEklMg:2",
+      "tenantId": "standalone-tenant"
+    },
+    {
+      "callOrder": 175,
+      "attemptId": "01a1427c-77a3-75de-819b-1a5b83eddedf",
+      "goalAttribution": null,
+      "observation": {
+        "adapterName": "direct-responses",
+        "adapterVersion": "1",
+        "agentVersionId": "native-plugin-agent-07d635668b84638e0753c7874c68b7d2c2b290450b23d4aa76a32a1e7da015c5",
+        "callId": "7f227944-9442-438f-bc66-1eac6894765d",
+        "finishedAt": "2026-10-16T02:15:40.310Z",
+        "firstOutputLatencyMs": 18633,
+        "httpDiagnostics": {
+          "read": {
+            "end": "releasedBeforeEof"
+          },
+          "response": {
+            "cfRay": "a4b38d720904b54d-LAX",
+            "contentType": "text/event-stream",
+            "oneApiRequestId": "202610160214535170293248268d9d6NXCimEyM",
+            "server": "cloudflare",
+            "status": 200
+          },
+          "stream": {
+            "byteCount": 126298,
+            "chunkCount": 67,
+            "commentFrameCount": 0,
+            "completedItemCount": 1,
+            "dataFrameCount": 69,
+            "frameCount": 69,
+            "lastEventType": "response.completed",
+            "pendingFrameBytes": 0,
+            "pendingJsonState": "empty",
+            "reasoningDeltaCount": 0,
+            "terminalEventCount": 1,
+            "textDeltaCount": 58,
+            "toolArgumentDeltaCount": 0,
+            "unknownEventCount": 1
+          },
+          "termination": {
+            "reason": "protocolTerminal"
+          }
+        },
+        "httpTiming": {
+          "admittedMs": 34,
+          "dispatchedMs": 34,
+          "finishedMs": 49333,
+          "firstByteMs": 5288,
+          "firstCompletedItemMs": 24455,
+          "firstSemanticMs": 18633,
+          "headersMs": 4131,
+          "lastByteMs": 49272,
+          "lastSemanticMs": 49306,
+          "readClosedMs": 49306,
+          "streamEndMs": 49333,
+          "terminalMs": 49333
+        },
+        "modelId": "gpt-6-astra",
+        "operation": "generate",
+        "outcome": "completed",
+        "providerResponseId": "resp_094d0609c616babf016ad1889ea3cc81918c1a78f53937c1c2",
+        "purpose": "agent",
+        "schemaVersion": "crewon.model-call-observation.v0",
+        "startedAt": "2026-10-16T02:14:50.977Z",
+        "transport": "http",
+        "usageEventObserved": true
+      },
+      "runId": "plugin-izj3PanFGkpcJfgwFCjPnpcl72yfe21VMZTSZ1jpfZ4",
+      "stepId": "model:plugin-GW3Jd_bAvo5ooyJphay3-VDAXSxq6amCK9G6_fEklMg:2",
+      "tenantId": "standalone-tenant"
+    }
+  ],
+  "eventTimeline": [
+    {
+      "sequence": 1,
+      "occurredAt": "2026-10-16T02:11:01.031Z",
+      "type": "run.created"
+    },
+    {
+      "sequence": 2,
+      "occurredAt": "2026-10-16T02:11:06.512Z",
+      "type": "run.started"
+    },
+    {
+      "sequence": 3,
+      "occurredAt": "2026-10-16T02:11:06.622Z",
+      "type": "segment.started"
+    },
+    {
+      "sequence": 5,
+      "occurredAt": "2026-10-16T02:13:20.734Z",
+      "type": "tool.requested"
+    },
+    {
+      "sequence": 6,
+      "occurredAt": "2026-10-16T02:13:20.753Z",
+      "type": "segment.completed"
+    },
+    {
+      "sequence": 7,
+      "occurredAt": "2026-10-16T02:13:29.225Z",
+      "type": "tool.completed"
+    },
+    {
+      "sequence": 8,
+      "occurredAt": "2026-10-16T02:13:35.787Z",
+      "type": "segment.started"
+    },
+    {
+      "sequence": 67,
+      "occurredAt": "2026-10-16T02:14:50.559Z",
+      "type": "model.sampling.retry"
+    },
+    {
+      "sequence": 127,
+      "occurredAt": "2026-10-16T02:15:40.332Z",
+      "type": "segment.completed"
+    },
+    {
+      "sequence": 129,
+      "occurredAt": "2026-10-16T02:15:40.332Z",
+      "type": "run.completed"
+    }
+  ],
+  "timingMs": {
+    "run": 279301.0,
+    "modelCalls": 258172,
+    "toolRequestedToCompleted": 8491.0,
+    "itemDoneToTerminalCall173": 98239,
+    "postLastByteIdleCall174": 60133,
+    "retryCall175": 49333
+  },
+  "submissionByThisAudit": false,
+  "productionFixDeployed": false,
+  "acceptance": "New actual Run completed, but its scope is discussion and no outline/script creation is established."
+}

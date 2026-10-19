@@ -1,0 +1,43 @@
+{
+  "recordedAt": "2026-10-17T04:05:38.534561+00:00",
+  "generationRunId": "plugin-e9r_t5x66Oucjb-ii_ChoJKFrCPVrdSt6lMujJNPtlQ",
+  "operationId": "eed9bb32-0f9f-efae-277c-39aba1f26da0",
+  "providerObserved": {
+    "status": "success",
+    "completed": true,
+    "filename": "comfyui_00004_.png",
+    "outputNode": "58",
+    "executionStart": 1792209170703,
+    "executionSuccess": 1792209233618,
+    "durationMs": 62915
+  },
+  "diagnosticBeforeFix": {
+    "surface": "actual Electron Node, native DNS resolver and pinned PluginExecutionJsonHttp, GET only",
+    "path": "/api/comfy/proxy/history?prompt_id=eed9bb32-0f9f-efae-277c-39aba1f26da0",
+    "durationMs": 2119.581417,
+    "errorCode": "ETIMEOUT",
+    "dnsFamily": "AAAA"
+  },
+  "diagnosticAfterSourceFix": {
+    "surface": "same read-only diagnostic, source imports",
+    "historyDurationMs": 3530.993,
+    "historySucceeded": true,
+    "queueDurationMs": 2009.776417,
+    "queueEmpty": true
+  },
+  "checks": {
+    "nativeDnsTestsPassed": 11,
+    "preparationUiTestsPassed": 32,
+    "terminalDiagnosticsTestsPassed": 14,
+    "mediaTypecheck": "passed",
+    "controlTypecheck": "passed",
+    "uiBuildAndTypecheck": "passed",
+    "boundary": "passed"
+  },
+  "runtimeImplementationDigest": "sha256:2e6632905fe9baaeba45e39ea5ad7bd84793f3a5e38a774a8690e4c065fc8b46",
+  "clientAcceptancePassed": false,
+  "blocker": "Updated renderer reload required a full app restart. Actual Main PID 40744 is waiting in SecItemCopyMatching / SecurityServer decrypt for manual macOS keychain authorization. Client query admission failure remains unproven until live diagnostics.",
+  "dataPreserved": true,
+  "generationResubmitted": false,
+  "startupSample": "/private/tmp/crewon-runtime-merge-20261016/stale-preparation-startup-20261017.sample.txt"
+}

@@ -1,4 +1,5 @@
 import { createHash } from "node:crypto";
+import { observePluginGenerationPhase as observe } from "./installed-plugin-invocation-diagnostics.ts";
 import type {
   ActorContext,
   ExtensionCatalogPort,
@@ -114,7 +115,9 @@ export class LoopbackExtensionHostClient implements ExtensionHostPort {
       agentVersionId: input.agentVersionId,
     });
     if (request.operation !== "readiness") throw requestInvalid();
-    const response = await this.#post(request, options.signal);
+    const response = await observe("readiness.host-evaluate", () =>
+      this.#post(request, options.signal),
+    );
     if (
       response.operation !== "readiness" ||
       response.agentVersionId !== request.agentVersionId

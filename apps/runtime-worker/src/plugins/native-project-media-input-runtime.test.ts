@@ -3,7 +3,11 @@ import { readFileSync, renameSync, writeFileSync } from "node:fs";
 import { join } from "node:path";
 import test, { type TestContext } from "node:test";
 import { CreativeProjectApplicationService } from "@crewon/application";
-import type { PluginTaskAdmission } from "@crewon/domain";
+import {
+  createExtensionConfiguration,
+  type PluginTaskAdmission,
+} from "@crewon/domain";
+import { installLocalPluginPackage } from "@crewon/plugin-host";
 import {
   captureDesktopNativePluginPolicy,
   createDesktopNativePluginAuthority,
@@ -23,19 +27,35 @@ import { prepareInstalledPluginProjectMediaInputStores } from "./installed-plugi
 
 // Genuine Main bootstrap/policy/authority producers and SQLite; named workflow digests.
 // The installed metadata-only Node entry throws if imported. No model/Run/provider readiness is claimed.
-async function fixture(t: TestContext, stages = true) {
+async function fixture(t: TestContext, stages = true, historyPackages = 1) {
   const f = await executionSetupFixture({
-    version: "23.0.0",
+    version: historyPackages > 1 ? "50.2.5" : "23.0.0",
     contract: "assets",
     projectContext: true,
   });
   const workers: ReturnType<typeof createInstalledPluginWorkerAuthority>[] = [];
+  const history: Awaited<ReturnType<typeof executionSetupFixture>>[] = [];
   let main: ReturnType<typeof createDesktopNativePluginAuthority> | undefined;
   t.after(async () => {
     for (const worker of workers) await worker.close();
     main?.close();
     await f.cleanup();
+    for (const previous of history) await previous.cleanup();
   });
+  for (let index = 1; index < historyPackages; index++) {
+    const previous = await executionSetupFixture({
+      version: `${31 + index}.0.0`,
+      contract: "assets",
+      projectContext: true,
+    });
+    history.push(previous);
+    const installed = await installLocalPluginPackage({
+      directory: previous.source,
+      installRoot: join(f.dataDirectory, "plugins"),
+      authorization: async () => ({ outcome: "allow" }),
+    });
+    assert.equal(installed.packageDigest, previous.identity.packageDigest);
+  }
   const old = composeDesktopLocalPluginProjectApproval({
     approval: parseDesktopPluginApproval(f.approval),
     descriptor: f.installed.descriptor,
@@ -73,11 +93,48 @@ async function fixture(t: TestContext, stages = true) {
       },
     ],
   };
+  if (historyPackages > 1) {
+    declaration.reviews = [f, ...history].flatMap((item) => [
+      {
+        ...declaration.reviews[0]!,
+        targetIdentity: item.entry.identity,
+      },
+      {
+        targetIdentity: item.entry.identity,
+        workflow: {
+          workflowId: "flux2-three-reference-storyboard",
+          workflowDigest: fixtureHash("named-reviewed-D18-workflow"),
+          output: {
+            kind: "image",
+            nodeId: "17",
+            dimensions: "workflow-native",
+          },
+        },
+      },
+    ]);
+    declaration.referenceIdentities = [f, ...history].map((item) => ({
+      pluginId: item.identity.pluginId,
+      pluginVersion: item.identity.version,
+      manifestDigest: item.configuration.manifestDigest,
+      implementationDigest: item.configuration.implementationDigest,
+    }));
+  }
   await f.stop();
   writeFileSync(
     f.approvalPath,
     JSON.stringify({
       ...old,
+      sources: [
+        ...old.sources,
+        ...history.map((item, index) => ({
+          ...item.approval.sources[0]!,
+          sourceId: `historical-short-${index}`,
+        })),
+      ],
+      publications: [
+        ...old.publications,
+        ...history.flatMap((item) => item.approval.publications),
+      ],
       schemaVersion: "crewon.desktop-plugin-approval.v3",
       projects: {
         ...old.projects,
@@ -96,6 +153,79 @@ async function fixture(t: TestContext, stages = true) {
     { mode: 0o600 },
   );
   await f.start();
+  // Approve each real installed historical package through the original Main
+  // preview/claim/CAS writer, then restore the current selection. No policy or
+  // Native authority receipt is synthesized for this integration fixture.
+  let selection = f.installedSelection;
+  let configurationRevision = f.configuration.revision;
+  for (const item of history.length ? [...history, f] : []) {
+    const actor = assertDesktopPluginBootstrapIssued(f.bootstrap).actor;
+    if (item !== f)
+      await f.store.pluginInstallationStore().recordInstalledPackage({
+        scope: f.scope,
+        actor,
+        package: {
+          schemaVersion: "crewon.installed-plugin-package.v1",
+          ...f.scope,
+          ...item.identity,
+          installedAt: "2026-10-15T00:00:00.000Z",
+          installedByActorId: actor.actorId,
+          installedByPrincipalId: actor.principalId,
+        },
+        expectedSelectionRevision: selection.revision,
+        receipt: {
+          idempotencyKey: `history-install-${item.identity.version}`,
+          requestDigest: fixtureHash(
+            `history-install-${item.identity.version}`,
+          ),
+        },
+      });
+    selection = (
+      await f.store.pluginInstallationStore().commitSelection({
+        scope: f.scope,
+        actor,
+        expectedSelectionRevision: selection.revision,
+        selection: {
+          ...selection,
+          selectedPackageDigest: item.identity.packageDigest,
+          revision: selection.revision + 1,
+          updatedAt: "2026-10-15T00:00:00.000Z",
+          updatedByActorId: actor.actorId,
+          updatedByPrincipalId: actor.principalId,
+        },
+        receipt: {
+          idempotencyKey: `history-select-${item.identity.version}`,
+          requestDigest: fixtureHash(`history-select-${item.identity.version}`),
+        },
+      })
+    ).selection;
+    const { contentDigest: _digest, ...body } = item.configuration;
+    const configuration = createExtensionConfiguration(
+      { ...body, revision: configurationRevision + 1 },
+      { sha256: fixtureHash },
+    );
+    await f.store.extensionStore().saveExtensionConfiguration({
+      configuration,
+      expectedRevision: configurationRevision++,
+      receipt: {
+        actorId: actor.actorId,
+        idempotencyKey: `history-config-${item.identity.version}`,
+        requestDigest: fixtureHash(`history-config-${item.identity.version}`),
+      },
+    });
+    const owner = f.create();
+    const preview = await owner.preview({
+      bootstrap: f.bootstrap,
+      pluginId: f.identity.pluginId,
+    });
+    const claim = owner.claimPreview({
+      previewId: preview.previewId,
+      approveExecution: true,
+    });
+    await f.stop();
+    await owner.commitPolicyWhileStopped(claim);
+    await f.start();
+  }
   const setup = f.create();
   const preview = await setup.preview({
     bootstrap: f.bootstrap,
@@ -151,8 +281,60 @@ async function fixture(t: TestContext, stages = true) {
     mediaInputId: "not-created-input",
     inputRevision: null,
   };
-  return { f, worker, config, inputs, actor, query, open, publication };
+  return {
+    f,
+    worker,
+    config,
+    inputs,
+    actor,
+    query,
+    open,
+    publication,
+    declaration,
+    manifest,
+  };
 }
+
+test("real Native issuance composes 34 retained workflow reviews after 17 immutable package installations without media execution", async (t) => {
+  const f = await fixture(t, true, 17);
+  assert.equal(f.manifest.schemaVersion, "crewon.desktop-plugin-bootstrap.v3");
+  assert.equal(f.manifest.projects.mediaInputs!.reviews.length, 34);
+  assert.deepEqual(
+    f.manifest.projects.mediaInputs!.reviews,
+    f.declaration.reviews,
+  );
+  assert.equal(
+    new Set(
+      f.manifest.projects.mediaInputs!.reviews.map(
+        (review) => review.targetIdentity.packageDigest,
+      ),
+    ).size,
+    17,
+  );
+  assert.ok(f.inputs);
+  assert.equal(f.worker.installedPluginExecution.projectMedia, undefined);
+  const project = await new CreativeProjectApplicationService({
+    store: f.f.store.creativeProjectStore(),
+    authorization: { authorize: async () => ({ outcome: "allow" }) },
+    clock: { now: () => new Date().toISOString() },
+    ids: { nextId: () => "history-native-project" },
+    digester: { sha256: fixtureHash },
+  }).createProject(f.actor, {
+    title: "历史审批不丢失",
+    briefText: "只读取项目元数据，不发起生成",
+    idempotencyKey: "history-native-project-create",
+  });
+  const query = { ...f.query, projectId: project.project.projectId };
+  assert.equal(await f.inputs.loadInput(f.actor, query), null);
+  await f.worker.close();
+  await assert.rejects(() => f.inputs!.loadInput(f.actor, query));
+  const next = f.open().installedPluginExecution.projectMediaInputs;
+  assert.ok(next);
+  assert.equal(
+    await next.createInputs({ store: f.f.store }).loadInput(f.actor, query),
+    null,
+  );
+});
 
 test("Main exact stage opt-in reaches Native metadata tools; old conversation/asset approvals infer none", async (t) => {
   const off = await fixture(t, false);
@@ -187,16 +369,14 @@ test("Main exact stage opt-in reaches Native metadata tools; old conversation/as
   assert.equal(await reopened.loadInput(on.actor, query), null);
   assert.equal(
     (
-      await on.f.store
-        .creativeProjectStore()
-        .loadProject({
-          owner: {
-            tenantId: on.actor.tenantId,
-            spaceId: on.actor.spaceId,
-            principalId: on.actor.principalId,
-          },
-          projectId: query.projectId,
-        })
+      await on.f.store.creativeProjectStore().loadProject({
+        owner: {
+          tenantId: on.actor.tenantId,
+          spaceId: on.actor.spaceId,
+          principalId: on.actor.principalId,
+        },
+        projectId: query.projectId,
+      })
     )?.title,
     "同一个项目",
   );

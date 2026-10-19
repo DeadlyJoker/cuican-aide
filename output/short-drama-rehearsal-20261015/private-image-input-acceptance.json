@@ -1,0 +1,123 @@
+{
+  "schemaVersion": "crewon.acceptance.private-image-input.v1",
+  "recordedAt": "2026-10-15T16:10:29.394Z",
+  "nodeVersion": "v24.18.1",
+  "scope": "private bounded image capture, Responses wire delivery and continuation; not a business media review job",
+  "sources": {
+    "packages/agent-kernel/src/model-image-observation.ts": "sha256:69f1b87da7b386c6f3e4d40c89d95f91b3fb4ef3612148deb5db6aad271feeef",
+    "packages/agent-kernel/src/agent-segment-images.ts": "sha256:05dbe7c3ae1ba794b026e2e2d0d666be7de6cb7c28866bd6e569beb2a96fe4b8",
+    "packages/agent-kernel/src/agent-kernel-port.ts": "sha256:ccf257242e59f15189834310a452507f0e6cd56dda757a0ce598467c9370f020",
+    "packages/agent-kernel/src/model-transport-port.ts": "sha256:07e76bc0c57a593f752f712fc4ddbc06631a4f458cfbf44422be88b4ad7b422d",
+    "packages/agent-kernel/src/crewon-agent-kernel.ts": "sha256:6704795e2aaa5b73cee7ae18dfebb0e795f7f272a04aa221ec3079bf7c5e9f1e",
+    "packages/agent-kernel/src/index.ts": "sha256:7b6002f0f1649f84152b82baf6b5480266592ea929feb02e3e6bcecdeab2b7d1",
+    "packages/agent-kernel/src/model-image-observation.test.ts": "sha256:816d0ba269e700f374e0439651ab1c105a9fc9646f2561e86beb677f1f36a88e",
+    "packages/agent-responses/src/responses-image-input.ts": "sha256:31f89fe5793a6e93477e480113582a51aeb618178ff12cfdfadfe85eea846353",
+    "packages/agent-responses/src/direct-responses-transport.ts": "sha256:d6c773c579474d10bd4b12181d01c688d5edd0a65938b5708ca86e2b66d0362d",
+    "packages/agent-responses/src/websocket-responses-transport.ts": "sha256:0a661c17badb331287d01183b1e195a69a5d611f9e53bcce0e40f8054a3796c6",
+    "packages/agent-responses/src/responses-image-input.test.ts": "sha256:35333346baae36ab30b3ae77f5b49d1489baffea76c3fbe9fcaaae819912f556",
+    "packages/agent-responses/src/responses-image-continuation.test.ts": "sha256:9b59d121cf27a8121f2595c6aca72107426fdf952531bd2698fbc174996662f5",
+    "docs/model-image-review-input.md": "sha256:67f9bf27b807aa0fca0d95d5a14f13bd56fbaacb60612f2f745c84f20dab9c58"
+  },
+  "tests": {
+    "agentResponses": {
+      "passed": 334,
+      "failed": 0,
+      "skipped": 0
+    },
+    "agentKernel": {
+      "passed": 72,
+      "failed": 0,
+      "skipped": 0
+    },
+    "workerIntegration": {
+      "passed": 17,
+      "failed": 0,
+      "skipped": 1,
+      "skipReason": "CREWON_TEST_POSTGRES_URL not configured"
+    }
+  },
+  "checks": {
+    "packagesTypecheck": "passed",
+    "responsesFinalTypecheck": "passed",
+    "workerTypecheck": "passed",
+    "controlApiTypecheck": "passed",
+    "boundary": "passed",
+    "format": "passed",
+    "gitDiffCheck": "passed"
+  },
+  "limits": {
+    "count": 6,
+    "perImageBytes": 262144,
+    "totalImageBytes": 1048576,
+    "pixels": 262144,
+    "edge": 1024,
+    "lineageRuns": 32,
+    "lineageResponsesPerRun": 16
+  },
+  "wireEvidence": {
+    "realLocalHttp": true,
+    "realLocalWebSocket": true,
+    "httpKeptOpenAfterTerminal": true,
+    "websocketToHttpFallback": true,
+    "normalProviderContinuation": true,
+    "preResponseRetry": true,
+    "unknownCheckpointFullReplay": true,
+    "changedEvidenceFullReplay": true,
+    "invalidTailCannotEstablishLineage": true,
+    "unexpectedToolsRejected": true,
+    "byteSnapshots": true,
+    "rawPixelsAbsentFromAgentEvents": true
+  },
+  "logs": {
+    "image-input-responses-tests": {
+      "path": "image-input-responses-tests.log",
+      "sha256": "97c0d6985eaf5336f96346e0439a9e03b2be7db6b95481386c8a6b503fa5a818"
+    },
+    "image-input-kernel-tests": {
+      "path": "image-input-kernel-tests.log",
+      "sha256": "551468c8d805f889298888b5a360c24eb79c5098ac9659035f1ac2adeb1c9838"
+    },
+    "image-input-worker-integration": {
+      "path": "image-input-worker-integration.log",
+      "sha256": "5505643f4147913e0d4b432200cb11af838c79289e905d93ce852ca8768161f6"
+    },
+    "image-input-packages-typecheck": {
+      "path": "image-input-packages-typecheck.log",
+      "sha256": "67b06f2413a1561868875e5481212ce03ccd7443e7612e1d9cd3ab19189f1b37"
+    },
+    "image-input-responses-typecheck": {
+      "path": "image-input-responses-typecheck.log",
+      "sha256": "99784a2cf132542fc461c3e4a15a4444cf79c971befad7ebac62e930f14f2f54"
+    },
+    "image-input-worker-typecheck": {
+      "path": "image-input-worker-typecheck.log",
+      "sha256": "f3a27ad51384300eda5209fe35f1990070f72b4e16e619caad82b5c36261bf6d"
+    },
+    "image-input-control-typecheck": {
+      "path": "image-input-control-typecheck.log",
+      "sha256": "c2a82e833a563d0b2008e1c90e03f9d137d38065fdc5e073991097e4f09e2df8"
+    },
+    "image-input-boundary": {
+      "path": "image-input-boundary.log",
+      "sha256": "9ca051bf69b76010b6bdde6c73202e042b6c69e932667cbdacb0353047bf50a4"
+    },
+    "image-input-format": {
+      "path": "image-input-format.log",
+      "sha256": "afd0d265f84b3b6c0e01a95fba9476bb8eb9d3df85f728960450995b0da10c3e"
+    }
+  },
+  "notEstablished": [
+    "real external model visual judgment",
+    "artifact and tenant/source qualification",
+    "frame extraction and image downscaling",
+    "durable review report and repair loop",
+    "audio review",
+    "final video",
+    "commercial acceptance",
+    "installation in actual client"
+  ],
+  "clientStateEvidence": "lifecycle-state-20261016.json",
+  "noExternalModelRequest": true,
+  "noGenerationOrUploadSubmitted": true,
+  "goalStatus": "active"
+}

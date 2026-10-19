@@ -8,6 +8,7 @@ import type {
   InstalledPluginGenerationContextInput,
   InstalledPluginGenerationContextState,
 } from "./useInstalledPluginGenerationContext.types";
+import { publishControlThreadRevision } from "../control-runtime/controlThreadRevisionSubscriptions";
 import { AGENT_PLATFORM_SESSION_CHANGED_EVENT } from "../agent-platform/agentPlatformClient";
 import { deferred, flush } from "./pluginUiLoader.test-support";
 import {
@@ -96,6 +97,57 @@ describe("Host generation context, original Control client and account journal",
       "/api/v1/threads/thread-1",
     ]);
     expect(f.adopt).not.toHaveBeenCalled();
+  });
+
+  it("refreshes the canonical CAS after another lane completes, ignoring foreign threads and inactive views", async () => {
+    await render();
+    await phase("ready");
+    f.threads.set("thread-1", taskContextThread("thread-1", 18));
+    await change(() =>
+      publishControlThreadRevision(f.ports.runtime, "thread-other"),
+    );
+    expect(state.context.thread?.revision).toBe(17);
+    expect(f.requests).toHaveLength(1);
+    await change(() =>
+      publishControlThreadRevision(f.ports.runtime, "thread-1"),
+    );
+    await phase("ready");
+    expect(state.context.thread?.revision).toBe(18);
+    expect(f.requests.map((r) => [r.method, r.path])).toEqual([
+      ["GET", "/api/v1/threads/thread-1"],
+      ["GET", "/api/v1/threads/thread-1"],
+    ]);
+    expect(f.adopt).not.toHaveBeenCalled();
+    await render({ active: false });
+    await change(() =>
+      publishControlThreadRevision(f.ports.runtime, "thread-1"),
+    );
+    expect(f.requests).toHaveLength(2);
+  });
+
+  it("ignores unrelated generation families while retaining current-family refreshes", async () => {
+    await render();
+    await phase("ready");
+    const ready = state.context;
+    const lease = generationContextLease();
+    await change(() =>
+      f.accept({
+        ...lease,
+        descriptor: {
+          ...lease.descriptor,
+          pluginId: "example.other-workbench",
+        },
+      }),
+    );
+    expect(state.context).toBe(ready);
+    expect(f.requests).toHaveLength(1);
+    expect(state.context.intent).toBeNull();
+
+    f.threads.set("thread-1", taskContextThread("thread-1", 99));
+    await change(() => f.accept());
+    await phase("ready");
+    expect(state.context.intent?.phase).toBe("accepted");
+    expect(state.context.thread?.revision).toBe(99);
   });
 
   it.each(["inactive", "noPorts", "noContexts", "wrongVersion"] as const)(

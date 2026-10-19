@@ -619,3 +619,54 @@ function origin(server: Server): string {
     throw new Error("invalid_address");
   return `http://localhost:${address.port}`;
 }
+
+test("imageUpload sends bounded multipart bytes only to the exact workflow file endpoint", async (t) => {
+  let requests = 0;
+  const bytes = Buffer.alloc(1024 * 1024 + 1, 31);
+  const server = await listen(t, (request, response) => {
+    requests++;
+    assert.equal(request.url, "/api/comfy/upload/file");
+    const chunks: Buffer[] = [];
+    request.on("data", (chunk: Buffer) => chunks.push(chunk));
+    request.on("end", () => {
+      assert.deepEqual(Buffer.concat(chunks), bytes);
+      response.end("{}");
+    });
+  });
+  const transport = new PinnedNodeHttpTransport({
+    responseProfile: "imageUpload",
+  });
+  const q = {
+    ...input(server, 64 * 1024),
+    method: "POST" as const,
+    target: {
+      endpoint: new URL(`${origin(server)}/api/comfy/upload/file`),
+      address: "127.0.0.1",
+      family: 4 as const,
+    },
+    headers: { "content-type": "multipart/form-data; boundary=crewon-test" },
+    body: bytes,
+    maxRequestBytes: 16 * 1024 * 1024 + 64 * 1024,
+  };
+  for (const path of [
+    "/api/comfy/upload/image",
+    "/api/comfy/upload/file/",
+    "/api/comfy/upload/file?type=output",
+  ])
+    await assert.rejects(
+      transport.request(
+        {
+          ...q,
+          target: { ...q.target, endpoint: new URL(path, origin(server)) },
+        },
+        new AbortController().signal,
+      ),
+      /request_invalid/,
+    );
+  assert.equal(requests, 0);
+  assert.equal(
+    (await transport.request(q, new AbortController().signal)).status,
+    200,
+  );
+  assert.equal(requests, 1);
+});
