@@ -116,6 +116,8 @@ export interface TeamTaskJournalStore {
   admitAutonomousChild(
     input: AutonomousTaskChildAdmission & { parentFence: TeamTaskFence },
   ): Promise<AutonomousTaskChildAdmissionResult>;
+  /** Explicit descendant cancellation; ordinary Team cancellation remains unchanged. */
+  cancelAutonomousTree(locator: TeamTaskLocator): Promise<void>;
 }
 
 export type AutonomousTaskChildAdmissionResult = Readonly<{

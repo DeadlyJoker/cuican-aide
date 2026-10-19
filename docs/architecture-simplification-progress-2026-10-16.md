@@ -867,3 +867,9 @@ Node 24 下新增契约测试 2/2、Application typecheck 和格式检查通过�
 PostgreSQL edge schema 现在与 SQLite 对齐，包含 child admission metadata 表及旧 edge schema 的 additive migration。`ExperimentalPostgresTeamTaskJournal.admitAutonomousChild` 使用同一连接、事务和 Team advisory lock，按与 SQLite 相同的顺序提交 parent effect、child journal、edge、metadata 和 wake key；重复请求 replay，冲突由事务回滚。
 
 当前环境没有 `CREWON_TEST_POSTGRES_URL`，因此本批只完成 PostgreSQL typecheck，并继续保持 integration test skip；SQLite 原子 admission 1/1、契约/edge 3/3 仍通过。没有把 PostgreSQL 运行时结果描述为已验收，下一步在测试库可用后重跑双 backend 故障注入。
+
+## 第七十八批：自主任务树取消传播（2026-10-19）
+
+新增显式 `cancelAutonomousTree` Store 操作。SQLite/PostgreSQL 都按 edge 递归枚举 descendants，在同一事务中标记 parent 和所有仍处于 coordinating 的 child；普通 `requestCancel` 语义未改变。当前 admission 集成测试同时验证 parent/child 的 durable `cancelRequested` 状态，未把 AbortSignal 当成外部副作用回滚证明。
+
+Node 24 下 Store、Control API typecheck 通过，SQLite 原子 admission 集成 1/1 通过；PostgreSQL runtime 继续因无测试库跳过。下一步补 scheduler watcher 对后代取消的端到端恢复验证。

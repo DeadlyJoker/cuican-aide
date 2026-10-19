@@ -17,6 +17,7 @@ import {
   validateTeamLeaseDuration,
   teamJournalId,
   validateTeamTaskFence,
+  validateTeamTaskLocator,
   validateTeamTaskListLimit,
   validateTeamTaskScope,
   type TeamTaskIntent,
@@ -626,6 +627,29 @@ export class ExperimentalPostgresTeamTaskJournal
         effect: (await this.#effect(client, parentFence, effect.key))!,
         wakeKey,
       };
+    });
+  }
+  async cancelAutonomousTree(locator: TeamTaskLocator): Promise<void> {
+    validateTeamTaskLocator(locator);
+    await this.#transaction(locator, async (client) => {
+      await this.#edgeSchema(client);
+      if (!(await this.#read(client, locator, true)))
+        teamJournalFail("team_task_not_found");
+      await client.query(
+        `WITH RECURSIVE descendants(child_task_id) AS (
+           SELECT child_task_id FROM ${this.#table("autonomous_task_edges")}
+           WHERE tenant_id=$1 AND space_id=$2 AND parent_task_id=$3
+           UNION ALL
+           SELECT e.child_task_id FROM ${this.#table("autonomous_task_edges")} e
+           JOIN descendants d ON e.tenant_id=$1 AND e.space_id=$2 AND e.parent_task_id=d.child_task_id
+         )
+         UPDATE ${this.#table("team_task_journals")} t
+         SET cancel_requested=1,revision=revision+1
+         WHERE t.tenant_id=$1 AND t.space_id=$2
+           AND t.task_id IN (SELECT $3 UNION SELECT child_task_id FROM descendants)
+           AND t.status='coordinating'`,
+        teamTaskKeys(locator),
+      );
     });
   }
   async finalAccepted(fence: TeamTaskFence, value: ControlTeamTurnResult) {

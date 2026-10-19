@@ -17,6 +17,7 @@ import {
   validateTeamLeaseDuration,
   teamJournalId,
   validateTeamTaskFence,
+  validateTeamTaskLocator,
   validateTeamTaskListLimit,
   validateTeamTaskScope,
   type TeamTaskIntent,
@@ -605,6 +606,37 @@ export class ExperimentalSqliteTeamTaskJournal implements TeamTaskJournalStore {
         effect: this.#effect(parentFence, effect.key)!,
         wakeKey,
       };
+    });
+  }
+  async cancelAutonomousTree(locator: TeamTaskLocator): Promise<void> {
+    validateTeamTaskLocator(locator);
+    this.#transaction(() => {
+      this.#edgeSchema();
+      if (!this.#read(locator)) teamJournalFail("team_task_not_found");
+      const rows = this.database
+        .prepare(
+          `WITH RECURSIVE descendants(child_task_id) AS (
+             SELECT child_task_id FROM autonomous_task_edges
+             WHERE tenant_id=? AND space_id=? AND parent_task_id=?
+             UNION ALL
+             SELECT e.child_task_id FROM autonomous_task_edges e
+             JOIN descendants d ON e.tenant_id=? AND e.space_id=? AND e.parent_task_id=d.child_task_id
+           ) SELECT child_task_id FROM descendants`,
+        )
+        .all(
+          locator.tenantId,
+          locator.spaceId,
+          locator.taskId,
+          locator.tenantId,
+          locator.spaceId,
+        ) as { child_task_id: string }[];
+      const ids = [locator.taskId, ...rows.map((row) => row.child_task_id)];
+      const placeholders = ids.map(() => "?").join(",");
+      this.database
+        .prepare(
+          `UPDATE team_task_journals SET cancel_requested=1,revision=revision+1 WHERE tenant_id=? AND space_id=? AND task_id IN (${placeholders}) AND status='coordinating'`,
+        )
+        .run(locator.tenantId, locator.spaceId, ...ids);
     });
   }
   async finalAccepted(fence: TeamTaskFence, value: ControlTeamTurnResult) {

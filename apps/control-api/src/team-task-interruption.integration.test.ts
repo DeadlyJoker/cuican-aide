@@ -347,6 +347,9 @@ workflowDeploymentIntegrationTest(
       ),
       false,
     );
+    await journal.cancelAutonomousTree(parent);
+    assert.equal((await journal.read(parent))?.cancelRequested, true);
+    assert.equal((await journal.read(child))?.cancelRequested, true);
   },
 );
 
