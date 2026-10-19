@@ -967,3 +967,7 @@ host admission port 在绑定时会复制并冻结 capability snapshot，后续�
 ## 第九十五批：Team Run 首次终态读取降延迟（2026-10-19）
 
 `waitForTerminalRun` 原先在收到 queued Run 后无条件等待一个 polling interval，默认配置会给每个阶段增加最多约 1 秒的本地等待，即使 Run 已经完成。现在首次读取立即执行，只有确认仍为非终态后才按原间隔等待；瞬时读取失败继续使用原有指数退避和 deadline。新增回归验证首读无等待、后续轮询仍节流，并通过 Team application integration 32 项（SQLite 16 项通过，未配置测试库的 PostgreSQL 16 项跳过）。
+
+## 第九十六批：Team 事件等待边界审计（2026-10-19）
+
+复核现有 Run SSE 后确认它依赖 `ControlApiClient.openRunEventStream`、HTTP 身份和 `Last-Event-ID` 恢复，而后台 Team scheduler 使用进程内 `ControlTeamRuntimeClient`。当前不能把 SSE client 或 session 凭据直接塞进 application/runtime worker，否则会混淆 Control 授权边界和 scheduler 的 durable fence。现阶段保留首读立即加有界 polling 的安全路径；下一步应新增 host-only 的 `waitForRunTerminal` port，由受信 composition 提供事件等待与断线恢复，application 仍校验 run identity、终态、deadline 和取消，未实现前不改变现有后台路径。
