@@ -20,6 +20,7 @@ import {
   compileRuntimeAgentVersion,
   createPostgresRuntimeWorker,
   createStandaloneRuntimeWorker,
+  deriveRuntimeTeamTaskCapability,
   type RuntimeWorkerCompositionConfig,
 } from "./standalone-composition.ts";
 import { activateStandaloneRuntimeAgentVersionRelease } from "./agent-version-release-composition.ts";
@@ -28,6 +29,37 @@ import { resolveRuntimeExtensionEnvironment } from "./extensions/extension-proce
 import { compileComfyAgentVersion } from "./extensions/comfyui-agent-version.ts";
 import { bundledComfyRegistration } from "./extensions/comfyui-bundled-registration.ts";
 import { extensionCompositionDeployments } from "./extensions/extension-runtime-composition.ts";
+
+test("derives autonomous Team capability from the trusted Worker route", () => {
+  const capability = deriveRuntimeTeamTaskCapability(
+    {
+      tenantId: "tenant-1",
+      spaceId: "space-1",
+      actorId: "actor-1",
+      principalId: "principal-1",
+    },
+    {
+      authorityId: "authority-1",
+      runtimeGeneration: "runtime-1",
+      agentVersionId: "agent-1",
+      policySnapshotId: "policy-1",
+      workspaceBindingId: "workspace-1",
+    },
+  );
+  assert.deepEqual(capability, {
+    schemaVersion: "crewon.autonomous-task-capability.v0",
+    tenantId: "tenant-1",
+    spaceId: "space-1",
+    actorId: "actor-1",
+    principalId: "principal-1",
+    authorityId: "authority-1",
+    runtimeGeneration: "runtime-1",
+    policySnapshotId: "policy-1",
+    workspaceBindingId: "workspace-1",
+    toolPermissionMode: "requestApproval",
+  });
+  assert.ok(Object.isFrozen(capability));
+});
 
 test("compiles the production Worker prefix into one immutable AgentVersion", () => {
   const version = compileRuntimeAgentVersion(runtimeConfig());

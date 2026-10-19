@@ -25,6 +25,8 @@ import {
 import {
   ArtifactApplicationService,
   RunExecutionService,
+  type ActorContext,
+  type AutonomousTaskCapabilitySnapshot,
   type AgentVersionDeploymentCandidate,
   type ArtifactStorePort,
   type RunRoute,
@@ -233,6 +235,25 @@ export type RuntimeWorkerCompositionConfig = Readonly<{
   workspaceReadFile?: RuntimeWorkspaceReadFileConfig;
   nativeWorkspaceReadCatalog?: NativeWorkspaceReadCatalog;
 }>;
+
+/** Builds the executor capability from the already-validated Worker route. */
+export function deriveRuntimeTeamTaskCapability(
+  actor: ActorContext,
+  route: RunRoute,
+): AutonomousTaskCapabilitySnapshot {
+  return Object.freeze({
+    schemaVersion: "crewon.autonomous-task-capability.v0",
+    tenantId: actor.tenantId,
+    spaceId: actor.spaceId,
+    actorId: actor.actorId,
+    principalId: actor.principalId,
+    authorityId: route.authorityId,
+    runtimeGeneration: route.runtimeGeneration,
+    policySnapshotId: route.policySnapshotId,
+    workspaceBindingId: route.workspaceBindingId,
+    toolPermissionMode: "requestApproval",
+  });
+}
 
 export type RuntimeTeamTaskSchedulerConfig = Readonly<{
   scope: TeamTaskScope;
@@ -801,19 +822,10 @@ async function composeRuntimeWorker(
                 teamConfig.host.autonomousCapability === undefined
                   ? {
                       ...teamConfig.host,
-                      autonomousCapability: {
-                        schemaVersion:
-                          "crewon.autonomous-task-capability.v0" as const,
-                        tenantId: teamConfig.host.actor.tenantId,
-                        spaceId: teamConfig.host.actor.spaceId,
-                        actorId: teamConfig.host.actor.actorId,
-                        principalId: teamConfig.host.actor.principalId,
-                        authorityId: config.route.authorityId,
-                        runtimeGeneration: config.route.runtimeGeneration,
-                        policySnapshotId: config.route.policySnapshotId,
-                        workspaceBindingId: config.route.workspaceBindingId,
-                        toolPermissionMode: "requestApproval" as const,
-                      },
+                      autonomousCapability: deriveRuntimeTeamTaskCapability(
+                        teamConfig.host.actor,
+                        config.route,
+                      ),
                     }
                   : teamConfig.host,
             }),
