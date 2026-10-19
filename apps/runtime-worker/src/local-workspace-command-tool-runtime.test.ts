@@ -392,6 +392,53 @@ test("measures the real workspace command adapter and its shared-workspace seria
   }
 });
 
+test("separate workspace runtimes do not share a command queue", async () => {
+  const directory = mkdtempSync(join(tmpdir(), "crewon-command-isolation-"));
+  const firstRoot = join(directory, "first");
+  const secondRoot = join(directory, "second");
+  mkdirSync(firstRoot);
+  mkdirSync(secondRoot);
+  try {
+    writeFileSync(join(secondRoot, "sample.txt"), "second-workspace");
+    const first = createLocalWorkspaceCommandToolRuntime(firstRoot);
+    const second = createLocalWorkspaceCommandToolRuntime(secondRoot);
+    const run = async (
+      runtime: ToolRuntimePort,
+      runId: string,
+      command: string,
+    ) => {
+      const input = approvedCommand(
+        runtime,
+        JSON.stringify({ command, timeoutSeconds: 10 }),
+        "danger-full-access",
+        { runId, callId: runId },
+      );
+      const result = await runtime.execute(input, new AbortController().signal);
+      assert.equal(result.status, "completed");
+      runtime.acknowledgeExecutionResult?.({
+        ...input,
+        status: "completed",
+        providerReceiptId: result.providerReceiptId,
+      });
+      return result;
+    };
+    let firstFinished = false;
+    const slow = run(first, "first-slow", "sleep 0.5; printf first").then(
+      (result) => {
+        firstFinished = true;
+        return result;
+      },
+    );
+    await new Promise((resolve) => setTimeout(resolve, 25));
+    const quick = await run(second, "second-quick", "cat sample.txt");
+    assert.equal(JSON.parse(quick.result.output).stdout, "second-workspace");
+    assert.equal(firstFinished, false);
+    await slow;
+  } finally {
+    rmSync(directory, { recursive: true, force: true });
+  }
+});
+
 function approvedCommand(
   runtime: ToolRuntimePort,
   input: string,

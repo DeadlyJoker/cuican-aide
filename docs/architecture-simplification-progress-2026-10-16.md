@@ -983,3 +983,7 @@ host admission port 在绑定时会复制并冻结 capability snapshot，后续�
 ## 第九十九批：EventHub 等待与持久状态兜底（2026-10-19）
 
 Standalone Control 现在为显式 Team operations 提供 host-only terminal wait：先订阅对应 Run，再读取持久状态；事件到达时立即重新读取最终 Run，事件在短窗口内不可达时关闭旧订阅、重新订阅并用持久 `getRun` 兜底。这样 `outboxScanIntervalMs=null` 仍能完成任务，订阅不会因超时累积挂起 waiter；application 继续校验 Run identity、终态、deadline 和取消。真实 standalone HTTP admission/cancel 2/2、headless Team SQLite 4/4、Application/Control API typecheck 通过。
+
+## 第一百批：workspace queue 隔离回归（2026-10-19）
+
+补充真实本地命令适配器回归：同一 workspace 的慢命令继续保持串行副作用保护；不同 workspace runtime 的 queue 独立，A workspace 的 500ms 命令运行时，B workspace 的快速读取先完成。该测试只固定现有资源作用域事实，没有按 shell 文本推断读写权限，也没有放开同一 workspace 的并行写入。
