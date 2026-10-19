@@ -99,6 +99,7 @@ export * from "./workflow-run-scheduler-port.ts";
 export * from "./task-lineage-policy.ts";
 export * from "./autonomous-task-edge-store-port.ts";
 export * from "./autonomous-task-admission.ts";
+export * from "./autonomous-child-wait.ts";
 export * from "./workflow-run-admission-store-port.ts";
 export * from "./workflow-run-application-service.ts";
 export * from "./tool-approval-store-port.ts";

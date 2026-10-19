@@ -999,3 +999,7 @@ Standalone Control 现在为显式 Team operations 提供 host-only terminal wai
 ## 第一百零三批：Runtime Worker 自动绑定 child reader（2026-10-19）
 
 显式 Runtime Worker Team host 现在像 child admission 一样自动绑定同一 Team journal 的 child reader；显式传入的 host reader 优先保留。Standalone composition 回归 19/19 通过，Runtime Worker typecheck 通过。该接线仍只提供内部观察能力，未开启模型自主 spawn 或改变默认 scheduler。
+
+## 第一百零四批：有界 autonomous child 收敛等待原语（2026-10-19）
+
+新增 application `waitForAutonomousChildren`：按调用者给定的 bounded child ID 集合读取 host child snapshots，保持返回顺序，只有 child `finalAccepted` 或 durable `cancelRequested` 才视为收敛；缺失、超时和取消均 fail closed。轮询有 deadline 和 interval 上限，不引入新的数据库或 HTTP 状态。新增 3 项 application 回归覆盖顺序、取消收敛和永久 coordinating 超时。

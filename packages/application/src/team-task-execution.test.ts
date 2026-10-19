@@ -146,7 +146,9 @@ test("host child reader binds the parent fence scope and task identity", async (
   let received: Record<string, unknown> | null = null;
   const reader = createTeamTaskAutonomousChildReader({
     store: {
-      listAutonomousChildren: async (input) => {
+      listAutonomousChildren: async (
+        input: Parameters<TeamTaskJournalStore["listAutonomousChildren"]>[0],
+      ) => {
         received = input as unknown as Record<string, unknown>;
         return [];
       },
