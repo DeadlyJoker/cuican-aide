@@ -887,3 +887,9 @@ Node 24 SQLite/Control 集成测试 1/1 通过，Store/Application/Control API t
 现在双 backend 在返回 replay 前同时核对持久化的 child task id、budget、capability、intent 和 wake key。字段缺失或类型损坏按 journal corruption 拒绝；合法但内容不同按 effect conflict 拒绝。新增 SQLite 真实 Control/Worker interruption 回归覆盖同键不同 child intent，事务和原有 edge 冲突回滚路径保持不变。
 
 Node 22 当前环境下定向 Control/Store typecheck 通过；Team interruption Node test 16 项中 SQLite 8 项通过、PostgreSQL 8 项因未提供 `CREWON_TEST_POSTGRES_URL` 跳过。Node 24 仍是仓库要求的最终验证环境。
+
+## 第八十一批：自主 child 数量预算在 admission 处生效（2026-10-19）
+
+补齐 child admission 的预算边界：`childOrdinal` 现在必须不大于冻结 budget 的 `maxChildren`。此前只检查 depth，`maxChildren=0` 仍可接受 ordinal 1，导致持久化 child 超出声明预算。
+
+新增 application 契约回归覆盖零 child 预算；该校验发生在 Store 事务之前，不改变现有数据库或 HTTP 形状。

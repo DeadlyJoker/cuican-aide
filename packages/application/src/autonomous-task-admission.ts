@@ -83,6 +83,7 @@ export function captureAutonomousTaskChildAdmission(
     edge.parentTaskId !== parentTaskId ||
     edge.childTaskId !== childTaskId ||
     edge.depth > budget.maxDepth ||
+    edge.childOrdinal > budget.maxChildren ||
     childIntent.taskId !== childTaskId ||
     childIntent.tenantId !== capability.tenantId ||
     childIntent.spaceId !== capability.spaceId ||

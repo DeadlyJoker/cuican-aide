@@ -93,6 +93,7 @@ test("child admission capture rejects mismatched identity, depth and accessors",
     { ...admission, childTaskId: "other" },
     { ...admission, edge: { ...admission.edge, childTaskId: "other" } },
     { ...admission, edge: { ...admission.edge, depth: 4 } },
+    { ...admission, budget: { ...budget, maxChildren: 0 } },
     { ...admission, capability: { ...capability, actorId: "other" } },
     { ...admission, childIntent: { ...childIntent, taskId: "other" } },
   ])
