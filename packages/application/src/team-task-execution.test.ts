@@ -3,6 +3,7 @@ import test from "node:test";
 import type { ControlTeamRuntimeClient } from "./team-turn-types.ts";
 import {
   createTeamTaskAutonomousChildAdmission,
+  createTeamTaskAutonomousChildReader,
   createTeamTaskExecutor,
   type TeamTaskExecutionHost,
 } from "./team-task-execution.ts";
@@ -139,4 +140,31 @@ test("host child admission binds parent capability instead of accepting caller a
   assert.deepEqual(received.value?.parentCapability, capability);
   assert.deepEqual(received.value?.parentFence, parentFence);
   assert.ok(Object.isFrozen(received.value?.parentCapability));
+});
+
+test("host child reader binds the parent fence scope and task identity", async () => {
+  let received: Record<string, unknown> | null = null;
+  const reader = createTeamTaskAutonomousChildReader({
+    store: {
+      listAutonomousChildren: async (input) => {
+        received = input as unknown as Record<string, unknown>;
+        return [];
+      },
+    } as unknown as TeamTaskJournalStore,
+  });
+  const parentFence: TeamTaskFence = {
+    tenantId: actor.tenantId,
+    spaceId: actor.spaceId,
+    taskId: "parent-task",
+    ownerId: "owner-1",
+    leaseId: "lease-1",
+    epoch: 1,
+  };
+  assert.deepEqual(await reader({ parentFence, limit: 4 }), []);
+  assert.deepEqual(received, {
+    tenantId: actor.tenantId,
+    spaceId: actor.spaceId,
+    parentTaskId: parentFence.taskId,
+    limit: 4,
+  });
 });

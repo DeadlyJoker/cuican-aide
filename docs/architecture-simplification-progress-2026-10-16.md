@@ -991,3 +991,7 @@ Standalone Control 现在为显式 Team operations 提供 host-only terminal wai
 ## 第一百零一批：autonomous child 组合快照读取（2026-10-19）
 
 在 SQLite/PostgreSQL 的 Team journal 内新增 `listAutonomousChildren`：一次数据库快照按 parent edge 顺序读取 child edge 和对应 `TeamTaskRecord`，缺失 child 或损坏 edge 直接 fail closed，结果数量限制为 32。新增 interruption 回归验证 parent admission 后能同时得到 child identity、edge 和 coordinating 状态；临时 PostgreSQL 实例与 SQLite 16 项全部通过。该 port 只提供一致的只读观察，尚未改变父任务等待、聚合或 HTTP 结果协议。
+
+## 第一百零二批：父 task 绑定 child snapshot reader（2026-10-19）
+
+`TeamTaskExecutionHost` 现在可显式提供 host-only child reader；运行中的 Team client 只能读取当前 lease fence 对应 parent task 的 children，调用者不能提交另一个 parent ID。该 port 复用 journal 的组合快照，不新增 HTTP 或模型输入字段；新增 application 回归确认 tenant、space、parentTaskId 和 limit 均由父 fence 绑定。
