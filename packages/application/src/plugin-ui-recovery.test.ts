@@ -11,6 +11,53 @@ import {
 import { createPluginUiIntentPayloadVerifier } from "./plugin-ui-recovery-codec.ts";
 import { capturePluginUiRecoveryPort } from "./plugin-ui-recovery-invocation.ts";
 import { extensionCanonicalJson } from "@crewon/domain";
+import { queryRevisionNotAdmitted } from "./project-query-nonadmission.ts";
+import { projectGenerationQueryUiTaskKey } from "./project-query-task-receipt.ts";
+
+test("only the host query non-admission proof can end a repeatedly dispatched old query", async () => {
+  const f = recoveryFixture(),
+    lease = await f.mount(),
+    request = recoveryRequest("query");
+  if (
+    request.action !==
+    "crewon.project-generation-queries.v1.queryConceptGeneration"
+  )
+    throw new Error("fixture_invalid");
+  await f.service.stageRecovery(f.actor, {
+    mountRef: lease.mountRef,
+    ...request,
+  });
+  f.behavior.actionError = new ApplicationError(
+    "conflict",
+    "project_query_revision_not_admitted",
+  );
+  await assert.rejects(
+    f.service.invoke(f.actor, { mountRef: lease.mountRef, ...request }),
+  );
+  const record = [...f.records.values()][0]!;
+  assert.equal(record.phase, "dispatched");
+  f.behavior.actionError = queryRevisionNotAdmitted(
+    {
+      threadId: request.input.threadId,
+      expectedThreadRevision: request.input.expectedThreadRevision,
+      taskKey: projectGenerationQueryUiTaskKey(
+        {
+          sourcePin: record.sourcePin,
+          idempotencyKey: request.input.idempotencyKey,
+        },
+        recoveryDigester,
+      ),
+    },
+    new Error("revision_conflict"),
+  );
+  await assert.rejects(
+    f.service.invoke(f.actor, { mountRef: lease.mountRef, ...request }),
+  );
+  const refused = [...f.records.values()][0]!;
+  assert.equal(refused.phase, "refused");
+  assert.equal(refused.dispatchAttemptCount, 2);
+  assert.equal(refused.requestJson, record.requestJson);
+});
 
 test("declared recovery requires durable stage before business and survives mount replacement", async () => {
   const f = recoveryFixture();

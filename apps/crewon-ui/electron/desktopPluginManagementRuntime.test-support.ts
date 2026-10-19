@@ -10,6 +10,7 @@ import { Writable } from "node:stream";
 import { RuntimeSupervisor } from "./runtimeSupervisor.ts";
 import { desktopRuntimeModelDiscovery } from "./desktopRuntimeModelDiscovery.ts";
 import type { ProviderModelCatalogOutcome } from "./providerModelCatalog.ts";
+import type { ActiveProvider } from "./providerCredentials.ts";
 import { desktopPluginBootstrapFixture } from "./desktopPluginBootstrap.test-support.ts";
 
 export function desktopPluginManagementFixture(input: {
@@ -18,6 +19,9 @@ export function desktopPluginManagementFixture(input: {
   controlHealth?: "live" | "unavailable";
   modelCatalog?: readonly string[];
   modelDiscoveryOutcome?: () => ProviderModelCatalogOutcome;
+  providerModelCatalog?: (
+    provider: ActiveProvider,
+  ) => Promise<readonly string[] | null>;
 }) {
   const files = desktopPluginBootstrapFixture();
   if (input.approval === "present") files.writeApproval();
@@ -60,7 +64,7 @@ export function desktopPluginManagementFixture(input: {
           (input.controlHealth === "unavailable" ? 503 : 200) +
           ";res.end('{}');return;}",
         "if(req.url==='/api/v1/health/ready'){res.statusCode=" +
-          (input.provider === "configured" ? 200 : 503) +
+          "(env.CREWON_MODEL_ID?200:503)" +
           ";res.end('{}');return;}",
         "res.statusCode=404;res.end('{}');});",
         "server.listen(Number(env.CREWON_CONTROL_PORT),'127.0.0.1');",
@@ -90,10 +94,12 @@ export function desktopPluginManagementFixture(input: {
             modelId: "fixture-model",
             apiKey: "fixture-model-secret",
           },
-    providerModelCatalog: async () =>
-      input.modelDiscoveryOutcome
-        ? desktopRuntimeModelDiscovery(input.modelDiscoveryOutcome())
-        : (input.modelCatalog ?? ["fixture-model"]),
+    providerModelCatalog:
+      input.providerModelCatalog ??
+      (async () =>
+        input.modelDiscoveryOutcome
+          ? desktopRuntimeModelDiscovery(input.modelDiscoveryOutcome())
+          : (input.modelCatalog ?? ["fixture-model"])),
     agentPlatformApiKeyForOrigin: () => null,
     workspaceRoot: () => null,
     logOutputs: { stdout, stderr },

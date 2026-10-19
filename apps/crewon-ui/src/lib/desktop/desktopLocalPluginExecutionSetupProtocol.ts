@@ -1,3 +1,21 @@
+export const DESKTOP_SHORT_DRAMA_IMAGE_PRESETS = [
+  "krea2-portrait",
+  "krea2-character-three-view",
+  "api-c16-scene",
+  "api-c16-portrait",
+  "api-t4-three-view",
+] as const;
+export type DesktopShortDramaImagePreset =
+  (typeof DESKTOP_SHORT_DRAMA_IMAGE_PRESETS)[number];
+export function isDesktopShortDramaImagePreset(
+  input: unknown,
+): input is DesktopShortDramaImagePreset {
+  return (
+    typeof input === "string" &&
+    DESKTOP_SHORT_DRAMA_IMAGE_PRESETS.some((value) => value === input)
+  );
+}
+
 export const DESKTOP_LOCAL_PLUGIN_EXECUTION_SETUP_VERSION = 1 as const;
 
 /** Public pins only. Paths, actor identity and runtime authority stay in Main. */
@@ -47,7 +65,7 @@ export type DesktopLocalPluginExecutionPreview =
       previewId: string;
       expiresAt: number;
       baseUrl: string;
-      preset: "krea2-portrait" | "krea2-character-three-view";
+      preset: DesktopShortDramaImagePreset;
       networkPaths: readonly DesktopLocalPluginExecutionNetworkPath[];
       approvalRequirement: "none";
       mediaInputPreparation?: Readonly<{
@@ -66,7 +84,10 @@ export type DesktopLocalPluginExecutionPreview =
           DesktopLocalPluginExecutionPreview["mediaInputPreparation"]
         >["workflows"];
         additionalNetworkPaths: readonly [
-          Readonly<{ method: "POST"; path: "/upload/image" }>,
+          Readonly<{
+            method: "POST";
+            path: "/upload/image" | "/api/comfy/upload/file";
+          }>,
         ];
       }>;
       historyQueryAvailability?: "available" | "unavailable";

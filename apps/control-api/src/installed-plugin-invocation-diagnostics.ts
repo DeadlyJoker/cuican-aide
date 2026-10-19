@@ -1,12 +1,17 @@
 import { AsyncLocalStorage } from "node:async_hooks";
 
 const GENERATION_ACTION = "crewon.project-generations.v1.generateConcept";
+const QUERY_ACTION =
+  "crewon.project-generation-queries.v1.queryConceptGeneration";
+const READINESS_ACTION = "crewon.project-generation-contexts.v1.getReadiness";
 const MAX_REQUEST_RECORDS = 96;
+const RESERVED_TERMINAL_RECORDS = 8;
 const MAX_ACTIVE_SCOPES = 32;
 const PREFIX = "CREWON_PLUGIN_INVOCATION_DIAGNOSTIC:";
 const now = performance.now.bind(performance);
 const phases = [
   "route.invoke",
+  "request.peer-prepare",
   "generation.current",
   "generation.target-package",
   "generation.source-bytes",
@@ -23,6 +28,38 @@ const phases = [
   "generation.node-execute",
   "generation.task-commit",
   "generation.node-close",
+  "query.current",
+  "query.target-package",
+  "query.source-bytes",
+  "query.target-bytes",
+  "query.target-policy",
+  "query.transaction-current",
+  "query.transaction-bytes",
+  "query.transaction-access",
+  "query.saved-generation",
+  "query.shared-ready",
+  "query.node-prepare",
+  "query.node-current",
+  "query.node-execute",
+  "query.task-commit",
+  "query.host-resolve",
+  "query.host-evaluate",
+  "query.node-close",
+  "readiness.current",
+  "readiness.target-package",
+  "readiness.source-bytes",
+  "readiness.target-bytes",
+  "readiness.target-policy",
+  "readiness.identity",
+  "readiness.profile",
+  "readiness.policy",
+  "readiness.bytes",
+  "readiness.access",
+  "readiness.source-selection",
+  "readiness.target-selection",
+  "readiness.invocation-current",
+  "readiness.saved-input",
+  "readiness.host-evaluate",
 ] as const;
 export type PluginGenerationDiagnosticPhase = (typeof phases)[number];
 const allowedPhases = new Set<string>(phases);
@@ -76,6 +113,15 @@ export function createPluginInvocationDiagnostics(
   ): void => {
     if (!scope.alive || silenced || scope.sequence >= MAX_REQUEST_RECORDS)
       return;
+    // Repeated authority checks must not hide the final failure location.
+    if (
+      scope.sequence >= MAX_REQUEST_RECORDS - RESERVED_TERMINAL_RECORDS &&
+      status !== "error" &&
+      phase !== "route.invoke" &&
+      phase !== "query.task-commit" &&
+      phase !== "query.node-execute"
+    )
+      return;
     try {
       // Only captured server identity and fixed primitives enter serialization.
       const line =
@@ -123,7 +169,9 @@ export function createPluginInvocationDiagnostics(
     if (!enabled) return work();
     if (
       silenced ||
-      action !== GENERATION_ACTION ||
+      (action !== GENERATION_ACTION &&
+        action !== READINESS_ACTION &&
+        action !== QUERY_ACTION) ||
       typeof requestId !== "string" ||
       requestId.length > 52 ||
       !/^req-[a-zA-Z0-9]{1,48}$/u.test(requestId) ||

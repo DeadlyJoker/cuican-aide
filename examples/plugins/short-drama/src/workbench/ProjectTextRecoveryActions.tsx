@@ -4,9 +4,11 @@ import type { TextSnapshot } from "./ProjectTextController.types";
 export function ProjectTextRecoveryActions({
   controller,
   snapshot,
+  onOpenResult,
 }: {
   controller: ProjectTextController;
   snapshot: TextSnapshot;
+  onOpenResult?(): void;
 }) {
   const recovery = snapshot.recovery,
     record = recovery.intent;
@@ -45,7 +47,9 @@ export function ProjectTextRecoveryActions({
           disabled={
             snapshot.saving || snapshot.opening || recovery.acknowledging
           }
-          onClick={() => void controller.refreshRecovery()}
+          onClick={async () => {
+            if (await controller.refreshRecovery()) onOpenResult?.();
+          }}
         >
           {record?.phase === "accepted" ? "读取已保存结果" : "重新读取恢复记录"}
         </button>

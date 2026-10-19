@@ -17,6 +17,7 @@ export type ShortDramaProjectPage =
   | "script"
   | "characters"
   | "art"
+  | "concepts"
   | "references";
 export const projectPages = [
   {
@@ -79,8 +80,18 @@ export function projectPagesFor(origin: "creative" | "novel" | null) {
           projectPages[2],
           projectPages[5],
         ]
-      : projectPages.slice(2);
-  return [overview, ...remaining];
+      : projectPages.slice(1);
+  return [
+    overview,
+    ...remaining.filter((page) => page.id !== "references"),
+    {
+      id: "concepts" as const,
+      title: "概念图",
+      description: "原创设定 · 形象与场景探索",
+      icon: Image,
+    },
+    ...remaining.filter((page) => page.id === "references"),
+  ];
 }
 
 /** Navigation changes only the plugin content; it never overlays the host canvas. */

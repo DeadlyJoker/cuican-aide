@@ -568,12 +568,25 @@ test(
 test("actual published model siblings remain selectable while stale targets for the same model stay hidden", async (t) => {
   const f = await peerFixture(t, "sqlite", 1, { modelSiblings: true });
   assert.equal(f.entries.length, 3);
+  const metadataReads = f.metadataState.metadataReads;
   const catalog = await f.invoke(f.common("catalog"));
   if (catalog.operation !== "catalog") throw new Error("unexpected_response");
   assert.deepEqual(
     catalog.entries.map((row) => row.configuredTarget.agentVersionId),
     [f.entries[0]!.target.agentVersionId, f.entries[1]!.target.agentVersionId],
   );
+  assert.equal(
+    f.metadataState.metadataReads - metadataReads,
+    1,
+    "one physical catalog snapshot verifies identical package/configuration bytes once across model variants",
+  );
+  f.metadataState.allowed = false;
+  assert.notEqual(
+    (await post(f.peer.origin, f.common("catalog"))).status,
+    200,
+    "a previous catalog cannot cache metadata permission for the next request",
+  );
+  f.metadataState.allowed = true;
   const ready = await f.invoke(f.request("readiness", 1));
   if (ready.operation !== "readiness") throw new Error("unexpected_response");
   assert.deepEqual(ready.result, {
@@ -585,4 +598,19 @@ test("actual published model siblings remain selectable while stale targets for 
   const hidden = await f.invoke(f.common("catalog"));
   if (hidden.operation !== "catalog") throw new Error("unexpected_response");
   assert.equal(hidden.entries.length, 0);
+});
+
+test("model-sibling catalog returns no partial metadata when selection changes during the shared byte validation", async (t) => {
+  const f = await peerFixture(t, "sqlite", 1, { modelSiblings: true });
+  const preflights = f.state.preflights;
+  f.metadataState.beforeMetadataRead = async () => {
+    f.metadataState.beforeMetadataRead = null;
+    await f.select("disabled");
+  };
+  assert.notEqual((await post(f.peer.origin, f.common("catalog"))).status, 200);
+  const hidden = await f.invoke(f.common("catalog"));
+  if (hidden.operation !== "catalog") throw new Error("unexpected_response");
+  assert.deepEqual(hidden.entries, []);
+  assert.equal(f.state.http, 0);
+  assert.equal(f.state.preflights, preflights);
 });

@@ -1,4 +1,5 @@
 // @vitest-environment happy-dom
+import { ControlApiTransportError } from "@crewon/control-client";
 import { afterEach, describe, expect, it, vi } from "vitest";
 import {
   parsePluginUiLease,
@@ -145,10 +146,15 @@ describe.each([false, true])("media generation Web/Native %s", (native) => {
     );
     await flush();
     expect(f.wire("/actions")).toHaveLength(0);
+    const lostResponse = new Error("named-lost-stage-response");
     f.setStage(() => {
-      throw new Error("named-lost-stage-response");
+      throw lostResponse;
     });
-    await expect(f.invoke()).rejects.toThrow("named-lost-stage-response");
+    await expect(f.invoke()).rejects.toMatchObject({
+      constructor: ControlApiTransportError,
+      message: "control_api_transport_unavailable",
+      cause: lostResponse,
+    });
     expect(f.wire("/actions")).toHaveLength(0);
   });
   it("cancel and account replacement suppress late receipts and never retry automatically", async () => {

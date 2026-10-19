@@ -1,0 +1,138 @@
+{
+  "schemaVersion": "crewon.comfy-video-format-probe.v1",
+  "createdAt": "2026-10-16T03:03:34.567Z",
+  "technicalOnly": true,
+  "narrativeGeneration": false,
+  "nativeProjectAcceptance": false,
+  "origin": "https://u564342-7908818e1ac4.westd.seetacloud.com:8443/",
+  "clientId": "c82024c9-fe52-4e2e-9ff9-916c6e3252d0",
+  "prefix": "crewon-video-format-probe-c82024c9-fe52-4e2e-9ff9-916c6e3252d0",
+  "graph": {
+    "1": {
+      "class_type": "EmptyImage",
+      "inputs": {
+        "width": 64,
+        "height": 64,
+        "batch_size": 2,
+        "color": 2306116
+      }
+    },
+    "2": {
+      "class_type": "CreateVideo",
+      "inputs": {
+        "images": [
+          "1",
+          0
+        ],
+        "fps": 24
+      }
+    },
+    "3": {
+      "class_type": "SaveVideo",
+      "inputs": {
+        "video": [
+          "2",
+          0
+        ],
+        "filename_prefix": "crewon-video-format-probe-c82024c9-fe52-4e2e-9ff9-916c6e3252d0",
+        "format": "mp4",
+        "format.codec": "h264",
+        "format.codec.encoding": "re-encode",
+        "format.codec.encoding.crf": 18
+      }
+    }
+  },
+  "graphDigest": "sha256:92d582df19027712810572b87393195b4a502478e81033b003246ffdb0ae74b8",
+  "nodeSchemaDigests": {
+    "EmptyImage": "sha256:6210ea8e5eef5208dd434ba3dade4ba625610d74aea3eefe2b6a26fcc3f4d6bf",
+    "CreateVideo": "sha256:52f4264e7c5cffb904f502caab1f93344f424a0a92c34b413436ed29b7180049",
+    "SaveVideo": "sha256:0081c4360c7835c7320defaad7d84301bc9d4ba0fd7f10fa0adfcbe86e59722f"
+  },
+  "phase": "verified",
+  "submissionCount": 1,
+  "dispatchedAt": "2026-10-16T03:03:34.576Z",
+  "submissionResponse": {
+    "prompt_id": "6d9f8224-2d7d-4077-a586-e6183e704aee",
+    "number": 0,
+    "node_errors": {}
+  },
+  "promptId": "6d9f8224-2d7d-4077-a586-e6183e704aee",
+  "providerStatus": {
+    "status_str": "success",
+    "completed": true,
+    "messages": [
+      [
+        "execution_start",
+        {
+          "prompt_id": "6d9f8224-2d7d-4077-a586-e6183e704aee",
+          "timestamp": 1792119814933
+        }
+      ],
+      [
+        "execution_cached",
+        {
+          "nodes": [],
+          "prompt_id": "6d9f8224-2d7d-4077-a586-e6183e704aee",
+          "timestamp": 1792119814944
+        }
+      ],
+      [
+        "execution_success",
+        {
+          "prompt_id": "6d9f8224-2d7d-4077-a586-e6183e704aee",
+          "timestamp": 1792119815153
+        }
+      ]
+    ]
+  },
+  "outputNode": {
+    "images": [
+      {
+        "filename": "crewon-video-format-probe-c82024c9-fe52-4e2e-9ff9-916c6e3252d0_00001_.mp4",
+        "subfolder": "",
+        "type": "output"
+      }
+    ],
+    "animated": [
+      true
+    ]
+  },
+  "media": {
+    "contentType": "video/mp4",
+    "byteLength": 2126,
+    "byteDigest": "sha256:53d272999f1eaf137c69314410ca1652ad4120b1e289f9082eb50e13504472b5",
+    "metadata": {
+      "durationMs": 83.333,
+      "video": {
+        "codec": "h264",
+        "width": 64,
+        "height": 64,
+        "framesPerSecond": 24,
+        "sampleAspectRatio": null,
+        "rotationDegrees": 0,
+        "startMs": 0,
+        "durationMs": 83.333
+      },
+      "audio": null
+    },
+    "fullDecode": true,
+    "frames": [
+      {
+        "requestedTimeMs": 0,
+        "actualTimeMs": 0,
+        "width": 64,
+        "height": 64,
+        "contentDigest": "sha256:c796b250f575a8cfca13c589fb1bf6e891707d5b835eb067bea490a3a2d2ae02"
+      },
+      {
+        "requestedTimeMs": 41,
+        "actualTimeMs": 42,
+        "width": 64,
+        "height": 64,
+        "contentDigest": "sha256:c796b250f575a8cfca13c589fb1bf6e891707d5b835eb067bea490a3a2d2ae02"
+      }
+    ]
+  },
+  "verifiedAt": "2026-10-16T03:03:44.493Z",
+  "localPath": "/Users/cheneywang/.codex/worktrees/e9bf/cuican-aide/output/short-drama-rehearsal-20261015/comfy-video-format-probe-20261016.mp4"
+}

@@ -1,0 +1,866 @@
+{
+  "checkedAt": "2026-10-16T04:25:37.466Z",
+  "scope": "read-only exact four node declarations; no generation, upload, settings or weights downloads",
+  "results": [
+    {
+      "node": "VRGDG_VoxCPM2Generate",
+      "status": 200,
+      "bytes": 4870,
+      "declaration": {
+        "input": {
+          "required": {
+            "text": [
+              "STRING",
+              {
+                "default": "Hello from VoxCPM2.",
+                "multiline": true,
+                "tooltip": "What you want the model to say.\nFor cloning modes, this is the new target speech, not the transcript of your reference clip."
+              }
+            ],
+            "mode": [
+              [
+                "text_to_speech",
+                "voice_design",
+                "prompt_continuation",
+                "controllable_clone",
+                "ultimate_clone"
+              ],
+              {
+                "default": "text_to_speech",
+                "tooltip": "Choose how VoxCPM2 should speak:\n- text_to_speech: regular TTS with no voice reference.\n- voice_design: zero-shot styled speech guided by your wording alone.\n- prompt_continuation: continue from a prompt clip using prompt_audio plus prompt_text.\n- controllable_clone: easiest voice clone. Provide a clean reference clip.\n- ultimate_clone: strongest cloning mode. Provide a reference clip and the exact transcript in prompt_text."
+              }
+            ],
+            "device": [
+              ["auto", "cuda", "cpu"],
+              {
+                "default": "auto",
+                "tooltip": "auto picks CUDA when available and falls back to CPU.\nCUDA is strongly recommended for VoxCPM2."
+              }
+            ],
+            "cfg_value": [
+              "FLOAT",
+              {
+                "default": 2,
+                "min": 0,
+                "max": 20,
+                "step": 0.1,
+                "tooltip": "Classifier-free guidance strength.\nA good starting point is 2.0. Lower can sound looser; higher can sound more forced."
+              }
+            ],
+            "inference_timesteps": [
+              "INT",
+              {
+                "default": 10,
+                "min": 1,
+                "max": 200,
+                "step": 1,
+                "tooltip": "Number of inference steps.\n10 is a solid default. Higher may improve quality slightly but is slower."
+              }
+            ],
+            "load_denoiser": [
+              "BOOLEAN",
+              {
+                "default": false,
+                "tooltip": "Optional cleanup for noisy prompt or reference audio before cloning.\nUseful if your source clip has hiss, room noise, or light background noise."
+              }
+            ],
+            "normalize_text": [
+              "BOOLEAN",
+              {
+                "default": false,
+                "tooltip": "Normalize text before generation.\nCan help with number/date expansion and cleaner pronunciation on some inputs."
+              }
+            ],
+            "retry_badcase": [
+              "BOOLEAN",
+              {
+                "default": true,
+                "tooltip": "Retry obviously bad generations automatically.\nThis can improve reliability but may take longer."
+              }
+            ],
+            "retry_badcase_max_times": [
+              "INT",
+              {
+                "default": 3,
+                "min": 1,
+                "max": 10,
+                "step": 1,
+                "tooltip": "Maximum retry attempts when retry_badcase is enabled."
+              }
+            ],
+            "retry_badcase_ratio_threshold": [
+              "FLOAT",
+              {
+                "default": 6,
+                "min": 1,
+                "max": 20,
+                "step": 0.1,
+                "tooltip": "Bad-case threshold for retry logic.\nLeave this alone unless you are tuning generation behavior."
+              }
+            ],
+            "min_len": [
+              "INT",
+              {
+                "default": 2,
+                "min": 1,
+                "max": 128,
+                "step": 1,
+                "tooltip": "Minimum generated audio token length.\nUsually safe to leave at the default."
+              }
+            ],
+            "max_len": [
+              "INT",
+              {
+                "default": 4096,
+                "min": 32,
+                "max": 16384,
+                "step": 1,
+                "tooltip": "Maximum generated token length.\nIncrease if long text is getting cut off. Higher values can use more VRAM and time."
+              }
+            ],
+            "save_filename_prefix": [
+              "STRING",
+              {
+                "default": "voxcpm2",
+                "multiline": false,
+                "tooltip": "Base name for the saved WAV file in ComfyUI/output/VRGDG_AudioFiles."
+              }
+            ]
+          },
+          "optional": {
+            "reference_audio": [
+              "AUDIO",
+              {
+                "tooltip": "Speaker reference for voice cloning.\nUse a clean single-speaker clip, ideally 10 to 30 seconds."
+              }
+            ],
+            "reference_audio_path": [
+              "STRING",
+              {
+                "default": "",
+                "multiline": false,
+                "placeholder": "Optional path to speaker reference audio",
+                "tooltip": "Speaker reference for voice cloning.\nUse a clean single-speaker clip, ideally 10 to 30 seconds."
+              }
+            ],
+            "prompt_audio": [
+              "AUDIO",
+              {
+                "tooltip": "Prompt/continuation audio.\nUse this for prompt_continuation, or for ultimate_clone when you want the model to match a specific spoken example."
+              }
+            ],
+            "prompt_audio_path": [
+              "STRING",
+              {
+                "default": "",
+                "multiline": false,
+                "placeholder": "Optional path to prompt/reference transcript audio",
+                "tooltip": "Prompt/continuation audio.\nUse this for prompt_continuation, or for ultimate_clone when you want the model to match a specific spoken example."
+              }
+            ],
+            "prompt_text": [
+              "STRING",
+              {
+                "default": "",
+                "multiline": true,
+                "placeholder": "Required for ultimate_clone if prompt audio is used",
+                "tooltip": "Exact transcript of the prompt/reference clip.\nRequired for prompt_continuation and ultimate_clone. Match the spoken words as closely as possible."
+              }
+            ]
+          }
+        },
+        "input_order": {
+          "required": [
+            "text",
+            "mode",
+            "device",
+            "cfg_value",
+            "inference_timesteps",
+            "load_denoiser",
+            "normalize_text",
+            "retry_badcase",
+            "retry_badcase_max_times",
+            "retry_badcase_ratio_threshold",
+            "min_len",
+            "max_len",
+            "save_filename_prefix"
+          ],
+          "optional": [
+            "reference_audio",
+            "reference_audio_path",
+            "prompt_audio",
+            "prompt_audio_path",
+            "prompt_text"
+          ]
+        },
+        "is_input_list": false,
+        "output": ["AUDIO", "STRING", "INT", "STRING"],
+        "output_is_list": [false, false, false, false],
+        "output_name": ["audio", "saved_audio_path", "sample_rate", "status"],
+        "name": "VRGDG_VoxCPM2Generate",
+        "display_name": "VRGDG VoxCPM2 Voice Clone / TTS",
+        "description": "",
+        "python_module": "custom_nodes.comfyui-vrgamedevgirl",
+        "category": "VRGDG/Audio",
+        "output_node": false,
+        "has_intermediate_output": false,
+        "search_aliases": []
+      }
+    },
+    {
+      "node": "WanImageToVideo",
+      "status": 200,
+      "bytes": 1261,
+      "declaration": {
+        "input": {
+          "required": {
+            "positive": ["CONDITIONING", {}],
+            "negative": ["CONDITIONING", {}],
+            "vae": ["VAE", {}],
+            "width": [
+              "INT",
+              {
+                "default": 832,
+                "min": 16,
+                "max": 16384,
+                "step": 16
+              }
+            ],
+            "height": [
+              "INT",
+              {
+                "default": 480,
+                "min": 16,
+                "max": 16384,
+                "step": 16
+              }
+            ],
+            "length": [
+              "INT",
+              {
+                "default": 81,
+                "min": 1,
+                "max": 16384,
+                "step": 4
+              }
+            ],
+            "batch_size": [
+              "INT",
+              {
+                "default": 1,
+                "min": 1,
+                "max": 4096
+              }
+            ]
+          },
+          "optional": {
+            "clip_vision_output": ["CLIP_VISION_OUTPUT", {}],
+            "start_image": ["IMAGE", {}]
+          }
+        },
+        "input_order": {
+          "required": [
+            "positive",
+            "negative",
+            "vae",
+            "width",
+            "height",
+            "length",
+            "batch_size"
+          ],
+          "optional": ["clip_vision_output", "start_image"]
+        },
+        "is_input_list": false,
+        "output": ["CONDITIONING", "CONDITIONING", "LATENT"],
+        "output_is_list": [false, false, false],
+        "output_name": ["positive", "negative", "latent"],
+        "output_tooltips": [null, null, null],
+        "output_matchtypes": null,
+        "name": "WanImageToVideo",
+        "display_name": null,
+        "description": "",
+        "python_module": "comfy_extras.nodes_wan",
+        "category": "model/conditioning/wan",
+        "output_node": false,
+        "deprecated": false,
+        "experimental": false,
+        "dev_only": false,
+        "api_node": false,
+        "price_badge": null,
+        "search_aliases": null,
+        "essentials_category": null,
+        "has_intermediate_output": false
+      }
+    },
+    {
+      "node": "SaveAudio",
+      "status": 200,
+      "bytes": 845,
+      "declaration": {
+        "input": {
+          "required": {
+            "audio": ["AUDIO", {}],
+            "filename_prefix": [
+              "STRING",
+              {
+                "default": "audio/ComfyUI",
+                "multiline": false
+              }
+            ]
+          },
+          "hidden": {
+            "prompt": ["PROMPT"],
+            "extra_pnginfo": ["EXTRA_PNGINFO"]
+          }
+        },
+        "input_order": {
+          "required": ["audio", "filename_prefix"],
+          "hidden": ["prompt", "extra_pnginfo"]
+        },
+        "is_input_list": false,
+        "output": ["AUDIO"],
+        "output_is_list": [false],
+        "output_name": ["audio"],
+        "output_tooltips": [null],
+        "output_matchtypes": null,
+        "name": "SaveAudio",
+        "display_name": "Save Audio (FLAC) (DEPRECATED)",
+        "description": "",
+        "python_module": "comfy_extras.nodes_audio",
+        "category": "audio",
+        "output_node": true,
+        "deprecated": true,
+        "experimental": false,
+        "dev_only": false,
+        "api_node": false,
+        "price_badge": null,
+        "search_aliases": ["export flac"],
+        "essentials_category": "Audio",
+        "has_intermediate_output": false
+      }
+    },
+    {
+      "node": "SaveVideo",
+      "status": 200,
+      "bytes": 7074,
+      "declaration": {
+        "input": {
+          "required": {
+            "video": [
+              "VIDEO",
+              {
+                "tooltip": "The video to save."
+              }
+            ],
+            "filename_prefix": [
+              "STRING",
+              {
+                "tooltip": "The prefix for the file to save. This may include formatting information such as %date:yyyy-MM-dd% or %Empty Latent Image.width% to include values from nodes.",
+                "default": "video/ComfyUI",
+                "multiline": false
+              }
+            ],
+            "format": [
+              "COMFY_DYNAMICCOMBO_V3",
+              {
+                "tooltip": "The output container. Auto uses MP4 for Auto/H.264 and WebM for AV1. MP4, MKV, and WebM select a specific container.",
+                "options": [
+                  {
+                    "key": "auto",
+                    "inputs": {
+                      "required": {
+                        "codec": [
+                          "COMFY_DYNAMICCOMBO_V3",
+                          {
+                            "tooltip": "The output video codec. Auto preserves a compatible source stream. H.264 and AV1 re-encoding support SDR, HDR (HLG), and HDR PQ.",
+                            "options": [
+                              {
+                                "key": "auto",
+                                "inputs": {
+                                  "required": {}
+                                }
+                              },
+                              {
+                                "key": "h264",
+                                "inputs": {
+                                  "required": {},
+                                  "optional": {
+                                    "encoding": [
+                                      "COMFY_DYNAMICCOMBO_V3",
+                                      {
+                                        "display_name": "encoding mode",
+                                        "tooltip": "Automatic preserves compatible H.264 streams. Re-encode applies custom encoding options.",
+                                        "options": [
+                                          {
+                                            "key": "auto",
+                                            "inputs": {
+                                              "required": {}
+                                            }
+                                          },
+                                          {
+                                            "key": "re-encode",
+                                            "inputs": {
+                                              "required": {
+                                                "crf": [
+                                                  "FLOAT",
+                                                  {
+                                                    "tooltip": "Lower values produce higher quality and larger files.",
+                                                    "default": 23,
+                                                    "min": 0,
+                                                    "max": 51,
+                                                    "step": 1
+                                                  }
+                                                ]
+                                              }
+                                            }
+                                          }
+                                        ]
+                                      }
+                                    ]
+                                  }
+                                }
+                              },
+                              {
+                                "key": "av1",
+                                "inputs": {
+                                  "required": {},
+                                  "optional": {
+                                    "encoding": [
+                                      "COMFY_DYNAMICCOMBO_V3",
+                                      {
+                                        "display_name": "encoding mode",
+                                        "tooltip": "Automatic preserves compatible AV1 streams. Re-encode applies custom encoding options.",
+                                        "options": [
+                                          {
+                                            "key": "auto",
+                                            "inputs": {
+                                              "required": {}
+                                            }
+                                          },
+                                          {
+                                            "key": "re-encode",
+                                            "inputs": {
+                                              "required": {
+                                                "crf": [
+                                                  "FLOAT",
+                                                  {
+                                                    "tooltip": "Lower values produce higher quality and larger files.",
+                                                    "default": 30,
+                                                    "min": 0,
+                                                    "max": 63,
+                                                    "step": 1
+                                                  }
+                                                ]
+                                              }
+                                            }
+                                          }
+                                        ]
+                                      }
+                                    ]
+                                  }
+                                }
+                              }
+                            ]
+                          }
+                        ]
+                      }
+                    }
+                  },
+                  {
+                    "key": "mp4",
+                    "inputs": {
+                      "required": {
+                        "codec": [
+                          "COMFY_DYNAMICCOMBO_V3",
+                          {
+                            "tooltip": "The output video codec. Auto preserves a compatible source stream. H.264 and AV1 re-encoding support SDR, HDR (HLG), and HDR PQ.",
+                            "options": [
+                              {
+                                "key": "auto",
+                                "inputs": {
+                                  "required": {}
+                                }
+                              },
+                              {
+                                "key": "h264",
+                                "inputs": {
+                                  "required": {},
+                                  "optional": {
+                                    "encoding": [
+                                      "COMFY_DYNAMICCOMBO_V3",
+                                      {
+                                        "display_name": "encoding mode",
+                                        "tooltip": "Automatic preserves compatible H.264 streams. Re-encode applies custom encoding options.",
+                                        "options": [
+                                          {
+                                            "key": "auto",
+                                            "inputs": {
+                                              "required": {}
+                                            }
+                                          },
+                                          {
+                                            "key": "re-encode",
+                                            "inputs": {
+                                              "required": {
+                                                "crf": [
+                                                  "FLOAT",
+                                                  {
+                                                    "tooltip": "Lower values produce higher quality and larger files.",
+                                                    "default": 23,
+                                                    "min": 0,
+                                                    "max": 51,
+                                                    "step": 1
+                                                  }
+                                                ]
+                                              }
+                                            }
+                                          }
+                                        ]
+                                      }
+                                    ]
+                                  }
+                                }
+                              },
+                              {
+                                "key": "av1",
+                                "inputs": {
+                                  "required": {},
+                                  "optional": {
+                                    "encoding": [
+                                      "COMFY_DYNAMICCOMBO_V3",
+                                      {
+                                        "display_name": "encoding mode",
+                                        "tooltip": "Automatic preserves compatible AV1 streams. Re-encode applies custom encoding options.",
+                                        "options": [
+                                          {
+                                            "key": "auto",
+                                            "inputs": {
+                                              "required": {}
+                                            }
+                                          },
+                                          {
+                                            "key": "re-encode",
+                                            "inputs": {
+                                              "required": {
+                                                "crf": [
+                                                  "FLOAT",
+                                                  {
+                                                    "tooltip": "Lower values produce higher quality and larger files.",
+                                                    "default": 30,
+                                                    "min": 0,
+                                                    "max": 63,
+                                                    "step": 1
+                                                  }
+                                                ]
+                                              }
+                                            }
+                                          }
+                                        ]
+                                      }
+                                    ]
+                                  }
+                                }
+                              }
+                            ]
+                          }
+                        ]
+                      }
+                    }
+                  },
+                  {
+                    "key": "mkv",
+                    "inputs": {
+                      "required": {
+                        "codec": [
+                          "COMFY_DYNAMICCOMBO_V3",
+                          {
+                            "tooltip": "The output video codec. Auto preserves a compatible source stream. H.264 and AV1 re-encoding support SDR, HDR (HLG), and HDR PQ.",
+                            "options": [
+                              {
+                                "key": "auto",
+                                "inputs": {
+                                  "required": {}
+                                }
+                              },
+                              {
+                                "key": "h264",
+                                "inputs": {
+                                  "required": {},
+                                  "optional": {
+                                    "encoding": [
+                                      "COMFY_DYNAMICCOMBO_V3",
+                                      {
+                                        "display_name": "encoding mode",
+                                        "tooltip": "Automatic preserves compatible H.264 streams. Re-encode applies custom encoding options.",
+                                        "options": [
+                                          {
+                                            "key": "auto",
+                                            "inputs": {
+                                              "required": {}
+                                            }
+                                          },
+                                          {
+                                            "key": "re-encode",
+                                            "inputs": {
+                                              "required": {
+                                                "crf": [
+                                                  "FLOAT",
+                                                  {
+                                                    "tooltip": "Lower values produce higher quality and larger files.",
+                                                    "default": 23,
+                                                    "min": 0,
+                                                    "max": 51,
+                                                    "step": 1
+                                                  }
+                                                ]
+                                              }
+                                            }
+                                          }
+                                        ]
+                                      }
+                                    ]
+                                  }
+                                }
+                              },
+                              {
+                                "key": "av1",
+                                "inputs": {
+                                  "required": {},
+                                  "optional": {
+                                    "encoding": [
+                                      "COMFY_DYNAMICCOMBO_V3",
+                                      {
+                                        "display_name": "encoding mode",
+                                        "tooltip": "Automatic preserves compatible AV1 streams. Re-encode applies custom encoding options.",
+                                        "options": [
+                                          {
+                                            "key": "auto",
+                                            "inputs": {
+                                              "required": {}
+                                            }
+                                          },
+                                          {
+                                            "key": "re-encode",
+                                            "inputs": {
+                                              "required": {
+                                                "crf": [
+                                                  "FLOAT",
+                                                  {
+                                                    "tooltip": "Lower values produce higher quality and larger files.",
+                                                    "default": 30,
+                                                    "min": 0,
+                                                    "max": 63,
+                                                    "step": 1
+                                                  }
+                                                ]
+                                              }
+                                            }
+                                          }
+                                        ]
+                                      }
+                                    ]
+                                  }
+                                }
+                              }
+                            ]
+                          }
+                        ]
+                      }
+                    }
+                  },
+                  {
+                    "key": "webm",
+                    "inputs": {
+                      "required": {
+                        "codec": [
+                          "COMFY_DYNAMICCOMBO_V3",
+                          {
+                            "tooltip": "The output video codec. Auto preserves a compatible source stream. H.264 and AV1 re-encoding support SDR, HDR (HLG), and HDR PQ.",
+                            "options": [
+                              {
+                                "key": "auto",
+                                "inputs": {
+                                  "required": {}
+                                }
+                              },
+                              {
+                                "key": "av1",
+                                "inputs": {
+                                  "required": {},
+                                  "optional": {
+                                    "encoding": [
+                                      "COMFY_DYNAMICCOMBO_V3",
+                                      {
+                                        "display_name": "encoding mode",
+                                        "tooltip": "Automatic preserves compatible AV1 streams. Re-encode applies custom encoding options.",
+                                        "options": [
+                                          {
+                                            "key": "auto",
+                                            "inputs": {
+                                              "required": {}
+                                            }
+                                          },
+                                          {
+                                            "key": "re-encode",
+                                            "inputs": {
+                                              "required": {
+                                                "crf": [
+                                                  "FLOAT",
+                                                  {
+                                                    "tooltip": "Lower values produce higher quality and larger files.",
+                                                    "default": 30,
+                                                    "min": 0,
+                                                    "max": 63,
+                                                    "step": 1
+                                                  }
+                                                ]
+                                              }
+                                            }
+                                          }
+                                        ]
+                                      }
+                                    ]
+                                  }
+                                }
+                              }
+                            ]
+                          }
+                        ]
+                      }
+                    }
+                  }
+                ]
+              }
+            ]
+          },
+          "optional": {
+            "codec": [
+              "COMFY_DYNAMICCOMBO_V3",
+              {
+                "tooltip": "The output video codec. Auto preserves a compatible source stream. H.264 and AV1 re-encoding support SDR, HDR (HLG), and HDR PQ.",
+                "hidden": true,
+                "options": [
+                  {
+                    "key": "auto",
+                    "inputs": {
+                      "required": {}
+                    }
+                  },
+                  {
+                    "key": "h264",
+                    "inputs": {
+                      "required": {},
+                      "optional": {
+                        "encoding": [
+                          "COMFY_DYNAMICCOMBO_V3",
+                          {
+                            "display_name": "encoding mode",
+                            "tooltip": "Automatic preserves compatible H.264 streams. Re-encode applies custom encoding options.",
+                            "options": [
+                              {
+                                "key": "auto",
+                                "inputs": {
+                                  "required": {}
+                                }
+                              },
+                              {
+                                "key": "re-encode",
+                                "inputs": {
+                                  "required": {
+                                    "crf": [
+                                      "FLOAT",
+                                      {
+                                        "tooltip": "Lower values produce higher quality and larger files.",
+                                        "default": 23,
+                                        "min": 0,
+                                        "max": 51,
+                                        "step": 1
+                                      }
+                                    ]
+                                  }
+                                }
+                              }
+                            ]
+                          }
+                        ]
+                      }
+                    }
+                  },
+                  {
+                    "key": "av1",
+                    "inputs": {
+                      "required": {},
+                      "optional": {
+                        "encoding": [
+                          "COMFY_DYNAMICCOMBO_V3",
+                          {
+                            "display_name": "encoding mode",
+                            "tooltip": "Automatic preserves compatible AV1 streams. Re-encode applies custom encoding options.",
+                            "options": [
+                              {
+                                "key": "auto",
+                                "inputs": {
+                                  "required": {}
+                                }
+                              },
+                              {
+                                "key": "re-encode",
+                                "inputs": {
+                                  "required": {
+                                    "crf": [
+                                      "FLOAT",
+                                      {
+                                        "tooltip": "Lower values produce higher quality and larger files.",
+                                        "default": 30,
+                                        "min": 0,
+                                        "max": 63,
+                                        "step": 1
+                                      }
+                                    ]
+                                  }
+                                }
+                              }
+                            ]
+                          }
+                        ]
+                      }
+                    }
+                  }
+                ]
+              }
+            ]
+          },
+          "hidden": {
+            "prompt": ["PROMPT"],
+            "extra_pnginfo": ["EXTRA_PNGINFO"]
+          }
+        },
+        "input_order": {
+          "required": ["video", "filename_prefix", "format"],
+          "optional": ["codec"],
+          "hidden": ["prompt", "extra_pnginfo"]
+        },
+        "is_input_list": false,
+        "output": ["VIDEO"],
+        "output_is_list": [false],
+        "output_name": ["video"],
+        "output_tooltips": ["The input video, unchanged."],
+        "output_matchtypes": null,
+        "name": "SaveVideo",
+        "display_name": "Save Video",
+        "description": "Saves the input videos to your ComfyUI output directory.",
+        "python_module": "comfy_extras.nodes_video",
+        "category": "video",
+        "output_node": true,
+        "deprecated": false,
+        "experimental": false,
+        "dev_only": false,
+        "api_node": false,
+        "price_badge": null,
+        "search_aliases": ["export video"],
+        "essentials_category": "Basics",
+        "has_intermediate_output": false
+      }
+    }
+  ]
+}

@@ -1,4 +1,5 @@
 import { isPluginUiNavigationAction } from "@crewon/contracts/plugins";
+import { observeProjectTextMutation } from "./projectTextMutationChanges";
 import {
   invokePluginUiNavigation,
   type PluginUiNavigationHandler,
@@ -26,6 +27,7 @@ import {
   parseProjectGenerationSelectionUiActionResponse,
   parseProjectGenerationUiActionRequest,
   parseProjectGenerationQueryUiActionRequest,
+  parsePluginUiLease,
   type PluginUiLease,
 } from "@crewon/contracts/plugins";
 import type { ControlApiClient } from "@crewon/control-client";
@@ -42,7 +44,10 @@ import {
   type PluginUiModuleImporter,
 } from "./trustedPluginUiLoader";
 import { uiFailure, uiRecord, pluginUiAssetUrl } from "./pluginUiValidation";
-import { PluginUiLeaseLifecycle } from "./pluginUiLeaseLifecycle";
+import {
+  PluginUiLeaseLifecycle,
+  PluginUiLeaseRenewalDeferredError,
+} from "./pluginUiLeaseLifecycle";
 import {
   assertPluginUiCurrent,
   checkedLeaseIdentity,
@@ -120,6 +125,10 @@ export function createDesktopPluginUiHost(
   const renew =
     typeof options.assets.renew === "function"
       ? options.assets.renew.bind(options.assets)
+      : null;
+  const renewResult =
+    typeof options.assets.renewResult === "function"
+      ? options.assets.renewResult.bind(options.assets)
       : null;
   const importer = options.importer ?? importTrustedPluginUiModule;
   const bindings = new Map<
@@ -293,6 +302,7 @@ export function createDesktopPluginUiHost(
             ? taskReceiptTransport(lease, input.signal, request)
             : pluginUiControlRequest(request, input.signal));
           assertPluginUiCurrent(assertCurrent, input.signal);
+          observeProjectTextMutation(client, lease, input, response.output);
           return response.output;
         });
       },
@@ -325,38 +335,76 @@ export function createDesktopPluginUiHost(
   return Object.freeze({
     loader,
     validateLease,
-    ...(renew
+    ...(renewResult || renew
       ? {
           renewLease(lease: PluginUiLease, signal: AbortSignal) {
-            return leases.renew(
-              lease,
-              signal,
-              async (previous, renewalSignal) => {
-                assertPluginUiCurrent(assertCurrent, renewalSignal);
-                const owned = bindings.get(previous.mountRef);
-                if (!owned || owned.identity !== checkedLeaseIdentity(previous))
-                  uiFailure("plugin_ui_native_binding_unavailable");
-                const next = await renew(owned.binding.bindingRef);
-                assertPluginUiCurrent(assertCurrent, renewalSignal);
-                if (bindings.get(previous.mountRef) !== owned)
-                  uiFailure("plugin_ui_native_binding_unavailable");
+            return leases
+              .renew(
+                lease,
+                signal,
+                async (previous, renewalSignal) => {
+                  assertPluginUiCurrent(assertCurrent, renewalSignal);
+                  const owned = bindings.get(previous.mountRef);
+                  if (
+                    !owned ||
+                    owned.identity !== checkedLeaseIdentity(previous)
+                  )
+                    uiFailure("plugin_ui_native_binding_unavailable");
+                  const result = renewResult
+                    ? await renewResult(owned.binding.bindingRef)
+                    : null;
+                  const next = renewResult
+                    ? null
+                    : await renew!(owned.binding.bindingRef);
+                  assertPluginUiCurrent(assertCurrent, renewalSignal);
+                  if (bindings.get(previous.mountRef) !== owned)
+                    uiFailure("plugin_ui_native_binding_unavailable");
+                  if (renewResult) {
+                    const value = uiRecord(result);
+                    if (
+                      Object.keys(value).length !== 2 ||
+                      !Object.hasOwn(value, "kind") ||
+                      !Object.hasOwn(value, "lease") ||
+                      (value.kind !== "renewed" && value.kind !== "deferred")
+                    )
+                      uiFailure("plugin_ui_native_renewal_invalid");
+                    const checked = parsePluginUiLease(value.lease);
+                    if (value.kind === "deferred") {
+                      if (
+                        JSON.stringify(checked) !== JSON.stringify(previous) ||
+                        Date.parse(checked.expiresAt) <= Date.now()
+                      )
+                        uiFailure("plugin_ui_native_renewal_invalid");
+                      throw new PluginUiLeaseRenewalDeferredError(checked);
+                    }
+                    return checked;
+                  }
+                  return next;
+                },
+                (previous, next) => {
+                  const owned = bindings.get(previous.mountRef);
+                  if (
+                    !owned ||
+                    owned.identity !== checkedLeaseIdentity(previous)
+                  )
+                    uiFailure("plugin_ui_native_binding_unavailable");
+                  recovery.renewLease(previous, next);
+                  loader.renewLease(previous, next);
+                  bindings.set(
+                    next.mountRef,
+                    Object.freeze({
+                      binding: owned.binding,
+                      identity: checkedLeaseIdentity(next),
+                    }),
+                  );
+                },
+              )
+              .then((next) => {
+                // The owner has committed and cleared its renewal flight. Props delivery
+                // keeps its own live fences and never replays an action or a write.
+                loader.resumeDeferredUpdate(next);
                 return next;
-              },
-              (previous, next) => {
-                const owned = bindings.get(previous.mountRef);
-                if (!owned || owned.identity !== checkedLeaseIdentity(previous))
-                  uiFailure("plugin_ui_native_binding_unavailable");
-                recovery.renewLease(previous, next);
-                loader.renewLease(previous, next);
-                bindings.set(
-                  next.mountRef,
-                  Object.freeze({
-                    binding: owned.binding,
-                    identity: checkedLeaseIdentity(next),
-                  }),
-                );
-              },
-            );
+              });
           },
         }
       : {}),

@@ -18,6 +18,8 @@ import type {
 export const DESKTOP_NATIVE_PLUGIN_AUTHORITY_SCHEMA =
   "crewon.desktop-native-plugin-authority.v1";
 export const DESKTOP_NATIVE_PLUGIN_AUTHORITY_MAX_BYTES = 128 * 1024;
+/** Shared bound for persisted approvals and bootstrap catalogues across Main, Control and Worker. */
+export const DESKTOP_PLUGIN_APPROVAL_MAX_BYTES = 256 * 1024;
 export type DesktopNativePluginPackageIdentity = Readonly<{
   pluginId: string;
   publisherId: string;
@@ -26,7 +28,27 @@ export type DesktopNativePluginPackageIdentity = Readonly<{
 }>;
 export type DesktopNativePluginNetworkPath =
   | Readonly<{ method: "GET" | "POST"; path: string }>
+  /** A canonical path or single query value prefix, followed by the saved operation ID only. */
   | Readonly<{ method: "GET"; operationPathPrefix: string }>;
+
+export function isPluginOperationPathPrefix(value: unknown): value is string {
+  if (
+    typeof value !== "string" ||
+    value.length > 2048 ||
+    !value.startsWith("/") ||
+    value.startsWith("//") ||
+    /[\\#\s\p{Cc}]/u.test(value)
+  )
+    return false;
+  const url = new URL(value, "https://operation.invalid/");
+  return (
+    url.origin === "https://operation.invalid" &&
+    url.pathname + url.search === value &&
+    (url.search === ""
+      ? value.endsWith("/")
+      : /^\?[A-Za-z][A-Za-z0-9_]{0,63}=$/u.test(url.search))
+  );
+}
 export type DesktopNativePluginNetworkGrant =
   DesktopNativePluginPackageIdentity &
     Readonly<{
@@ -117,8 +139,7 @@ function networkPath(input: unknown): DesktopNativePluginNetworkPath {
   )
     invalid();
   if (prefix !== undefined) {
-    if (value.method !== "GET" || !text.endsWith("/") || text.includes("?"))
-      invalid();
+    if (value.method !== "GET" || !isPluginOperationPathPrefix(text)) invalid();
     return Object.freeze({ method: "GET", operationPathPrefix: text });
   }
   if (value.method !== "GET" && value.method !== "POST") invalid();

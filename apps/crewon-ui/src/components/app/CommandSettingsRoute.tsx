@@ -1,4 +1,5 @@
 import { X } from "lucide-react";
+import { usePluginExecutionPreparationStatus } from "../../lib/plugins/usePluginExecutionPreparationStatus";
 import type { ControlApiClient } from "@crewon/control-client";
 import type { AgentPlatformUser } from "../../lib/agent-platform/agentPlatformSession";
 import { usesControlSettingsPanel } from "../../lib/settings/controlSettingsPanels";
@@ -60,6 +61,11 @@ export function CommandSettingsRoute({
   onPanelFieldCommit,
   onSectionChange,
 }: CommandSettingsRouteProps) {
+  const preparation = usePluginExecutionPreparationStatus(
+    activeSection === "mcp-servers" && dataMode !== "demo"
+      ? executionSetup
+      : null,
+  );
   return (
     <section className="screen-shell command-screen settings-command-screen">
       <section className="desktop-window command-window settings-command-window">
@@ -110,6 +116,20 @@ export function CommandSettingsRoute({
             <SettingsContent
               activeSection={activeSection}
               dataMode={dataMode}
+              disconnectedNotice={
+                preparation === "pending"
+                  ? {
+                      title:
+                        locale === "zh"
+                          ? "正在准备插件执行环境"
+                          : "Preparing the plugin environment",
+                      description:
+                        locale === "zh"
+                          ? "运行环境正在重启，设置会在恢复后自动显示。无需重复确认或保存。"
+                          : "The runtime is restarting. Settings will return automatically; no repeat approval or save is needed.",
+                    }
+                  : null
+              }
               disabled={disabled}
               locale={locale}
               panel={panel}

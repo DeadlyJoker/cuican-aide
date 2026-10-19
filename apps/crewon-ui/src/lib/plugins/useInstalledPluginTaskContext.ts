@@ -14,7 +14,10 @@ import {
 import { parsePluginUiLease } from "@crewon/contracts/plugins";
 import { ControlApiClientError } from "@crewon/control-client";
 import { AGENT_PLATFORM_SESSION_CHANGED_EVENT } from "../agent-platform/agentPlatformClient";
-import { installedPluginTaskRequest } from "./installedPluginTaskRequests";
+import {
+  installedPluginTaskRequest,
+  installedPluginTaskRead,
+} from "./installedPluginTaskRequests";
 import {
   readInstalledPluginTaskReceipt,
   type InstalledPluginTaskReceiptEvent,
@@ -81,7 +84,7 @@ function knownRefusal(error: unknown): boolean {
     [400, 401, 403, 404, 409, 422].includes(error.status)
   );
 }
-function remember(owner: Owner, raw: InstalledPluginTaskReceiptEvent): void {
+function remember(owner: Owner, raw: InstalledPluginTaskReceiptEvent): boolean {
   try {
     const value = uiRecord(raw);
     if (
@@ -89,20 +92,22 @@ function remember(owner: Owner, raw: InstalledPluginTaskReceiptEvent): void {
       !Object.hasOwn(value, "lease") ||
       !Object.hasOwn(value, "receipt")
     )
-      return;
+      return false;
     const receipt = readInstalledPluginTaskReceipt(value.receipt);
-    if (receipt === null) return;
+    if (receipt === null) return false;
     const event = Object.freeze({
       lease: parsePluginUiLease(value.lease),
       receipt,
     });
-    if (!installedPluginTaskReceiptForModule(owner.module, event)) return;
+    if (!installedPluginTaskReceiptForModule(owner.module, event)) return false;
     owner.events.delete(receipt.runId);
     owner.events.set(receipt.runId, event);
     while (owner.events.size > 8)
       owner.events.delete(owner.events.keys().next().value!);
+    return true;
   } catch {
     // The registry is a read hint. Malformed events never provide task authority.
+    return false;
   }
 }
 
@@ -145,6 +150,7 @@ export function useInstalledPluginTaskContext(
     validRunIds.current = false;
     runKey = "invalid";
   }
+  const requestedRunKey = useRef<{ owner: Owner; key: string } | null>(null);
   const [suspended, setSuspended] = useState<Owner | null>(null);
   const [stored, setStored] = useState<{
     owner: Owner;
@@ -196,7 +202,7 @@ export function useInstalledPluginTaskContext(
       owner.ports.assertSessionCurrent();
     };
     const request = <T>(read: (signal: AbortSignal) => Promise<T>) =>
-      installedPluginTaskRequest(owner.ports.client, read, controller.signal);
+      installedPluginTaskRead(owner.ports.client, read, controller.signal);
     const read = async () => {
       assertCurrent();
       if (!validRunIds.current) throw new Error("plugin_task_context_invalid");
@@ -227,30 +233,39 @@ export function useInstalledPluginTaskContext(
         );
       }
       const tasks: ExtensionTaskView[] = [];
-      for (const runId of [...new Set(candidates)].slice(0, 8)) {
-        let task: ExtensionTaskView;
-        try {
-          task = parseGetExtensionTaskResponse(
-            await request((signal) =>
-              owner.ports.client.getExtensionTask(
-                owner.module.plugin.descriptor.pluginId,
-                runId,
-                { signal },
+      // Read independent task snapshots together; the shared pool bounds physical HTTP concurrency.
+      // Read completion order does not reorder the checked adoption below.
+      const snapshots = await Promise.all(
+        [...new Set(candidates)].slice(0, 8).map(async (runId) => {
+          try {
+            const task = parseGetExtensionTaskResponse(
+              await request((signal) =>
+                owner.ports.client.getExtensionTask(
+                  owner.module.plugin.descriptor.pluginId,
+                  runId,
+                  { signal },
+                ),
               ),
-            ),
-            { pluginId: owner.module.plugin.descriptor.pluginId, runId },
-          ).task;
-        } catch (error) {
-          assertCurrent();
-          if (
-            error instanceof ControlApiClientError &&
-            error.status === 404 &&
-            error.code === "extension_task_not_found"
-          )
-            continue;
-          throw error;
-        }
-        assertCurrent();
+              { pluginId: owner.module.plugin.descriptor.pluginId, runId },
+            ).task;
+            assertCurrent();
+            return { runId, task };
+          } catch (error) {
+            assertCurrent();
+            if (
+              error instanceof ControlApiClientError &&
+              error.status === 404 &&
+              error.code === "extension_task_not_found"
+            )
+              return null;
+            throw error;
+          }
+        }),
+      );
+      assertCurrent();
+      for (const snapshot of snapshots) {
+        if (!snapshot) continue;
+        const { runId, task } = snapshot;
         const event = owner.events.get(runId);
         if (
           event &&
@@ -363,8 +378,7 @@ export function useInstalledPluginTaskContext(
     const unsubscribe = owner.ports.receiptSource.subscribe((event) => {
       try {
         assertCurrent();
-        remember(owner, event);
-        refresh();
+        if (remember(owner, event)) refresh();
       } catch {
         /* Session withdrawal wins. */
       }
@@ -376,6 +390,7 @@ export function useInstalledPluginTaskContext(
       unsubscribe();
       return;
     }
+    requestedRunKey.current = { owner, key: runKey };
     refresh();
     return () => {
       controller.abort();
@@ -389,7 +404,14 @@ export function useInstalledPluginTaskContext(
   }, [owner, live, publish]);
 
   useEffect(() => {
-    if (live) owner?.requestRefresh?.();
+    if (!live || !owner) return;
+    if (
+      requestedRunKey.current?.owner === owner &&
+      requestedRunKey.current.key === runKey
+    )
+      return;
+    requestedRunKey.current = { owner, key: runKey };
+    owner.requestRefresh?.();
   }, [owner, live, runKey]);
   const refresh = useCallback(() => {
     if (live) owner?.requestRefresh?.();

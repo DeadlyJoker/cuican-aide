@@ -1,0 +1,12 @@
+{
+  "builtAt": "2026-10-17T04:04:14.254Z",
+  "path": "/private/tmp/crewon-plugin-performance-20261015/stale-preparation-profile-20261017.asar",
+  "sha256": "05ff70d0e0cd642989953cfd160f656ed560b9e184cef203306827e3f80feb31",
+  "headerSha256": "c71c4468de9200bcbe99d0233a4ada68dc32bb131310dfec9b258e69b8102953",
+  "nonRendererFilesVerified": 17464,
+  "mainUnchanged": true,
+  "clientAcceptancePassed": false,
+  "runtimeImplementationDigest": "sha256:2e6632905fe9baaeba45e39ea5ad7bd84793f3a5e38a774a8690e4c065fc8b46",
+  "installedAndHashesVerified": true,
+  "clientBlocker": "Mac still reported locked immediately after the user said unlocked; awaiting manual desktop unlock."
+}

@@ -420,6 +420,7 @@ export async function peerFixture(
     readiness,
     scope,
     state,
+    metadataState: f.state,
     peer,
     common,
     identity,

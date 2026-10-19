@@ -97,6 +97,7 @@ export {
   SqliteProjectAssetV2RecoveryStore,
   PostgresProjectAssetV2RecoveryStore,
 } from "./project-asset-vtwo-recovery-store.ts";
+export { SqliteProjectMediaImageReviewJobStore } from "./project-media-image-review-job-store.ts";
 
 export {
   watchSqliteAvailability,

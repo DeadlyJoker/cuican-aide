@@ -20,6 +20,7 @@ import type {
 } from "@crewon/contracts/project-conversations";
 import type { ProjectConversationComposerSelection } from "../control-runtime/controlProjectConversationTurn";
 import { subscribeProjectConversationBindingChanges } from "../plugins/projectConversationBindingChanges";
+import { subscribeProjectWorkspaceSourceChanges } from "../plugins/projectWorkspaceChanges";
 import { readProjectConversationComposerContext } from "../control-runtime/controlProjectConversationContext";
 
 type Snapshot = Readonly<{
@@ -150,6 +151,21 @@ export function useProjectConversationComposer(
     };
   }, [owner, input.threadRevision, refresh]);
   const actual = snapshotOwner === owner ? snapshot : null;
+  const binding = actual?.binding;
+  useEffect(() => {
+    if (!owner.client || !binding) return;
+    return subscribeProjectWorkspaceSourceChanges(
+      owner.client,
+      binding.projectId,
+      binding.source,
+      "texts",
+      () => {
+        if (current.current !== owner) return;
+        setLoading(true);
+        setRefresh((value) => value + 1);
+      },
+    );
+  }, [owner, binding]);
   const retained =
     input.retainedSelection?.binding.threadId === owner.threadId
       ? input.retainedSelection
@@ -259,6 +275,30 @@ export function useProjectConversationComposer(
               ? "项目创作"
               : "Project creation"}
         </span>{" "}
+        {failure !== null && !loading ? (
+          <span role="alert">
+            {failure === "source-changed"
+              ? zh
+                ? "插件来源已改变，请重新连接项目对话。"
+                : "The plugin source changed. Reconnect the project conversation."
+              : zh
+                ? "未能更新项目来源，暂不能发送。请点击刷新项目重试。"
+                : "Project sources could not be updated. Sending is paused. Refresh the project to retry."}
+          </span>
+        ) : null}
+        {loading ? (
+          <span role="status">
+            {zh ? "正在更新项目创作状态…" : "Updating project creation state…"}
+          </span>
+        ) : selectedKind === "script" &&
+          actual.outline === null &&
+          retainedScript === null ? (
+          <span role="alert">
+            {zh
+              ? "请先采用故事大纲，再创作分集剧本。"
+              : "Adopt an outline before writing an episode script."}
+          </span>
+        ) : null}
         {!displayPageStage && (
           <select
             aria-label={zh ? "创作阶段" : "Creation stage"}

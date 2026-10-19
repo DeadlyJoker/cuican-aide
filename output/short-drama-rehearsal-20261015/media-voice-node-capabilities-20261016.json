@@ -1,0 +1,1275 @@
+{
+  "recordedAt": "2026-10-16T02:54:52.784541+00:00",
+  "origin": "same saved seetacloud service",
+  "readOnly": true,
+  "catalogSha256": "34a0aba3f58b17a83dce0d3d7543ba41f14c8093ff0b452ea0c9c1a2b0ab63ff",
+  "catalogNodeCount": 4882,
+  "nodes": {
+    "MiniMaxH3VoiceProfileT8": {
+      "input": {
+        "required": {
+          "voice_mode": [
+            "COMBO",
+            {
+              "default": "described_voice",
+              "multiselect": false,
+              "options": [
+                "described_voice",
+                "reference_voice"
+              ]
+            }
+          ],
+          "speaker_id": [
+            "STRING",
+            {
+              "default": "speaker_1",
+              "multiline": false
+            }
+          ],
+          "voice_description": [
+            "STRING",
+            {
+              "default": "an adult speaker with a natural warm voice, clear diction, human micro-pauses, and close conversational delivery",
+              "multiline": true
+            }
+          ],
+          "language": [
+            "COMBO",
+            {
+              "default": "Chinese",
+              "multiselect": false,
+              "options": [
+                "Arabic",
+                "Chinese",
+                "English",
+                "French",
+                "German",
+                "Italian",
+                "Japanese",
+                "Korean",
+                "Portuguese",
+                "Russian",
+                "Spanish"
+              ]
+            }
+          ],
+          "rights_confirmed": [
+            "BOOLEAN",
+            {
+              "tooltip": "Required for reference_voice. Confirm that you have consent or another lawful right to use the connected person's voice.",
+              "default": false
+            }
+          ],
+          "reference_start_seconds": [
+            "FLOAT",
+            {
+              "advanced": true,
+              "default": 0.0,
+              "min": 0.0,
+              "max": 86400.0,
+              "step": 0.01
+            }
+          ],
+          "reference_duration_seconds": [
+            "FLOAT",
+            {
+              "tooltip": "0 selects up to the first available 15 seconds after start.",
+              "advanced": true,
+              "default": 0.0,
+              "min": 0.0,
+              "max": 15.0,
+              "step": 0.01
+            }
+          ],
+          "highpass_60hz": [
+            "BOOLEAN",
+            {
+              "advanced": true,
+              "default": true
+            }
+          ],
+          "peak_limit_minus_3_dbfs": [
+            "BOOLEAN",
+            {
+              "tooltip": "Only attenuates peaks above -3 dBFS; it never boosts quiet references.",
+              "advanced": true,
+              "default": true
+            }
+          ]
+        },
+        "optional": {
+          "reference_audio": [
+            "AUDIO",
+            {}
+          ]
+        }
+      },
+      "input_order": {
+        "required": [
+          "voice_mode",
+          "speaker_id",
+          "voice_description",
+          "language",
+          "rights_confirmed",
+          "reference_start_seconds",
+          "reference_duration_seconds",
+          "highpass_60hz",
+          "peak_limit_minus_3_dbfs"
+        ],
+        "optional": [
+          "reference_audio"
+        ]
+      },
+      "is_input_list": false,
+      "output": [
+        "H3_T8_VOICE_PROFILE",
+        "AUDIO",
+        "STRING"
+      ],
+      "output_is_list": [
+        false,
+        false,
+        false
+      ],
+      "output_name": [
+        "voice_profile",
+        "prepared_reference_audio",
+        "report_json"
+      ],
+      "output_tooltips": [
+        null,
+        null,
+        null
+      ],
+      "output_matchtypes": null,
+      "name": "MiniMaxH3VoiceProfileT8",
+      "display_name": "MiniMax H3 Voice Profile / 音色资料 (EXP/T8)",
+      "description": "Creates a workflow-memory voice profile. Reference mode prepares a 2-15s 32kHz stereo anchor and requires explicit rights confirmation.",
+      "python_module": "custom_nodes.comfyui-minimax-h3-audio-T8",
+      "category": "T8/MiniMax H3/Speech/Experimental",
+      "output_node": false,
+      "deprecated": false,
+      "experimental": true,
+      "dev_only": false,
+      "api_node": false,
+      "price_badge": null,
+      "search_aliases": null,
+      "essentials_category": null,
+      "has_intermediate_output": false
+    },
+    "MiniMaxH3SpeechPlanT8": {
+      "input": {
+        "required": {
+          "voice_profile": [
+            "H3_T8_VOICE_PROFILE",
+            {}
+          ],
+          "text": [
+            "STRING",
+            {
+              "multiline": true,
+              "dynamicPrompts": true
+            }
+          ],
+          "language": [
+            "COMBO",
+            {
+              "default": "Chinese",
+              "multiselect": false,
+              "options": [
+                "Arabic",
+                "Chinese",
+                "English",
+                "French",
+                "German",
+                "Italian",
+                "Japanese",
+                "Korean",
+                "Portuguese",
+                "Russian",
+                "Spanish"
+              ]
+            }
+          ],
+          "acting_direction": [
+            "STRING",
+            {
+              "default": "natural, emotionally connected, with clear diction",
+              "multiline": true
+            }
+          ],
+          "emotion": [
+            "STRING",
+            {
+              "default": "neutral",
+              "multiline": false
+            }
+          ],
+          "emotion_intensity": [
+            "FLOAT",
+            {
+              "tooltip": "Prompt strength only; this is not a calibrated acoustic control.",
+              "default": 0.5,
+              "min": 0.0,
+              "max": 1.0,
+              "step": 0.05
+            }
+          ],
+          "space": [
+            "COMBO",
+            {
+              "default": "close",
+              "multiselect": false,
+              "options": [
+                "studio",
+                "close",
+                "across_table",
+                "living_room",
+                "bedside",
+                "stage"
+              ]
+            }
+          ],
+          "chunking": [
+            "COMBO",
+            {
+              "default": "single_segment",
+              "multiselect": false,
+              "options": [
+                "single_segment",
+                "language_aware"
+              ]
+            }
+          ],
+          "target_units": [
+            "INT",
+            {
+              "tooltip": "Words for Latin text; characters for CJK text.",
+              "advanced": true,
+              "default": 18,
+              "min": 1,
+              "max": 200
+            }
+          ],
+          "max_units": [
+            "INT",
+            {
+              "advanced": true,
+              "default": 24,
+              "min": 1,
+              "max": 300
+            }
+          ]
+        }
+      },
+      "input_order": {
+        "required": [
+          "voice_profile",
+          "text",
+          "language",
+          "acting_direction",
+          "emotion",
+          "emotion_intensity",
+          "space",
+          "chunking",
+          "target_units",
+          "max_units"
+        ]
+      },
+      "is_input_list": false,
+      "output": [
+        "H3_T8_SPEECH_PLAN",
+        "STRING"
+      ],
+      "output_is_list": [
+        false,
+        false
+      ],
+      "output_name": [
+        "speech_plan",
+        "plan_json"
+      ],
+      "output_tooltips": [
+        null,
+        null
+      ],
+      "output_matchtypes": null,
+      "name": "MiniMaxH3SpeechPlanT8",
+      "display_name": "MiniMax H3 Speech Plan / 语音规划 (EXP/T8)",
+      "description": "Separates spoken text from acting direction and performs language-aware chunking. It never guesses the render duration.",
+      "python_module": "custom_nodes.comfyui-minimax-h3-audio-T8",
+      "category": "T8/MiniMax H3/Speech/Experimental",
+      "output_node": false,
+      "deprecated": false,
+      "experimental": true,
+      "dev_only": false,
+      "api_node": false,
+      "price_badge": null,
+      "search_aliases": null,
+      "essentials_category": null,
+      "has_intermediate_output": false
+    },
+    "MiniMaxH3SpeechStudioT8": {
+      "input": {
+        "required": {
+          "model": [
+            "MODEL",
+            {}
+          ],
+          "clip": [
+            "CLIP",
+            {}
+          ],
+          "video_vae": [
+            "VAE",
+            {}
+          ],
+          "audio_vae": [
+            "VAE",
+            {}
+          ],
+          "voice_profile": [
+            "H3_T8_VOICE_PROFILE",
+            {}
+          ],
+          "speech_plan": [
+            "H3_T8_SPEECH_PLAN",
+            {}
+          ],
+          "segment_index": [
+            "INT",
+            {
+              "default": 0,
+              "min": 0,
+              "max": 9999
+            }
+          ],
+          "seed": [
+            "INT",
+            {
+              "default": 0,
+              "min": 0,
+              "max": 18446744073709551615
+            }
+          ],
+          "render_seconds": [
+            "FLOAT",
+            {
+              "default": 10.0,
+              "min": 5.17,
+              "max": 15.08,
+              "step": 0.01
+            }
+          ],
+          "resolution": [
+            "COMBO",
+            {
+              "default": 32,
+              "multiselect": false,
+              "options": [
+                32,
+                64,
+                128
+              ]
+            }
+          ],
+          "steps": [
+            "INT",
+            {
+              "default": 20,
+              "min": 1,
+              "max": 1000
+            }
+          ],
+          "sampler_name": [
+            "COMBO",
+            {
+              "default": "res_multistep",
+              "multiselect": false,
+              "options": [
+                "res_multistep",
+                "dual_clock_euler",
+                "euler",
+                "euler_cfg_pp",
+                "euler_ancestral",
+                "euler_ancestral_cfg_pp",
+                "heun",
+                "heunpp2",
+                "exp_heun_2_x0",
+                "exp_heun_2_x0_sde",
+                "dpm_2",
+                "dpm_2_ancestral",
+                "lms",
+                "dpm_fast",
+                "dpm_adaptive",
+                "dpmpp_2s_ancestral",
+                "dpmpp_2s_ancestral_cfg_pp",
+                "dpmpp_sde",
+                "dpmpp_sde_gpu",
+                "dpmpp_2m",
+                "dpmpp_2m_cfg_pp",
+                "dpmpp_2m_sde",
+                "dpmpp_2m_sde_gpu",
+                "dpmpp_2m_sde_heun",
+                "dpmpp_2m_sde_heun_gpu",
+                "dpmpp_3m_sde",
+                "dpmpp_3m_sde_gpu",
+                "ddpm",
+                "lcm",
+                "ipndm",
+                "ipndm_v",
+                "deis",
+                "cfgpp_ud10_ab",
+                "res_multistep_cfg_pp",
+                "res_multistep_ancestral",
+                "res_multistep_ancestral_cfg_pp",
+                "gradient_estimation",
+                "gradient_estimation_cfg_pp",
+                "er_sde",
+                "seeds_2",
+                "seeds_3",
+                "sa_solver",
+                "sa_solver_pece",
+                "ddim",
+                "uni_pc",
+                "uni_pc_bh2"
+              ]
+            }
+          ],
+          "scheduler": [
+            "COMBO",
+            {
+              "default": "simple",
+              "multiselect": false,
+              "options": [
+                "simple",
+                "native_flow",
+                "sgm_uniform",
+                "karras",
+                "exponential",
+                "ddim_uniform",
+                "beta",
+                "normal",
+                "linear_quadratic",
+                "kl_optimal"
+              ]
+            }
+          ],
+          "shift_video": [
+            "FLOAT",
+            {
+              "advanced": true,
+              "default": 12.0,
+              "min": 0.01,
+              "max": 100.0,
+              "step": 0.01
+            }
+          ],
+          "shift_audio": [
+            "FLOAT",
+            {
+              "advanced": true,
+              "default": 3.0,
+              "min": 0.01,
+              "max": 100.0,
+              "step": 0.01
+            }
+          ],
+          "trim_mode": [
+            "COMBO",
+            {
+              "default": "none",
+              "multiselect": false,
+              "options": [
+                "none",
+                "conservative_energy"
+              ]
+            }
+          ],
+          "verify_mode": [
+            "COMBO",
+            {
+              "default": "off",
+              "multiselect": false,
+              "options": [
+                "off",
+                "verify_only",
+                "trim_exact_target"
+              ]
+            }
+          ],
+          "asr_model_directory": [
+            "STRING",
+            {
+              "tooltip": "Optional CPU faster-whisper CTranslate2 model directory. Required only when verify_mode is not off.",
+              "advanced": true,
+              "default": "",
+              "multiline": false
+            }
+          ],
+          "asr_language": [
+            "COMBO",
+            {
+              "advanced": true,
+              "default": "auto",
+              "multiselect": false,
+              "options": [
+                "auto",
+                "Arabic",
+                "Chinese",
+                "English",
+                "French",
+                "German",
+                "Italian",
+                "Japanese",
+                "Korean",
+                "Portuguese",
+                "Russian",
+                "Spanish"
+              ]
+            }
+          ],
+          "min_similarity": [
+            "FLOAT",
+            {
+              "advanced": true,
+              "default": 0.85,
+              "min": 0.0,
+              "max": 1.0,
+              "step": 0.01
+            }
+          ],
+          "unload_asr_after_verify": [
+            "BOOLEAN",
+            {
+              "advanced": true,
+              "default": true
+            }
+          ],
+          "speaker_check_mode": [
+            "COMBO",
+            {
+              "advanced": true,
+              "default": "off",
+              "multiselect": false,
+              "options": [
+                "off",
+                "report_cosine",
+                "require_threshold"
+              ]
+            }
+          ],
+          "speaker_model_directory": [
+            "STRING",
+            {
+              "advanced": true,
+              "default": "",
+              "multiline": false
+            }
+          ],
+          "min_speaker_similarity": [
+            "FLOAT",
+            {
+              "advanced": true,
+              "default": 0.86,
+              "min": 0.0,
+              "max": 1.0,
+              "step": 0.01
+            }
+          ],
+          "unload_speaker_after_verify": [
+            "BOOLEAN",
+            {
+              "advanced": true,
+              "default": true
+            }
+          ],
+          "peak_limit_dbfs": [
+            "FLOAT",
+            {
+              "advanced": true,
+              "default": -1.0,
+              "min": -24.0,
+              "max": 0.0,
+              "step": 0.1
+            }
+          ],
+          "release_policy": [
+            "COMBO",
+            {
+              "default": "clear_execution_cache",
+              "multiselect": false,
+              "options": [
+                "keep_loaded",
+                "clear_execution_cache",
+                "unload_all_models"
+              ]
+            }
+          ]
+        },
+        "optional": {
+          "speech_guard": [
+            "H3_T8_SPEECH_GUARD",
+            {}
+          ]
+        }
+      },
+      "input_order": {
+        "required": [
+          "model",
+          "clip",
+          "video_vae",
+          "audio_vae",
+          "voice_profile",
+          "speech_plan",
+          "segment_index",
+          "seed",
+          "render_seconds",
+          "resolution",
+          "steps",
+          "sampler_name",
+          "scheduler",
+          "shift_video",
+          "shift_audio",
+          "trim_mode",
+          "verify_mode",
+          "asr_model_directory",
+          "asr_language",
+          "min_similarity",
+          "unload_asr_after_verify",
+          "speaker_check_mode",
+          "speaker_model_directory",
+          "min_speaker_similarity",
+          "unload_speaker_after_verify",
+          "peak_limit_dbfs",
+          "release_policy"
+        ],
+        "optional": [
+          "speech_guard"
+        ]
+      },
+      "is_input_list": false,
+      "output": [
+        "AUDIO",
+        "STRING",
+        "STRING",
+        "LATENT",
+        "STRING",
+        "FLOAT",
+        "FLOAT",
+        "BOOLEAN"
+      ],
+      "output_is_list": [
+        false,
+        false,
+        false,
+        false,
+        false,
+        false,
+        false,
+        false
+      ],
+      "output_name": [
+        "audio",
+        "conditioned_prompt",
+        "report_json",
+        "generated_av_latent",
+        "transcript",
+        "text_similarity",
+        "speaker_similarity",
+        "accepted"
+      ],
+      "output_tooltips": [
+        null,
+        null,
+        null,
+        null,
+        null,
+        null,
+        null,
+        null
+      ],
+      "output_matchtypes": null,
+      "name": "MiniMaxH3SpeechStudioT8",
+      "display_name": "MiniMax H3 Speech Studio / 一站式语音 (EXP/T8)",
+      "description": "Native ComfyUI speech graph: conditioning -> sampler -> audio-only decode -> explicit release. Stock res_multistep/simple is the initial quality baseline.",
+      "python_module": "custom_nodes.comfyui-minimax-h3-audio-T8",
+      "category": "T8/MiniMax H3/Speech/Experimental",
+      "output_node": false,
+      "deprecated": false,
+      "experimental": true,
+      "dev_only": false,
+      "api_node": false,
+      "price_badge": null,
+      "search_aliases": null,
+      "essentials_category": null,
+      "has_intermediate_output": false
+    },
+    "MiniMaxH3SpeechVerifyT8": {
+      "input": {
+        "required": {
+          "audio": [
+            "AUDIO",
+            {}
+          ],
+          "expected_text": [
+            "STRING",
+            {
+              "forceInput": true,
+              "multiline": true
+            }
+          ],
+          "verify_mode": [
+            "COMBO",
+            {
+              "default": "off",
+              "multiselect": false,
+              "options": [
+                "off",
+                "verify_only",
+                "trim_exact_target"
+              ]
+            }
+          ],
+          "asr_model_directory": [
+            "STRING",
+            {
+              "tooltip": "Absolute faster-whisper CTranslate2 directory, or a folder name under ComfyUI/models/TTS. Required only when verification is enabled.",
+              "default": "",
+              "multiline": false
+            }
+          ],
+          "language": [
+            "COMBO",
+            {
+              "default": "auto",
+              "multiselect": false,
+              "options": [
+                "auto",
+                "Arabic",
+                "Chinese",
+                "English",
+                "French",
+                "German",
+                "Italian",
+                "Japanese",
+                "Korean",
+                "Portuguese",
+                "Russian",
+                "Spanish"
+              ]
+            }
+          ],
+          "min_similarity": [
+            "FLOAT",
+            {
+              "default": 0.85,
+              "min": 0.0,
+              "max": 1.0,
+              "step": 0.01
+            }
+          ],
+          "beam_size": [
+            "INT",
+            {
+              "advanced": true,
+              "default": 5,
+              "min": 1,
+              "max": 20
+            }
+          ],
+          "cpu_threads": [
+            "INT",
+            {
+              "advanced": true,
+              "default": 8,
+              "min": 1,
+              "max": 64
+            }
+          ],
+          "unload_after_verify": [
+            "BOOLEAN",
+            {
+              "default": true
+            }
+          ],
+          "strict": [
+            "BOOLEAN",
+            {
+              "advanced": true,
+              "default": false
+            }
+          ],
+          "pre_padding_seconds": [
+            "FLOAT",
+            {
+              "advanced": true,
+              "default": 0.12,
+              "min": 0.0,
+              "max": 2.0,
+              "step": 0.01
+            }
+          ],
+          "post_padding_seconds": [
+            "FLOAT",
+            {
+              "advanced": true,
+              "default": 0.25,
+              "min": 0.0,
+              "max": 2.0,
+              "step": 0.01
+            }
+          ],
+          "speaker_check_mode": [
+            "COMBO",
+            {
+              "default": "off",
+              "multiselect": false,
+              "options": [
+                "off",
+                "report_cosine",
+                "require_threshold"
+              ]
+            }
+          ],
+          "speaker_model_directory": [
+            "STRING",
+            {
+              "tooltip": "Local WavLM X-Vector model directory. A voice_profile with a reference is also required when speaker checking is enabled.",
+              "advanced": true,
+              "default": "",
+              "multiline": false
+            }
+          ],
+          "min_speaker_similarity": [
+            "FLOAT",
+            {
+              "tooltip": "Dataset-dependent EXP threshold; report_cosine does not gate output.",
+              "advanced": true,
+              "default": 0.86,
+              "min": 0.0,
+              "max": 1.0,
+              "step": 0.01
+            }
+          ],
+          "unload_speaker_after_verify": [
+            "BOOLEAN",
+            {
+              "advanced": true,
+              "default": true
+            }
+          ],
+          "peak_limit_dbfs": [
+            "FLOAT",
+            {
+              "tooltip": "Final attenuation-only peak protection; never boosts quiet speech.",
+              "default": -1.0,
+              "min": -24.0,
+              "max": 0.0,
+              "step": 0.1
+            }
+          ]
+        },
+        "optional": {
+          "voice_profile": [
+            "H3_T8_VOICE_PROFILE",
+            {}
+          ]
+        }
+      },
+      "input_order": {
+        "required": [
+          "audio",
+          "expected_text",
+          "verify_mode",
+          "asr_model_directory",
+          "language",
+          "min_similarity",
+          "beam_size",
+          "cpu_threads",
+          "unload_after_verify",
+          "strict",
+          "pre_padding_seconds",
+          "post_padding_seconds",
+          "speaker_check_mode",
+          "speaker_model_directory",
+          "min_speaker_similarity",
+          "unload_speaker_after_verify",
+          "peak_limit_dbfs"
+        ],
+        "optional": [
+          "voice_profile"
+        ]
+      },
+      "is_input_list": false,
+      "output": [
+        "AUDIO",
+        "STRING",
+        "FLOAT",
+        "FLOAT",
+        "BOOLEAN",
+        "STRING"
+      ],
+      "output_is_list": [
+        false,
+        false,
+        false,
+        false,
+        false,
+        false
+      ],
+      "output_name": [
+        "audio",
+        "transcript",
+        "text_similarity",
+        "speaker_similarity",
+        "accepted",
+        "report_json"
+      ],
+      "output_tooltips": [
+        null,
+        null,
+        null,
+        null,
+        null,
+        null
+      ],
+      "output_matchtypes": null,
+      "name": "MiniMaxH3SpeechVerifyT8",
+      "display_name": "MiniMax H3 Speech Verify & Align / ASR校验裁切 (EXP/T8)",
+      "description": "Runs optional CPU faster-whisper verification. Exact-target mode removes Ref2VA lead-in only when the complete requested text is found in order.",
+      "python_module": "custom_nodes.comfyui-minimax-h3-audio-T8",
+      "category": "T8/MiniMax H3/Speech/Experimental",
+      "output_node": false,
+      "deprecated": false,
+      "experimental": true,
+      "dev_only": false,
+      "api_node": false,
+      "price_badge": null,
+      "search_aliases": null,
+      "essentials_category": null,
+      "has_intermediate_output": false
+    },
+    "MiniMaxH3SpeechADRFitT8": {
+      "input": {
+        "required": {
+          "audio": [
+            "AUDIO",
+            {}
+          ],
+          "target_duration_seconds": [
+            "FLOAT",
+            {
+              "default": 5.0,
+              "min": 0.001,
+              "max": 36000.0,
+              "step": 0.001
+            }
+          ],
+          "fit_mode": [
+            "COMBO",
+            {
+              "default": "safe_time_stretch",
+              "multiselect": false,
+              "options": [
+                "refuse_if_mismatch",
+                "pad_or_trim",
+                "safe_time_stretch"
+              ]
+            }
+          ],
+          "minimum_rate": [
+            "FLOAT",
+            {
+              "advanced": true,
+              "default": 0.9,
+              "min": 0.1,
+              "max": 4.0,
+              "step": 0.01
+            }
+          ],
+          "maximum_rate": [
+            "FLOAT",
+            {
+              "advanced": true,
+              "default": 1.1,
+              "min": 0.1,
+              "max": 4.0,
+              "step": 0.01
+            }
+          ],
+          "pitch_semitones": [
+            "FLOAT",
+            {
+              "advanced": true,
+              "default": 0.0,
+              "min": -12.0,
+              "max": 12.0,
+              "step": 0.1
+            }
+          ]
+        }
+      },
+      "input_order": {
+        "required": [
+          "audio",
+          "target_duration_seconds",
+          "fit_mode",
+          "minimum_rate",
+          "maximum_rate",
+          "pitch_semitones"
+        ]
+      },
+      "is_input_list": false,
+      "output": [
+        "AUDIO",
+        "STRING"
+      ],
+      "output_is_list": [
+        false,
+        false
+      ],
+      "output_name": [
+        "audio",
+        "report_json"
+      ],
+      "output_tooltips": [
+        null,
+        null
+      ],
+      "output_matchtypes": null,
+      "name": "MiniMaxH3SpeechADRFitT8",
+      "display_name": "MiniMax H3 Speech ADR Exact Fit / 配音精确时长 (EXP/T8)",
+      "description": "Fits AUDIO to an exact sample count using refusal, pad/trim, or bounded phase-vocoder stretch. Exact duration is not a lip-sync claim.",
+      "python_module": "custom_nodes.comfyui-minimax-h3-audio-T8",
+      "category": "T8/MiniMax H3/Speech/Experimental",
+      "output_node": false,
+      "deprecated": false,
+      "experimental": true,
+      "dev_only": false,
+      "api_node": false,
+      "price_badge": null,
+      "search_aliases": null,
+      "essentials_category": null,
+      "has_intermediate_output": false
+    },
+    "ConcatenateVideo": {
+      "input": {
+        "required": {
+          "videos": [
+            "COMFY_AUTOGROW_V3",
+            {
+              "tooltip": "Video segments to concatenate in input order.",
+              "template": {
+                "input": {
+                  "required": {
+                    "video": [
+                      "VIDEO",
+                      {
+                        "tooltip": "A video segment to append."
+                      }
+                    ]
+                  }
+                },
+                "prefix": "video",
+                "min": 1,
+                "max": 100
+              }
+            }
+          ],
+          "codec": [
+            "COMBO",
+            {
+              "tooltip": "Codec used to encode videos tensors. Auto uses H.264; already encoded videos remain unchanged.",
+              "advanced": true,
+              "default": "auto",
+              "multiselect": false,
+              "options": [
+                "auto",
+                "h264",
+                "av1"
+              ]
+            }
+          ]
+        },
+        "optional": {
+          "complete_audio": [
+            "AUDIO",
+            {
+              "tooltip": "Optional complete soundtrack for the concatenated video. Overrides audio carried by the input videos.",
+              "advanced": true
+            }
+          ]
+        }
+      },
+      "input_order": {
+        "required": [
+          "videos",
+          "codec"
+        ],
+        "optional": [
+          "complete_audio"
+        ]
+      },
+      "is_input_list": true,
+      "output": [
+        "VIDEO"
+      ],
+      "output_is_list": [
+        false
+      ],
+      "output_name": [
+        "VIDEO"
+      ],
+      "output_tooltips": [
+        "The concatenated video."
+      ],
+      "output_matchtypes": null,
+      "name": "ConcatenateVideo",
+      "display_name": "Concatenate Video",
+      "description": "Concatenates videos in order without decoding compatible encoded inputs.",
+      "python_module": "comfy_extras.nodes_video",
+      "category": "video",
+      "output_node": false,
+      "deprecated": false,
+      "experimental": false,
+      "dev_only": false,
+      "api_node": false,
+      "price_badge": null,
+      "search_aliases": null,
+      "essentials_category": "Video Tools",
+      "has_intermediate_output": false
+    },
+    "AudioConcat": {
+      "input": {
+        "required": {
+          "audio1": [
+            "AUDIO",
+            {}
+          ],
+          "audio2": [
+            "AUDIO",
+            {}
+          ],
+          "direction": [
+            "COMBO",
+            {
+              "tooltip": "Whether to append audio2 after or before audio1.",
+              "default": "after",
+              "multiselect": false,
+              "options": [
+                "after",
+                "before"
+              ]
+            }
+          ]
+        }
+      },
+      "input_order": {
+        "required": [
+          "audio1",
+          "audio2",
+          "direction"
+        ]
+      },
+      "is_input_list": false,
+      "output": [
+        "AUDIO"
+      ],
+      "output_is_list": [
+        false
+      ],
+      "output_name": [
+        "AUDIO"
+      ],
+      "output_tooltips": [
+        null
+      ],
+      "output_matchtypes": null,
+      "name": "AudioConcat",
+      "display_name": "Concatenate Audio",
+      "description": "Concatenates the audio1 to audio2 in the specified direction.",
+      "python_module": "comfy_extras.nodes_audio",
+      "category": "audio",
+      "output_node": false,
+      "deprecated": false,
+      "experimental": false,
+      "dev_only": false,
+      "api_node": false,
+      "price_badge": null,
+      "search_aliases": [
+        "join audio",
+        "combine audio",
+        "append audio"
+      ],
+      "essentials_category": null,
+      "has_intermediate_output": false
+    },
+    "SaveAudio": {
+      "input": {
+        "required": {
+          "audio": [
+            "AUDIO",
+            {}
+          ],
+          "filename_prefix": [
+            "STRING",
+            {
+              "default": "audio/ComfyUI",
+              "multiline": false
+            }
+          ]
+        },
+        "hidden": {
+          "prompt": [
+            "PROMPT"
+          ],
+          "extra_pnginfo": [
+            "EXTRA_PNGINFO"
+          ]
+        }
+      },
+      "input_order": {
+        "required": [
+          "audio",
+          "filename_prefix"
+        ],
+        "hidden": [
+          "prompt",
+          "extra_pnginfo"
+        ]
+      },
+      "is_input_list": false,
+      "output": [
+        "AUDIO"
+      ],
+      "output_is_list": [
+        false
+      ],
+      "output_name": [
+        "audio"
+      ],
+      "output_tooltips": [
+        null
+      ],
+      "output_matchtypes": null,
+      "name": "SaveAudio",
+      "display_name": "Save Audio (FLAC) (DEPRECATED)",
+      "description": "",
+      "python_module": "comfy_extras.nodes_audio",
+      "category": "audio",
+      "output_node": true,
+      "deprecated": true,
+      "experimental": false,
+      "dev_only": false,
+      "api_node": false,
+      "price_badge": null,
+      "search_aliases": [
+        "export flac"
+      ],
+      "essentials_category": "Audio",
+      "has_intermediate_output": false
+    }
+  },
+  "acceptance": "Metadata only; no GPU execution, generation, voice cloning or actual quality/licensing assertion."
+}

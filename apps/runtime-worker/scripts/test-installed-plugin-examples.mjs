@@ -22,6 +22,7 @@ try {
   const examples = await buildInstalledBusinessPluginExamples(ownedRoot, {
     includeKrea: true,
     includeShortDrama: true,
+    includeReferenceWorkflows: true,
   });
   if (signal) throw new Error("installed_plugin_example_test_interrupted");
   const tests = (await readdir(join(app, "src")))
@@ -47,6 +48,10 @@ try {
         CREWON_TEST_SHORT_DRAMA_PLUGIN_V1_DIR: examples.shortDramaV1Directory,
         CREWON_TEST_SHORT_DRAMA_PLUGIN_V2_DIR: examples.shortDramaV2Directory,
         CREWON_TEST_SHORT_DRAMA_PLUGIN_DIR: examples.projectUiDirectory,
+        CREWON_TEST_REFERENCE_WORKFLOW_PLUGIN_DIR:
+          examples.referenceWorkflowDirectory,
+        CREWON_TEST_REFERENCE_WORKFLOW_PACKAGE_DIGEST:
+          examples.referenceWorkflowPackageDigest,
       },
     },
   );

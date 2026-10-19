@@ -1,0 +1,107 @@
+{
+  "schemaVersion": "crewon.acceptance.gateway-sse-boundary-fix.v1",
+  "recordedAt": "2026-10-15T18:38:51.596099+00:00",
+  "previousGoalTurnClassification": "progress: immutable review admission and SQL-backed restore implemented and tested",
+  "thisTurnClassification": "progress: actual Rust gateway corruption reproduced, isolated-source fix tested against real CrewON decoder/HTTP, current public gateway metadata verified",
+  "source": {
+    "repository": "https://github.com/qxcnm/Codex-Manager",
+    "cleanBaseline": "764531421428e35b0fbb3aab8f4f777887e7a44a",
+    "versionLabel": "v0.6.3",
+    "changedSourceSha256": {
+      "crates/service/src/gateway/observability/http_bridge/stream_readers.rs": "sha256:4d92cac0223aab65daf9670597f07080eeced59026a30002f863a25f65456c39",
+      "crates/service/src/gateway/observability/http_bridge/stream_readers/openai_responses.rs": "sha256:90b608dab2a8e19e1b8f46c0d82a240c61a82ca60510541761f8c1b52457a375",
+      "crates/service/src/gateway/observability/http_bridge/stream_readers/sse_boundary.rs": "sha256:97b1a5b2e3f67130dfd1a5a4da07514b399f246c077aa1a7cf31ba1cb52e7cf0"
+    }
+  },
+  "bug": {
+    "scope": "OpenAIResponsesPassthroughSseReader",
+    "before": "upstream sidecar saw complete terminal, raw forwarding inserted comment+blank lines inside unfinished JSON",
+    "after": "constant-space SSE boundary state gates synthetic heartbeats, raw chunks remain incremental"
+  },
+  "verification": {
+    "beforeActualRustTest": "failed as expected with corrupted forwarded bytes",
+    "afterStreamReaderTests": 23,
+    "afterAllHttpBridgeTests": 143,
+    "testCountsOverlap": true,
+    "allHttpBridgeFailed": 0,
+    "crewOnActualByteVerification": {
+      "boundary": "Actual Rust captured synthetic byte output, real CrewON SSE parser and direct HTTP transport; no live model, store, tool or commercial footage.",
+      "before": {
+        "bytes": 161,
+        "outcome": "responses_event_json_invalid"
+      },
+      "after": {
+        "bytes": 125,
+        "sseEvents": 1,
+        "protocolCompleted": 1,
+        "responseKeptOpen": true,
+        "elapsedMs": 19.105
+      }
+    },
+    "patchApplyCheck": "passed against pristine baseline; applied files compared identical",
+    "rustfmt": "passed",
+    "gitDiffCheck": "passed",
+    "crewonRepositoryFormat": "passed"
+  },
+  "evidenceSha256": {
+    "gateway-heartbeat-before-fix.log": "sha256:9451a2cb8a6058b77557c93bbb12e94d8815e8f49d0e99f79c35a5ebf6531364",
+    "gateway-heartbeat-after-fix.log": "sha256:6bc080033b5d5a68a02c267a2adcb58f104a102b0f03b7a617db4904e4928d63",
+    "gateway-http-bridge-regressions.log": "sha256:0c2da1f8c0cc6055b13b27cb2a44b080ea860222b6f743fdf38901893128283a",
+    "gateway-crewon-wire-verification.json": "sha256:b51d4a0e3fe700b4be329b3c0dbdc1a4c2b86813617602a7054145c826b1a970",
+    "named-broken-forwarded-sse.bin": "sha256:b9323e481c0bc7d87ce236011b69b3e320f4b82274c108b14d49e58100a86c5c",
+    "named-forwarded-sse.bin": "sha256:8668752cf36a3f3550584dfe8ac9471aeddfb85c14253b7768ea718eac72a30c",
+    "codex-manager-sse-heartbeat-boundary.patch": "sha256:fb5449688da976ed906aa7ecc87c5b71605258f5e6df7ba99f86c7d00bb08e2b",
+    "verify-gateway-sse-bytes.mjs": "sha256:40f534a667d4e6e23ddce4118caf0a145e9ba7daa6f1ee7354b138d7b27715ad",
+    "gateway-public-identity-after-local-fix.json": "sha256:426f5d245e889c4ee9806e8d4ef7a47f5c297c7701444d5e2b41c55130c409ae",
+    "gateway-public-status-20261016.json": "sha256:de464ef34b003b7b887cf2c95f797649616317323662e6b172d67b48cbb15d09",
+    "gateway-fix-client-state-20261016.json": "sha256:5368eef29b48f41408869793c3fad0ca057dfa3f7937ec42e6d7ae8385a5cae1",
+    "网关心跳破坏SSE-复现与修复.md": "sha256:6c31fb2df5051a9ae64ac04328f55a818899abf08d3ce3edd3a47f582439b95c"
+  },
+  "publicServiceMetadata": {
+    "recordedAt": "2026-10-15T18:25:59.430Z",
+    "purpose": "Unauthenticated public service metadata only; no model or account request",
+    "url": "https://api.aicuican.com/api/status",
+    "status": 200,
+    "contentType": "application/json; charset=utf-8",
+    "metadata": {
+      "version": "v1.0.0-rc.8-27-g12deba956-portal.1",
+      "system_name": "璀璨API",
+      "start_time": 1791885640
+    },
+    "success": true,
+    "elapsedMs": 1930
+  },
+  "nextProductionEvidenceRequired": "current /v1/responses routing, codex-plus upstream identity/version, per-request send logs from both layers; public status is consistent with New API and does not prove upstream topology",
+  "existingSshConfiguration": "no gateway host alias in current configured includes; no unrelated identity used or private-key body read",
+  "boundary": "Named synthetic Rust/HTTP bytes only; source/model-role comparison, no actual customer body capture, model/generation/upload request or deployment.",
+  "notEstablished": [
+    "current production Codex-Manager version or presence on the Responses route",
+    "heartbeats as cause of the two recorded real idle timeouts",
+    "intermittent pre-header TLS root cause/fix",
+    "production deployment or real-client script/video flow",
+    "real AI audiovisual review and repair",
+    "final commercial-quality movie"
+  ],
+  "liveClientState": {
+    "recordedAt": "2026-10-15T18:24:21.982206+00:00",
+    "readOnly": true,
+    "projectId": "01a13f43-094c-767a-9414-b5622b236255",
+    "foundationRevision": 3,
+    "parametersRevision": 2,
+    "textArtifacts": 0,
+    "latestRun": {
+      "runId": "plugin-7DebIFmDWoV0jmAkgi1mhBYp5eV0jJkKx6zyeqJcPLE",
+      "revision": 19,
+      "status": "canceled"
+    },
+    "newLiveModelOrMediaRequest": false
+  },
+  "changes": {
+    "productionService": false,
+    "liveClientOrProfile": false,
+    "dnsTlsOrProxySettings": false,
+    "liveModelOrMediaRequest": false,
+    "localGatewaySourceAndOwnedTestsOnly": true
+  },
+  "goalStatus": "active"
+}

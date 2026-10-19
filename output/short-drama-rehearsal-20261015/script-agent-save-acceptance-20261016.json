@@ -1,0 +1,97 @@
+{
+  "recordedAt": "2026-10-16T04:03:21.189906+00:00",
+  "previousGoalTurn": "progress: merged runtime scheduling/streaming commit and preserved preceding fixes; validated real read-only client paths",
+  "runId": "plugin-I8ZkBHzRr8WJd_dBDMAwF19pjhTiG_ts2DuEX2Y6tvc",
+  "artifact": {
+    "schemaVersion": "crewon.project-text-artifact.v1",
+    "tenantId": "standalone-tenant",
+    "spaceId": "standalone-space",
+    "projectId": "01a13f43-094c-767a-9414-b5622b236255",
+    "kind": "script",
+    "episodeId": "ep1",
+    "artifactId": "01a142dc-664f-70a8-a2ea-bf7260762c50",
+    "ownerPrincipalId": "standalone-principal",
+    "revision": 2,
+    "latestContentRevision": 1,
+    "selectedContentRevision": 1,
+    "locked": false,
+    "createdByActorId": "standalone-actor",
+    "createdAt": "2026-10-16T03:58:22.797Z",
+    "updatedByActorId": "standalone-actor",
+    "updatedAt": "2026-10-16T03:59:11.573Z"
+  },
+  "contentRevision": 1,
+  "contentDigest": "sha256:c8454d2d19c6089a29982dc698dcde383b6e4415944b370a65973aa500e699ca",
+  "sourceOutline": {
+    "artifactId": "01a14284-96db-74ff-be5d-bae1e189b995",
+    "contentRevision": 2,
+    "contentDigest": "sha256:fee286ef70f647d019c83483a448f76ce98af6cf2f72e66c0ed961cc7f1f2e46"
+  },
+  "checks": {
+    "sceneCount": 12,
+    "shotIds": "shot01..shot12",
+    "timelinesContiguous": true,
+    "plannedDurationSeconds": 90,
+    "onlyNamedSpeakers": true,
+    "allActionsHaveTiming": true,
+    "actualRenderedVideo": false,
+    "semanticReview": "Root read actual saved script; no independent model review report yet"
+  },
+  "ui": {
+    "candidateAppearedWithoutManualRefresh": true,
+    "adopted": true,
+    "runTerminal": true,
+    "adoptedObservedWithoutManualRefresh": true
+  },
+  "intervals": [
+    [
+      0,
+      10
+    ],
+    [
+      10,
+      18
+    ],
+    [
+      18,
+      27
+    ],
+    [
+      27,
+      36
+    ],
+    [
+      36,
+      42
+    ],
+    [
+      42,
+      48
+    ],
+    [
+      48,
+      56
+    ],
+    [
+      56,
+      64
+    ],
+    [
+      64,
+      72
+    ],
+    [
+      72,
+      80
+    ],
+    [
+      80,
+      85
+    ],
+    [
+      85,
+      90
+    ]
+  ],
+  "goalStatus": "active"
+}

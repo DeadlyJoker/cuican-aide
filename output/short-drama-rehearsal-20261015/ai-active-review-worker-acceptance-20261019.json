@@ -1,0 +1,26 @@
+{
+  "at": "2026-10-19T02:40:22.414085+00:00",
+  "scope": "saved-image-review",
+  "tests": {
+    "media_image_review_job_and_routing_integration": 16,
+    "pass": 16,
+    "fail": 0,
+    "skipped": 0,
+    "ffmpeg": "/opt/homebrew/bin/ffmpeg",
+    "referenceWorkflowPackage": "examples/plugins/short-drama/dist/50.2.17",
+    "referenceWorkflowPackageDigest": "sha256:19476f09f83bf2fc0421f1692198e7a67d3b49f47e83adb2162f40a680b2b84c"
+  },
+  "verified": [
+    "replay after send permission withdrawal",
+    "atomic rollback of run/message/job/receipt",
+    "missing admission rejected",
+    "ordinary kernel cannot synthesize review",
+    "route and authority drift rejected",
+    "cold restore durable report",
+    "encrypted image bytes transformed locally before model call",
+    "source permission revocation prevents publication",
+    "candidate substitution and whole-video coverage rejected",
+    "runtime close joins in-flight review"
+  ],
+  "result": "AI主动审核内核真实测试通过；仍需真实客户端和真实视频成片验收"
+}

@@ -1,0 +1,42 @@
+{
+  "installedAt": "2026-10-16T10:04:41.030Z",
+  "identity": {
+    "schemaVersion": "crewon.extension-build-identity.v1",
+    "implementationDigest": "sha256:595c9689a1afe440a50b366aa65637cb3f3d6379c728d57b3a5a34658f345df2",
+    "bundles": [
+      {
+        "file": "control-api.mjs",
+        "digest": "sha256:5f09d63b077428fc12687b7f71e32610fbd355517989d955d8b0600e719aa7bf"
+      },
+      {
+        "file": "device-gateway.mjs",
+        "digest": "sha256:a75bcaee2d78fab139f01f4212d823dc0248a430df7c6e9650ee6eb12c6e0e52"
+      },
+      {
+        "file": "local-workspace-checks-mcp.mjs",
+        "digest": "sha256:00c30cb7aeb1699fc3c38a3a5e3318b03d8f9a8b97b22295ddd9671b6b0d5c64"
+      },
+      {
+        "file": "provider-model-catalog.mjs",
+        "digest": "sha256:a762f1e2f0e9bcd827505cff3443b3a5d826a8b7682963ce3227c9df2ed5f6f4"
+      },
+      {
+        "file": "provider-settings-coordinator.mjs",
+        "digest": "sha256:64d3d107b3a851c45c61f44c989d8d54fa68e606739cf5b74f06576857e16b96"
+      },
+      {
+        "file": "runtime-release.mjs",
+        "digest": "sha256:46caad48c9bef11c7e9dccc669dc85f8a0802b191777600014e431420c6af0d4"
+      },
+      {
+        "file": "runtime-worker.mjs",
+        "digest": "sha256:cfcd7f3fbc669e1b7f756479857913f887e67e22ddb5b30bcb3c234ac7dcc9ed"
+      }
+    ],
+    "historicalWorkItemScope": "crewon.extension-work-item-scope.v1"
+  },
+  "backup": "/private/tmp/crewon-plugin-performance-20261015/before-readiness-bounded-20261016",
+  "installed": true,
+  "signatureVerified": true,
+  "clientAcceptanceComplete": false
+}

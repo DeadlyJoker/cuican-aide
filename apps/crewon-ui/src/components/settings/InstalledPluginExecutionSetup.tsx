@@ -1,6 +1,7 @@
 import { useEffect, useId } from "react";
 import type {
   DesktopLocalPluginExecutionIdentity,
+  DesktopShortDramaImagePreset,
   DesktopLocalPluginExecutionSetupAccess,
 } from "../../lib/desktop/desktopLocalPluginExecutionSetupProtocol";
 import type { Locale } from "../../lib/i18n";
@@ -8,6 +9,20 @@ import type { ExecutionSetupParameters } from "../../lib/plugins/localPluginExec
 import { useLocalPluginExecutionSetup } from "../../lib/plugins/useLocalPluginExecutionSetup";
 import { Button } from "../ui/button";
 import { Switch } from "../ui/switch";
+
+const presetLabels: Record<
+  DesktopShortDramaImagePreset,
+  readonly [string, string]
+> = {
+  "krea2-portrait": ["Krea2 写实人像（1MP）", "Krea2 portrait (1MP)"],
+  "krea2-character-three-view": [
+    "Krea2 角色三视图",
+    "Krea2 character three-view",
+  ],
+  "api-c16-scene": ["C16 场景（16:9）", "C16 scene (16:9)"],
+  "api-c16-portrait": ["C16 角色（3:4）", "C16 character (3:4)"],
+  "api-t4-three-view": ["T4 角色三视图", "T4 character three-view"],
+};
 
 /** Shares only the original panel's scoped settings presentation. */
 export function InstalledPluginExecutionSetup(
@@ -92,13 +107,7 @@ export function InstalledPluginExecutionSetup(
           </p>
           <p>
             {zh ? "预设：" : "Preset: "}
-            {preview.preset === "krea2-portrait"
-              ? zh
-                ? "Krea2 写实人像（1MP）"
-                : "Krea2 portrait (1MP)"
-              : zh
-                ? "Krea2 角色三视图"
-                : "Krea2 character three-view"}
+            {presetLabels[preview.preset][zh ? 0 : 1]}
           </p>
           <p>
             {zh ? "允许的网络请求：" : "Allowed network requests: "}
@@ -161,8 +170,8 @@ export function InstalledPluginExecutionSetup(
                   )
                   .join(" · ")}
                 {zh
-                  ? "。执行时会把项目已采用的参考图上传至上方生成服务（POST /upload/image），并创建生成任务。"
-                  : ". Execution uploads the project's adopted references to the service above (POST /upload/image) and creates a generation task."}
+                  ? `。执行时会把项目已采用的参考图上传至上方生成服务（POST ${preview.mediaGenerationPreparation.additionalNetworkPaths[0].path}），并创建生成任务。`
+                  : `. Execution uploads the project's adopted references to the service above (POST ${preview.mediaGenerationPreparation.additionalNetworkPaths[0].path}) and creates a generation task.`}
               </p>
               {preview.mediaGenerationPreparation.alreadyApproved ? (
                 <p className="installed-plugin-configuration-hint">

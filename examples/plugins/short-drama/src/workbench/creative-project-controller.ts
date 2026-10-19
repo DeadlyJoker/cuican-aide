@@ -118,6 +118,7 @@ export class CreativeProjectController {
   readonly #queryRecovery: GenerationSourceRecovery;
   readonly #selectionRecovery: GenerationSourceRecovery;
   readonly #recovery = new ConceptRecoveryCoordinator();
+  #hostProjectId: string | null = null;
   #client: PluginCreativeProjectClient;
   #listeners = new Set<() => void>();
   #ready = false;
@@ -220,6 +221,12 @@ export class CreativeProjectController {
       selection: import("./ConceptController.types").ConceptSelection,
     ) => {
       if (!this.#ready || this.#disposed) return;
+      if (
+        this.#hostProjectId !== null &&
+        (details.project.projectId !== this.#hostProjectId ||
+          selection.asset.projectId !== this.#hostProjectId)
+      )
+        return;
       if (
         !this.#recovery.canApply(lane, {
           projectId: selection.asset.projectId,
@@ -329,6 +336,29 @@ export class CreativeProjectController {
       ...this.#recovery.contexts,
       selection: context,
     });
+  }
+  setHostProjectScope(projectId: string | null) {
+    if (this.#disposed) return;
+    this.concepts.setHostProjectScope(projectId);
+    if (projectId === this.#hostProjectId) return;
+    this.#hostProjectId = projectId;
+    this.#generationRecovery.abort();
+    this.#queryRecovery.abort();
+    this.#historicalQueryRecovery.abort();
+    this.#selectionRecovery.abort();
+    if (
+      projectId !== null &&
+      !this.concepts.localMutationPending &&
+      this.#snapshot.details?.project.projectId !== projectId
+    ) {
+      this.#detail?.abort();
+      this.#update({
+        details: null,
+        opening: false,
+        error: null,
+        notice: null,
+      });
+    }
   }
   setRecoveryContexts(contexts: ConceptRecoveryContexts) {
     const wasConflicting = this.#recovery.manualHandling;
@@ -490,7 +520,10 @@ export class CreativeProjectController {
       !this.#ready ||
       this.#disposed ||
       this.#write ||
-      this.concepts.locked ||
+      this.concepts.localMutationPending ||
+      (this.concepts.locked &&
+        (projectId !== this.#hostProjectId ||
+          this.concepts.recoveringProject(projectId))) ||
       (this.#intent && !preserveDraft)
     )
       return;

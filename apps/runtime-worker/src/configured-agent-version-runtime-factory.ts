@@ -22,6 +22,11 @@ import { scopeToolRuntimeToAgentVersion } from "./agent-version-tool-runtime.ts"
 import { KernelContextCompactor } from "./kernel-context-compactor.ts";
 import { PinnedRunExecutionPolicy } from "./standalone-adapters.ts";
 import { readRuntimeExtensionMaterializations } from "./extensions/extension-runtime-proof.ts";
+import {
+  captureSavedImageReviewRuntimePurpose,
+  MediaImageReviewRoutingKernel,
+  type SavedImageReviewRuntimePurpose,
+} from "./media-image-review-routing-kernel.ts";
 
 export type AgentVersionRuntimeBinding = Readonly<{
   tenantId: string;
@@ -34,6 +39,8 @@ export type AgentVersionRuntimeBinding = Readonly<{
   toolRuntimeMode?: "independent" | "shared";
   /** Request-owned HTTP transports have no prewarm/close resource owner. */
   transportOwnership?: "runtime" | "request";
+  /** Trusted Native binding only; metadata or an ordinary text runtime cannot enable image review. */
+  savedImageReview?: SavedImageReviewRuntimePurpose;
   createTransport(
     version: CompiledAgentVersion,
     options?: RuntimeCreationOptions,
@@ -74,7 +81,28 @@ export class ConfiguredAgentVersionRuntimeFactory
           "agent_version_runtime_binding_duplicate",
         );
       }
-      this.#bindings.set(key, binding);
+      const savedImageReview =
+        binding.savedImageReview === undefined
+          ? undefined
+          : captureSavedImageReviewRuntimePurpose(binding.savedImageReview);
+      if (
+        savedImageReview &&
+        (savedImageReview.actor.tenantId !== binding.tenantId ||
+          binding.workspaceBindingId !== null ||
+          binding.executionAuthority !== "crewonKernel" ||
+          binding.createGovernedContext !== undefined ||
+          binding.toolRuntimeMode === "shared")
+      )
+        throw new AgentVersionRuntimeError(
+          "agent_version_image_review_binding_invalid",
+        );
+      this.#bindings.set(
+        key,
+        Object.freeze({
+          ...binding,
+          ...(savedImageReview ? { savedImageReview } : {}),
+        }),
+      );
     }
   }
 
@@ -196,12 +224,30 @@ export class ConfiguredAgentVersionRuntimeFactory
       const governedContext = await binding.createGovernedContext?.(
         input.version,
       );
-      const kernel = new CrewONAgentKernel({
+      const baseKernel = new CrewONAgentKernel({
         transport,
         instructions: input.version.instructions,
         toolCatalog: { definitions: () => input.version.tools },
         streamMaxRetries: input.version.execution.streamMaxRetries,
       });
+      const route = {
+        authorityId: binding.authorityId,
+        runtimeGeneration: input.version.runtimeGeneration,
+        agentVersionId: input.version.agentVersionId,
+        policySnapshotId: input.version.policySnapshotId,
+        workspaceBindingId: binding.workspaceBindingId,
+      };
+      const reviewKernel =
+        binding.savedImageReview === undefined
+          ? null
+          : creation.own(
+              new MediaImageReviewRoutingKernel({
+                kernel: baseKernel,
+                purpose: binding.savedImageReview,
+                route,
+              }),
+            );
+      const kernel = reviewKernel ?? baseKernel;
       const ownedTransport = transport;
       const ownedToolRuntime = ownsToolRuntime ? toolRuntime : null;
       let closeTask: Promise<void> | null = null;
@@ -209,13 +255,7 @@ export class ConfiguredAgentVersionRuntimeFactory
         version: input.version,
         executionAuthority: binding.executionAuthority,
         kernel,
-        policy: new PinnedRunExecutionPolicy({
-          authorityId: binding.authorityId,
-          runtimeGeneration: input.version.runtimeGeneration,
-          agentVersionId: input.version.agentVersionId,
-          policySnapshotId: input.version.policySnapshotId,
-          workspaceBindingId: binding.workspaceBindingId,
-        }),
+        policy: new PinnedRunExecutionPolicy(route),
         toolRuntime: scopedToolRuntime,
         contextCompactor: new KernelContextCompactor(kernel),
         ...(extensions === null ? {} : { extensions }),
@@ -233,6 +273,7 @@ export class ConfiguredAgentVersionRuntimeFactory
                 closeTask ??= Promise.allSettled([
                   Promise.resolve().then(() => ownedToolRuntime?.close?.()),
                   Promise.resolve().then(() => ownedTransport.close?.()),
+                  Promise.resolve().then(() => reviewKernel?.close()),
                 ]).then((results) => {
                   const failures = results.flatMap((result) =>
                     result.status === "rejected" ? [result.reason] : [],
@@ -277,6 +318,16 @@ export class ConfiguredAgentVersionRuntimeFactory
       );
     }
     validateVersionAuthority(binding.executionAuthority, input.version);
+    if (
+      binding.savedImageReview &&
+      (input.version.tools.length !== 0 ||
+        input.version.resources.workspaceRequired ||
+        input.version.resources.governedContextDigest !== null ||
+        input.version.model.autoCompactAtTokens !== null)
+    )
+      throw new AgentVersionRuntimeError(
+        "agent_version_image_review_version_invalid",
+      );
     return binding;
   }
 }

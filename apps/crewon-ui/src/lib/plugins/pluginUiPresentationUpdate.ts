@@ -5,6 +5,7 @@ import {
 } from "@crewon/control-client";
 import type { PluginUiProps } from "@crewon/plugin-sdk/ui";
 import { PluginUiLoaderError } from "./pluginUiValidation";
+import { PluginUiLeaseRenewalDeferredError } from "./pluginUiLeaseLifecycle";
 
 /** Host-only delivery status. It is never an action receipt or a renewed authorization. */
 export class PluginUiUpdateDeferredError extends PluginUiLoaderError {
@@ -15,6 +16,7 @@ export class PluginUiUpdateDeferredError extends PluginUiLoaderError {
 
 export function isTransientPluginUiValidationError(error: unknown): boolean {
   return (
+    error instanceof PluginUiLeaseRenewalDeferredError ||
     error instanceof ControlApiTransportError ||
     (error instanceof ControlApiClientError && error.status >= 500) ||
     (error instanceof ControlApiProtocolError &&

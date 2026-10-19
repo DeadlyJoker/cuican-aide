@@ -1,15 +1,20 @@
 import assert from "node:assert/strict";
 import { execFileSync } from "node:child_process";
 import { cp, mkdir, readFile, readdir, rm, writeFile } from "node:fs/promises";
-import { join } from "node:path";
+import { join, relative, sep } from "node:path";
 import { fileURLToPath } from "node:url";
+import { verifyLocalPluginPackage } from "../packages/plugin-host/src/index.ts";
 
 const repository = fileURLToPath(new URL("../", import.meta.url));
 
 /** Build the public example outside the host; consumers receive only the prebuilt artifacts. */
 export async function buildInstalledBusinessPluginExamples(
   ownedRoot,
-  { includeKrea = false, includeShortDrama = false } = {},
+  {
+    includeKrea = false,
+    includeShortDrama = false,
+    includeReferenceWorkflows = false,
+  } = {},
 ) {
   const sdkOutput = join(ownedRoot, "sdk");
   await mkdir(sdkOutput, { mode: 0o700 });
@@ -33,6 +38,10 @@ export async function buildInstalledBusinessPluginExamples(
     await mkdir(development, { recursive: true, mode: 0o700 });
     await cp(sourceDirectory, development, {
       recursive: true,
+      filter: (source) =>
+        !["node_modules", "dist", ".sdk"].includes(
+          relative(sourceDirectory, source).split(sep)[0],
+        ),
     });
     const packagePath = join(development, "package.json");
     const manifest = JSON.parse(await readFile(packagePath, "utf8"));
@@ -109,6 +118,23 @@ export async function buildInstalledBusinessPluginExamples(
         fixtureProfile: "projects",
       })
     : null;
+  const referenceVersion = includeReferenceWorkflows
+    ? JSON.parse(
+        await readFile(
+          join(repository, "examples/plugins/short-drama/package.json"),
+          "utf8",
+        ),
+      ).version
+    : undefined;
+  const references = includeReferenceWorkflows
+    ? await buildExample({
+        ...example("short-drama", "reference-workflow-packages"),
+        versions: [referenceVersion],
+      })
+    : null;
+  const referenceVerification = references
+    ? await verifyLocalPluginPackage({ directory: references[0] })
+    : null;
   // Deleting the actual development projects proves consumers cannot borrow their dependencies.
   await rm(join(ownedRoot, "development"), { recursive: true });
   await rm(sdkOutput, { recursive: true });
@@ -126,5 +152,11 @@ export async function buildInstalledBusinessPluginExamples(
           projectUiDirectory: projectUi[0],
         }),
     developmentRemoved: true,
+    ...(referenceVerification === null
+      ? {}
+      : {
+          referenceWorkflowDirectory: references[0],
+          referenceWorkflowPackageDigest: referenceVerification.packageDigest,
+        }),
   });
 }

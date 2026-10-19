@@ -3,6 +3,7 @@ import { randomUUID } from "node:crypto";
 import { DatabaseSync } from "node:sqlite";
 import { Pool } from "pg";
 import { readFile } from "node:fs/promises";
+import { pathToFileURL } from "node:url";
 import type { TestContext } from "node:test";
 import { verifyLocalPluginPackage } from "@crewon/plugin-host";
 import {
@@ -47,14 +48,6 @@ import type {
   PinnedHttpResponse,
 } from "./pinned-node-http.ts";
 
-const packageUrl = new URL(
-  "../../../output/extensions/installable-plugins/short-drama-reference-workflows-20261006/short-drama/20.0.2/",
-  import.meta.url,
-);
-const templatesUrl = new URL(
-  "../../../examples/plugins/short-drama/src/templates/",
-  import.meta.url,
-);
 type Render = (input: {
   workflowId: ProjectMediaWorkflowId;
   prompt: string;
@@ -66,13 +59,20 @@ type Render = (input: {
 
 /** Verify the immutable complete package; use only its exported pure adapter, not setup/Tool activation. */
 export async function reviewedMediaGraphs() {
+  const generated = process.env.CREWON_TEST_REFERENCE_WORKFLOW_PLUGIN_DIR;
+  const expectedDigest =
+    process.env.CREWON_TEST_REFERENCE_WORKFLOW_PACKAGE_DIGEST;
+  assert.ok(
+    generated &&
+      expectedDigest &&
+      /^sha256:[a-f0-9]{64}$/u.test(expectedDigest),
+    "run the Worker test producer to build and pin the reference workflow package",
+  );
+  const packageUrl = pathToFileURL(generated.replace(/\/$/u, "") + "/");
   const verified = await verifyLocalPluginPackage({
     directory: packageUrl.pathname,
   });
-  assert.equal(
-    verified.packageDigest,
-    "sha256:2e110c0993eab6c903aacdf92f5385e1228aeedf377288b1b54c58e4b1ac0c56",
-  );
+  assert.equal(verified.packageDigest, expectedDigest);
   const moduleUrl = new URL("node.mjs", packageUrl).href;
   const adapter = (await import(moduleUrl)) as {
     renderReferenceWorkflow: Render;
@@ -97,7 +97,10 @@ export async function reviewedMediaGraphs() {
     definitions.map(async (d) => ({
       ...d,
       template: JSON.parse(
-        await readFile(new URL(`${d.id}.api.json`, templatesUrl), "utf8"),
+        await readFile(
+          new URL(`workflows/${d.id}.api.json`, packageUrl),
+          "utf8",
+        ),
       ),
     })),
   );

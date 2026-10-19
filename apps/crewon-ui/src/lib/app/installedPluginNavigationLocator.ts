@@ -7,6 +7,7 @@ export const PLUGIN_PROJECT_NAVIGATION_STAGES = [
   "script",
   "characters",
   "art",
+  "concepts",
   "references",
 ] as const;
 export type InstalledPluginNavigationLocator = Readonly<{

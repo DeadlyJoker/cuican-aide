@@ -1,0 +1,130 @@
+{
+  "schemaVersion": "crewon.acceptance.image-review-worker.v1",
+  "recordedAt": "2026-10-15T16:41:59.066Z",
+  "nodeVersion": "v24.18.1",
+  "ffmpeg": {
+    "executable": "/opt/homebrew/bin/ffmpeg",
+    "observedVersion": "8.0.1",
+    "installedByThisTurn": false,
+    "bundledOrRedistributed": false
+  },
+  "sources": {
+    "packages/application/src/project-media-image-review.ts": "sha256:4a09630191333073a2e78166228e56dc67d84b4327d93a219f472cbd0a0b644b",
+    "packages/application/src/project-media-image-review.test.ts": "sha256:3e2edbd855bf9db4fad36170a1db5fb4fa691ff8c71f53d8010238548a4bac58",
+    "packages/application/src/index.ts": "sha256:47c61ef42c7a04b8beb4920773d6f7af60987a4dc2db83476f7e8824d37f31e5",
+    "packages/agent-kernel/src/model-image-observation.ts": "sha256:40e896440ad96d5367adda356478a2637d8dbb15cb012140368fa7c65c5f6925",
+    "apps/runtime-worker/src/media-image-review-source.ts": "sha256:e60ee131a422c0bb1c6387c09c4448c040a433473d2c1cb4a65722c9c24d8166",
+    "apps/runtime-worker/src/media-image-review-kernel.ts": "sha256:45fc17b1cd50e948b191760105889d41a7d5378f8d118f06538b20c147d8e4e9",
+    "apps/runtime-worker/src/media-review-image-encoder.ts": "sha256:1e8ea6fd571e31ddbf925415672731624b4286680a8e9add102d79f8573c992e",
+    "apps/runtime-worker/src/media-image-review.test-support.ts": "sha256:a655aec16791f2a5caaccb8dc9a31c6e3c12cfeee5e4447221fbe2f365047468",
+    "apps/runtime-worker/src/media-image-review.integration.test.ts": "sha256:00e58f0ae3b4e2ad7d05990d9e5f0700c2a7f4a4b0eaa711e870a65c539e32b1",
+    "apps/runtime-worker/src/media-review-image-encoder.test.ts": "sha256:dd8e76746e505677ad2b429f57ab0092e9aa32b4144893d8948eda60880d43bc",
+    "docs/model-image-review-input.md": "sha256:69ed57b3a1cf34efa28a0afbb110d7c3f5cd9182e0fd8f16781b46305fd26ee1"
+  },
+  "tests": {
+    "newMediaReview": {
+      "passed": 14,
+      "failed": 0,
+      "skipped": 0
+    },
+    "agentKernel": {
+      "passed": 72,
+      "failed": 0,
+      "skipped": 0
+    },
+    "agentResponses": {
+      "passed": 334,
+      "failed": 0,
+      "skipped": 0
+    }
+  },
+  "checks": {
+    "workerTypecheck": "passed",
+    "packagesTypecheck": "passed",
+    "boundary": "passed",
+    "format": "passed",
+    "existingProductionDependencyLicenseCheck": "passed",
+    "gitDiffCheck": "passed"
+  },
+  "controlledEvidence": {
+    "sameOriginalSQLiteFileForRunAndCandidate": true,
+    "actualFrozenReferenceWorkflowPackageVerified": true,
+    "actualEncryptedArchive": true,
+    "actualPngIntegrityCheck": true,
+    "actualFfmpegDecodeAndJpegEncode": true,
+    "transparencyPixelComparison": true,
+    "actualLocalHttpImageRequest": true,
+    "actualWorkerRunCompletionAndHistory": true,
+    "coldReportReadWithoutModelSendPermission": true,
+    "physicalModelCallAccountingPersistsOnRejectedReview": true,
+    "sourceRevocationDoesNotRetryModel": true,
+    "finalBusyErrorDoesNotRetryModel": true,
+    "invalidSourceAndWholeMovieClaimRejected": true,
+    "noExtraGenerationOnReviewOrColdRead": true,
+    "rawImagesAbsentFromRunEventsAndHistory": true
+  },
+  "namedFixtures": [
+    "external generation HTTP response and its image pixels",
+    "semantic review model HTTP response",
+    "authorization decisions and immutable test publication metadata"
+  ],
+  "executionLimits": {
+    "pngMaxBytes": 16777216,
+    "jpegMaxBytes": 262144,
+    "edge": 512,
+    "perProcessConcurrency": 1,
+    "codecThreads": 1,
+    "filterThreads": 1,
+    "deadlineMs": 10000,
+    "queue": "none"
+  },
+  "notEstablished": [
+    "Native review command admission and publication",
+    "durable Native job-binding discovery",
+    "in-progress restart/reconnect recovery",
+    "workbench report presentation and invalidation",
+    "real model visual judgment",
+    "video frame and audio review",
+    "automatic repair",
+    "final playable commercial-quality video",
+    "external binary redistribution and source usage rights"
+  ],
+  "clientStateEvidence": "lifecycle-state-after-review-20261016.json",
+  "realClientUpdated": false,
+  "realModelOrMediaRequestSubmitted": false,
+  "goalStatus": "active",
+  "logs": {
+    "media-review-integration": {
+      "path": "media-review-integration.log",
+      "sha256": "dc2fe9f4a5bfb758f261f7f6d369903e7655d91ea421addf3c4fb6c5ace07217"
+    },
+    "media-review-kernel-tests": {
+      "path": "media-review-kernel-tests.log",
+      "sha256": "fa2ad10c1a9aff09ee9866e265c85f477e5b497f38aa86a40afddb89004756f6"
+    },
+    "media-review-responses-tests": {
+      "path": "media-review-responses-tests.log",
+      "sha256": "b4e086a479e8f381f00d76aab3d49f5fcfb4e5873453b79d474992f967977073"
+    },
+    "media-review-worker-typecheck": {
+      "path": "media-review-worker-typecheck.log",
+      "sha256": "f3a27ad51384300eda5209fe35f1990070f72b4e16e619caad82b5c36261bf6d"
+    },
+    "media-review-packages-typecheck": {
+      "path": "media-review-packages-typecheck.log",
+      "sha256": "4009ee5b21ad8b464c2d7c320c49edcdc24e0e820bc4831e62a7046ff6891841"
+    },
+    "media-review-boundary": {
+      "path": "media-review-boundary.log",
+      "sha256": "9ca051bf69b76010b6bdde6c73202e042b6c69e932667cbdacb0353047bf50a4"
+    },
+    "media-review-format": {
+      "path": "media-review-format.log",
+      "sha256": "afd0d265f84b3b6c0e01a95fba9476bb8eb9d3df85f728960450995b0da10c3e"
+    },
+    "media-review-license-check": {
+      "path": "media-review-license-check.log",
+      "sha256": "c2785a10ca782d38ead952c24071da8ae6aa42d8d4cf0664ba2672713b6cbe04"
+    }
+  }
+}

@@ -1,0 +1,157 @@
+{
+  "sourceHashes": {
+    "packages/contracts/src/desktop-native-plugin-authority-contract.ts": "9b2de7675cb291778b4563e97dee297c53e60d86042076329e54e02615960ab5",
+    "apps/crewon-ui/electron/desktopNativePluginAuthority.ts": "8f3f5105f22d4a0d2d32ebff924d6e0a2f37fedbb125eaf740a63f9e38bcd112",
+    "apps/control-api/src/desktop-native-plugin-authority-files.ts": "7407aa08041e749ed60425a87d1e34220e6f78560233b49b9da3d0deb17ce0f2",
+    "apps/control-api/src/desktop-plugin-configuration.ts": "abfcb072b07d960f1024fa652602620e9e81184b418df1d7401b75f495f27ad6",
+    "apps/runtime-worker/src/plugins/installed-plugin-native-authority-files.ts": "2b5bdcc897bf907ddd3b65c96f958df120d721bf378dca783261eee5a28ed722",
+    "apps/crewon-ui/electron/desktopPluginBootstrap.ts": "f0861442836a84df7dc6600e2968e1e0ddebc875875953b3955f95b300ef2e95",
+    "apps/crewon-ui/electron/desktopLocalPluginSourceImportFiles.ts": "8ad4ed09c18a896812e50227b1c8d458ccaa9b03baf559d8fac8b392993a7292",
+    "apps/crewon-ui/electron/desktopLocalPluginExecutionSetup.ts": "0c467017871d5e9e215089b5cafb9c3c1b79ec3fdfd7a634a6e7c703c7e19a96",
+    "apps/crewon-ui/src/lib/plugins/projectWorkspaceChanges.ts": "27fc0f54ee9f26768204172b4477ee5ffab3bf5dd775ed1826fa8cd2d0f2cc73",
+    "apps/crewon-ui/src/lib/plugins/useInstalledPluginWorkspaceRevision.ts": "8bba38a3ddbe3e765778215f037d620fe5459d3464449d9c8ff89fd25e48693d",
+    "apps/crewon-ui/src/components/plugins/InstalledPluginModule.tsx": "973ddc41d089b55728fb620ecb8ae1e214820e0ae8d519c1cf6f06f5785427a1",
+    "examples/plugins/short-drama/src/workbench/ShortDramaPersistentWorkbench.tsx": "3e4c02fda795060864b846fdf0f8217c1a9c46b7cf8cf680f879deef09c81e5d",
+    "examples/plugins/short-drama/src/workbench/ProjectTextController.ts": "555e82456771cfbb39864d7c01bfb15b82fd8e964e8b697fed4eec2ee47dfd1c",
+    "examples/plugins/short-drama/src/workbench/ProjectRecoveryRecords.tsx": "9ea403449d4d964ade9a0fe3d6ed7fb535265aaccc21aace4bde1f0885238b44",
+    "examples/plugins/short-drama/src/workbench/ProjectTextRecoveryActions.tsx": "4c1aab2c013c6cf4886d89a5ccc6cd23fd9bcb98755a029d1f10580b9d2e667e",
+    "examples/plugins/short-drama/src/workbench/useProjectAssetInvalidation.ts": "c428998df0cc8985f561624aba5f5ea52c79d8da2518e792c970b8348324798e",
+    "examples/plugins/short-drama/src/ui.tsx": "a0683f9827a7558121eb007a5c86796cc419e2e592a09f19e734479bc842c957",
+    "apps/runtime-worker/src/plugins/native-project-foundation-declaration.ts": "a5fb0c00760a8093d2ee69debe05709021af1fb94db8ceac4b5ef3616565f35e",
+    "apps/runtime-worker/src/plugins/native-project-outline-declaration.ts": "8f5008ebc2765b62ab56573866587c9db1d3e6420b86373f50ea04b2b6cbec1e",
+    "apps/control-api/src/desktop-native-plugin-control-environment.ts": "68cf3af472870fb707d661d8f50a110f17e3ff089979e8db20eeaa63f6691132"
+  },
+  "checks": {
+    "uiTests": 44,
+    "pluginTests": 40,
+    "typecheck": "passed",
+    "uiLint": "passed",
+    "nativeTests": 180,
+    "controlContractTests": 33,
+    "nativeTypecheck": "passed",
+    "controlTypecheck": "passed",
+    "workerTypecheck": "passed",
+    "contractsTypecheck": "passed",
+    "boundary": "passed",
+    "repositoryFormat": "passed",
+    "nativeDeclarationRegressionTests": 24,
+    "declarationRegression": "24 passed after 3 reproduced failures"
+  },
+  "acceptedInClient": true,
+  "rendererPackage": {
+    "path": "/private/tmp/crewon-plugin-performance-20261015/page-stage-capacity-final-profile-20261016.asar",
+    "sha256": "9a7d9141520ba35f744726b32f38ac0176b69d5867b9e18578e9d381b85f8395",
+    "headerSha256": "4b5c930a4ce1ca41ceaaf0213cc5ba24feb1a64ea8c5666380f53e934fe5b26e",
+    "nonRendererFilesVerified": 17458,
+    "startup": {
+      "entries": [
+        "assets/index-D14UBe5N.js"
+      ],
+      "eagerChunks": [
+        "assets/index-D14UBe5N.js",
+        "assets/runtime-PPVm8Dsz.js",
+        "assets/react-BPCV84d_.js",
+        "assets/icons-BKXws8yi.js",
+        "assets/desktopFetch-C6vSCXoG.js"
+      ],
+      "eagerBytes": 326474,
+      "javascriptLimitBytes": 524288,
+      "cloudflareEntryExcluded": true
+    }
+  },
+  "plugin": {
+    "version": "50.2.8",
+    "packageDigest": "sha256:c448c8b41a15d87ccb7937186857bdc30a321f313a576c286cb915c97ddadf6f",
+    "files": 54,
+    "clientUpgradeAccepted": true
+  },
+  "runtimeImplementationDigest": "sha256:07368603516c4ea60120ff2312248ff86f10046514812cf9953382022cd92010",
+  "codesignDeepStrictVerify": "passed",
+  "coldStartup": {
+    "mainPid": 21547,
+    "clientWindowObserved": true,
+    "manualInterferenceAfterStartupConfirmedByUser": true,
+    "nativeDeclarationsLoaded": true
+  },
+  "finalNativePackage": {
+    "builtAt": "2026-10-16T07:40:41.528Z",
+    "output": "/private/tmp/crewon-plugin-performance-20261015/page-stage-declarations-final-20261016.asar",
+    "sha256": "d88af60c812fcd6f4c59ac8b9a850abb09d7487207eac3f320846f276ef87186",
+    "headerSha256": "9b1cb494957d3d4109df834bd904691202e64d443c379c2883d2f7d950816369",
+    "nonNativeFilesIntegrityVerified": 17477,
+    "changes": "Native rebuild includes consistent approval catalogue limits; renderer and acceptance bootstrap unchanged"
+  },
+  "installedRuntimeBundlesVerified": 7,
+  "sourceImport": {
+    "committed": true,
+    "approvalBytes": 131492,
+    "retainedSources": 26,
+    "installedSelected": true,
+    "firstTwoFailuresReason": "approval_size",
+    "startupReaderFailuresReproduced": 3,
+    "startupReaderFixInstalled": true,
+    "configurationRevision": 21,
+    "executionPreparation": "prepared",
+    "enabled": true
+  },
+  "clientProject": {
+    "projectId": "01a13f43-094c-767a-9414-b5622b236255",
+    "originalThreadRestored": true,
+    "projectDirectoryCount": 3,
+    "existingRoleCandidatesLoaded": 2,
+    "bothRoleCandidateSources": {
+      "brief": 2,
+      "script": 2
+    },
+    "bothRoleCandidatesAdopted": true,
+    "artStageLiveAcceptance": {
+      "runId": "plugin-2-1I4-CbYvh0ci9gdtthT_z99i3HEMmlaWUw3DiSLKw",
+      "status": "completed",
+      "seconds": 59.933,
+      "modelHttpSeconds": 36.9,
+      "modelCalls": 4,
+      "modelCallsFailed": 0,
+      "assetId": "01a143b2-2c35-77a1-957d-9da82b524ebb",
+      "assetRevision": 1,
+      "source": {
+        "brief": 2,
+        "script": 2
+      },
+      "assetListRefreshedWithoutClick": true,
+      "stageStayedArt": true,
+      "finalReceiptVisible": true,
+      "composerRecovered": true,
+      "rendererRefreshRestoredArtStage": true,
+      "reopenedAdoptedAsset": true
+    },
+    "assets": [
+      {
+        "asset_id": "01a1437f-5f1e-7599-8e99-9ad1bf2a3f4d",
+        "kind": "character",
+        "latest_content_revision": 1,
+        "selected_content_revision": 1
+      },
+      {
+        "asset_id": "01a14380-46c6-727b-8dd7-121ef91e4afb",
+        "kind": "character",
+        "latest_content_revision": 1,
+        "selected_content_revision": 1
+      },
+      {
+        "asset_id": "01a143b2-2c35-77a1-957d-9da82b524ebb",
+        "kind": "scene",
+        "latest_content_revision": 1,
+        "selected_content_revision": 1
+      }
+    ]
+  },
+  "acceptanceScope": "Plugin 50.2.8 upgrade, preparation, existing project/task/asset loading, live art-stage tool completion, automatic asset refresh and renderer refresh/reopen; excludes film/audio delivery and original transport failure root cause",
+  "verifiedAt": "2026-10-16T07:55:17.224Z",
+  "selection": [
+    {
+      "revision": 71,
+      "state": "enabled",
+      "selected_package_digest": "sha256:c448c8b41a15d87ccb7937186857bdc30a321f313a576c286cb915c97ddadf6f"
+    }
+  ]
+}

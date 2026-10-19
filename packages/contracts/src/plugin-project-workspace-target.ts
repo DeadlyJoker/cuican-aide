@@ -41,3 +41,37 @@ export function parseProjectWorkspaceTargetResponse(
     throw new Error("plugin_project_workspace_target_invalid");
   return Object.freeze({ projectId, workspaceId: value.workspaceId });
 }
+
+/** Read-only runtime composition discovery; never a workspace or execution grant. */
+export const PROJECT_CREATION_CONTEXT_ACTION =
+  "crewon.project-workspace-target.v1.getCreationContext";
+export const PROJECT_CREATION_CONTEXT_SCHEMA =
+  "crewon.project-conversation-creation-context.v1";
+export type ProjectCreationContextResponse = Readonly<{
+  schemaVersion: typeof PROJECT_CREATION_CONTEXT_SCHEMA;
+  workspaceMode: "legacy-nullable" | "plugin-owned-explicit";
+}>;
+export function parseProjectCreationContextRequest(
+  input: unknown,
+): Readonly<Record<string, never>> {
+  pluginUiFields(parsePluginUiJsonValue(input, { maxBytes: 1024 }), []);
+  return Object.freeze({});
+}
+export function parseProjectCreationContextResponse(
+  input: unknown,
+): ProjectCreationContextResponse {
+  const value = pluginUiFields(
+    parsePluginUiJsonValue(input, { maxBytes: 1024 }),
+    ["schemaVersion", "workspaceMode"],
+  );
+  if (
+    value.schemaVersion !== PROJECT_CREATION_CONTEXT_SCHEMA ||
+    (value.workspaceMode !== "legacy-nullable" &&
+      value.workspaceMode !== "plugin-owned-explicit")
+  )
+    throw new Error("plugin_project_creation_context_invalid");
+  return Object.freeze({
+    schemaVersion: PROJECT_CREATION_CONTEXT_SCHEMA,
+    workspaceMode: value.workspaceMode,
+  });
+}

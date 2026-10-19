@@ -1,3 +1,9 @@
+import { composeDesktopProjectHistoryTaskReads } from "./desktop-project-history-task-reads.ts";
+import { bindInstalledPluginRequestOwner } from "./installed-plugin-request-owner.ts";
+import {
+  assertDesktopNativePluginControlComposition,
+  type DesktopNativePluginControlConfig,
+} from "./desktop-native-plugin-control-environment.ts";
 import type {
   ApplicationClock,
   ContentDigester,
@@ -103,6 +109,7 @@ export async function createDesktopProjectHistoryPluginRuntime(
     clock: ApplicationClock;
     digester: ContentDigester;
     tasks?: InstalledPluginTaskRuntimeCore;
+    nativeControl?: DesktopNativePluginControlConfig;
     fallback?: PluginUiHostServiceAvailabilityPort;
   }>,
 ): Promise<DesktopProjectHistoryPluginRuntime | undefined> {
@@ -122,8 +129,35 @@ export async function createDesktopProjectHistoryPluginRuntime(
   const extensions =
     projects.generationReadStore ??
     (await prepareProjectGenerationReadStore(input.store));
+  if (input.nativeControl !== undefined) {
+    if (input.tasks === undefined)
+      throw new Error("desktop_project_history_task_owner_required");
+    assertDesktopNativePluginControlComposition({
+      configuration: input.configuration,
+      nativeControl: input.nativeControl,
+    });
+  }
   const taskReads =
-    input.tasks?.extensionReads ?? input.installed.extensionReads;
+    input.nativeControl === undefined
+      ? (input.tasks?.extensionReads ?? input.installed.extensionReads)
+      : bindInstalledPluginRequestOwner(
+          composeDesktopProjectHistoryTaskReads({
+            metadata: input.installed.extensionReads,
+            native: input.tasks!.extensionReads,
+            preparedPluginIds: input.nativeControl.publication.entries.map(
+              (entry) => entry.identity.pluginId,
+            ),
+            assertCurrent: async () => {
+              assertDesktopNativePluginControlComposition({
+                configuration: input.configuration,
+                nativeControl: input.nativeControl!,
+              });
+              await input.installed.requests.assertCurrent();
+            },
+          }),
+          input.installed.requests,
+          { preparation: "configuration" },
+        );
   const reads = composeProjectGenerationReadService({
     projects,
     extensions,

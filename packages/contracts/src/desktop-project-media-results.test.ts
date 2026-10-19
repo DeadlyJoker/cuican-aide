@@ -111,3 +111,87 @@ test("result publication requires exact reviewed generation package; metadata ca
       parse({ ...old, mediaResults: results, ...patch }, options),
     );
 });
+
+test("a new publisher can coexist with historical read-only packages without expanding their authority", () => {
+  const previousDigest = `sha256:${"b".repeat(64)}`;
+  const previous = { ...publication, packageDigest: previousDigest };
+  const config = {
+    ...old,
+    mediaInputs: {
+      ...mediaInputs,
+      reviews: [
+        ...mediaInputs.reviews,
+        {
+          ...mediaInputs.reviews[0]!,
+          targetIdentity: {
+            ...identity,
+            version: "25.0.0",
+            packageDigest: previousDigest,
+          },
+        },
+      ],
+    },
+    mediaGenerations: declaration,
+    mediaResults: {
+      ...results,
+      purposes: ["read", "publish"],
+      publications: [previous, publication],
+      publishPublications: [publication],
+    },
+  };
+  const approved = {
+    publications: [
+      ...options.publications,
+      { pluginId: identity.pluginId, packageDigest: previousDigest },
+    ],
+  };
+  const captured = parse(config, approved);
+  assert.deepEqual(captured.mediaResults!.publishPublications, [publication]);
+  assert.deepEqual(captured.mediaResults!.publications, [
+    previous,
+    publication,
+  ]);
+  assert.ok(Object.isFrozen(captured.mediaResults!.publishPublications));
+  for (const publishers of [
+    [],
+    [previous],
+    [publication, previous],
+    [publication, publication],
+    [{ ...publication, contributionId: "foreign" }],
+  ]) {
+    assert.throws(() =>
+      parse(
+        {
+          ...config,
+          mediaResults: {
+            ...config.mediaResults,
+            publishPublications: publishers,
+          },
+        },
+        approved,
+      ),
+    );
+  }
+  assert.throws(() =>
+    parse(
+      {
+        ...config,
+        mediaResults: { ...config.mediaResults, purposes: ["read"] },
+      },
+      approved,
+    ),
+  );
+  assert.throws(() =>
+    parse(
+      {
+        ...config,
+        mediaResults: {
+          ...config.mediaResults,
+          publications: [publication],
+          publishPublications: [previous],
+        },
+      },
+      approved,
+    ),
+  );
+});

@@ -1,0 +1,78 @@
+{
+  "createdAt": "2026-10-15T08:39:15.888Z",
+  "sourceProfile": "/private/tmp/crewon-plugin-performance-20261015/profile",
+  "targetProfile": "/private/tmp/crewon-plugin-performance-20261015/final-profile",
+  "sourceApp": "/Users/cheneywang/.codex/worktrees/e9bf/cuican-aide/apps/crewon-ui/release/mac-arm64/CrewON.app",
+  "targetApp": "/private/tmp/crewon-plugin-performance-20261015/CrewON验收.app",
+  "app": {
+    "files": 331,
+    "onlyChanged": "Contents/Info.plist",
+    "mismatches": [],
+    "asarSha256": "3b7b29c454b8ba0b1be00726239bf38aeba303e34927ac38f846453cc7012539",
+    "executableSha256": "221d5695ab9eb2263b9107e4a5bb3f5780adc35963530e322673d5535e8eeae5",
+    "resourceFileInventorySha256": "53baa262e49663bf739411ef810578d7afb6829495bcc7f95e26dabc6164a6e5",
+    "controlRuntimeSha256": "5e9e08409a9401d9102b46878f9b6b134dca231008dfa78a57c2002be0e2acc5",
+    "workerRuntimeSha256": "e5ab517d278f134066c21ca8e34b81bb5b94d85fe5f4dbded50c8815e9bbaddb",
+    "infoPlist": {
+      "CFBundleIdentifier": "com.crewon.acceptance.final",
+      "CFBundleDisplayName": "CrewON验收",
+      "CFBundleName": "CrewON",
+      "sha256": "6b7cd970339078606a9b3c120f84dd6378ea1cfcb10db121f2eda257dc151f53"
+    },
+    "infoPlistAdjustment": "CFBundleName restored to CrewON so existing Electron Helper executable names resolve; independent bundle identifier and acceptance display name retained.",
+    "infoPlistVerifiedAt": "2026-10-15T08:41:21.004Z"
+  },
+  "sqlite": [
+    {
+      "path": "control-runtime-v1/artifact-metadata.sqlite.delivery.sqlite",
+      "integrity": {
+        "integrity_check": "ok"
+      }
+    },
+    {
+      "path": "control-runtime-v1/artifact-metadata.sqlite",
+      "integrity": {
+        "integrity_check": "ok"
+      }
+    },
+    {
+      "path": "control-runtime-v1/control.sqlite",
+      "integrity": {
+        "integrity_check": "ok"
+      },
+      "runStatuses": [
+        {
+          "status": "canceled",
+          "n": 10
+        },
+        {
+          "status": "completed",
+          "n": 141
+        },
+        {
+          "status": "failed",
+          "n": 18
+        }
+      ]
+    },
+    {
+      "path": "control-runtime-backups/before-0.1.2-test-model/control.sqlite",
+      "integrity": {
+        "integrity_check": "ok"
+      }
+    },
+    {
+      "path": "Trust Tokens",
+      "integrity": {
+        "integrity_check": "ok"
+      }
+    },
+    {
+      "path": "Cookies",
+      "integrity": {
+        "integrity_check": "ok"
+      }
+    }
+  ],
+  "profileSymlinks": []
+}

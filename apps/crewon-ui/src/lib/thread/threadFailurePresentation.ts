@@ -6,6 +6,18 @@ export function threadFailurePresentation(
   locale: Locale,
 ) {
   switch (error?.message) {
+    case "control_api_transport_unavailable":
+      return {
+        title:
+          locale === "zh"
+            ? "工作台连接中断"
+            : "Workspace connection interrupted",
+        message:
+          locale === "zh"
+            ? "暂时无法连接任务服务。本次请求结果尚未确认，请恢复连接后重试原请求。"
+            : "The task service could not be reached. This request's outcome is unconfirmed. Reconnect and retry the original request.",
+        diagnostic: error.message,
+      };
     case "installed_plugin_request_authority_unavailable":
     case "project_conversation_execution_unavailable":
     case "project_asset_stage_execution_unavailable":

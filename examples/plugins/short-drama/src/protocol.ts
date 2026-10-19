@@ -1,5 +1,9 @@
 import type { PluginJsonValue } from "@crewon/plugin-sdk/contracts";
 import { promptId } from "./catalog.js";
+import {
+  comfyImageEndpoint,
+  type ComfyServiceProtocol,
+} from "./comfy-service.js";
 
 export type ImageReference = Readonly<{
   filename: string;
@@ -16,6 +20,7 @@ export type Observation =
 export function acceptedPromptId(input: PluginJsonValue): string {
   const value = object(input);
   if (
+    value.success === false ||
     value.error !== undefined ||
     (value.node_errors !== undefined &&
       Object.keys(object(value.node_errors)).length > 0)
@@ -28,11 +33,11 @@ export function acceptedPromptId(input: PluginJsonValue): string {
 export async function observeJob(
   id: string,
   read: (path: string) => Promise<PluginJsonValue>,
-  options: Readonly<{ outputNodeId: "29" | "129" | "17" }> = {
+  options: Readonly<{ outputNodeId: "29" | "129" | "17" | "58" }> = {
     outputNodeId: "29",
   },
 ): Promise<Observation> {
-  if (!["29", "129", "17"].includes(options.outputNodeId))
+  if (!["29", "129", "17", "58"].includes(options.outputNodeId))
     throw new Error("krea_plugin_output_node_invalid");
   id = promptId(id);
   const history = object(await read("/history/" + id));
@@ -88,9 +93,17 @@ export function imageReference(input: unknown): ImageReference {
     type: "output",
   });
 }
-export function imageUrl(input: ImageReference, base: string): string {
-  return new URL("/view?" + new URLSearchParams(imageReference(input)), base)
-    .href;
+export function imageUrl(
+  input: ImageReference,
+  base: string,
+  protocol: ComfyServiceProtocol = "native",
+): string {
+  return new URL(
+    comfyImageEndpoint(protocol) +
+      "?" +
+      new URLSearchParams(imageReference(input)),
+    base,
+  ).href;
 }
 export function object(input: unknown): Record<string, unknown> {
   if (!input || typeof input !== "object" || Array.isArray(input))

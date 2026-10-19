@@ -1,0 +1,41 @@
+// Vitest Snapshot v1, https://vitest.dev/guide/snapshot.html
+
+exports[`presents tool completion, model waiting, a real retry, resumed text and terminal idle through the actual SSE hook 1`] = `
+[
+  {
+    "busy": "true",
+    "indicator": null,
+    "phase": "tool running without a duplicate model indicator",
+    "tool": "inProgress",
+    "turn": "inProgress",
+  },
+  {
+    "busy": "true",
+    "indicator": "<div class="thinking-card" data-status="inProgress" role="status"><span class="status-dot" aria-hidden="true"></span><span class="thinking-shimmer">正在思考</span></div>",
+    "phase": "tool completed; next model waits while the earlier prefix remains visible",
+    "tool": "completed",
+    "turn": "inProgress",
+  },
+  {
+    "busy": "true",
+    "indicator": "<div class="thinking-card" data-status="inProgress" role="status"><span class="status-dot" aria-hidden="true"></span><span class="thinking-shimmer">连接中断，正在重试…</span></div>",
+    "phase": "durable model retry remains active rather than claiming completion",
+    "tool": "completed",
+    "turn": "inProgress",
+  },
+  {
+    "busy": "true",
+    "indicator": null,
+    "phase": "first resumed assistant text clears the retry indicator",
+    "tool": "completed",
+    "turn": "inProgress",
+  },
+  {
+    "busy": "false",
+    "indicator": null,
+    "phase": "canonical terminal is idle with the saved assistant response",
+    "tool": "completed",
+    "turn": "completed",
+  },
+]
+`;

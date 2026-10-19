@@ -1,0 +1,117 @@
+{
+  "schemaVersion": "crewon.acceptance.image-review-job-admission.v1",
+  "recordedAt": "2026-10-15T17:54:11.250586+00:00",
+  "previousGoalTurnClassification": "progress: MP4 inspection and technical-gate implementation with real FFmpeg verification",
+  "thisTurnClassification": "progress: same-connection atomic review admission and SQL-backed completed-report restore, including idempotency and fail-closed corruption paths",
+  "boundary": "Disposable Native SQLite fixtures, actual saved encrypted PNG and FFmpeg, actual original Run/Turn/Worker/local HTTP. Model judgment, provider generation and PDP outcomes are named fixtures. Live profile has no review-job migration and no new model/generation request.",
+  "tests": {
+    "image-review-job-tests.log": {
+      "passed": 13,
+      "failed": 0
+    },
+    "image-review-job-turn-regression.log": {
+      "passed": 15,
+      "failed": 0
+    },
+    "image-review-job-sqlite-turn-regression.log": {
+      "passed": 9,
+      "failed": 0
+    }
+  },
+  "totalTestsPassed": 37,
+  "checks": {
+    "runtimeWorkerTypecheck": "passed",
+    "allPackagesTypecheck": "passed",
+    "boundary": "passed",
+    "existingJsLicenseCheck": "passed",
+    "repositoryFormat": "passed",
+    "changedTypescriptFormat": "passed",
+    "gitDiffCheck": "passed"
+  },
+  "verified": [
+    "same SQLite connection atomically commits Turn, immutable job, original outbox/work item/history and idempotency receipt",
+    "final grant revocation after writes rolls all authorities back",
+    "new send denial leaves no Run or message",
+    "replay after send withdrawal retains original Run and does not request another send decision",
+    "actual Worker sends actual bounded JPEG through local HTTP and persists a bound report",
+    "original SQL admission restores completed report after closing and reopening the Store",
+    "copied ordinary Turn receipt cannot be promoted to an admission",
+    "missing or corrupt jobs/schema cannot create a model request or generic Worker retry",
+    "candidate pins, tenant/space, original Run route and provenance rechecked",
+    "old optional thread-binding column is not required; existing ordinary-thread/project fence retained",
+    "ordinary Turn conformance and authorization regressions pass"
+  ],
+  "compatibility": {
+    "migration": "additive explicit opt-in only; constructors and ordinary startup do not migrate",
+    "publicHttpShapeChanged": false,
+    "reportV1ShapeChanged": false,
+    "runStateShapeChanged": false,
+    "storageScope": "Native SQLite only; PostgreSQL image-review admission remains unavailable"
+  },
+  "sourceSha256": {
+    "packages/application/src/project-media-image-review-job.ts": "sha256:6fdea23c5342c4c98858b5bf94e7ccbe784aab0fee461b5e8589da4ff7d66898",
+    "packages/application/src/project-media-image-review-job.test.ts": "sha256:29fdc1b67583e66dc3a48f825dec3c6fb738459e7548be8ab40f4869c48f77f4",
+    "packages/application/src/index.ts": "sha256:5c8616f2335f2a78b36eb48d3598d9cbc77b6cf5bd1e79adfe6d9773c1d6a7b1",
+    "packages/store/src/project-media-image-review-job-schema.ts": "sha256:55788ba4ad1bc89608505d28165fe8be1cc3f28e0966e4393ba0c97493cfda4b",
+    "packages/store/src/project-media-image-review-job-store.ts": "sha256:0adcb0ccdb6a4c600c559bddc4403c1f3eaf842ed558aab2479f56c86f99fb0f",
+    "packages/store/src/sqlite-run-store.ts": "sha256:d910234f63576dd698247cfc7b4544ce4b17ac085ab5ea57b3a628fcca37812a",
+    "packages/store/src/index.ts": "sha256:f39e462e0bf3607a9abdace0c4e1bdb07ffcaac9b93ed8fac0fb2e63ff405e7d",
+    "apps/runtime-worker/src/media-image-review-job-service.ts": "sha256:a887ac7d45b14fb13eb72197fdb25482f888e13fc8d3fd6d0d24025319b66a3f",
+    "apps/runtime-worker/src/media-image-review-job.integration.test.ts": "sha256:2be1d9d16c19b9855aa14a8a167673a4b6ffad444fb10356629a68b2932e6dbc",
+    "apps/runtime-worker/src/media-image-review-source.ts": "sha256:8a3438fa88760da8d838c1ee64dbc41ac9cde38acff0921a92ae8a908ace9b53",
+    "apps/runtime-worker/src/media-image-review-kernel.ts": "sha256:7bb521283e19a0bbe2dacf3fecbfb861b69eaa86124fee712104c1d1e972676d",
+    "apps/runtime-worker/src/media-image-review.test-support.ts": "sha256:aea27032d7829d28b203ee852fb5c0a851bcec528ea9433bbe14fbee4b34263c",
+    "docs/model-image-review-input.md": "sha256:01ae67753ae319222008dfd4ac5405c753928037f08c884e316e795cf98a1737"
+  },
+  "evidenceSha256": {
+    "image-review-job-tests.log": "sha256:577e3bc9e823364161df241efe9e74836c41ec36b20f6aea1ef79df04330991f",
+    "image-review-job-turn-regression.log": "sha256:91fabaa92d21f8b688bc6e92557139902a443d1841710412cfba8a9a1aa2f858",
+    "image-review-job-sqlite-turn-regression.log": "sha256:2df3569e3147fe90fd6f38cf2c329facbdec49e2a268a7e1b83723d45bbef158",
+    "image-review-job-worker-typecheck.log": "sha256:f3a27ad51384300eda5209fe35f1990070f72b4e16e619caad82b5c36261bf6d",
+    "image-review-job-packages-typecheck.log": "sha256:687e8909c8b68d39e6700c5149b4f743bef430ee4581f1085c79cf3841be703c",
+    "image-review-job-boundary.log": "sha256:9ca051bf69b76010b6bdde6c73202e042b6c69e932667cbdacb0353047bf50a4",
+    "image-review-job-license.log": "sha256:c2785a10ca782d38ead952c24071da8ae6aa42d8d4cf0664ba2672713b6cbe04",
+    "image-review-job-repository-format.log": "sha256:afd0d265f84b3b6c0e01a95fba9476bb8eb9d3df85f728960450995b0da10c3e",
+    "image-review-job-typescript-format.log": "sha256:17aa973d3f004560237d9a95171210b0671deff23d61628eecf7322ff5938f20"
+  },
+  "liveClientState": {
+    "recordedAt": "2026-10-15T17:51:54.717489+00:00",
+    "readOnly": true,
+    "projectId": "01a13f43-094c-767a-9414-b5622b236255",
+    "foundationRevision": 3,
+    "parametersRevision": 2,
+    "textArtifacts": 0,
+    "latestRun": {
+      "runId": "plugin-7DebIFmDWoV0jmAkgi1mhBYp5eV0jJkKx6zyeqJcPLE",
+      "revision": 19,
+      "status": "canceled"
+    },
+    "reviewJobSchemaInstalledInLiveProfile": false,
+    "newLiveModelOrMediaRequestsSubmitted": false
+  },
+  "notEstablished": [
+    "Native approval/configuration and project-aware UI entry",
+    "Control/Worker dispatch and pinned reviewer-runtime registration",
+    "interrupted review resume/reconnect in real client",
+    "PostgreSQL review admission",
+    "real model semantic image judgment",
+    "video/voice generation and composition",
+    "video frame model batch review, audio and issue-driven repair",
+    "complete short-drama script saved in client",
+    "final playable commercial-quality video and usage rights",
+    "upstream model SSE delivery repair"
+  ],
+  "pendingHumanReplies": [
+    "Mac unlock confirmation",
+    "gateway read-only log access",
+    "video/audio services and generation cost limit"
+  ],
+  "changes": {
+    "liveProfileWrites": false,
+    "liveApprovalWrites": false,
+    "liveClientRebuild": false,
+    "productionServiceMutation": false,
+    "realModelOrMediaSubmission": false
+  },
+  "goalStatus": "active"
+}

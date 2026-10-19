@@ -1,0 +1,15 @@
+{
+  "recordedAt": "2026-10-15T19:49:57.703651+00:00",
+  "readOnly": true,
+  "projectId": "01a13f43-094c-767a-9414-b5622b236255",
+  "foundationRevision": 3,
+  "parametersRevision": 2,
+  "textArtifacts": 0,
+  "latestRun": {
+    "runId": "plugin-7DebIFmDWoV0jmAkgi1mhBYp5eV0jJkKx6zyeqJcPLE",
+    "revision": 19,
+    "status": "canceled"
+  },
+  "liveProfileWrites": false,
+  "realModelOrMediaSubmission": false
+}

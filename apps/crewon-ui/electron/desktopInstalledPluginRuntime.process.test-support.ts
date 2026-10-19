@@ -76,6 +76,8 @@ export type NativeInstalledProcessFixtureOptions = Readonly<{
   installedReportExecution?: NativeNamedReportExecutionConfiguration;
   reportModelCatalog?: Readonly<{ modelId: string }>;
   isolationModelCatalog?: Readonly<{ modelId: string }>;
+  workerStartupFailure?: true;
+  managementPackageIdentity?: Readonly<{ pluginId: string; version: string }>;
 }>;
 
 /** Actual source Supervisor children; HTTPS decisions require current private Native
@@ -142,10 +144,19 @@ export async function nativeInstalledProcessFixture(
     const original = await verifyLocalPluginPackage({
       directory: await realpath(packageDirectory),
     });
-    assert.equal(original.descriptor.pluginId, "example.professional");
-    assert.equal(original.descriptor.version, "1.0.0");
+    assert.equal(
+      original.descriptor.pluginId,
+      options.managementPackageIdentity?.pluginId ?? "example.professional",
+    );
+    assert.equal(
+      original.descriptor.version,
+      options.managementPackageIdentity?.version ?? "1.0.0",
+    );
     const approvedDirectory = join(directory, "approved-professional");
     await cp(packageDirectory, approvedDirectory, { recursive: true });
+    // Native-approved sources are private host-owned directories; the frozen
+    // publication's read-only mode is not the fixture import capability.
+    await chmod(approvedDirectory, 0o700);
     const installed = await verifyLocalPluginPackage({
       directory: approvedDirectory,
     });
@@ -356,6 +367,13 @@ export async function nativeInstalledProcessFixture(
     apiKey: modelKey,
   };
   const supervisors = new Set<RuntimeSupervisor>();
+  const failedWorker = join(directory, "failed-worker.ts");
+  if (options.workerStartupFailure)
+    await writeFile(
+      failedWorker,
+      'console.error("named_worker_startup_failure"); process.exit(19);',
+      { mode: 0o600 },
+    );
   const logs: string[] = [];
   function supervisor(configured: boolean, installed = true) {
     const output = () =>
@@ -372,7 +390,9 @@ export async function nativeInstalledProcessFixture(
         source: true,
         control: join(repository, "apps/control-api/src/main.ts"),
         release: join(repository, "apps/runtime-worker/src/release-main.ts"),
-        worker: join(repository, "apps/runtime-worker/src/main.ts"),
+        worker: options.workerStartupFailure
+          ? failedWorker
+          : join(repository, "apps/runtime-worker/src/main.ts"),
         modelCatalog: "/unused/model-catalog",
         workspaceMcp: "/unused/workspace-mcp",
       },

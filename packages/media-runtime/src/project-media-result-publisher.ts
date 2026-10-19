@@ -9,7 +9,7 @@ import {
   parseProjectMediaResultCandidate,
   projectMediaResultArchiveIdentity,
   projectMediaResultAssertVoid,
-  parseProjectMediaWorkflowReview,
+  captureProjectMediaWorkflowReviews,
   mediaInputSame,
   projectMediaInputBound,
   mediaResultFail as fail,
@@ -130,16 +130,11 @@ export class ProjectMediaResultPublisher {
         ProjectMediaResultAuthorizationPort["assertActive"]
       >(input.authorization, "assertActive"),
     });
-    if (
-      !Array.isArray(input.reviews) ||
-      input.reviews.length < 1 ||
-      input.reviews.length > 32 ||
-      types.isProxy(input.reviews)
-    )
+    try {
+      this.#reviews = captureProjectMediaWorkflowReviews(input.reviews);
+    } catch {
       fail("review_invalid");
-    this.#reviews = Object.freeze(
-      input.reviews.map(parseProjectMediaWorkflowReview),
-    );
+    }
     this.#uiInstallation =
       input.uiInstallation === undefined
         ? undefined

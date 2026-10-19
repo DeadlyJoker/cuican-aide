@@ -1,0 +1,313 @@
+{
+  "recordedAt": "2026-10-16T04:04:13.827836+00:00",
+  "runId": "plugin-I8ZkBHzRr8WJd_dBDMAwF19pjhTiG_ts2DuEX2Y6tvc",
+  "status": "completed",
+  "modelCalls": [
+    {
+      "callId": "5b00f7b7-5e01-49a5-84a4-704f97fddad4",
+      "modelId": "gpt-6-astra",
+      "outcome": "completed",
+      "startedAt": "2026-10-16T03:55:05.002Z",
+      "finishedAt": "2026-10-16T03:55:18.587Z",
+      "httpTiming": {
+        "admittedMs": 3,
+        "dispatchedMs": 3,
+        "finishedMs": 13586,
+        "firstByteMs": 8772,
+        "firstCompletedItemMs": 11389,
+        "firstSemanticMs": 11350,
+        "headersMs": 8770,
+        "lastByteMs": 13532,
+        "lastSemanticMs": 13533,
+        "readClosedMs": 13534,
+        "streamEndMs": 13586,
+        "terminalMs": 13586
+      },
+      "httpDiagnostics": {
+        "read": {
+          "end": "releasedBeforeEof"
+        },
+        "response": {
+          "cfRay": "a4b42045bf6cdc0e-LAX",
+          "contentType": "text/event-stream",
+          "oneApiRequestId": "202610160355078050349928268d9d6o4VmfdJ8",
+          "server": "cloudflare",
+          "status": 200
+        },
+        "stream": {
+          "byteCount": 105576,
+          "chunkCount": 57,
+          "commentFrameCount": 0,
+          "completedItemCount": 1,
+          "dataFrameCount": 8,
+          "frameCount": 8,
+          "lastEventType": "response.completed",
+          "pendingFrameBytes": 0,
+          "pendingJsonState": "empty",
+          "reasoningDeltaCount": 0,
+          "terminalEventCount": 1,
+          "textDeltaCount": 0,
+          "toolArgumentDeltaCount": 1,
+          "unknownEventCount": 1
+        },
+        "termination": {
+          "reason": "protocolTerminal"
+        }
+      }
+    },
+    {
+      "callId": "f7f0679d-8ba1-4afc-a69b-5205cbc6527d",
+      "modelId": "gpt-6-astra",
+      "outcome": "completed",
+      "startedAt": "2026-10-16T03:55:22.597Z",
+      "finishedAt": "2026-10-16T03:56:29.054Z",
+      "httpTiming": {
+        "admittedMs": 2,
+        "dispatchedMs": 2,
+        "finishedMs": 66457,
+        "firstByteMs": 13211,
+        "firstCompletedItemMs": 61711,
+        "firstSemanticMs": 61711,
+        "headersMs": 13211,
+        "lastByteMs": 66444,
+        "lastSemanticMs": 66447,
+        "readClosedMs": 66447,
+        "streamEndMs": 66457,
+        "terminalMs": 66457
+      },
+      "httpDiagnostics": {
+        "read": {
+          "end": "releasedBeforeEof"
+        },
+        "response": {
+          "cfRay": "a4b420c6fd4c4b1f-LAX",
+          "contentType": "text/event-stream",
+          "oneApiRequestId": "202610160355282154260178268d9d6PtdrzMr0",
+          "server": "cloudflare",
+          "status": 200
+        },
+        "stream": {
+          "byteCount": 113826,
+          "chunkCount": 60,
+          "commentFrameCount": 0,
+          "completedItemCount": 1,
+          "dataFrameCount": 38,
+          "frameCount": 38,
+          "lastEventType": "response.completed",
+          "pendingFrameBytes": 0,
+          "pendingJsonState": "empty",
+          "reasoningDeltaCount": 0,
+          "terminalEventCount": 1,
+          "textDeltaCount": 0,
+          "toolArgumentDeltaCount": 31,
+          "unknownEventCount": 1
+        },
+        "termination": {
+          "reason": "protocolTerminal"
+        }
+      }
+    },
+    {
+      "callId": "30bac982-abe4-4fea-9f7d-cbc3658f68d0",
+      "modelId": "gpt-6-astra",
+      "outcome": "completed",
+      "startedAt": "2026-10-16T03:56:32.694Z",
+      "finishedAt": "2026-10-16T03:56:43.603Z",
+      "httpTiming": {
+        "admittedMs": 1,
+        "dispatchedMs": 1,
+        "finishedMs": 10909,
+        "firstByteMs": 8116,
+        "firstCompletedItemMs": 10889,
+        "firstSemanticMs": 10184,
+        "headersMs": 8114,
+        "lastByteMs": 10898,
+        "lastSemanticMs": 10901,
+        "readClosedMs": 10901,
+        "streamEndMs": 10909,
+        "terminalMs": 10909
+      },
+      "httpDiagnostics": {
+        "read": {
+          "end": "releasedBeforeEof"
+        },
+        "response": {
+          "cfRay": "a4b42267affc5227-LAX",
+          "contentType": "text/event-stream",
+          "oneApiRequestId": "202610160356385798658388268d9d60t0A0eQR",
+          "server": "cloudflare",
+          "status": 200
+        },
+        "stream": {
+          "byteCount": 122788,
+          "chunkCount": 65,
+          "commentFrameCount": 0,
+          "completedItemCount": 1,
+          "dataFrameCount": 71,
+          "frameCount": 71,
+          "lastEventType": "response.completed",
+          "pendingFrameBytes": 0,
+          "pendingJsonState": "empty",
+          "reasoningDeltaCount": 0,
+          "terminalEventCount": 1,
+          "textDeltaCount": 0,
+          "toolArgumentDeltaCount": 64,
+          "unknownEventCount": 1
+        },
+        "termination": {
+          "reason": "protocolTerminal"
+        }
+      }
+    },
+    {
+      "callId": "d42e9877-8306-48e8-978d-c0dc4e95ba38",
+      "modelId": "gpt-6-astra",
+      "outcome": "failed",
+      "startedAt": "2026-10-16T03:56:50.411Z",
+      "finishedAt": "2026-10-16T03:57:00.889Z",
+      "httpTiming": {
+        "admittedMs": 2,
+        "dispatchedMs": 2,
+        "finishedMs": 10478
+      },
+      "httpDiagnostics": {
+        "termination": {
+          "code": "responses_transport_unavailable",
+          "networkCode": "UND_ERR_CONNECT_TIMEOUT",
+          "reason": "transportError"
+        }
+      }
+    },
+    {
+      "callId": "16234db1-810d-42e6-807f-6d47d3bea6c1",
+      "modelId": "gpt-6-astra",
+      "outcome": "completed",
+      "startedAt": "2026-10-16T03:57:01.107Z",
+      "finishedAt": "2026-10-16T03:58:07.404Z",
+      "httpTiming": {
+        "admittedMs": 2,
+        "dispatchedMs": 2,
+        "finishedMs": 66298,
+        "firstByteMs": 7959,
+        "firstCompletedItemMs": 64611,
+        "firstSemanticMs": 17067,
+        "headersMs": 7958,
+        "lastByteMs": 66283,
+        "lastSemanticMs": 66287,
+        "readClosedMs": 66287,
+        "streamEndMs": 66298,
+        "terminalMs": 66298
+      },
+      "httpDiagnostics": {
+        "read": {
+          "end": "releasedBeforeEof"
+        },
+        "response": {
+          "cfRay": "a4b42329f980cb91-LAX",
+          "contentType": "text/event-stream",
+          "oneApiRequestId": "202610160357063052736428268d9d6QzUIKsOU",
+          "server": "cloudflare",
+          "status": 200
+        },
+        "stream": {
+          "byteCount": 779761,
+          "chunkCount": 524,
+          "commentFrameCount": 0,
+          "completedItemCount": 1,
+          "dataFrameCount": 2530,
+          "frameCount": 2530,
+          "lastEventType": "response.completed",
+          "pendingFrameBytes": 0,
+          "pendingJsonState": "empty",
+          "reasoningDeltaCount": 0,
+          "terminalEventCount": 1,
+          "textDeltaCount": 0,
+          "toolArgumentDeltaCount": 2521,
+          "unknownEventCount": 1
+        },
+        "termination": {
+          "reason": "protocolTerminal"
+        }
+      }
+    },
+    {
+      "callId": "ba9d7dcb-7d5c-466c-8d19-4c1534cd19c6",
+      "modelId": "gpt-6-astra",
+      "outcome": "completed",
+      "startedAt": "2026-10-16T03:58:29.982Z",
+      "finishedAt": "2026-10-16T03:58:39.323Z",
+      "httpTiming": {
+        "admittedMs": 3,
+        "dispatchedMs": 3,
+        "finishedMs": 9341,
+        "firstByteMs": 4090,
+        "firstCompletedItemMs": 8423,
+        "firstSemanticMs": 6229,
+        "headersMs": 4089,
+        "lastByteMs": 9331,
+        "lastSemanticMs": 9333,
+        "readClosedMs": 9333,
+        "streamEndMs": 9341,
+        "terminalMs": 9341
+      },
+      "httpDiagnostics": {
+        "read": {
+          "end": "releasedBeforeEof"
+        },
+        "response": {
+          "cfRay": "a4b42544ba125708-LAX",
+          "contentType": "text/event-stream",
+          "oneApiRequestId": "202610160358325357681128268d9d6yVQS2Lha",
+          "server": "cloudflare",
+          "status": 200
+        },
+        "stream": {
+          "byteCount": 115823,
+          "chunkCount": 63,
+          "commentFrameCount": 0,
+          "completedItemCount": 1,
+          "dataFrameCount": 37,
+          "frameCount": 37,
+          "lastEventType": "response.completed",
+          "pendingFrameBytes": 0,
+          "pendingJsonState": "empty",
+          "reasoningDeltaCount": 0,
+          "terminalEventCount": 1,
+          "textDeltaCount": 28,
+          "toolArgumentDeltaCount": 0,
+          "unknownEventCount": 1
+        },
+        "termination": {
+          "reason": "protocolTerminal"
+        }
+      }
+    }
+  ],
+  "tools": [
+    {
+      "name": "crewon_short_drama__project_context_read",
+      "tool.requested": "2026-10-16T03:55:18.593Z",
+      "tool.completed": "2026-10-16T03:55:20.378Z",
+      "wallMs": 1785.0
+    },
+    {
+      "name": "crewon_short_drama__script_read",
+      "tool.requested": "2026-10-16T03:56:29.061Z",
+      "tool.completed": "2026-10-16T03:56:30.933Z",
+      "wallMs": 1872.0
+    },
+    {
+      "name": "crewon_short_drama__content_read",
+      "tool.requested": "2026-10-16T03:56:43.611Z",
+      "tool.completed": "2026-10-16T03:56:48.234Z",
+      "wallMs": 4623.0
+    },
+    {
+      "name": "crewon_short_drama__script_save",
+      "tool.requested": "2026-10-16T03:58:07.448Z",
+      "tool.completed": "2026-10-16T03:58:27.107Z",
+      "wallMs": 19659.0
+    }
+  ],
+  "note": "Tool wall includes dispatch, authority, persistence and projection; it is not provider execution alone."
+}

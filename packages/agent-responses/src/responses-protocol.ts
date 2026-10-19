@@ -1,4 +1,8 @@
 import {
+  observeResponsesStreamEvent,
+  type ResponsesStreamDiagnostics,
+} from "./responses-stream-diagnostics.ts";
+import {
   ModelTransportError,
   retainModelTransportFailureUsage,
   type ModelInputItem,
@@ -375,6 +379,7 @@ export async function* responsesProtocolEvents(
     identityPolicy?: ResponsesIdentityPolicy;
     finalOutputPolicy?: ResponsesFinalOutputPolicy;
     outputDeltaFlushBytes?: number;
+    diagnostics?: ResponsesStreamDiagnostics;
     onActivity: () => void;
     /** Ends HTTP ownership once the received tail is checked; never waits for future EOF. */
     onReadClosed?: (state: Readonly<{ endOfBody: boolean }>) => void;
@@ -407,6 +412,9 @@ async function* decodeResponsesProtocolEvents(
   try {
     for await (const item of parseResponsesSse(body, {
       onActivity: options.onActivity,
+      ...(options.diagnostics === undefined
+        ? {}
+        : { diagnostics: options.diagnostics }),
       stopAfterBufferedFrames: () => decoder.terminal,
       ...(options.onReadClosed === undefined
         ? {}
@@ -420,6 +428,7 @@ async function* decodeResponsesProtocolEvents(
         continue;
       }
       const events = decoder.accept(item.value);
+      observeResponsesStreamEvent(item.value, events, options.diagnostics);
       // Public terminal/usage wait until the received tail passes validation.
       if (decoder.terminal) terminalEvents = events;
       else for (const event of events) yield event;

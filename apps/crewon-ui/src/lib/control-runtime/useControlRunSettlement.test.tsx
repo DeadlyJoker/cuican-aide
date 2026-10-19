@@ -5,6 +5,7 @@ import { expect, it, vi } from "vitest";
 import type { Thread } from "@crewon/app-server-protocol/v2/Thread";
 import type { RunEventView } from "@crewon/contracts";
 import { useControlThreadRuntime } from "./useControlThreadRuntime";
+import { controlThreadHasPendingCanonicalSync } from "./controlRunTerminalPresentation";
 import {
   transcriptFixture,
   transcriptRun,
@@ -29,18 +30,27 @@ it.each(["terminal event", "closed stream"])(
         expect(h.drain).toHaveBeenCalledOnce();
       });
       expect(h.read).toHaveBeenCalledTimes(2);
-      expect(h.shown()[0]!.turns[0]).toMatchObject({
-        status: "completed",
-        controlCanonicalSyncPending: true,
-        controlPendingReplyDraft: { text: "Answer" },
-      });
-      expect(h.shown()[0]!.turns[0]!.items.some((item) => item.type === "agentMessage")).toBe(false);
+      // A trusted terminal receipt ends execution immediately. Only delivery of
+      // the canonical assistant Message waits for the existing text drain.
+      expect(h.shown()[0]!.turns[0]!.status).toBe("completed");
       expect(h.active()).toEqual({ other: "run-other" });
-      expect(h.reset).not.toHaveBeenCalled();
+      expect(controlThreadHasPendingCanonicalSync(h.shown()[0]!)).toBe(true);
+      expect(
+        h
+          .shown()[0]!
+          .turns[0]!.items.filter((item) => item.type === "agentMessage"),
+      ).toHaveLength(0);
+      const resetsBeforeDrain = h.reset.mock.calls.length;
       await act(async () => h.releaseDrain());
       await vi.waitFor(async () => {
         await act(async () => {});
         expect(h.active()).toEqual({ other: "run-other" });
+        expect(controlThreadHasPendingCanonicalSync(h.shown()[0]!)).toBe(false);
+        expect(
+          h
+            .shown()[0]!
+            .turns[0]!.items.filter((item) => item.type === "agentMessage"),
+        ).toHaveLength(1);
       });
       expect(h.shown()[0]!.turns[0]).toMatchObject({
         id: "run-1",
@@ -52,6 +62,7 @@ it.each(["terminal event", "closed stream"])(
       expect(h.shown()[0]!.turns[0]).not.toHaveProperty("controlCanonicalSyncPending", true);
       expect(h.shown()[0]!.turns[0]).not.toHaveProperty("controlPendingReplyDraft");
       expect(h.read).toHaveBeenCalledTimes(2);
+      expect(h.reset).toHaveBeenCalledTimes(resetsBeforeDrain + 1);
       expect(h.notice).not.toHaveBeenCalled();
       expect(h.fixture.mutations).toHaveLength(0);
     } finally {

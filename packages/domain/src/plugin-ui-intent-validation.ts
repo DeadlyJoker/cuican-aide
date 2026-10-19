@@ -32,7 +32,9 @@ export function pluginUiIntentRefusalSupported(
 ): boolean {
   return action === "crewon.project-media-generations.v1.generate"
     ? reason === PLUGIN_UI_MEDIA_NOT_ADMITTED
-    : action === PLUGIN_UI_INTENT_ACTIONS.selection &&
+    : action === PLUGIN_UI_INTENT_ACTIONS.query
+      ? reason === "project_query_revision_not_admitted"
+      : action === PLUGIN_UI_INTENT_ACTIONS.selection &&
         (PLUGIN_UI_INTENT_SELECTION_CONFLICTS as readonly string[]).includes(
           reason,
         );

@@ -203,3 +203,21 @@ test("real stage adapters load only their own excerpt and retain CrewON tools, l
   assert.equal(foundation.resource.qualityChecks, "not-run");
   assert.ok(Buffer.byteLength(JSON.stringify(foundation)) < 3072);
 });
+
+test("discussion text guidance separates independent Foundation candidate permission without widening text authority", () => {
+  for (const kind of ["discussion", "brief"]) {
+    const guide = resource.projectCreationSkill({ stage: { kind } });
+    const text = guide.instructions.join("\n");
+    assert.match(text, /Project 文本 scope 只读/u);
+    assert.match(text, /真实 foundation_scope/u);
+    assert.match(
+      text,
+      /非空且 allowedOperations 包含 foundation_proposal_save/u,
+    );
+    assert.match(text, /冻结版本保存同项目方案候选/u);
+    assert.match(text, /拒绝、撤权或读取失败不得借文本 scope/u);
+    assert.match(text, /不自动确认、推进下游/u);
+    assert.match(guide.output, /ACK 后才称已保存/u);
+    assert.ok(Buffer.byteLength(JSON.stringify(guide)) < 4096);
+  }
+});

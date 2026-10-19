@@ -1,0 +1,137 @@
+{
+  "builtAt": "2026-10-17T09:06:31.087Z",
+  "path": "/private/tmp/crewon-plugin-performance-20261015/material-api-client-profile-20261017.asar",
+  "sha256": "dfdfe50aa7aeacb7ebef155999fb8235dff0e095cbd8863d7aa64e48f3c0bc53",
+  "headerSha256": "6aa234b8185c2a2af949d00e413fb420e5f8b58cbc8656aa15601e40755decab",
+  "preservedOutsideRendererAndHostFilesVerified": 17458,
+  "mainUnchanged": false,
+  "hostRebuiltFromCurrentSource": true,
+  "clientAcceptancePassed": false,
+  "installed": false,
+  "checks": {
+    "pluginTests": 521,
+    "mainAndUiTests": 89,
+    "journalArchiveBoundaryAndExecutionTestsPassed": 92,
+    "postgresSkipped": 52,
+    "uploadAndPinnedTransportBoundaryTestsPassed": 44,
+    "nativeReferenceCompositionAndStoreTestsPassed": 40,
+    "nativeReferenceCompositionPostgresSkipped": 18,
+    "uiLint": "passed",
+    "uiBuild": "passed",
+    "nativeHostBuild": "passed",
+    "format": "passed",
+    "controlTypecheck": "passed",
+    "protocolFencePreparerTestsPassed": 24,
+    "protocolFencePostgresSkipped": 22,
+    "finalBoundary": "passed",
+    "nativeReferenceGrantParameterTestsPassed": 14,
+    "nativeReferenceGrantParameterBuild": "passed"
+  },
+  "pluginCandidate": {
+    "version": "50.2.14",
+    "directory": "/Users/cheneywang/.codex/worktrees/e9bf/cuican-aide/examples/plugins/short-drama/dist/50.2.14",
+    "packageDigest": "sha256:3dce12db9b56adc5a655d4063ae7ed3fe5eec5f60e00c2a17b06dc44ffce0662"
+  },
+  "rootCauses": [
+    "protocol-specific upload target and prepared-file namespace missing",
+    "Native asset store omitted the approved generation image verifier while exposing reference save"
+  ],
+  "clientBlocker": "CUA confirmed Mac locked again on 2026-10-18. Main PID 16741 and Worker/Control remain running; original reference intent still pending. Manual unlock request remains outstanding. No candidate installed or original request retried.",
+  "sourceFiles": {
+    "apps/control-api/src/desktop-project-startup.ts": "2ba14e0f06f87997dcf4dfb6066fb0ad27a903dc88f42aa033aa95cd3eef257a",
+    "packages/application/src/project-material-preparation-record.ts": "0c9808ba9c3b7f789c9b4803c32e265507143fd098b70c7c7f0ce32c64d0f1cd",
+    "packages/media-runtime/src/comfyui-material-upload.ts": "ae62a1546312065d55ff4a8ab7b9d1a00cccf494b7d70a267c7d03a9cc3abe5e",
+    "packages/media-runtime/src/project-material-preparer.ts": "7a9c8a72d9f50eb2f18ed1e38dfe56c0c3970f05dbe80bad7b2d9a436e11679e",
+    "apps/runtime-worker/src/plugins/native-project-media-runtime.ts": "082019a8e3edd1e62efe6395dbd46d0fcc207e3e95e2f7443b400a102bb240b2",
+    "apps/runtime-worker/src/plugins/native-reference-material-read-authorization.ts": "458049d7426b3f076dcdd0529c12c72b246dde3330a1d7c2be3729e01a938d16",
+    "apps/runtime-worker/src/plugins/native-reference-material-read-authorization.test.ts": "3d79e397c3505312a38a7f41460ee02edfcec0b3f75daac34d558fa5fcd6ffaa"
+  },
+  "runtimeCandidate": {
+    "path": "/private/tmp/crewon-plugin-performance-20261015/material-api-runtime-20261018",
+    "implementationDigest": "sha256:509f60d5dc82eed3d9ceeb32ad53603b403b2235c19f2e270499c6f1449920f5",
+    "allBundleHashesVerified": true,
+    "bundles": [
+      {
+        "file": "control-api.mjs",
+        "digest": "sha256:904e4d7bcf24eff9a11b027b143c07c4ae7e7bdbe34b3301ade7e796a23f4744"
+      },
+      {
+        "file": "device-gateway.mjs",
+        "digest": "sha256:a75bcaee2d78fab139f01f4212d823dc0248a430df7c6e9650ee6eb12c6e0e52"
+      },
+      {
+        "file": "local-workspace-checks-mcp.mjs",
+        "digest": "sha256:00c30cb7aeb1699fc3c38a3a5e3318b03d8f9a8b97b22295ddd9671b6b0d5c64"
+      },
+      {
+        "file": "provider-model-catalog.mjs",
+        "digest": "sha256:05ec4e217b2f8c97053a81d9b2e8101ef0f26e648b522e73a9353f7577e4a969"
+      },
+      {
+        "file": "provider-settings-coordinator.mjs",
+        "digest": "sha256:99fd113a66a10b6441a6f8423282617519184b8d90c5e9c352eb0117368333ad"
+      },
+      {
+        "file": "runtime-release.mjs",
+        "digest": "sha256:993f67b94aa85fb5be00f553fa2f89915bd34bdc04f90c6cbf6bf5e267e3c798"
+      },
+      {
+        "file": "runtime-worker.mjs",
+        "digest": "sha256:a08700a679182cba8ed9aa75750b3865437c9d02a7f16d1d1df0ef7334e87f46"
+      }
+    ]
+  },
+  "priorRuntimeCandidates": [
+    {
+      "path": "/private/tmp/crewon-plugin-performance-20261015/material-api-runtime-20261017",
+      "implementationDigest": "sha256:de478b7fa00e7e2b4acf7a5ceec8a7cc650c3e6435526e5847c3f926ff5ab1de",
+      "allBundleHashesVerified": true,
+      "bundles": [
+        {
+          "file": "control-api.mjs",
+          "digest": "sha256:904e4d7bcf24eff9a11b027b143c07c4ae7e7bdbe34b3301ade7e796a23f4744"
+        },
+        {
+          "file": "device-gateway.mjs",
+          "digest": "sha256:a75bcaee2d78fab139f01f4212d823dc0248a430df7c6e9650ee6eb12c6e0e52"
+        },
+        {
+          "file": "local-workspace-checks-mcp.mjs",
+          "digest": "sha256:00c30cb7aeb1699fc3c38a3a5e3318b03d8f9a8b97b22295ddd9671b6b0d5c64"
+        },
+        {
+          "file": "provider-model-catalog.mjs",
+          "digest": "sha256:05ec4e217b2f8c97053a81d9b2e8101ef0f26e648b522e73a9353f7577e4a969"
+        },
+        {
+          "file": "provider-settings-coordinator.mjs",
+          "digest": "sha256:99fd113a66a10b6441a6f8423282617519184b8d90c5e9c352eb0117368333ad"
+        },
+        {
+          "file": "runtime-release.mjs",
+          "digest": "sha256:86f7c1a2136ee771d5c7487a9862195091c11e62f7416087498a145589b278a7"
+        },
+        {
+          "file": "runtime-worker.mjs",
+          "digest": "sha256:9f1d672a849faefeef248fd3497f71a58a53f31a7b3d56cb306238f7a3aa0a5f"
+        }
+      ]
+    }
+  ],
+  "verifiedAt": "2026-10-17T19:16:25.660234+00:00",
+  "installationAcceptance20261018": {
+    "installed": true,
+    "installedAt": "2026-10-18T08:43:49.793044+00:00",
+    "asarSha256": "dfdfe50aa7aeacb7ebef155999fb8235dff0e095cbd8863d7aa64e48f3c0bc53",
+    "runtimeIdentity": "sha256:509f60d5dc82eed3d9ceeb32ad53603b403b2235c19f2e270499c6f1449920f5",
+    "signatureVerified": true,
+    "backup": "/private/tmp/crewon-plugin-performance-20261015/before-material-api-client-20261018-164227",
+    "startupPid": 59321,
+    "startupSample": "/private/tmp/crewon-runtime-merge-20261016/material-api-client-startup-sample-20261018.txt",
+    "startupBlockedAt": null,
+    "originalReferenceRequest": "f3f1bc0b-3d48-45dd-9422-24c0c54f3ec6",
+    "originalReferenceRetryAcceptedInClient": true,
+    "fullClientAcceptancePassed": false,
+    "sceneReferenceAdoptedAndReopened": true
+  }
+}

@@ -1,6 +1,7 @@
 import { normalizeModelUsage, observeModelUsage } from "./model-usage-observer.ts";
 import { modelTransportFailureUsage } from "./model-transport-failure-usage.ts";
 import { SamplingWorkBudget } from "./sampling-work-budget.ts";
+import { appendSegmentImageObservations } from "./agent-segment-images.ts";
 import {
   parseCanonicalAgentEvent,
   parseProviderCheckpoint,
@@ -143,8 +144,13 @@ export class CrewONAgentKernel implements AgentKernelPort {
       model: requireNonEmpty(this.#transport.modelId, "model_id_invalid"),
     });
 
-    const input = modelInput(contract);
     const tools = modelTools(contract, this.#toolDefinitions);
+    const input = appendSegmentImageObservations(
+      contract,
+      modelInput(contract),
+      tools.length,
+      options,
+    );
     const observedCallIds = new Set(
       contract.history
         .filter((item) => item.type === "tool_call")
@@ -335,6 +341,11 @@ export class CrewONAgentKernel implements AgentKernelPort {
                     );
                   }
                 } else if (event.item.type === "tool_call") {
+                  if (options?.imageObservations !== undefined)
+                    throw new AgentKernelError(
+                      "segment_image_review_tool_call_invalid",
+                      false,
+                    );
                   const completedToolItem = event.item;
                   const observedToolCall: ObservedToolCall = {
                     type: "tool.call",
@@ -467,6 +478,11 @@ export class CrewONAgentKernel implements AgentKernelPort {
                 break;
               }
               case "tool.call":
+                if (options?.imageObservations !== undefined)
+                  throw new AgentKernelError(
+                    "segment_image_review_tool_call_invalid",
+                    false,
+                  );
                 if (contract.purpose === "compaction") {
                   throw new AgentKernelError(
                     "compaction_tool_call_unsupported",

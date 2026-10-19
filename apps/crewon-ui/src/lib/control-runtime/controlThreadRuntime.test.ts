@@ -1,4 +1,5 @@
 import { ControlProjectMediaGeneration } from "./controlProjectMediaGeneration";
+import { subscribeControlThreadRevision } from "./controlThreadRevisionSubscriptions";
 import { savedInput as savedMediaInput } from "./controlProjectMediaGeneration.test-support";
 import {
   formatThreadCatalogCursor,
@@ -2320,162 +2321,282 @@ describe("Control thread runtime", () => {
     }
   });
 
-  it.each(["text", "asset", "media-input", "media-generation"] as const)("starts a bound %s stage through the original transcript, SSE and reconnect cursor without a default Turn", async (kind) => {
-    let submitted = false,
-      terminal = false,
-      attempt = 0;
-    const client = fakeClient({
-      messages: [messageView(1, "user", "写第一集")],
-      runs: () =>
-        submitted
-          ? [
-              runView(
-                terminal
-                  ? {
-                      status: "completed",
-                      lastSequence: 3,
-                      terminalAt: "2026-08-09T08:00:04.000Z",
-                    }
-                  : {},
-              ),
-            ]
-          : [],
-    });
-    const start = vi
-      .spyOn(kind === "text" ? client.projectConversations : kind === "asset" ? client.projectAssetStages : client.projectMediaInputStages, "startStage")
-      .mockImplementation(async (_threadId: string, request: { expectedThreadRevision: number; expectedBindingRevision: number }) => {
-        submitted = true;
-        return {
-          disposition: "committed" as const,
-          threadId: "thread-1",
-          threadRevision: request.expectedThreadRevision + 1,
-          runId: "run-1",
-          runRevision: 1,
-          bindingRevision: request.expectedBindingRevision,
-          stageAdmissionDigest: `sha256:${"b".repeat(64)}`,
-        };
+  it.each(["text", "asset", "media-input", "media-generation"] as const)(
+    "starts a bound %s stage through the original transcript, SSE and reconnect cursor without a default Turn",
+    async (kind) => {
+      let submitted = false,
+        terminal = false,
+        attempt = 0;
+      const client = fakeClient({
+        messages: [messageView(1, "user", "写第一集")],
+        runs: () =>
+          submitted
+            ? [
+                runView(
+                  terminal
+                    ? {
+                        status: "completed",
+                        lastSequence: 3,
+                        terminalAt: "2026-08-09T08:00:04.000Z",
+                      }
+                    : {},
+                ),
+              ]
+            : [],
       });
-    const settled = deferred<string>(),
-      cursors: number[] = [],
-      runtimeCallbacks = callbacks(settled.resolve);
-    const runtime = new ControlThreadRuntime(
-      {
-        client,
-        reconnectDelay: async () => {},
-        threadEventStream: idleThreadEventStream,
-        eventStream: async function* (_client, input) {
-          cursors.push(input.afterSequence ?? 0);
-          if (++attempt === 1) {
+      const start = vi
+        .spyOn(
+          kind === "text"
+            ? client.projectConversations
+            : kind === "asset"
+              ? client.projectAssetStages
+              : client.projectMediaInputStages,
+          "startStage",
+        )
+        .mockImplementation(
+          async (
+            _threadId: string,
+            request: {
+              expectedThreadRevision: number;
+              expectedBindingRevision: number;
+            },
+          ) => {
+            submitted = true;
+            return {
+              disposition: "committed" as const,
+              threadId: "thread-1",
+              threadRevision: request.expectedThreadRevision + 1,
+              runId: "run-1",
+              runRevision: 1,
+              bindingRevision: request.expectedBindingRevision,
+              stageAdmissionDigest: `sha256:${"b".repeat(64)}`,
+            };
+          },
+        );
+      const settled = deferred<string>(),
+        cursors: number[] = [],
+        runtimeCallbacks = callbacks(settled.resolve);
+      const runtime = new ControlThreadRuntime(
+        {
+          client,
+          reconnectDelay: async () => {},
+          threadEventStream: idleThreadEventStream,
+          eventStream: async function* (_client, input) {
+            cursors.push(input.afterSequence ?? 0);
+            if (++attempt === 1) {
+              yield runEvent(1, {
+                type: "model.output.delta",
+                data: { segmentId: "segment-1", delta: "第一" },
+              });
+              throw new Error("actual reconnect boundary");
+            }
             yield runEvent(1, {
               type: "model.output.delta",
-              data: { segmentId: "segment-1", delta: "第一" },
+              data: { segmentId: "segment-1", delta: "duplicate" },
             });
-            throw new Error("actual reconnect boundary");
-          }
-          yield runEvent(1, {
-            type: "model.output.delta",
-            data: { segmentId: "segment-1", delta: "duplicate" },
-          });
-          yield runEvent(2, {
-            type: "model.output.delta",
-            data: { segmentId: "segment-1", delta: "集" },
-          });
-          terminal = true;
-          yield runEvent(3, {
-            type: "run.completed",
-            data: { outputRef: null },
-          });
+            yield runEvent(2, {
+              type: "model.output.delta",
+              data: { segmentId: "segment-1", delta: "集" },
+            });
+            terminal = true;
+            yield runEvent(3, {
+              type: "run.completed",
+              data: { outputRef: null },
+            });
+          },
         },
-      },
-      runtimeCallbacks,
-    );
-    try {
-      const textSettings = {
-        model: "gpt-5.6-sol",
-        executionIntent: "none",
-        projectConversation: {
-          binding: {
-            bindingId: "binding-1",
-            projectId: "project-1",
-            threadId: "thread-1",
-            workspaceId: "workspace-original",
-            revision: 2,
-            state: "active",
-            source: {
-              pluginId: "crewon.short-drama",
-              publisherId: "example.publisher",
-              version: "16.0.0",
-              packageDigest: `sha256:${"a".repeat(64)}`,
-              selectionRevision: 3,
+        runtimeCallbacks,
+      );
+      try {
+        const textSettings = {
+          model: "gpt-5.6-sol",
+          executionIntent: "none",
+          projectConversation: {
+            binding: {
+              bindingId: "binding-1",
+              projectId: "project-1",
+              threadId: "thread-1",
+              workspaceId: "workspace-original",
+              revision: 2,
+              state: "active",
+              source: {
+                pluginId: "crewon.short-drama",
+                publisherId: "example.publisher",
+                version: "16.0.0",
+                packageDigest: `sha256:${"a".repeat(64)}`,
+                selectionRevision: 3,
+              },
+              createdAt: occurredAt,
+              updatedAt: occurredAt,
             },
-            createdAt: occurredAt,
-            updatedAt: occurredAt,
+            stage: {
+              kind: "script",
+              episodeId: "episode-1",
+              briefRevision: 1,
+              outline: null,
+            },
           },
-          stage: {
-            kind: "script",
+        } as const;
+        const mediaStage = {
+          kind: "media-input",
+          workflowId: "flux2-three-reference-storyboard",
+          configurationRevision: 4,
+          briefRevision: 1,
+          script: {
+            artifactId: "script-1",
             episodeId: "episode-1",
-            briefRevision: 1,
-            outline: null,
+            contentRevision: 2,
           },
-        },
-      } as const;
-      const mediaStage = {kind:"media-input",workflowId:"flux2-three-reference-storyboard",configurationRevision:4,briefRevision:1,script:{artifactId:"script-1",episodeId:"episode-1",contentRevision:2}} as const;
-      if (kind === "media-generation") {
-        const binding = textSettings.projectConversation.binding;
-        const saved = { ...savedMediaInput, projectId: binding.projectId, references: {
-          character: { ...savedMediaInput.references.character, projectId: binding.projectId },
-        } };
-        client.getThread.mockResolvedValue({ thread: threadView({ workspaceId: binding.workspaceId }), eventSequence: 1 });
-        vi.spyOn(client.projectConversations, "getBinding").mockResolvedValue({ binding });
-        vi.spyOn(client.projectMediaGenerations, "getRecovery").mockResolvedValue({ intent: null });
-        vi.spyOn(client.projectMediaInputs, "getOptions").mockResolvedValue({ configuration: { revision: 1, workflows: [saved.workflowId] } });
-        vi.spyOn(client.projectMediaInputs, "listInputs").mockResolvedValue({ inputs: [{ projectId: binding.projectId, mediaInputId: saved.mediaInputId, latestInputRevision: 1, item: saved.item, workflowId: saved.workflowId, createdAt: saved.createdAt }], nextMediaInputId: null });
-        vi.spyOn(client.projectMediaInputs, "loadInput").mockResolvedValue({ state: { input: saved, latestInputRevision: 1 } });
-        const generate = vi.spyOn(client.projectMediaGenerations, "generate").mockImplementation(async request => {
-          submitted = true;
-          return { disposition: "committed", projectId: request.projectId, threadId: request.threadId, mediaInputId: request.mediaInputId, inputRevision: request.inputRevision, executionId: request.executionId, threadRevision: request.expectedThreadRevision + 1, runId: "run-1" };
-        });
-        const generation = new ControlProjectMediaGeneration({ client, binding, briefRevision: 1, presenter: runtime });
-        try {
-          await generation.refresh(); await generation.select(saved.mediaInputId); await generation.generate();
-          expect(generation.getSnapshot().receipt?.runId).toBe("run-1");
-          expect(generate).toHaveBeenCalledOnce();
-          expect(start).not.toHaveBeenCalled();
-        } finally { generation.dispose(); }
-      } else {
-        const result = await runtime.startTurn("thread-1", "写第一集", [], kind === "text" ? textSettings : kind === "asset" ? {
-          model: "gpt-5.6-sol", executionIntent: "none", projectAssetStage: { binding: textSettings.projectConversation.binding, stage: { kind: "assets", assetKind: "character", briefRevision: 1, script: null } },
-        } : {
-          model: "gpt-5.6-sol", executionIntent:"none",projectMediaInputStage:{binding:textSettings.projectConversation.binding,stage:mediaStage},
-        });
-        expect(result.turn.id).toBe("run-1");
-        expect(start.mock.calls[0]![1]).toMatchObject({ modelId: "gpt-5.6-sol" });
+        } as const;
+        if (kind === "media-generation") {
+          const binding = textSettings.projectConversation.binding;
+          const saved = {
+            ...savedMediaInput,
+            projectId: binding.projectId,
+            references: {
+              character: {
+                ...savedMediaInput.references.character,
+                projectId: binding.projectId,
+              },
+            },
+          };
+          client.getThread.mockResolvedValue({
+            thread: threadView({ workspaceId: binding.workspaceId }),
+            eventSequence: 1,
+          });
+          vi.spyOn(client.projectConversations, "getBinding").mockResolvedValue(
+            { binding },
+          );
+          vi.spyOn(
+            client.projectMediaGenerations,
+            "getRecovery",
+          ).mockResolvedValue({ intent: null });
+          vi.spyOn(client.projectMediaInputs, "getOptions").mockResolvedValue({
+            configuration: { revision: 1, workflows: [saved.workflowId] },
+          });
+          vi.spyOn(client.projectMediaInputs, "listInputs").mockResolvedValue({
+            inputs: [
+              {
+                projectId: binding.projectId,
+                mediaInputId: saved.mediaInputId,
+                latestInputRevision: 1,
+                item: saved.item,
+                workflowId: saved.workflowId,
+                createdAt: saved.createdAt,
+              },
+            ],
+            nextMediaInputId: null,
+          });
+          vi.spyOn(client.projectMediaInputs, "loadInput").mockResolvedValue({
+            state: { input: saved, latestInputRevision: 1 },
+          });
+          const generate = vi
+            .spyOn(client.projectMediaGenerations, "generate")
+            .mockImplementation(async (request) => {
+              submitted = true;
+              return {
+                disposition: "committed",
+                projectId: request.projectId,
+                threadId: request.threadId,
+                mediaInputId: request.mediaInputId,
+                inputRevision: request.inputRevision,
+                executionId: request.executionId,
+                threadRevision: request.expectedThreadRevision + 1,
+                runId: "run-1",
+              };
+            });
+          const generation = new ControlProjectMediaGeneration({
+            client,
+            binding,
+            briefRevision: 1,
+            presenter: runtime,
+          });
+          try {
+            await generation.refresh();
+            await generation.select(saved.mediaInputId);
+            await generation.generate();
+            expect(generation.getSnapshot().receipt?.runId).toBe("run-1");
+            expect(generate).toHaveBeenCalledOnce();
+            expect(start).not.toHaveBeenCalled();
+          } finally {
+            generation.dispose();
+          }
+        } else {
+          const result = await runtime.startTurn(
+            "thread-1",
+            "写第一集",
+            [],
+            kind === "text"
+              ? textSettings
+              : kind === "asset"
+                ? {
+                    model: "gpt-5.6-sol",
+                    executionIntent: "none",
+                    projectAssetStage: {
+                      binding: textSettings.projectConversation.binding,
+                      stage: {
+                        kind: "assets",
+                        assetKind: "character",
+                        briefRevision: 1,
+                        script: null,
+                      },
+                    },
+                  }
+                : {
+                    model: "gpt-5.6-sol",
+                    executionIntent: "none",
+                    projectMediaInputStage: {
+                      binding: textSettings.projectConversation.binding,
+                      stage: mediaStage,
+                    },
+                  },
+          );
+          expect(result.turn.id).toBe("run-1");
+          expect(start.mock.calls[0]![1]).toMatchObject({
+            modelId: "gpt-5.6-sol",
+          });
+        }
+        await settled.promise;
+        if (kind !== "media-generation") {
+          expect(start).toHaveBeenCalledOnce();
+          expect(start.mock.calls[0]![1]).toMatchObject({
+            threadId: "thread-1",
+            projectId: "project-1",
+            content: "写第一集",
+            expectedThreadRevision: 1,
+            expectedBindingRevision: 2,
+            stage:
+              kind === "text"
+                ? { kind: "script", episodeId: "episode-1", outline: null }
+                : kind === "asset"
+                  ? {
+                      kind: "assets",
+                      assetKind: "character",
+                      briefRevision: 1,
+                      script: null,
+                    }
+                  : mediaStage,
+          });
+        }
+        expect(client.startTurn).not.toHaveBeenCalled();
+        expect(client.getActiveAgentVersionCatalog).not.toHaveBeenCalled();
+        expect(client.getRun).toHaveBeenCalledWith(
+          "run-1",
+          kind === "media-generation"
+            ? expect.objectContaining({ signal: expect.any(AbortSignal) })
+            : {},
+        );
+        expect(cursors).toEqual([0, 1]);
+        expect(runtimeCallbacks.onTextDelta.mock.calls).toEqual([
+          ["thread-1", "第一"],
+          ["thread-1", "集"],
+        ]);
+        expect(runtimeCallbacks.onRunSettled).toHaveBeenCalledOnce();
+      } finally {
+        runtime.close();
       }
-      await settled.promise;
-      if (kind !== "media-generation") {
-      expect(start).toHaveBeenCalledOnce();
-      expect(start.mock.calls[0]![1]).toMatchObject({
-        threadId: "thread-1",
-        projectId: "project-1",
-        content: "写第一集",
-        expectedThreadRevision: 1,
-        expectedBindingRevision: 2,
-        stage: kind === "text" ? { kind: "script", episodeId: "episode-1", outline: null } : kind === "asset" ? { kind: "assets", assetKind: "character", briefRevision: 1, script: null } : mediaStage,
-      });
-      }
-      expect(client.startTurn).not.toHaveBeenCalled();
-      expect(client.getActiveAgentVersionCatalog).not.toHaveBeenCalled();
-      expect(client.getRun).toHaveBeenCalledWith("run-1", kind === "media-generation" ? expect.objectContaining({ signal: expect.any(AbortSignal) }) : {});
-      expect(cursors).toEqual([0, 1]);
-      expect(runtimeCallbacks.onTextDelta.mock.calls).toEqual([
-        ["thread-1", "第一"],
-        ["thread-1", "集"],
-      ]);
-      expect(runtimeCallbacks.onRunSettled).toHaveBeenCalledOnce();
-    } finally {
-      runtime.close();
-    }
-  });
+    },
+  );
 
   it.each([
     { runId: "other-run" },
@@ -2780,6 +2901,52 @@ describe("Control thread runtime", () => {
       { threadId: "thread-2", afterSequence: 7 },
     ]);
     runtime.close();
+  });
+
+  it("publishes completed-message revision invalidation through the existing Thread SSE without another stream", async () => {
+    const client = fakeClient({ messages: [], runs: [] }),
+      deliver = deferred<void>(),
+      notified = deferred<void>();
+    let streams = 0;
+    const runtime = new ControlThreadRuntime(
+      {
+        client,
+        threadEventStream: async function* (_client, input) {
+          streams++;
+          await deliver.promise;
+          yield {
+            schemaVersion: "crewon.thread-event.v0",
+            threadId: input.threadId,
+            eventId: "assistant-completed",
+            sequence: (input.afterSequence ?? 0) + 1,
+            occurredAt,
+            type: "thread.message.appended",
+          };
+          await waitForAbort(input.signal);
+        },
+      },
+      callbacks(),
+    );
+    const listener = vi.fn(() => notified.resolve());
+    const release = subscribeControlThreadRevision(
+      runtime,
+      "thread-1",
+      listener,
+    );
+    const other = vi.fn(),
+      releaseOther = subscribeControlThreadRevision(runtime, "thread-2", other);
+    try {
+      await runtime.readThread("thread-1");
+      deliver.resolve();
+      await notified.promise;
+      expect(listener).toHaveBeenCalledOnce();
+      expect(other).not.toHaveBeenCalled();
+      expect(streams).toBe(1);
+    } finally {
+      release();
+      releaseOther();
+      runtime.close();
+    }
   });
 
   it("keeps only the focused Thread SSE and releases every subscription on close", async () => {

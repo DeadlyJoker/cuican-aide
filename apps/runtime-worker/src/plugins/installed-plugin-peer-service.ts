@@ -61,6 +61,11 @@ type Entry = Readonly<{
   registration: InstalledPluginBusinessRegistration;
   identity: InstalledPluginPeerIdentity;
 }>;
+type CatalogFacts = Readonly<{
+  selection: ReturnType<typeof parsePluginSelection>;
+  activation: ReturnType<typeof parseExtensionActivation> | null;
+  configuration: ReturnType<typeof parseExtensionConfiguration> | null;
+}>;
 type ScopeHosts = Readonly<{
   scope: PluginProfileScope;
   entries: readonly Entry[];
@@ -237,6 +242,16 @@ export class InstalledPluginPeerService {
     };
     if (request.operation === "catalog") {
       const entries = [];
+      // Model variants share package/configuration metadata. Validate each exact
+      // input once in this physical snapshot, after collecting its target rows.
+      // This is deliberately request-local: later requests recheck actual bytes.
+      const validations = new Map<
+        string,
+        Readonly<{
+          row: Entry;
+          facts: CatalogFacts;
+        }>
+      >();
       for (const row of hosts.entries) {
         const facts = await this.#catalogFacts(
           hosts.scope,
@@ -278,12 +293,22 @@ export class InstalledPluginPeerService {
             activation!.configurationDigest !== configuration.contentDigest)
         )
           continue;
-        await hosts.generation.validateConfiguration({
-          actor: request.actor,
-          registration: project(row.registration),
+        const key = extensionCanonicalJson({
+          identity: row.identity,
           configuration: row.entry.configuration,
         });
-        signal.throwIfAborted();
+        const previous = validations.get(key);
+        if (previous && !isDeepStrictEqual(previous.facts, facts))
+          fail("source_changed");
+        if (!previous) validations.set(key, { row, facts });
+        entries.push({
+          identity: row.identity,
+          manifest: row.registration.manifest,
+          configuration: row.entry.configuration,
+          configuredTarget: row.entry.target,
+        });
+      }
+      for (const { row, facts } of validations.values()) {
         if (
           !isDeepStrictEqual(
             facts,
@@ -291,12 +316,22 @@ export class InstalledPluginPeerService {
           )
         )
           fail("source_changed");
-        entries.push({
-          identity: row.identity,
-          manifest: row.registration.manifest,
+        signal.throwIfAborted();
+        await hosts.generation.validateConfiguration({
+          actor: request.actor,
+          registration: project(row.registration),
           configuration: row.entry.configuration,
-          configuredTarget: row.entry.target,
         });
+        signal.throwIfAborted();
+      }
+      for (const { row, facts } of validations.values()) {
+        if (
+          !isDeepStrictEqual(
+            facts,
+            await this.#catalogFacts(hosts.scope, row.identity.pluginId),
+          )
+        )
+          fail("source_changed");
       }
       await this.#current(request.actor, hosts.scope, signal);
       return parseInstalledPluginPeerResponse({ ...response, entries });

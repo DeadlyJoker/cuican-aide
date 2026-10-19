@@ -6,6 +6,7 @@ import {
   lstatSync,
   openSync,
   readSync,
+  type BigIntStats,
   type Stats,
 } from "node:fs";
 import { dirname, join } from "node:path";
@@ -13,6 +14,7 @@ import { isDeepStrictEqual } from "node:util";
 import {
   parseDesktopNativePluginAuthority,
   DESKTOP_NATIVE_PLUGIN_AUTHORITY_MAX_BYTES,
+  DESKTOP_PLUGIN_APPROVAL_MAX_BYTES,
   type DesktopNativePluginAuthority,
 } from "@crewon/contracts/plugins";
 
@@ -25,7 +27,7 @@ type PrivateFile = Readonly<{
   value: unknown;
   assertCurrent(): void;
 }>;
-function same(a: Stats, b: Stats): boolean {
+function same(a: BigIntStats, b: BigIntStats): boolean {
   return (
     a.dev === b.dev &&
     a.ino === b.ino &&
@@ -33,8 +35,8 @@ function same(a: Stats, b: Stats): boolean {
     a.mode === b.mode &&
     a.nlink === b.nlink &&
     a.size === b.size &&
-    a.mtimeMs === b.mtimeMs &&
-    a.ctimeMs === b.ctimeMs
+    a.mtimeNs === b.mtimeNs &&
+    a.ctimeNs === b.ctimeNs
   );
 }
 function directories(path: string): readonly Pin[] {
@@ -64,24 +66,25 @@ function assertDirectories(pins: readonly Pin[]): void {
 function read(
   path: string,
   maximum: number,
-): Readonly<{ bytes: Buffer; metadata: Stats }> {
-  const original = lstatSync(path),
+): Readonly<{ bytes: Buffer; metadata: BigIntStats }> {
+  const original = lstatSync(path, { bigint: true }),
     uid = process.getuid?.();
   if (
     uid === undefined ||
     !original.isFile() ||
     original.isSymbolicLink() ||
-    original.nlink !== 1 ||
-    original.uid !== uid ||
-    (original.mode & 0o777) !== 0o600 ||
-    original.size < 1 ||
-    original.size > maximum
+    original.nlink !== 1n ||
+    original.uid !== BigInt(uid) ||
+    (original.mode & 0o777n) !== 0o600n ||
+    original.size < 1n ||
+    original.size > BigInt(maximum)
   )
     nativeAuthorityFailure("file_invalid");
   const fd = openSync(path, constants.O_RDONLY | constants.O_NOFOLLOW);
   try {
-    if (!same(original, fstatSync(fd))) nativeAuthorityFailure("file_changed");
-    const bytes = Buffer.alloc(original.size + 1);
+    if (!same(original, fstatSync(fd, { bigint: true })))
+      nativeAuthorityFailure("file_changed");
+    const bytes = Buffer.alloc(Number(original.size) + 1);
     let size = 0;
     while (size < bytes.length) {
       const count = readSync(fd, bytes, size, bytes.length - size, null);
@@ -89,9 +92,9 @@ function read(
       size += count;
     }
     if (
-      size !== original.size ||
-      !same(original, fstatSync(fd)) ||
-      !same(original, lstatSync(path))
+      size !== Number(original.size) ||
+      !same(original, fstatSync(fd, { bigint: true })) ||
+      !same(original, lstatSync(path, { bigint: true }))
     )
       nativeAuthorityFailure("file_changed");
     return { bytes: bytes.subarray(0, size), metadata: original };
@@ -114,13 +117,21 @@ export function captureNativeAuthorityFile(
     value,
     assertCurrent() {
       assertDirectories(pins);
-      const current = read(path, maximum);
-      if (
-        !same(snapshot.metadata, current.metadata) ||
-        !snapshot.bytes.equals(current.bytes)
-      )
-        nativeAuthorityFailure("file_changed");
+      const check = () => {
+        const current = lstatSync(path, { bigint: true });
+        if (
+          !current.isFile() ||
+          current.isSymbolicLink() ||
+          !same(snapshot.metadata, current)
+        )
+          nativeAuthorityFailure("file_changed");
+      };
+      // The initial bounded read pins exact bytes. Fresh inode, permissions,
+      // size and nanosecond ctime/mtime checks detect writes (even restored
+      // mtime), replacement and links without reopening each unchanged file.
+      check();
       assertDirectories(pins);
+      check();
     },
   });
 }
@@ -188,9 +199,12 @@ export function captureNativePluginAuthority(path: string): Readonly<{
     nativeAuthorityFailure("publication_binding_invalid");
   const bootstrap = captureNativeAuthorityFile(
       authority.bootstrapPath,
-      128 * 1024,
+      DESKTOP_PLUGIN_APPROVAL_MAX_BYTES,
     ),
-    approval = captureNativeAuthorityFile(authority.approvalPath, 128 * 1024),
+    approval = captureNativeAuthorityFile(
+      authority.approvalPath,
+      DESKTOP_PLUGIN_APPROVAL_MAX_BYTES,
+    ),
     profile = captureNativeAuthorityFile(authority.profilePath, 16 * 1024),
     policy = captureNativeAuthorityFile(authority.policyPath, 128 * 1024);
   if (

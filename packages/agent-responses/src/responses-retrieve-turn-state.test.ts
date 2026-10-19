@@ -9,7 +9,7 @@ import type { ProviderCheckpoint } from "@crewon/contracts";
 import { DirectResponsesTransport } from "./direct-responses-transport.ts";
 
 const endpoint = "https://provider.test/v1/responses";
-const request: ModelRequest = {
+const request = {
   schemaVersion: "crewon.model-request.v0",
   runId: "run-a",
   segmentId: "segment-a",
@@ -21,7 +21,7 @@ const request: ModelRequest = {
   },
   tools: [],
   maxOutputBytes: 8192,
-};
+} satisfies ModelRequest;
 
 function checkpoint(responseId: string): ProviderCheckpoint {
   return {

@@ -1,0 +1,22 @@
+{
+  "at": "2026-10-18T13:33:03.798909+00:00",
+  "projectId": "01a13f43-094c-767a-9414-b5622b236255",
+  "conceptAssetId": "01a14e54-88a3-7384-8ad7-e4ca41604e3e",
+  "originalRunId": "plugin-q2Mb01ykWM3E2-wuOHo8LRpo8_fQK5zZN_pAivnU9tE",
+  "runStatus": "reconciling",
+  "operationId": "a42e4baa-59ee-dcd2-1c16-07e1af3b96c7",
+  "operationStatus": "submitting",
+  "providerOperationId": null,
+  "operationCreatedAt": "2026-10-18T09:26:59.248Z",
+  "pluginVersion": "50.2.16",
+  "configurationRevision": 25,
+  "serviceRootReadonlyProbe": {
+    "httpStatus": 404,
+    "response": "AutoDL Not Found",
+    "firstByteSeconds": 0.260593,
+    "bodyFile": "/private/tmp/crewon-runtime-merge-20261016/comfy-service-response-20261018.txt"
+  },
+  "noResubmission": true,
+  "completeFilmProduced": false,
+  "providerAcceptanceConfirmed": false
+}

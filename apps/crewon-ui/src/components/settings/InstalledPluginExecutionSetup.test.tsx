@@ -489,6 +489,41 @@ describe("explicit Native execution setup in original settings", () => {
     expect(f.client.confirm).toHaveBeenCalledOnce();
   });
 
+  it("allows a new preview after enabling changes the selection pin of an older completed preparation", async () => {
+    const f = fixture();
+    f.status = f.committed();
+    await mount(f, false, "zh", {
+      ...f.identity,
+      selectionRevision: f.identity.selectionRevision + 1,
+    });
+    expect(button("预览执行准备").disabled).toBe(false);
+    expect(container.textContent).not.toContain("准备结果尚未确认");
+    expect(container.textContent).not.toContain("执行环境已准备");
+    expect(f.client.confirm).not.toHaveBeenCalled();
+  });
+
+  it("keeps a live unknown confirmation blocked when its completed reply has foreign pins", async () => {
+    const f = fixture();
+    f.onConfirm = async () => {
+      const committed = f.committed();
+      if (committed.state !== "committed") throw new Error("fixture_invalid");
+      f.status = {
+        ...committed,
+        result: {
+          ...committed.result,
+          selectionRevision: f.identity.selectionRevision + 1,
+        },
+      };
+      throw new Error("transport_lost");
+    };
+    await choose(f);
+    await click("允许并准备");
+    await click("重新读取准备状态");
+    expect(container.textContent).toContain("准备结果尚未确认");
+    expect(button("预览执行准备").disabled).toBe(true);
+    expect(f.client.confirm).toHaveBeenCalledOnce();
+  });
+
   it("recovers across real tree unmounts and retains only the public ticket without cancelling a claimed confirmation", async () => {
     const f = fixture();
     const initialShell = Symbol("initial-shell");
@@ -709,4 +744,61 @@ describe("explicit Native execution setup in original settings", () => {
     ).toBe(false);
     expect(f.mutations).toHaveLength(0);
   });
+});
+
+it("shows the actual saved C16 scene API and scope before execution consent", async () => {
+  const f = fixture();
+  const parameters = {
+    ...executionTestParameters,
+    preset: "api-c16-scene" as const,
+  };
+  f.onPreview = async () => ({
+    ...f.preview(),
+    preset: parameters.preset,
+    networkPaths: [
+      { method: "POST", path: "/api/workflow/generate" },
+      {
+        method: "GET",
+        operationPathPrefix: "/api/comfy/proxy/history?prompt_id=",
+      },
+      { method: "GET", path: "/api/comfy/proxy/queue" },
+      { method: "GET", path: "/api/comfy/view" },
+    ],
+  });
+  await act(async () => {
+    root.render(
+      <InstalledPluginExecutionSetup
+        access={f.access}
+        identity={f.identity}
+        parameters={parameters}
+        disabled={false}
+        locale="zh"
+      />,
+    );
+    await settleSettings();
+  });
+  await click("预览执行准备");
+  expect(container.textContent).toContain("C16 场景（16:9）");
+  expect(container.textContent).toContain("POST /api/workflow/generate");
+  expect(container.textContent).not.toContain("Krea2 写实人像");
+  expect(f.client.confirm).not.toHaveBeenCalled();
+});
+
+it("shows the actual reviewed workflow upload endpoint before consent, without submitting execution", async () => {
+  const f = fixture();
+  const media = mediaGenerationPreview();
+  f.onPreview = async () => ({
+    ...f.preview(),
+    ...media,
+    mediaGenerationPreparation: {
+      ...media.mediaGenerationPreparation,
+      additionalNetworkPaths: [
+        { method: "POST", path: "/api/comfy/upload/file" },
+      ],
+    },
+  });
+  await choose(f);
+  expect(container.textContent).toContain("POST /api/comfy/upload/file");
+  expect(container.textContent).not.toContain("POST /upload/image");
+  expect(f.client.confirm).not.toHaveBeenCalled();
 });

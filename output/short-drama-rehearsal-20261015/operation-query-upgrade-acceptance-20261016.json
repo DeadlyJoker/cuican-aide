@@ -1,0 +1,34 @@
+{
+  "recordedAt": "2026-10-16T10:39:23.663282+00:00",
+  "observedClientFailure": "desktop_plugin_execution_setup_policy_conflict",
+  "affectedVersion": "50.2.12",
+  "configurationRevision": 23,
+  "fixes": [
+    "Recognize only the exact old workflow-panel/api grant with unchanged package, origin and approval requirements.",
+    "Preview the prospective scoped query grant; do not silently present old authority while committing a new grant.",
+    "Publish only through original consent, stopped-runtime mutation, immutable pins and CAS."
+  ],
+  "regression": {
+    "upgrades": [
+      "workflow-panel-v1",
+      "workflow-api-v1"
+    ],
+    "deniedConflicts": [
+      "other-origin",
+      "extra-route",
+      "per-action"
+    ],
+    "previewHasNoPolicyWrites": true,
+    "setupTestsPassed": 51,
+    "combinedRelatedTestsPassed": 128,
+    "postgresSkipped": 1
+  },
+  "runtimeImplementationDigest": "sha256:155ee9ad239c67a81d92bafeb316da78c26b0035011b7f2465b460f7e092600f",
+  "nativeHostTypecheckPassed": true,
+  "codesignVerified": true,
+  "clientEndToEndPassed": false,
+  "currentBlock": "macOS Keychain decrypt authorization after signed upgrade; main PID 36442 sampled at SecItemCopyMatching/ClientSession::decrypt",
+  "originalOperationId": "81932a4d-5f2e-d919-13a4-e8794aff833d",
+  "originalImage": "comfyui_00003_.png",
+  "newGenerationSubmitted": false
+}

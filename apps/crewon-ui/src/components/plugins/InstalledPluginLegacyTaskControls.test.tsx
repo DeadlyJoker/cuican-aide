@@ -3,6 +3,7 @@ import { act } from "react";
 import { createRoot, type Root } from "react-dom/client";
 import { afterEach, beforeEach, expect, it, vi } from "vitest";
 import type { InstalledPluginTaskContextState } from "../../lib/plugins/useInstalledPluginTaskContext.types";
+import { taskContextTask } from "../../lib/plugins/installedPluginTaskContext.test-support";
 import { InstalledPluginLegacyTaskControls } from "./InstalledPluginLegacyTaskControls";
 
 Object.assign(globalThis, { IS_REACT_ACT_ENVIRONMENT: true });
@@ -118,4 +119,36 @@ it("keeps read retry available for an already known thread and opens that same t
   await act(async () => container.querySelector("button")!.click());
   expect(open).toHaveBeenCalledWith("verified-legacy-thread");
   expect(value.prepareThread).not.toHaveBeenCalled();
+});
+
+it("retains explicit generation source selection and ordered task navigation for legacy plugins", async () => {
+  const task = taskContextTask();
+  const value = state({
+    thread: { threadId: task.threadId, revision: 2, provisional: false },
+    tasks: [task],
+  });
+  const open = await render(value);
+  const select = container.querySelector<HTMLSelectElement>(
+    'select[aria-label="查询生成记录"]',
+  )!;
+  expect(select).not.toBeNull();
+  expect(value.selectSource).not.toHaveBeenCalled();
+  await act(async () => {
+    select.value = JSON.stringify([
+      task.runId,
+      task.operations[0]!.operationId,
+    ]);
+    select.dispatchEvent(new Event("change", { bubbles: true }));
+  });
+  expect(value.selectSource).toHaveBeenCalledWith({
+    sourceRunId: task.runId,
+    operationId: task.operations[0]!.operationId,
+  });
+  const list = container.querySelector('[aria-label="已受理任务"]')!;
+  await act(async () => list.querySelector("button")!.click());
+  expect(open).toHaveBeenCalledWith(task.threadId);
+  expect(container.innerHTML).toMatchSnapshot();
+  await render({ ...value, phase: "loading" });
+  expect(container.querySelector("select")!.disabled).toBe(true);
+  expect(container.querySelector('[aria-label="已受理任务"]')).not.toBeNull();
 });

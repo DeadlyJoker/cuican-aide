@@ -142,7 +142,11 @@ export function parsePluginUiIntentRecord(
         body.reasonCode !== null
       : body.receiptJson !== null || body.receiptIdentityDigest !== null) ||
     (body.phase === "refused"
-      ? count !== 1 ||
+      ? (count !== 1 &&
+          !(
+            body.kind === "query" &&
+            body.reasonCode === "project_query_revision_not_admitted"
+          )) ||
         !pluginUiIntentRefusalSupported(
           body.sourcePin.action,
           body.reasonCode ?? "",
@@ -288,7 +292,10 @@ export function refusePluginUiIntentFirstDispatch(
   digester: ExtensionContentDigester,
 ): PluginUiIntentRecord {
   const intent = parsePluginUiIntentRecord(input, digester);
-  if (!pluginUiIntentRefusalSupported(intent.sourcePin.action, reasonCode))
+  if (
+    intent.kind === "query" ||
+    !pluginUiIntentRefusalSupported(intent.sourcePin.action, reasonCode)
+  )
     creativeProjectFailure("plugin_ui_intent_refusal_unsupported");
   if (intent.phase !== "dispatched" || intent.dispatchAttemptCount !== 1)
     return intent;
@@ -298,6 +305,34 @@ export function refusePluginUiIntentFirstDispatch(
       ...body,
       phase: "refused",
       reasonCode,
+      revision: creativeProjectNextRevision(intent.revision),
+      updatedAt: creativeProjectTimestamp(at),
+    },
+    digester,
+  );
+}
+
+/** Trusted query owner proved its frozen thread CAS can no longer commit and no receipt exists. */
+export function refusePluginUiIntentUnadmittedQuery(
+  input: PluginUiIntentRecord,
+  expectedDispatchAttemptCount: number,
+  at: string,
+  digester: ExtensionContentDigester,
+): PluginUiIntentRecord {
+  const intent = parsePluginUiIntentRecord(input, digester);
+  if (intent.kind !== "query")
+    creativeProjectFailure("plugin_ui_intent_refusal_unsupported");
+  if (
+    intent.phase !== "dispatched" ||
+    intent.dispatchAttemptCount !== expectedDispatchAttemptCount
+  )
+    return intent;
+  const { contentDigest: _digest, ...body } = intent;
+  return finish(
+    {
+      ...body,
+      phase: "refused",
+      reasonCode: "project_query_revision_not_admitted",
       revision: creativeProjectNextRevision(intent.revision),
       updatedAt: creativeProjectTimestamp(at),
     },

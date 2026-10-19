@@ -12,6 +12,9 @@ import { imageReference, type ImageReference } from "./protocol.js";
 import { observeJob, type Observation } from "./protocol.js";
 import type { PluginJsonValue } from "@crewon/plugin-sdk/contracts";
 
+export type PreparedImageReference = Omit<ImageReference, "type"> &
+  Readonly<{ type: "input" | "output" }>;
+
 export type ReferenceWorkflowId =
   | "krea2-reference-four-view"
   | "flux2-three-reference-storyboard";
@@ -26,14 +29,16 @@ export type ReferenceWorkflowRequest = Readonly<{
   operationId: string;
   sourceServiceOrigin: string;
   targetServiceOrigin: string;
-  images: Readonly<Partial<Record<ReferenceImageRole, ImageReference>>>;
+  images: Readonly<Partial<Record<ReferenceImageRole, PreparedImageReference>>>;
 }>;
 export type RenderedReferenceWorkflow = Readonly<{
   workflowId: ReferenceWorkflowId;
   workflowDigest: string;
   outputNodeId: string;
   graph: ComfyApiGraph;
-  sourceImages: Readonly<Partial<Record<ReferenceImageRole, ImageReference>>>;
+  sourceImages: Readonly<
+    Partial<Record<ReferenceImageRole, PreparedImageReference>>
+  >;
 }>;
 
 const fourViewOptions: ComfyApiGraphOptions = Object.freeze({
@@ -124,9 +129,14 @@ function serviceOrigin(input: unknown): string {
 /** Files are resolved by the host from verified selected results, never model-supplied paths. */
 function outputInput(
   input: unknown,
-): Readonly<{ reference: ImageReference; value: string }> {
+): Readonly<{ reference: PreparedImageReference; value: string }> {
   const value = fields(input, ["filename", "subfolder", "type"]);
-  const reference = imageReference(value);
+  if (value.type !== "input" && value.type !== "output")
+    throw new Error("short_drama_reference_path_invalid");
+  const reference: PreparedImageReference = Object.freeze({
+    ...imageReference({ ...value, type: "output" }),
+    type: value.type,
+  });
   if (
     /[\[\]:\ud800-\udfff]/u.test(reference.filename + reference.subfolder) ||
     reference.subfolder
@@ -139,7 +149,7 @@ function outputInput(
   const path = [reference.subfolder, reference.filename]
     .filter(Boolean)
     .join("/");
-  return Object.freeze({ reference, value: `${path} [output]` });
+  return Object.freeze({ reference, value: `${path} [${reference.type}]` });
 }
 
 /**
@@ -178,7 +188,8 @@ export function renderReferenceWorkflow(
       outputPrefix: `crewon-${promptId(request.operationId)}`,
     }),
   ) as Record<string, { class_type: string; inputs: Record<string, unknown> }>;
-  const sources: Partial<Record<ReferenceImageRole, ImageReference>> = {};
+  const sources: Partial<Record<ReferenceImageRole, PreparedImageReference>> =
+    {};
   for (const role of roles) {
     const prepared = outputInput(images[role]);
     sources[role] = prepared.reference;

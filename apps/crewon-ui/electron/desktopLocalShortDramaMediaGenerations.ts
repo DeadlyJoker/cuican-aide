@@ -15,6 +15,18 @@ type Preview = NonNullable<
 export const SHORT_MEDIA_UPLOAD_PATHS: Preview["additionalNetworkPaths"] =
   Object.freeze([Object.freeze({ method: "POST", path: "/upload/image" })]);
 
+export function shortDramaMediaUploadPaths(
+  protocol: unknown,
+): Preview["additionalNetworkPaths"] {
+  if (protocol === undefined || protocol === "native")
+    return SHORT_MEDIA_UPLOAD_PATHS;
+  if (protocol === "workflow-panel-v1" || protocol === "workflow-api-v1")
+    return Object.freeze([
+      Object.freeze({ method: "POST", path: "/api/comfy/upload/file" }),
+    ]);
+  return invalid();
+}
+
 /** Offer generation only from verified package data; metadata preparation grants no execution. */
 export function captureDesktopLocalShortDramaMediaGenerations(input: {
   snapshot: PackageSnapshot;
@@ -22,6 +34,7 @@ export function captureDesktopLocalShortDramaMediaGenerations(input: {
   mediaInputs: Inputs;
   approval: DesktopPluginApprovalSettings;
   uploadApproved: boolean;
+  serviceProtocol?: unknown;
 }): Preview | null {
   if (input.mediaInputs === null) return null;
   const tools = ["media_submit", "media_observe"].map((id) =>
@@ -88,7 +101,7 @@ export function captureDesktopLocalShortDramaMediaGenerations(input: {
         }),
       ),
     ),
-    additionalNetworkPaths: SHORT_MEDIA_UPLOAD_PATHS,
+    additionalNetworkPaths: shortDramaMediaUploadPaths(input.serviceProtocol),
   });
 }
 

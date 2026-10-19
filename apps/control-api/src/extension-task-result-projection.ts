@@ -24,5 +24,6 @@ export function verifiedExtensionTaskImages(
   return decodeComfyUiImages({
     resultJson: operation.resultJson,
     baseUrl: value.configuration.parameters.baseUrl,
+    serviceProtocol: value.configuration.parameters.serviceProtocol,
   }).map(({ url, filename, resultIndex }) => ({ url, filename, resultIndex }));
 }

@@ -1,0 +1,18 @@
+{
+  "recordedAt": "2026-10-16T03:26:22.643965+00:00",
+  "acceptanceOnly": true,
+  "purpose": "Same-process CPU profiles for actual local task admission timeout. No debugger port or permission changes.",
+  "controlOriginalSha256": "b85aa0927e44daf903785b20c9b8fba4c1ed4b81c5c2dcd57234117105b1e123",
+  "controlDiagnosticSha256": "002bb7de550949417ed09c64146838e6d2cee6aeca5e13148a54579213825174",
+  "productCodeSuffixIsByteIdentical": true,
+  "profilerSha256": "c425568e85c942eef0c6de7d3f1c31ceac361a27d66eb0c5258654b25611f8d1",
+  "maximumWindows": 8,
+  "windowSeconds": 45,
+  "outputDirectory": "/private/tmp/crewon-plugin-performance-20261015/control-cpu-profiles-20261016",
+  "activeRunsBeforeQuit": 0,
+  "backupDirectory": "/private/tmp/crewon-plugin-performance-20261015/before-control-cpu-profile-20261016",
+  "codesignDeepStrictVerify": "passed",
+  "launchAttemptAt": "2026-10-16T03:31:56.371331+00:00",
+  "functionalBaselineValid": false,
+  "limitation": "The added sampling header changed control-api.mjs but its extension-build-identity entry was not updated. Profiles identify synchronous ownership file work; this run cannot establish normal feature latency or serve as an A/B functional baseline."
+}

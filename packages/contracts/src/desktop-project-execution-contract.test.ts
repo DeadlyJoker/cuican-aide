@@ -1,5 +1,6 @@
 import assert from "node:assert/strict";
 import test from "node:test";
+import { parsePluginUiJsonValue } from "./plugin-ui-json.ts";
 import {
   DESKTOP_PROJECT_EXECUTION_VERSION,
   parseDesktopProjectExecutionConfiguration,
@@ -438,4 +439,133 @@ test("Native v3 carries owned metadata creation independently from Conversation 
   assert.equal(Object.hasOwn(parsed, "conversations"), false);
   assert.equal(Object.hasOwn(parsed, "pluginGenerations"), false);
   assert.equal(Object.hasOwn(parsed, "pluginQueries"), false);
+});
+
+// Historical approved package pins remain present across upgrades. This fixture
+// composes independently bounded metadata, mappings and both media workflows.
+function upgradedMediaProjects(count: number) {
+  const publications = Array.from({ length: count }, (_, index) => ({
+    pluginId: "crewon.short-drama",
+    packageDigest: `sha256:${(index + 1).toString(16).padStart(64, "0")}`,
+    contributionId: "workbench",
+  }));
+  const identities = publications.map((_, index) => ({
+    pluginId: "crewon.short-drama",
+    pluginVersion: `${index + 1}.0.0`,
+    manifestDigest: `sha256:${"a".repeat(64)}`,
+    implementationDigest: `sha256:${"b".repeat(64)}`,
+  }));
+  return {
+    version: DESKTOP_PROJECT_EXECUTION_VERSION,
+    textArtifacts: { version: "crewon.project-text.v1" },
+    assetArtifacts: { version: "crewon.project-asset.v1" },
+    generationReads: { version: "crewon.project-generation-read.v1" },
+    ...Object.fromEntries(
+      [
+        "pluginUi",
+        "textUi",
+        "textRecovery",
+        "assetUi",
+        "conversations",
+        "textPlans",
+        "planningDrafts",
+        "generationReadUi",
+        "selectionUi",
+        "mediaInputUi",
+      ].map((key) => [key, { publications }]),
+    ),
+    pluginGenerations: {
+      publications: publications.map((source) => ({
+        source,
+        target: { ...source, action: "image.generate" },
+      })),
+    },
+    pluginQueries: {
+      publications: publications.map((source) => ({
+        source,
+        target: { ...source, action: "image.query" },
+      })),
+    },
+    resultSelections: {
+      version: "crewon.project-concept-selection.v1",
+      adapter: "comfyui-krea2",
+      identities,
+    },
+    uiRecovery: {
+      version: "crewon.plugin-ui-recovery.v1",
+      publications: publications.map((source) => ({
+        ...source,
+        actions: [generate, query, select],
+      })),
+    },
+    mediaInputs: {
+      version: "crewon.desktop-project-media-inputs.v1",
+      purposes: ["read", "write"],
+      referenceIdentities: identities,
+      reviews: publications.flatMap((publication, index) =>
+        [
+          ["krea2-reference-four-view", "129"],
+          ["flux2-three-reference-storyboard", "17"],
+        ].map(([workflowId, nodeId]) => ({
+          targetIdentity: {
+            pluginId: publication.pluginId,
+            publisherId: "example.publisher",
+            version: identities[index]!.pluginVersion,
+            packageDigest: publication.packageDigest,
+            manifestDigest: identities[index]!.manifestDigest,
+            implementationDigest: identities[index]!.implementationDigest,
+          },
+          workflow: {
+            workflowId,
+            workflowDigest: `sha256:${"c".repeat(64)}`,
+            output: { kind: "image", nodeId, dimensions: "workflow-native" },
+          },
+        })),
+      ),
+    },
+    mediaInputStages: {
+      version: "crewon.project-media-input-stages.v1",
+      publications,
+    },
+  };
+}
+
+test("a valid 62KB historical approval can add another package mapping and workflows without deleting old pins", () => {
+  const previous = upgradedMediaProjects(14),
+    upgraded = upgradedMediaProjects(15);
+  const bytes = (value: unknown) => Buffer.byteLength(JSON.stringify(value));
+  assert.ok(bytes(previous) > 60_000 && bytes(previous) < 64 * 1024);
+  assert.ok(bytes(upgraded) > 64 * 1024 && bytes(upgraded) < 128 * 1024);
+  const pins = { publications: upgraded.mediaInputStages.publications };
+  assert.deepEqual(
+    parseDesktopProjectExecutionConfiguration(previous, pins),
+    previous,
+  );
+  assert.deepEqual(
+    parseDesktopProjectExecutionConfiguration(upgraded, pins),
+    upgraded,
+  );
+  assert.deepEqual(
+    upgraded.mediaInputs.reviews.slice(0, previous.mediaInputs.reviews.length),
+    previous.mediaInputs.reviews,
+  );
+});
+
+test("Native aggregate remains bounded at 128KiB and public plugin UI JSON retains its 64KiB ceiling", () => {
+  const oversized = upgradedMediaProjects(32);
+  assert.ok(Buffer.byteLength(JSON.stringify(oversized)) > 128 * 1024);
+  assert.throws(() =>
+    parseDesktopProjectExecutionConfiguration(oversized, {
+      publications: oversized.mediaInputStages.publications,
+    }),
+  );
+  const upgraded = upgradedMediaProjects(15);
+  assert.throws(
+    () => parsePluginUiJsonValue(upgraded),
+    /plugin_ui_json_bytes_exceeded/,
+  );
+  assert.throws(
+    () => parsePluginUiJsonValue(upgraded, { maxBytes: 128 * 1024 }),
+    /plugin_ui_json_limit_invalid/,
+  );
 });

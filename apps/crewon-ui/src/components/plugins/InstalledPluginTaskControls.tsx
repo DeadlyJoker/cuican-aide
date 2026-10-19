@@ -52,26 +52,6 @@ export function InstalledPluginTaskControls({
 }>) {
   const zh = locale === "zh";
   const busy = state.phase === "loading" || state.phase === "preparing";
-  const operations = new Map<
-    string,
-    Readonly<{ sourceRunId: string; operationId: string; label: string }>
-  >();
-  for (const task of state.tasks)
-    for (const operation of task.operations) {
-      const key = JSON.stringify([
-        operation.sourceRunId,
-        operation.operationId,
-      ]);
-      if (!operations.has(key))
-        operations.set(key, {
-          sourceRunId: operation.sourceRunId,
-          operationId: operation.operationId,
-          label: `${operation.images[0]?.filename ?? (zh ? `生成记录 ${operations.size + 1}` : `Record ${operations.size + 1}`)} · ${taskStatus(operation.status, zh)}`,
-        });
-    }
-  const selected = state.source
-    ? JSON.stringify([state.source.sourceRunId, state.source.operationId])
-    : "";
   return (
     <section
       className={styles.controls}
@@ -116,6 +96,49 @@ export function InstalledPluginTaskControls({
               : "The task could not be read. Refresh to retry."}
         </p>
       ) : null}
+      <InstalledPluginTaskRecords
+        state={state}
+        locale={locale}
+        onOpenTask={onOpenTask}
+      />
+    </section>
+  );
+}
+
+/** Shared host records keep legacy modules able to select an original generation. */
+export function InstalledPluginTaskRecords({
+  state,
+  locale,
+  onOpenTask,
+}: Readonly<{
+  state: InstalledPluginTaskContextState;
+  locale: Locale;
+  onOpenTask?: (threadId: string) => void;
+}>) {
+  const zh = locale === "zh";
+  const busy = state.phase !== "ready";
+  const operations = new Map<
+    string,
+    Readonly<{ sourceRunId: string; operationId: string; label: string }>
+  >();
+  for (const task of state.tasks)
+    for (const operation of task.operations) {
+      const key = JSON.stringify([
+        operation.sourceRunId,
+        operation.operationId,
+      ]);
+      if (!operations.has(key))
+        operations.set(key, {
+          sourceRunId: operation.sourceRunId,
+          operationId: operation.operationId,
+          label: `${operation.images[0]?.filename ?? (zh ? `生成记录 ${operations.size + 1}` : `Record ${operations.size + 1}`)} · ${taskStatus(operation.status, zh)}`,
+        });
+    }
+  const selected = state.source
+    ? JSON.stringify([state.source.sourceRunId, state.source.operationId])
+    : "";
+  return (
+    <>
       {operations.size ? (
         <label className={styles.source}>
           <span>{zh ? "查询生成记录" : "Generation record to query"}</span>
@@ -158,7 +181,8 @@ export function InstalledPluginTaskControls({
               <Button
                 size="sm"
                 variant="ghost"
-                onClick={() => onOpenTask(task.threadId)}
+                disabled={!onOpenTask}
+                onClick={() => onOpenTask?.(task.threadId)}
               >
                 {zh ? "打开任务" : "Open task"}
               </Button>
@@ -166,6 +190,6 @@ export function InstalledPluginTaskControls({
           ))}
         </ul>
       ) : null}
-    </section>
+    </>
   );
 }

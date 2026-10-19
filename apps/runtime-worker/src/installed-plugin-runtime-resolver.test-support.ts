@@ -118,11 +118,15 @@ export async function installedResolverFixture(
   });
   assert.ok(registration);
   const controls = {
+    modelHistories: [] as Parameters<
+      ModelTransportPort["stream"]
+    >[0]["input"]["items"][],
     records: [] as string[],
     signals: [] as AbortSignal[],
     contexts: [] as unknown[],
     factoryGate: null as Promise<void> | null,
     executeGate: null as Promise<void> | null,
+    onExecute: null as (() => Promise<void>) | null,
     closeGate: null as Promise<void> | null,
     onSetup: null as (() => Promise<void>) | null,
     onFactory: null as (() => Promise<void>) | null,
@@ -156,7 +160,7 @@ ${options.composition ? "const source=host.services.get('story.source','1');" : 
 host.services.get('crewon.execution','1').register({async create(context){
 f.records.push('factory');f.contexts.push(context);await f.factoryGate;await f.onFactory?.();let saved=null;
 return {definitions(){return ${JSON.stringify(declared)}},executionPolicy(){return ${JSON.stringify(toolPolicy)}},
-async execute(command,signal){f.records.push('execute');f.signals.push(signal);await f.executeGate;saved={status:'completed',executionId:command.executionId,providerReceiptId:'receipt/'+command.executionId,result:{schemaVersion:'crewon.tool-result.v0',callId:command.callId,output:'installed:'+context.identity.version,isError:false,artifactRef:null}};return saved},
+async execute(command,signal){f.records.push('execute');f.signals.push(signal);await f.executeGate;await f.onExecute?.();saved={status:'completed',executionId:command.executionId,providerReceiptId:'receipt/'+command.executionId,result:{schemaVersion:'crewon.tool-result.v0',callId:command.callId,output:'installed:'+context.identity.version,isError:false,artifactRef:null}};return saved},
 async reconcile(command,signal){f.records.push('reconcile');f.signals.push(signal);return saved??{status:'unknownOutcome',executionId:command.executionId,providerReceiptId:null}},
 async cancel(command,signal){f.records.push('cancel');f.signals.push(signal);return saved??{status:'unknownOutcome',executionId:command.executionId,providerReceiptId:null}},
 acknowledgeExecutionResult(input){f.records.push('ack');if(saved&&input.executionId===saved.executionId&&input.providerReceiptId===saved.providerReceiptId){saved=null;return true}return false},
@@ -263,6 +267,7 @@ ${options.close === false ? "" : "async close(){f.records.push('runtime-close');
     adapterVersion: "1",
     modelId: "fixture-model",
     async *stream(request) {
+      controls.modelHistories.push(request.input.items);
       const completed = request.input.items.find(
         (item) => item.type === "tool_result",
       );

@@ -1,4 +1,5 @@
 import {
+  DESKTOP_PLUGIN_APPROVAL_MAX_BYTES,
   parseDesktopProjectOutlineToolsConfiguration,
   type DesktopNativePluginPackageIdentity,
   type DesktopProjectOutlineToolsConfiguration,
@@ -21,7 +22,10 @@ export function captureNativeProjectOutlineDeclaration(
 ): DesktopProjectOutlineToolsConfiguration | undefined {
   if (!Object.hasOwn(input.bootstrap, "projectOutlineTools")) return undefined;
   const approval = record(
-    captureNativeAuthorityFile(input.approvalPath, 128 * 1024).value,
+    captureNativeAuthorityFile(
+      input.approvalPath,
+      DESKTOP_PLUGIN_APPROVAL_MAX_BYTES,
+    ).value,
   );
   const sources = list(input.bootstrap.sources),
     approved = list(approval.sources);

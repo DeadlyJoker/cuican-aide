@@ -37,6 +37,7 @@ import {
   type RuntimeLogSink,
 } from "./runtimeLogForwarder.ts";
 import { processRuntimeLogs } from "./processRuntimeLogs.ts";
+import { runtimeStartupFailureCode } from "./runtimeStartupFailure.ts";
 import { desktopRuntimeChildStdio } from "./desktopRuntimeChildStdio.ts";
 import { attachDesktopNativeProjectWorkspaceRuntime } from "./desktopNativeProjectWorkspaceRuntime.ts";
 import type { DesktopNativeProjectWorkspaceBridge } from "./desktopNativeProjectWorkspaceBridge.ts";
@@ -144,7 +145,8 @@ export type CloudAgentProfile = Readonly<{
 
 export class RuntimeSupervisor {
   readonly #workspaceAuthority: LocalWorkspaceAuthority | undefined;
-  readonly #projectWorkspaceBridges = new Set<DesktopNativeProjectWorkspaceBridge>();
+  readonly #projectWorkspaceBridges =
+    new Set<DesktopNativeProjectWorkspaceBridge>();
   readonly #dataDirectory: string;
   readonly #paths: RuntimePaths;
   readonly #repositoryRoot: string | null;
@@ -192,6 +194,8 @@ export class RuntimeSupervisor {
   #history: DesktopExtensionHistoryCoordinator | null = null;
   #restart: Promise<void> = Promise.resolve();
   #ready = false;
+  #managementRecovery = false;
+  #stopIntent = 0;
   #sessionGeneration = 0;
   readonly #sessionInvalidationListeners = new Set<
     () => void | Promise<void>
@@ -262,6 +266,8 @@ export class RuntimeSupervisor {
     this.#logs.resume();
     const provider = this.#provider();
     const startup = new AbortController();
+    const stopIntent = this.#stopIntent;
+    this.#managementRecovery = false;
     this.#startupAbort = startup;
     this.#runtimeAbort = startup;
     try {
@@ -456,7 +462,11 @@ export class RuntimeSupervisor {
               signal: startup.signal,
               deadlineMs: this.#installedDeadlineMs,
               spawnControl: (env) =>
-                this.#spawnNativeProjectControl(installedRuntime, env, startup.signal),
+                this.#spawnNativeProjectControl(
+                  installedRuntime,
+                  env,
+                  startup.signal,
+                ),
               spawnWorker: (env) =>
                 this.#spawn("Runtime Worker", this.#paths.worker, env, {
                   stdin: "pipe",
@@ -643,7 +653,25 @@ export class RuntimeSupervisor {
         });
       }
     } catch (error) {
-      if (this.#startupAbort === startup) await this.stop();
+      this.#logs.write(
+        "stderr",
+        "Runtime startup",
+        `${runtimeStartupFailureCode(error)}\n`,
+      );
+      const recover =
+        this.#startupAbort === startup &&
+        !startup.signal.aborted &&
+        error instanceof Error &&
+        [
+          "control_runtime_child_exited",
+          "desktop_installed_plugin_peer_worker_exited",
+          "desktop_installed_plugin_peer_stdout_closed",
+        ].includes(error.message);
+      if (this.#startupAbort === startup) await this.#stopRuntime();
+      if (recover && this.#stopIntent === stopIntent) {
+        await this.#recoverManagementControl(error);
+        return;
+      }
       throw error;
     } finally {
       if (this.#startupAbort === startup) this.#startupAbort = null;
@@ -673,8 +701,18 @@ export class RuntimeSupervisor {
         this.#logs.write(
           "stderr",
           name,
-          `exited unexpectedly (${signal ?? code ?? "unknown"}); restarting runtime\n`,
+          `exited unexpectedly (${signal ?? code ?? "unknown"}); ${this.#managementRecovery ? "management recovery stopped" : "restarting runtime"}\n`,
         );
+        if (this.#managementRecovery) {
+          void this.stop().catch(() => {
+            this.#logs.write(
+              "stderr",
+              "Runtime cleanup",
+              "runtime_management_cleanup_failed\n",
+            );
+          });
+          return;
+        }
         void this.restart().catch((error) => {
           this.#logs.write(
             "stderr",
@@ -864,6 +902,12 @@ export class RuntimeSupervisor {
   }
 
   async stop(): Promise<void> {
+    // Even a joined cleanup must cancel any startup's decision to recover.
+    this.#stopIntent++;
+    return this.#stopRuntime();
+  }
+
+  async #stopRuntime(): Promise<void> {
     if (this.#stopping !== null) return this.#stopping;
     this.#invalidateSession();
     this.#startupAbort?.abort();
@@ -900,7 +944,9 @@ export class RuntimeSupervisor {
     // before retiring its captured owner and the Native bootstrap files.
     await Promise.allSettled([installedStartup]);
     await Promise.allSettled([...this.#nativePluginOperations]);
-    await Promise.allSettled([...this.#projectWorkspaceBridges].map((bridge) => bridge.close()));
+    await Promise.allSettled(
+      [...this.#projectWorkspaceBridges].map((bridge) => bridge.close()),
+    );
     this.#projectWorkspaceBridges.clear();
     const childFailures = childStops.flatMap((result) =>
       result.status === "rejected" ? [result.reason] : [],
@@ -1099,6 +1145,42 @@ export class RuntimeSupervisor {
     this.#ready = true;
     this.#localManagementEvents.notify();
     this.#watchCurrentChildren();
+  }
+
+  /** A failed execution runtime never lends its owners to recovery management. */
+  async #recoverManagementControl(error: unknown): Promise<void> {
+    const recovery = new AbortController();
+    this.#startupAbort = recovery;
+    this.#runtimeAbort = recovery;
+    this.#managementRecovery = true;
+    this.#logs.resume();
+    this.#logs.write(
+      "stderr",
+      "Runtime unavailable",
+      `${error instanceof Error ? error.message : "runtime_startup_failed"}\n`,
+    );
+    try {
+      this.#financialEnvironment =
+        captureDesktopPluginCreditSettlementEnvironment(process.env);
+      const owner = new DesktopPluginBootstrapOwner({
+        dataDirectory: this.#dataDirectory,
+        actor: DESKTOP_RUNTIME_OWNER,
+        sessionEntropy: `${this.#sessionToken}:${this.#sessionGeneration}`,
+      });
+      this.#pluginBootstrap = owner;
+      await prepareOptionalDesktopPluginBootstrap(owner, recovery.signal);
+      recovery.signal.throwIfAborted();
+      await this.#startManagementControl(recovery.signal);
+    } catch (failure) {
+      if (this.#startupAbort === recovery) await this.stop();
+      throw new AggregateError(
+        [error, failure],
+        "runtime_management_recovery_failed",
+        { cause: error },
+      );
+    } finally {
+      if (this.#startupAbort === recovery) this.#startupAbort = null;
+    }
   }
 
   async #resolveModelCatalog(
@@ -1337,7 +1419,10 @@ export class RuntimeSupervisor {
     this.#children.push(child);
     if (this.#workspaceAuthority !== undefined) {
       const bridge = attachDesktopNativeProjectWorkspaceRuntime({
-        owner, workspaces: this.#workspaceAuthority, control: child, signal,
+        owner,
+        workspaces: this.#workspaceAuthority,
+        control: child,
+        signal,
       });
       if (bridge !== undefined) this.#projectWorkspaceBridges.add(bridge);
     }

@@ -1,0 +1,100 @@
+{
+  "schemaVersion": "crewon.acceptance.new-api-terminal-lifetime.v1",
+  "recordedAt": "2026-10-15T19:29:10.971887+00:00",
+  "previousGoalTurnClassification": "progress: current terminal parsing regressions revalidated and real model timing separates recognized terminal from incomplete JSON tails",
+  "thisTurnClassification": "progress: actual Go gateway held-open upstream failure reproduced, handler-only fix shown insufficient, response-body ownership corrected and actual CrewON wire verified",
+  "source": {
+    "origin": "https://github.com/QuantumNous/new-api.git",
+    "ref": "v1.0.0-rc.8",
+    "commit": "b9bc6f0e21fb3b87267475912fc7c31fa0494d6e",
+    "livePublicVersion": "v1.0.0-rc.8-27-g12deba956-portal.1",
+    "exactProductionCommitAvailable": false,
+    "boundary": "Public release baseline; fetched upstream history could not resolve 12deba956. No production-equivalence claim."
+  },
+  "reproduction": {
+    "original": "both completed adapters still live at one-second test observation deadline",
+    "handlerOnly": "status done but blocked upstream scanner still delays owner join",
+    "fixed": "actual upstream HTTP closes before scanner join; full Responses terminal and usage retained",
+    "negative": "output_item.done does not complete response; caller cancellation remains client_gone"
+  },
+  "regression": {
+    "topLevelPassed": 29,
+    "topLevelFailed": 1,
+    "completedPathSubtestsPassed": 2,
+    "wholeSuiteExitCode": 1,
+    "failure": [
+      {
+        "package": "github.com/QuantumNous/new-api/relay/helper",
+        "test": "TestStreamScannerHandler_StreamStatus_PreInitialized",
+        "action": "fail",
+        "seconds": 0
+      }
+    ],
+    "baselineVerified": "original HEAD stream_scanner.go also fails PreInitialized expected errorCount1 actual0; fixed source restored afterwards",
+    "testsRemovedOrWeakened": false
+  },
+  "wireVerification": {
+    "boundary": "Actual Go gateway captured named fixture bytes, real CrewON parser and direct local HTTP; no real model, client UI or business Run.",
+    "bytes": 327,
+    "frameTypes": [
+      "response.created",
+      "response.completed"
+    ],
+    "protocolCompleted": 1,
+    "responseKeptOpen": true,
+    "elapsedMs": 18.201
+  },
+  "patch": {
+    "path": "new-api-responses-terminal-lifetime.patch",
+    "sha256": "sha256:5ade2b7ebaf4914ed0420e50a72eb2384b4eb5f4246f0d44152b24573bcbbc24",
+    "gitApplyCheck": "passed against exact public HEAD file subset",
+    "actualApplyByteEquality": "all four files passed"
+  },
+  "sourceSha256": {
+    "relay/channel/openai/relay_responses.go": "sha256:b787fb9dd5d1b8196165b7d9bdd300c82824cc1116bf1dd7305e7fccb593ed44",
+    "relay/channel/openai/chat_via_responses.go": "sha256:b81e52206b056f112c7e3745c6804a8a1df29a87665d5237350d974e1afe5cd4",
+    "relay/helper/stream_scanner.go": "sha256:27484a95b8abe8c7b8f6a03c6bd8ace536d8155d06f72c0f6f6399ad1673ac1a",
+    "relay/channel/openai/relay_responses_terminal_test.go": "sha256:7dd96d90483f42a896dccc68c55268086c62bcbb65605970b3a123b2a745d06a"
+  },
+  "logSha256": {
+    "new-api-terminal-before-fix.log": "sha256:7ac9b4812312fc1cf9507df610293389e8103d99dcebbb22bd9e80f41c1c5608",
+    "new-api-terminal-handler-only.log": "sha256:f868f630957a825a84de7538acf1647585dfd4255a841c914124751ff317bd48",
+    "new-api-terminal-after-fix.log": "sha256:a2af199a99fcec8f05a107d13ecc72641a618ef7e89464e2a6d4c56ac451ad55",
+    "new-api-stream-regressions-final.jsonl": "sha256:4d8d4e3b148e7e1e8c4ac74dc5e6abbb4bad98e26a9efe36404c4811db1e9c1c",
+    "new-api-preinitialized-baseline.log": "sha256:9d273e15ecc9139e5c19f14a15c0502d42d1895439c4ac85478bdd857a41384a",
+    "new-api-stream-regressions-final-summary.json": "sha256:92d5f6ae05f9dc44e486fe5d7fd3ff634adff2aefe4847c7433d4a4a5d8f25c3"
+  },
+  "liveClientState": {
+    "recordedAt": "2026-10-15T19:22:30.251750+00:00",
+    "readOnly": true,
+    "projectId": "01a13f43-094c-767a-9414-b5622b236255",
+    "foundationRevision": 3,
+    "parametersRevision": 2,
+    "confirmedProposal": {
+      "digest": "sha256:2ef11e6f3a3884ccd533eb17012fd996f291850f4e37e09d2cd580e846f30f24",
+      "revision": 2
+    },
+    "textArtifacts": 0,
+    "latestRun": {
+      "runId": "plugin-7DebIFmDWoV0jmAkgi1mhBYp5eV0jJkKx6zyeqJcPLE",
+      "revision": 19,
+      "status": "canceled"
+    },
+    "reviewJobSchemaInstalledInLiveProfile": false,
+    "newLiveModelOrMediaRequestsSubmitted": false,
+    "computerUse": "Mac locked; no UI operations performed"
+  },
+  "productionMutation": false,
+  "newRealModelMediaUploadRequests": false,
+  "liveClientRebuilt": false,
+  "pending": [
+    "exact production source and current Responses route/upstream send logs",
+    "Mac manual unlock",
+    "video/audio service and generation spending scope",
+    "full saved script and storyboards",
+    "video/voice generation and composition",
+    "real AI review repair re-review",
+    "playable commercial-quality final video and actual usage rights"
+  ],
+  "goalStatus": "active"
+}

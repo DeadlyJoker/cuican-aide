@@ -196,11 +196,16 @@ export function parsePluginUiRecoveryHint(
     ((value.phase === "dispatched" || value.phase === "accepted") &&
       count === 0) ||
     (value.phase === "refused" &&
-      (count !== 1 ||
+      ((count !== 1 &&
+        !(
+          request.action === PROJECT_GENERATION_QUERY_UI_ACTIONS[0] && count > 0
+        )) ||
         !(request.action === PROJECT_MEDIA_GENERATE_UI_ACTION
           ? value.reasonCode === "project_media_generation_not_admitted"
-          : request.action === PROJECT_GENERATION_SELECTION_UI_ACTIONS[1] &&
-            SELECTION_REFUSAL_CODES.includes(value.reasonCode)))) ||
+          : request.action === PROJECT_GENERATION_QUERY_UI_ACTIONS[0]
+            ? value.reasonCode === "project_query_revision_not_admitted"
+            : request.action === PROJECT_GENERATION_SELECTION_UI_ACTIONS[1] &&
+              SELECTION_REFUSAL_CODES.includes(value.reasonCode)))) ||
     ((value.phase === "accepted" || value.phase === "refused") &&
       value.retryable) ||
     (value.phase === "accepted") !== (value.receipt !== null) ||

@@ -1,5 +1,6 @@
 import { checkNativeOwnershipFile } from "./desktop-native-ownership-check.ts";
 import { createHash } from "node:crypto";
+import { DESKTOP_PLUGIN_APPROVAL_MAX_BYTES } from "@crewon/contracts/plugins";
 import { basename, dirname } from "node:path";
 import { lstatSync } from "node:fs";
 import { inspect } from "node:util";
@@ -272,7 +273,7 @@ export function loadDesktopNativePluginControlEnvironment(
     Object.freeze(result);
     const bootstrap = captureNativeAuthorityFile(
       authority.bootstrapPath,
-      128 * 1024,
+      DESKTOP_PLUGIN_APPROVAL_MAX_BYTES,
     );
     const configuration = parseDesktopPluginConfiguration(bootstrap.value);
     issued.set(result, {

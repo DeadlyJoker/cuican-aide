@@ -133,3 +133,30 @@ test(
     await second.stop();
   },
 );
+
+test(
+  "actual Main retains plugin discovery and authenticated history when the default runtime has no plugin execution owner",
+  { timeout: 90_000 },
+  async (t) => {
+    const f = await nativeProjectMainFixture(t);
+    const approved = await f.start();
+    const threads = await approved.client.listThreads();
+    const packages = await approved.client.plugins.listPackages();
+    const effects = await f.effects();
+    await approved.stop();
+    const environment = { ...approved.environment };
+    delete environment.CREWON_DESKTOP_NATIVE_PLUGIN_CONTROL_PATH;
+    delete environment.CREWON_DESKTOP_INSTALLED_PLUGIN_TASK_CONFIG_PATH;
+    delete environment.CREWON_DESKTOP_INSTALLED_PLUGIN_ACTIVATION_CONFIG_PATH;
+    const child = startFullAppProcess("control", environment);
+    t.after(() => stopFullAppProcess(child));
+    await waitTaskProcess(
+      "actual metadata Main without plugin execution owner",
+      async () => child.stdout().includes("CrewON Control API listening"),
+      [child],
+    );
+    assert.deepEqual(await approved.client.listThreads(), threads);
+    assert.deepEqual(await approved.client.plugins.listPackages(), packages);
+    assert.deepEqual(await f.effects(), effects);
+  },
+);

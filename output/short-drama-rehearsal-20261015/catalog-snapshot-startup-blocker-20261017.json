@@ -1,0 +1,20 @@
+{
+  "checkedAt": "2026-10-17T02:46:04.335297+00:00",
+  "startupFailure": "desktop_installed_plugin_peer_deadline_exceeded",
+  "osKeychainFailureCode": -60008,
+  "relaunchMainPid": 94369,
+  "relaunchSample": "/private/tmp/crewon-runtime-merge-20261016/catalog-snapshot-relaunch-20261017.sample.txt",
+  "relaunchSampleShows": [
+    "SecItemCopyMatching",
+    "ClientSession::decrypt"
+  ],
+  "intent": {
+    "phase": "dispatched",
+    "dispatchAttemptCount": 4,
+    "receiptPresent": false
+  },
+  "clientAcceptancePassed": false,
+  "firstQueryAfterRestartPassed": false,
+  "generationResubmitted": false,
+  "pending": "manual_macos_keychain_authorization"
+}

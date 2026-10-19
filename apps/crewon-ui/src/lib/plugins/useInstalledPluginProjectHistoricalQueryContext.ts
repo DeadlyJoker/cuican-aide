@@ -18,6 +18,7 @@ import {
 import type { ControlApiClient } from "@crewon/control-client";
 import type { ControlThreadRuntime } from "../control-runtime/controlThreadRuntime";
 import { AGENT_PLATFORM_SESSION_CHANGED_EVENT } from "../agent-platform/agentPlatformClient";
+import { subscribeControlThreadRevision } from "../control-runtime/controlThreadRevisionSubscriptions";
 import type { ControlPluginUiModule } from "./controlPluginUiCatalog";
 import type {
   InstalledPluginProjectHistoricalQueryJournal,
@@ -27,7 +28,7 @@ import {
   installedPluginTaskModulePin,
   installedPluginTaskThread,
 } from "./installedPluginTaskContextSupport";
-import { installedPluginTaskRequest } from "./installedPluginTaskRequests";
+import { installedPluginTaskRead } from "./installedPluginTaskRequests";
 import { assertPluginUiCurrent } from "./controlPluginUiSupport";
 
 export type InstalledPluginProjectHistoricalQueryPorts = Readonly<{
@@ -154,8 +155,10 @@ export function useInstalledPluginProjectHistoricalQueryContext(
   }, [input.ports, pin, live, input.selectedThreadId, input.preparedThreadId]);
   useEffect(() => {
     if (!live || !input.ports) return;
-    return input.ports.journal.subscribe(() => update((value) => value + 1));
-  }, [input.ports, live]);
+    return input.ports.journal.subscribe((intent) => {
+      if (intent.familyKey === input.module.key) update((value) => value + 1);
+    });
+  }, [input.ports, live, input.module.key]);
   const intent = live ? latest(input) : null;
   const unresolved =
     intent?.phase === "pending" || intent?.phase === "uncertain";
@@ -166,6 +169,17 @@ export function useInstalledPluginProjectHistoricalQueryContext(
       intent?.receipt?.threadId ??
       null);
   const readKey = JSON.stringify([pin, destination, pulse]);
+  useEffect(() => {
+    if (!live || !input.ports || !destination) return;
+    return subscribeControlThreadRevision(
+      input.ports.runtime,
+      destination,
+      () => {
+        setReads(null);
+        update((value) => value + 1);
+      },
+    );
+  }, [live, input.ports, destination]);
   useEffect(() => {
     if (!live || !input.ports) return;
     const captured = current.current,
@@ -192,7 +206,7 @@ export function useInstalledPluginProjectHistoricalQueryContext(
         destination === null
           ? null
           : installedPluginTaskThread(
-              await installedPluginTaskRequest(
+              await installedPluginTaskRead(
                 ports.client,
                 (signal) => {
                   assertCurrent();
@@ -313,7 +327,7 @@ export function useInstalledPluginProjectHistoricalQueryContext(
       assertCurrent();
       const reference = accepted.input.reference;
       const source = parseGetConceptGenerationResponse(
-        await installedPluginTaskRequest(
+        await installedPluginTaskRead(
           ports.client,
           (signal) => {
             assertCurrent();
@@ -330,7 +344,7 @@ export function useInstalledPluginProjectHistoricalQueryContext(
       if (!source)
         throw new Error("plugin_project_historical_query_source_unavailable");
       const task = parseGetExtensionTaskResponse(
-        await installedPluginTaskRequest(
+        await installedPluginTaskRead(
           ports.client,
           (signal) => {
             assertCurrent();

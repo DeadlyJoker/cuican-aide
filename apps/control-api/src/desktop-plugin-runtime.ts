@@ -122,11 +122,15 @@ export async function createDesktopPluginRuntime(
   if (!(dependencies.identity instanceof StandaloneIdentity))
     throw new Error("desktop_plugin_identity_required");
   const configuration = parseDesktopPluginConfiguration(input.configuration);
+  const executionOwnerAvailable =
+    input.nativeControl !== undefined ||
+    input.tasks !== undefined ||
+    input.activation !== undefined;
   const mediaInputsDeclared =
     configuration.schemaVersion === "crewon.desktop-plugin-bootstrap.v3" &&
     configuration.projects.mediaInputs !== undefined;
   const projectExecution =
-    mediaInputsDeclared ||
+    (mediaInputsDeclared && executionOwnerAvailable) ||
     dependencies.creativeProjects?.pluginGenerations !== undefined ||
     dependencies.creativeProjects?.pluginQueries !== undefined ||
     dependencies.creativeProjects?.historicalQueries !== undefined;
@@ -146,7 +150,11 @@ export async function createDesktopPluginRuntime(
   }
   const tasks = input.tasks;
   const nativeControl = input.nativeControl;
-  if (mediaInputsDeclared && nativeControl === undefined)
+  if (
+    mediaInputsDeclared &&
+    executionOwnerAvailable &&
+    nativeControl === undefined
+  )
     throw new Error("desktop_native_project_media_input_authority_required");
   if (nativeControl !== undefined) {
     if (tasks !== undefined || input.activation !== undefined)
@@ -373,6 +381,9 @@ export async function createDesktopPluginRuntime(
       ...(projectExecution && taskRuntime !== undefined
         ? { tasks: taskRuntime.core }
         : {}),
+      ...(projectExecution && nativeControl !== undefined
+        ? { nativeControl }
+        : {}),
       ...((taskRuntime?.core.historicalQueries?.hostUiServices ??
         taskRuntime?.core.projectQueries?.hostUiServices ??
         taskRuntime?.core.projectGenerations?.hostUiServices ??
@@ -410,49 +421,52 @@ export async function createDesktopPluginRuntime(
       assetUi?.hostUiServices ??
       textUi?.hostUiServices ??
       projectUi?.hostUiServices;
-    mediaInputUi = composeDesktopProjectMediaInputUi({
-      configuration,
-      core: taskRuntime?.core,
-      fallback: originalBusinessHostUiServices,
-    });
-    mediaGenerationUi = composeDesktopProjectMediaGenerationUi({
-      configuration,
-      runtime:
-        taskRuntime !== undefined && "mediaGenerations" in taskRuntime
-          ? taskRuntime.mediaGenerations
-          : undefined,
-      fallback: mediaInputUi?.hostUiServices ?? originalBusinessHostUiServices,
-      committedTasks: taskRuntime?.core.owner.committedTasks,
-      recovery: () => recovery?.service,
-    });
-    mediaResultUi = composeDesktopProjectMediaResultUi({
-      configuration,
-      runtime:
-        taskRuntime !== undefined && "mediaResults" in taskRuntime
-          ? taskRuntime.mediaResults
-          : undefined,
-      fallback:
-        mediaGenerationUi?.hostUiServices ??
-        mediaInputUi?.hostUiServices ??
-        originalBusinessHostUiServices,
-    });
-    assetV2Ui = await createDesktopProjectAssetV2PluginRuntime({
-      configuration,
-      projects: dependencies.creativeProjects,
-      authority,
-      installation,
-      store: dependencies.store,
-      clock: dependencies.clock,
-      results:
-        taskRuntime !== undefined && "mediaResults" in taskRuntime
-          ? taskRuntime.mediaResults
-          : undefined,
-      fallback:
-        mediaResultUi?.hostUiServices ??
-        mediaGenerationUi?.hostUiServices ??
-        mediaInputUi?.hostUiServices ??
-        originalBusinessHostUiServices,
-    });
+    if (executionOwnerAvailable) {
+      mediaInputUi = composeDesktopProjectMediaInputUi({
+        configuration,
+        core: taskRuntime?.core,
+        fallback: originalBusinessHostUiServices,
+      });
+      mediaGenerationUi = composeDesktopProjectMediaGenerationUi({
+        configuration,
+        runtime:
+          taskRuntime !== undefined && "mediaGenerations" in taskRuntime
+            ? taskRuntime.mediaGenerations
+            : undefined,
+        fallback:
+          mediaInputUi?.hostUiServices ?? originalBusinessHostUiServices,
+        committedTasks: taskRuntime?.core.owner.committedTasks,
+        recovery: () => recovery?.service,
+      });
+      mediaResultUi = composeDesktopProjectMediaResultUi({
+        configuration,
+        runtime:
+          taskRuntime !== undefined && "mediaResults" in taskRuntime
+            ? taskRuntime.mediaResults
+            : undefined,
+        fallback:
+          mediaGenerationUi?.hostUiServices ??
+          mediaInputUi?.hostUiServices ??
+          originalBusinessHostUiServices,
+      });
+      assetV2Ui = await createDesktopProjectAssetV2PluginRuntime({
+        configuration,
+        projects: dependencies.creativeProjects,
+        authority,
+        installation,
+        store: dependencies.store,
+        clock: dependencies.clock,
+        results:
+          taskRuntime !== undefined && "mediaResults" in taskRuntime
+            ? taskRuntime.mediaResults
+            : undefined,
+        fallback:
+          mediaResultUi?.hostUiServices ??
+          mediaGenerationUi?.hostUiServices ??
+          mediaInputUi?.hostUiServices ??
+          originalBusinessHostUiServices,
+      });
+    }
     const businessHostUiServices =
       assetV2Ui?.hostUiServices ??
       mediaResultUi?.hostUiServices ??

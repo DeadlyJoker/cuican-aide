@@ -1,0 +1,194 @@
+diff --git a/crates/service/src/gateway/observability/http_bridge/stream_readers.rs b/crates/service/src/gateway/observability/http_bridge/stream_readers.rs
+index cac3998..4765575 100644
+--- a/crates/service/src/gateway/observability/http_bridge/stream_readers.rs
++++ b/crates/service/src/gateway/observability/http_bridge/stream_readers.rs
+@@ -25,6 +25,8 @@ mod gemini;
+ mod images;
+ #[path = "stream_readers/openai_responses.rs"]
+ mod openai_responses;
++#[path = "stream_readers/sse_boundary.rs"]
++mod sse_boundary;
+ #[path = "stream_readers/passthrough.rs"]
+ mod passthrough;
+ #[path = "stream_readers/responses_from_anthropic.rs"]
+diff --git a/crates/service/src/gateway/observability/http_bridge/stream_readers/openai_responses.rs b/crates/service/src/gateway/observability/http_bridge/stream_readers/openai_responses.rs
+index 9d9dc1f..6755a3c 100644
+--- a/crates/service/src/gateway/observability/http_bridge/stream_readers/openai_responses.rs
++++ b/crates/service/src/gateway/observability/http_bridge/stream_readers/openai_responses.rs
+@@ -1,3 +1,4 @@
++use super::sse_boundary::SseEventBoundary;
+ use super::{
+     classify_upstream_stream_read_error, mark_first_response_ms, mark_terminal_delivered,
+     stream_idle_timed_out, stream_idle_timeout_message, stream_reader_disconnected_message,
+@@ -115,6 +116,7 @@ pub(crate) struct OpenAIResponsesPassthroughSseReader {
+     request_started_at: Instant,
+     last_upstream_activity: Instant,
+     finished: bool,
++    boundary: SseEventBoundary,
+ }
+ 
+ impl OpenAIResponsesPassthroughSseReader {
+@@ -150,6 +152,7 @@ impl OpenAIResponsesPassthroughSseReader {
+             request_started_at,
+             last_upstream_activity: Instant::now(),
+             finished: false,
++            boundary: SseEventBoundary::default(),
+         }
+     }
+ 
+@@ -226,6 +229,7 @@ impl OpenAIResponsesPassthroughSseReader {
+                 mark_first_response_ms(&self.usage_collector, self.request_started_at);
+                 self.drain_sidecar_events();
+                 let bytes = bytes.to_vec();
++                self.boundary.observe(&bytes);
+                 mark_terminal_delivered(&self.usage_collector, &bytes);
+                 Ok(bytes)
+             }
+@@ -264,7 +268,9 @@ impl OpenAIResponsesPassthroughSseReader {
+                     self.finished = true;
+                     return Ok(Vec::new());
+                 }
+-                if crate::gateway::current_sse_keepalive_enabled() {
++                if crate::gateway::current_sse_keepalive_enabled()
++                    && self.boundary.can_emit_keepalive()
++                {
+                     Ok(self.keepalive_frame.bytes().to_vec())
+                 } else {
+                     Ok(Vec::new())
+@@ -373,3 +379,44 @@ mod async_finish_tests {
+         });
+     }
+ }
++
++#[cfg(test)]
++mod heartbeat_boundary_regression_tests {
++    use super::super::SseKeepaliveRuntimeGuard;
++    use super::*;
++    use crate::http::gateway_response_body::GatewayResponseBody;
++    use bytes::Bytes;
++    use std::time::Duration;
++
++    #[test]
++    fn heartbeat_cannot_split_a_responses_json_event() {
++        let _env = crate::test_env_guard();
++        let _keepalive = SseKeepaliveRuntimeGuard::enabled_with_interval(10);
++        crate::gateway::response_test_runtime().unwrap().block_on(async {
++            let (sender, receiver) = tokio::sync::mpsc::channel(4);
++            let prefix = b"data: {\"type\":\"response.completed\",\"sequence_number\":1,\"response\":{\"id\":\"named_response\",";
++            let suffix = b"\"status\":\"completed\",\"output\":[]}}\n\n";
++            sender.send(GatewayByteStreamItem::Chunk(Bytes::from_static(prefix))).await.unwrap();
++            let producer = tokio::spawn(async move {
++                tokio::time::sleep(Duration::from_millis(55)).await;
++                sender.send(GatewayByteStreamItem::Chunk(Bytes::from_static(suffix))).await.unwrap();
++                sender.send(GatewayByteStreamItem::Eof).await.unwrap();
++            });
++            let usage = Arc::new(Mutex::new(PassthroughSseCollector::default()));
++            let mut reader = OpenAIResponsesPassthroughSseReader::from_stream_response(
++                GatewayStreamResponse::new(reqwest::StatusCode::OK, reqwest::header::HeaderMap::new(),
++                    GatewayByteStream::from_receiver(receiver)), usage.clone(), SseKeepAliveFrame::Comment, Instant::now());
++            let mut all = Vec::new();
++            let mut buffer = [0_u8; 7];
++            tokio::time::timeout(Duration::from_secs(2), async {
++                loop { let n = reader.read_async(&mut buffer).await.unwrap(); if n == 0 { break; } all.extend_from_slice(&buffer[..n]); }
++            }).await.unwrap();
++            producer.await.unwrap();
++            assert!(usage.lock().unwrap().saw_terminal, "sidecar saw a complete upstream terminal");
++            let mut expected = prefix.to_vec(); expected.extend_from_slice(suffix);
++            assert_eq!(all, expected, "heartbeat must not enter an unfinished SSE event");
++            // Named synthetic bytes for the downstream client protocol check.
++            std::fs::write("named-forwarded-sse.bin", &all).unwrap();
++        });
++    }
++}
+diff --git a/crates/service/src/gateway/observability/http_bridge/stream_readers/sse_boundary.rs b/crates/service/src/gateway/observability/http_bridge/stream_readers/sse_boundary.rs
+new file mode 100644
+index 0000000..fd09d10
+--- /dev/null
++++ b/crates/service/src/gateway/observability/http_bridge/stream_readers/sse_boundary.rs
+@@ -0,0 +1,86 @@
++/// Constant-space framing state for raw passthrough bytes. A keepalive is a
++/// complete SSE comment event and may be inserted only between events.
++pub(super) struct SseEventBoundary {
++    line_has_content: bool,
++    previous_cr: bool,
++    between_events: bool,
++}
++
++impl Default for SseEventBoundary {
++    fn default() -> Self {
++        Self {
++            line_has_content: false,
++            previous_cr: false,
++            between_events: true,
++        }
++    }
++}
++
++impl SseEventBoundary {
++    pub(super) fn observe(&mut self, bytes: &[u8]) {
++        for &byte in bytes {
++            if self.previous_cr {
++                self.previous_cr = false;
++                if byte == b'\n' {
++                    continue;
++                }
++            }
++            match byte {
++                b'\r' | b'\n' => {
++                    self.between_events = !self.line_has_content;
++                    self.line_has_content = false;
++                    self.previous_cr = byte == b'\r';
++                }
++                _ => {
++                    self.line_has_content = true;
++                    self.between_events = false;
++                }
++            }
++        }
++    }
++    pub(super) fn can_emit_keepalive(&self) -> bool {
++        self.between_events
++    }
++}
++
++#[cfg(test)]
++mod tests {
++    use super::*;
++    #[test]
++    fn all_legal_line_endings_survive_every_byte_split() {
++        for ending in [
++            "\n\n", "\r\r", "\r\n\r\n", "\n\r", "\n\r\n", "\r\n\n", "\r\r\n", "\r\n\r",
++        ] {
++            let bytes = format!("data: {{\"named\":true}}{ending}").into_bytes();
++            for split in 0..=bytes.len() {
++                let mut boundary = SseEventBoundary::default();
++                boundary.observe(&bytes[..split]);
++                boundary.observe(&bytes[split..]);
++                assert!(boundary.can_emit_keepalive(), "{ending:?} split {split}");
++            }
++        }
++    }
++    #[test]
++    fn one_line_ending_and_partial_data_never_open_an_event_boundary() {
++        for ending in ["\n", "\r", "\r\n"] {
++            let mut boundary = SseEventBoundary::default();
++            for byte in format!("data: {{\"named\":true}}{ending}").bytes() {
++                boundary.observe(&[byte]);
++                assert!(!boundary.can_emit_keepalive());
++            }
++            boundary.observe(b"data: remaining");
++            assert!(!boundary.can_emit_keepalive());
++        }
++    }
++    #[test]
++    fn a_new_fragment_closes_the_previous_boundary_without_buffering_payload() {
++        let mut boundary = SseEventBoundary::default();
++        assert!(boundary.can_emit_keepalive());
++        boundary.observe(b"data: {}\n\n");
++        assert!(boundary.can_emit_keepalive());
++        boundary.observe(b"data: {\"unfinished\":");
++        assert!(!boundary.can_emit_keepalive());
++        boundary.observe(b"true}\r\n\r\n");
++        assert!(boundary.can_emit_keepalive());
++    }
++}

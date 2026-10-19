@@ -204,7 +204,7 @@ const mediaProtocol = await readFile(
 );
 if (
   createHash("sha256").update(mediaProtocol).digest("hex") !==
-  "1c884be265bbf71d299025845c2e202b0d0e3799d06937505545f6cd046b0323"
+  "aef8691cd4b91f665b44519a764bf01a9d68b54e7a4e204d50d1fd3fc68177da"
 )
   throw new Error("example_project_media_protocol_drift");
 const reviewedWorkflows = [

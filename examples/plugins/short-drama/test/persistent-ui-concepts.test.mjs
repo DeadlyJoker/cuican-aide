@@ -43,6 +43,33 @@ function assetButton(f, name) {
 }
 const conceptPrompt = (f) => f.container.querySelector("#concept-prompt");
 
+test("returning to the concept list reads concepts saved by another workbench and preserves the current draft", async () => {
+  const service = metadataService();
+  const created = service.create("跨工作台概念列表", "已保存需求");
+  const projectId = created.project.projectId;
+  service.createConcept(projectId, "原画面", 1, "原始描述");
+  const f = await ready(service);
+  try {
+    await f.click(assetButton(f, "原画面"));
+    await f.click(f.button("编辑为新修订"));
+    await f.input(conceptPrompt(f), "未保存的本地修改");
+    service.createConcept(
+      projectId,
+      "另一个工作台已保存",
+      1,
+      "另一份已保存描述",
+    );
+    const writes = service.methodCalls("appendConceptRevision").length;
+    await f.click(f.button("返回概念列表"));
+    assert.ok(assetButton(f, "另一个工作台已保存"));
+    await f.click(assetButton(f, "原画面"));
+    assert.equal(conceptPrompt(f).value, "未保存的本地修改");
+    assert.equal(service.methodCalls("appendConceptRevision").length, writes);
+  } finally {
+    await f.dispose();
+  }
+});
+
 test("creates a concept against the saved brief, preserves both raw drafts and blocks new input after archive", async () => {
   const service = metadataService();
   const savedText = " 已保存需求\n保持原文 ";

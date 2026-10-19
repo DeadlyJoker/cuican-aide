@@ -1,0 +1,48 @@
+{
+  "builtAt": "2026-10-16T09:59:52.876Z",
+  "backup": "/private/tmp/crewon-plugin-performance-20261015/before-readiness-stage-20261016",
+  "asar": "/private/tmp/crewon-plugin-performance-20261015/readiness-stage-profile-20261016.asar",
+  "sha256": "a3ad00c865f330de109bce56bc4c9f1bce9e5e1b4b1b8e12edd61189720eb773",
+  "headerSha256": "e075f8b6aee9e52a53414f98d687917d0e616cd8d8c2d4e5d28f3a279e3a7fd5",
+  "unchangedFilesVerified": 17482,
+  "runtimeDirectory": "/private/tmp/crewon-runtime-merge-20261016/readiness-stage-runtime-20261016",
+  "runtime": {
+    "schemaVersion": "crewon.extension-build-identity.v1",
+    "implementationDigest": "sha256:d6a5c7a01dafd6a5a8e92775c12e50204564844925d961e122d31009479de7a2",
+    "bundles": [
+      {
+        "file": "control-api.mjs",
+        "digest": "sha256:fd31806f385cfe60e3527d3d1a0c58ffd58fc1975088d5016d6b15d830a0797f"
+      },
+      {
+        "file": "device-gateway.mjs",
+        "digest": "sha256:a75bcaee2d78fab139f01f4212d823dc0248a430df7c6e9650ee6eb12c6e0e52"
+      },
+      {
+        "file": "local-workspace-checks-mcp.mjs",
+        "digest": "sha256:00c30cb7aeb1699fc3c38a3a5e3318b03d8f9a8b97b22295ddd9671b6b0d5c64"
+      },
+      {
+        "file": "provider-model-catalog.mjs",
+        "digest": "sha256:a762f1e2f0e9bcd827505cff3443b3a5d826a8b7682963ce3227c9df2ed5f6f4"
+      },
+      {
+        "file": "provider-settings-coordinator.mjs",
+        "digest": "sha256:64d3d107b3a851c45c61f44c989d8d54fa68e606739cf5b74f06576857e16b96"
+      },
+      {
+        "file": "runtime-release.mjs",
+        "digest": "sha256:04585811927753683a3d3e92a9264f2436bd162d877542972bfed663c6b69185"
+      },
+      {
+        "file": "runtime-worker.mjs",
+        "digest": "sha256:631b4471572be8857bd0846dfd37c035d2ee8b29179b205553bfb4882b50de9f"
+      }
+    ],
+    "historicalWorkItemScope": "crewon.extension-work-item-scope.v1"
+  },
+  "installed": true,
+  "clientAcceptanceComplete": false,
+  "installedAt": "2026-10-16T10:00:17.541Z",
+  "signatureVerified": true
+}

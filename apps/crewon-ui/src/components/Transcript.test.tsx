@@ -4,6 +4,7 @@ import { renderExpandedTranscript } from "./transcript.test-support";
 import { describe, expect, it, vi } from "vitest";
 import type { Thread } from "@crewon/app-server-protocol/v2/Thread";
 import { TranscriptFailureMessage } from "./TranscriptMessage";
+import { updateControlRunModelActivity } from "../lib/control-runtime/controlRunModelActivity";
 
 import {
   Transcript,
@@ -1073,6 +1074,135 @@ describe("Transcript", () => {
     expect(markup).not.toContain("No messages");
   });
 
+  it.each(["zh", "en"] as const)(
+    "snapshots model continuation after completed tools and a prior assistant prefix (%s)",
+    (locale) => {
+      const waiting = updateControlRunModelActivity(
+        {
+          ...activeToolThread,
+          turns: activeToolThread.turns.map((turn) => ({
+            ...turn,
+            items: [
+              {
+                type: "agentMessage" as const,
+                id: "prior-prefix",
+                text: "先读取项目，再继续编写。",
+                phase: "commentary" as const,
+                memoryCitation: null,
+              },
+              ...turn.items.map((item) =>
+                item.type === "mcpToolCall"
+                  ? {
+                      ...item,
+                      status: "completed" as const,
+                      result: {
+                        content: [],
+                        structuredContent: null,
+                        _meta: null,
+                      },
+                      durationMs: 22,
+                    }
+                  : item,
+              ),
+            ],
+          })),
+        },
+        "turn-active-tool",
+        "waiting",
+      );
+      const markup = renderToStaticMarkup(
+        <Transcript
+          {...labels}
+          locale={locale}
+          mode="code"
+          streamingText="已经输出的前缀"
+          thread={waiting}
+          onModeChange={vi.fn()}
+          onStop={vi.fn()}
+        />,
+      );
+      expect(markup).toContain('aria-busy="true"');
+      expect(markup).toContain(locale === "zh" ? "正在思考" : "Thinking");
+      expect(markup).toContain("已经输出的前缀");
+      expect(markup).toMatchSnapshot();
+    },
+  );
+
+  it.each(["zh", "en"] as const)(
+    "snapshots a real retry phase and clears it for terminal presentation (%s)",
+    (locale) => {
+      const retrying = updateControlRunModelActivity(
+        activeThread,
+        "turn-active",
+        "retrying",
+      );
+      const props = {
+        ...labels,
+        locale,
+        mode: "code" as const,
+        streamingText: "",
+        onModeChange: vi.fn(),
+        onStop: vi.fn(),
+      };
+      const markup = renderToStaticMarkup(
+        <Transcript {...props} thread={retrying} />,
+      );
+      expect(markup).toContain(
+        locale === "zh"
+          ? "连接中断，正在重试…"
+          : "Connection interrupted. Retrying…",
+      );
+      expect(markup).toContain('aria-busy="true"');
+      expect(markup).toMatchSnapshot();
+      for (const status of ["completed", "failed", "interrupted"] as const) {
+        const terminal = {
+          ...retrying,
+          turns: retrying.turns.map((turn) => ({ ...turn, status })),
+        };
+        const finished = renderToStaticMarkup(
+          <Transcript {...props} thread={terminal} />,
+        );
+        expect(finished).toContain('aria-busy="false"');
+        expect(finished).not.toContain("thinking-card");
+      }
+    },
+  );
+
+  it("keeps remaining parallel tool progress visible when another tool has completed", () => {
+    const waiting = updateControlRunModelActivity(
+      {
+        ...activeToolThread,
+        turns: activeToolThread.turns.map((turn) => ({
+          ...turn,
+          items: [
+            ...turn.items,
+            {
+              ...turn.items.find((item) => item.type === "mcpToolCall")!,
+              id: "completed-parallel-tool",
+              status: "completed",
+            },
+          ],
+        })),
+      } as Thread,
+      "turn-active-tool",
+      "waiting",
+    );
+    const markup = renderToStaticMarkup(
+      <Transcript
+        {...labels}
+        locale="en"
+        mode="code"
+        streamingText=""
+        thread={waiting}
+        onModeChange={vi.fn()}
+        onStop={vi.fn()}
+      />,
+    );
+    expect(markup).toContain('aria-busy="true"');
+    expect(markup).toContain('data-status="inProgress"');
+    expect(markup).not.toContain("thinking-card");
+  });
+
   it("does not add a generic thinking indicator when a live tool card is visible", () => {
     const markup = renderToStaticMarkup(
       <Transcript
@@ -1095,6 +1225,8 @@ describe("Transcript", () => {
     expect(markup).toContain('data-state="expanded"');
     expect(markup).toContain('data-status="inProgress" open=""');
     expect(markup).not.toContain("Waiting for model response");
+    expect(markup).not.toContain("thinking-card");
+    expect(markup).toContain('aria-busy="true"');
   });
 
   it("keeps the active process expanded when the final response starts streaming", () => {

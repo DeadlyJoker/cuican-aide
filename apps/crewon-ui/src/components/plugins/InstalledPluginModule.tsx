@@ -11,6 +11,7 @@ import {
   useState,
 } from "react";
 import type { PluginUiLease } from "@crewon/contracts/plugins";
+import type { ControlApiClient } from "@crewon/control-client";
 import type { ProjectPlanningProposal } from "@crewon/contracts/project-planning";
 import type { PluginUiProps, PluginUiTheme } from "@crewon/plugin-sdk/ui";
 import type { PluginJsonValue } from "@crewon/plugin-sdk/contracts";
@@ -35,16 +36,21 @@ import {
 
 import styles from "./InstalledPluginModule.module.css";
 import { isTransientPluginUiValidationError } from "../../lib/plugins/pluginUiPresentationUpdate";
+import { PluginUiLeaseRenewalDeferredError } from "../../lib/plugins/pluginUiLeaseLifecycle";
+import { PluginUiLoaderError } from "../../lib/plugins/pluginUiValidation";
 import { InstalledPluginUnavailable } from "./InstalledPluginUnavailable";
 import { InstalledPluginLegacyTaskControls } from "./InstalledPluginLegacyTaskControls";
 import { needsInstalledPluginLegacyTaskNavigation } from "./installedPluginLegacyTaskNavigation";
+import { useInstalledPluginWorkspaceRevision } from "../../lib/plugins/useInstalledPluginWorkspaceRevision";
 
-const LEASE_CHECK_INTERVAL_MS = 1_000;
 // Keep the original short request budget well inside the remaining finite authority window.
 const LEASE_RENEW_BEFORE_MS = 60_000;
+const LEASE_RETRY_MS = 5_000;
+const MAX_TIMER_MS = 2_147_483_647;
 type Monitor = {
   controller: AbortController;
   timer: ReturnType<typeof setTimeout> | null;
+  expiryTimer: ReturnType<typeof setTimeout> | null;
 };
 
 /** One installed content slot. The host owns its session, reference, theme and cleanup. */
@@ -66,6 +72,7 @@ export function InstalledPluginModule({
   runIds = [],
   projectConversationContext,
   projectPlanningDraft,
+  projectWorkspaceChangeClient = null,
   onOpenTask,
 }: Readonly<{
   host: ControlPluginUiHost;
@@ -94,8 +101,30 @@ export function InstalledPluginModule({
     modelId?: string | null;
   }>;
   projectPlanningDraft?: ProjectPlanningProposal;
+  projectWorkspaceChangeClient?: ControlApiClient | null;
   onOpenTask?(threadId: string): void;
 }>) {
+  // This advertises a read protocol; the Control response remains the authority
+  // for the current workspace mode and every subsequent creation write.
+  const creationContextSupported = module.plugin.descriptor.requires.some(
+    (requirement) =>
+      requirement.service === "crewon.project-workspace-target" &&
+      requirement.apiVersion === "1",
+  );
+  const pageContext = uiPage?.context;
+  const workspaceRevision = useInstalledPluginWorkspaceRevision({
+    client:
+      active && surface === "workbench" ? projectWorkspaceChangeClient : null,
+    module,
+    projectId:
+      pageContext &&
+      typeof pageContext === "object" &&
+      !Array.isArray(pageContext) &&
+      "projectId" in pageContext &&
+      typeof pageContext.projectId === "string"
+        ? pageContext.projectId
+        : null,
+  });
   const taskEnabled = module.plugin.descriptor.requires.some(
     (requirement) =>
       requirement.service === "crewon.tasks" &&
@@ -229,6 +258,7 @@ export function InstalledPluginModule({
     if (!owned) return;
     owned.controller.abort();
     if (owned.timer !== null) clearTimeout(owned.timer);
+    if (owned.expiryTimer !== null) clearTimeout(owned.expiryTimer);
   }, []);
   useLayoutEffect(() => () => stopMonitor(), [context, stopMonitor]);
   const report = useCallback(
@@ -258,57 +288,89 @@ export function InstalledPluginModule({
       );
       if (signal.aborted || current.current !== context) return lease;
       stopMonitor();
-      const owned: Monitor = { controller: new AbortController(), timer: null };
+      const owned: Monitor = {
+        controller: new AbortController(),
+        timer: null,
+        expiryTimer: null,
+      };
       monitor.current = owned;
+      const isCurrent = () =>
+        !owned.controller.signal.aborted &&
+        monitor.current === owned &&
+        current.current === context;
+      const armExpiry = () => {
+        if (owned.expiryTimer !== null) clearTimeout(owned.expiryTimer);
+        owned.expiryTimer = setTimeout(
+          () => {
+            if (!isCurrent()) return;
+            if (Date.parse(lease.expiresAt) > Date.now()) armExpiry();
+            else report(new PluginUiLoaderError("plugin_ui_lease_expired"));
+          },
+          Math.min(
+            MAX_TIMER_MS,
+            Math.max(0, Date.parse(lease.expiresAt) - Date.now()),
+          ),
+        );
+      };
+      const scheduleRenewal = () => {
+        // No background polling. Older hosts keep their finite lease and expiry fence.
+        if (context.host.renewLease)
+          owned.timer = setTimeout(
+            () => {
+              if (!isCurrent()) return;
+              if (
+                Date.parse(lease.expiresAt) - Date.now() >
+                LEASE_RENEW_BEFORE_MS
+              )
+                scheduleRenewal();
+              else void check();
+            },
+            Math.min(
+              MAX_TIMER_MS,
+              Math.max(
+                0,
+                Date.parse(lease.expiresAt) -
+                  Date.now() -
+                  LEASE_RENEW_BEFORE_MS,
+              ),
+            ),
+          );
+      };
       const check = async () => {
-        if (
-          owned.controller.signal.aborted ||
-          monitor.current !== owned ||
-          current.current !== context
-        )
-          return;
+        if (!isCurrent()) return;
+        let validating = true;
         try {
+          if (Date.parse(lease.expiresAt) <= Date.now())
+            throw new PluginUiLoaderError("plugin_ui_lease_expired");
           await context.host.validateLease(lease, owned.controller.signal);
-          if (
-            !owned.controller.signal.aborted &&
-            monitor.current === owned &&
-            current.current === context &&
-            context.host.renewLease &&
-            Date.parse(lease.expiresAt) - Date.now() <= LEASE_RENEW_BEFORE_MS
-          )
+          validating = false;
+          if (isCurrent() && context.host.renewLease) {
             lease = await context.host.renewLease(
               lease,
               owned.controller.signal,
             );
-          if (
-            !owned.controller.signal.aborted &&
-            monitor.current === owned &&
-            current.current === context
-          )
-            owned.timer = setTimeout(
-              () => void check(),
-              LEASE_CHECK_INTERVAL_MS,
-            );
+            if (isCurrent()) armExpiry();
+          }
+          if (isCurrent()) scheduleRenewal();
         } catch (error) {
-          if (
-            !owned.controller.signal.aborted &&
-            monitor.current === owned &&
-            current.current === context
-          ) {
-            const transient = isTransientPluginUiValidationError(error);
+          if (isCurrent()) {
+            const transient =
+              error instanceof PluginUiLeaseRenewalDeferredError ||
+              (validating && isTransientPluginUiValidationError(error));
             const remaining = Date.parse(lease.expiresAt) - Date.now();
             // Cached presentation is not an execution grant. Every action keeps
             // its live authorization check; never outlive the finite lease.
             if (transient && remaining > 0) {
               owned.timer = setTimeout(
                 () => void check(),
-                Math.min(5_000, remaining),
+                Math.min(LEASE_RETRY_MS, remaining),
               );
             } else report(error);
           }
         }
       };
-      owned.timer = setTimeout(() => void check(), LEASE_CHECK_INTERVAL_MS);
+      armExpiry();
+      scheduleRenewal();
       return lease;
     },
     [context, report, stopMonitor],
@@ -320,8 +382,28 @@ export function InstalledPluginModule({
       theme,
       data: Object.freeze({
         locale,
-        ...(surface === "sidebar" || uiPage
-          ? { hostPresentation: Object.freeze({ surface, ...(uiPage ?? {}) }) }
+        ...(surface === "sidebar" || uiPage || creationContextSupported
+          ? {
+              hostPresentation: Object.freeze({
+                surface,
+                ...(uiPage ?? {}),
+                ...(workspaceRevision.foundation > 0
+                  ? {
+                      projectFoundationChangeRevision:
+                        workspaceRevision.foundation,
+                    }
+                  : {}),
+                ...(workspaceRevision.texts > 0
+                  ? { projectTextChangeRevision: workspaceRevision.texts }
+                  : {}),
+                ...(workspaceRevision.assets > 0
+                  ? { projectAssetChangeRevision: workspaceRevision.assets }
+                  : {}),
+                ...(creationContextSupported
+                  ? { projectConversationCreationContext: "v1" }
+                  : {}),
+              }),
+            }
           : {}),
         pluginUiReady: ready === context,
         ...(module.plugin.descriptor.requires.some(
@@ -363,6 +445,10 @@ export function InstalledPluginModule({
       module.contributionId,
       surface,
       uiPage,
+      creationContextSupported,
+      workspaceRevision.foundation,
+      workspaceRevision.texts,
+      workspaceRevision.assets,
       theme,
       locale,
       taskEnabled,

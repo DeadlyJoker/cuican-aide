@@ -227,3 +227,87 @@ it("Main rejects mixed protocols and foreign/unpublished V2 grants instead of gr
     }),
   ).toThrow();
 });
+
+it("Main preserves an approved historical read-only package when a newer package receives generation consent", async () => {
+  const f = await fixture();
+  await prepare(f, true);
+  const approval = parseDesktopPluginApproval(
+    JSON.parse(readFileSync(f.approvalPath, "utf8")),
+  );
+  if (approval.schemaVersion !== "crewon.desktop-plugin-approval.v3")
+    throw new Error("v3_required");
+  const oldDigest = `sha256:${"b".repeat(64)}`;
+  const source = approval.sources.find(
+    (s) => s.packageDigest === f.identity.packageDigest,
+  )!;
+  const current = {
+    pluginId: f.identity.pluginId,
+    packageDigest: f.identity.packageDigest,
+    contributionId: "workbench",
+  };
+  const prior = { ...current, packageDigest: oldDigest };
+  const previous = {
+    ...approval,
+    publications: [
+      ...approval.publications,
+      {
+        ...approval.publications.find(
+          (p) => p.packageDigest === f.identity.packageDigest,
+        )!,
+        packageDigest: oldDigest,
+      },
+    ],
+    sources: [
+      ...approval.sources,
+      {
+        ...source,
+        sourceId: "prior-approved-package",
+        directory: source.directory + "-prior",
+        version: "0.0.1",
+        packageDigest: oldDigest,
+      },
+    ],
+    projects: {
+      ...approval.projects,
+      mediaInputs: {
+        ...approval.projects.mediaInputs!,
+        reviews: [
+          ...approval.projects.mediaInputs!.reviews,
+          ...approval.projects.mediaInputs!.reviews.map((r) => ({
+            ...r,
+            targetIdentity: {
+              ...r.targetIdentity,
+              version: "0.0.1",
+              packageDigest: oldDigest,
+            },
+          })),
+        ],
+      },
+      mediaResults: {
+        version: "crewon.desktop-project-media-results.v1" as const,
+        purposes: ["read"] as const,
+        publications: [prior],
+      },
+    },
+  };
+  const composed = composeDesktopLocalProjectAssetV2Approval({
+    approval: previous,
+    descriptor: f.installed.descriptor,
+    packageDigest: f.identity.packageDigest,
+  });
+  if (composed.schemaVersion !== "crewon.desktop-plugin-approval.v3")
+    throw new Error("v3_required");
+  expect(composed.projects.mediaResults).toEqual({
+    version: "crewon.desktop-project-media-results.v1",
+    purposes: ["read", "publish"],
+    publications: [prior, current],
+    publishPublications: [current],
+  });
+  expect(
+    composeDesktopLocalProjectAssetV2Approval({
+      approval: composed,
+      descriptor: f.installed.descriptor,
+      packageDigest: f.identity.packageDigest,
+    }),
+  ).toEqual(composed);
+});

@@ -159,7 +159,11 @@ export async function installedReleaseFixture(
     spaceId: releaseActor.spaceId,
     profileId: releaseScope.profileId,
   };
-  const state = { allowed: true, metadataReads: 0 };
+  const state = {
+    allowed: true,
+    metadataReads: 0,
+    beforeMetadataRead: null as (() => Promise<void>) | null,
+  };
   const entries: InstalledPluginReleaseEntry[] = [];
   const packages = [];
   for (const version of options.versions === 2
@@ -385,6 +389,7 @@ export async function installedReleaseFixture(
       assert.deepEqual(request.scope, scope);
       assert.equal(request.purpose, "read");
       state.metadataReads++;
+      await state.beforeMetadataRead?.();
       return state.allowed ? "allow" : "deny";
     },
   };

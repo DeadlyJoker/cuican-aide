@@ -1,0 +1,45 @@
+{
+  "builtAt": "2026-10-18T09:13:12.842Z",
+  "path": "/private/tmp/crewon-plugin-performance-20261015/result-publication-client-profile-20261018.asar",
+  "sha256": "7ad55da821efd130c9316053d3133e0db84186654055f774e6f265aabec1faa1",
+  "headerSha256": "e4e96be4b527a2b5bdbf1b1938c736df9fc02f6e02f37dfef65817123c4ba40c",
+  "preservedOutsideRendererAndHostFilesVerified": 17458,
+  "mainUnchanged": false,
+  "hostRebuiltFromCurrentSource": true,
+  "clientAcceptancePassed": false,
+  "installed": true,
+  "backup": "/private/tmp/crewon-plugin-performance-20261015/before-result-publication-20261018-171927",
+  "signatureVerified": true,
+  "runtimeIdentity": "sha256:4b52b94f7a1953c7d52fe002d3e65e35304457bd1eb9086674087396825a58ad",
+  "tests": {
+    "plugin": 524,
+    "resultContract": 5,
+    "main": 10,
+    "native": 7,
+    "controlTypecheck": true,
+    "contractTypecheck": true,
+    "uiBuild": true,
+    "runtimeBuild": true,
+    "hostBuild": true,
+    "boundary": true,
+    "format": true
+  },
+  "executionPreparationAcceptedInClient": true,
+  "resultAuthorization": {
+    "readablePackages": 20,
+    "publishPublications": [
+      {
+        "pluginId": "crewon.short-drama",
+        "packageDigest": "sha256:4a10e5f5feeeeb75cdb2b52fce0a5673caedb4b23ce81354fb09a57531e2f9b0",
+        "contributionId": "workbench"
+      }
+    ],
+    "historicalReadPreserved": true
+  },
+  "preparationScreenshot": "output/short-drama-rehearsal-20261015/client-reference-execution-prepared-20261018.png",
+  "fullClientAcceptancePassed": false,
+  "remainingBlockers": [
+    "macOS lock prevents CUA",
+    "Comfy root returns AutoDL 404; original submission outcome remains unconfirmed"
+  ]
+}

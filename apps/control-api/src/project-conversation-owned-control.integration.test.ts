@@ -250,6 +250,23 @@ for (const { native, targetDeclared, executeCase } of [
                 input: parsePluginUiJsonValue(input),
               }),
           );
+        const creationAction =
+          "crewon.project-workspace-target.v1.getCreationContext";
+        if (native && targetDeclared) {
+          assert.deepEqual(await invoke(creationAction, {}), {
+            schemaVersion: "crewon.project-conversation-creation-context.v1",
+            workspaceMode: "plugin-owned-explicit",
+          });
+          assert.equal(state.observed, 0);
+          state.policyAllowed = false;
+          await assert.rejects(invoke(creationAction, {}));
+          state.policyAllowed = true;
+          state.identityAllowed = false;
+          await assert.rejects(invoke(creationAction, {}));
+          state.identityAllowed = true;
+        } else {
+          await assert.rejects(invoke(creationAction, {}));
+        }
         if (!native) {
           assert.equal(
             owner.supportsAction(

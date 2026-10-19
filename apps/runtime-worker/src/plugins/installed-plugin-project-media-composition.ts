@@ -21,6 +21,7 @@ import {
 } from "../project-media-run-context.ts";
 import {
   captureProjectMediaExecutionReview,
+  MAX_PROJECT_MEDIA_EXECUTION_REVIEWS,
   type ProjectMediaExecutionReview,
 } from "../project-media-execution-review.ts";
 import type { InstalledPluginRunContext } from "./installed-plugin-run-context.ts";
@@ -61,7 +62,7 @@ export function captureInstalledPluginProjectMediaConfig(
     !Array.isArray(fields.reviews) ||
     types.isProxy(fields.reviews) ||
     !fields.reviews.length ||
-    fields.reviews.length > 32
+    fields.reviews.length > MAX_PROJECT_MEDIA_EXECUTION_REVIEWS
   )
     fail("configuration_invalid");
   const value = Object.freeze({

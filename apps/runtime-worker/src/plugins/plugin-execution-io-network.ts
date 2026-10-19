@@ -1,4 +1,5 @@
 import type { PluginJsonValue } from "@crewon/plugin-sdk/contracts";
+import { isPluginOperationPathPrefix } from "@crewon/contracts/plugins";
 import {
   NetworkEgressResolver,
   ProductionNetworkEgressPolicy,
@@ -24,7 +25,35 @@ export type PluginIoHttpRequest = Readonly<{
 }>;
 
 export function ioFailure(code: string): never {
+  if (code === "request_not_approved") throw new PluginExecutionIoPolicyError();
   throw new Error(`plugin_execution_io_${code}`);
+}
+
+/** A deterministic route denial cannot improve by replaying the same frozen request. */
+export class PluginExecutionIoPolicyError extends Error {
+  readonly code = "plugin_execution_io_request_not_approved";
+  constructor() {
+    super("plugin_execution_io_request_not_approved");
+    this.name = "PluginExecutionIoPolicyError";
+  }
+}
+
+/** A missing/gone HTTP resource requires service repair, not replaying the frozen tool call. */
+export class PluginExecutionIoHttpResourceError extends Error {
+  readonly code:
+    | "plugin_execution_io_http_404"
+    | "plugin_execution_io_http_410";
+  readonly status: 404 | 410;
+  constructor(status: 404 | 410) {
+    const code =
+      status === 404
+        ? "plugin_execution_io_http_404"
+        : "plugin_execution_io_http_410";
+    super(code);
+    this.code = code;
+    this.status = status;
+    this.name = "PluginExecutionIoHttpResourceError";
+  }
 }
 
 /** Pure data only; do not execute plugin accessors while checking an IO request. */
@@ -207,9 +236,7 @@ export function captureNetworkApproval(
     if (
       rule.path === undefined &&
       rule.method === "GET" &&
-      typeof rule.operationPathPrefix === "string" &&
-      rule.operationPathPrefix.endsWith("/") &&
-      !rule.operationPathPrefix.includes("?")
+      isPluginOperationPathPrefix(rule.operationPathPrefix)
     )
       return Object.freeze({
         method: "GET" as const,
@@ -324,6 +351,8 @@ export class PluginExecutionJsonHttp {
       },
       signal,
     );
+    if (response.status === 404 || response.status === 410)
+      throw new PluginExecutionIoHttpResourceError(response.status);
     if (response.status < 200 || response.status >= 300)
       ioFailure("http_failed");
     if (response.body.byteLength > 1024 * 1024) ioFailure("response_limit");

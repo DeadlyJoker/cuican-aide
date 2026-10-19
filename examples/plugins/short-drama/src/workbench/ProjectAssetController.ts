@@ -137,7 +137,26 @@ export class ProjectAssetController {
     return this.#activated;
   }
   activate() {
-    if (this.#disposed || this.#activated) return;
+    if (this.#disposed) return;
+    if (this.#activated) {
+      // Workbench instances share the durable journal, not their local snapshots.
+      // Returning to this page must observe another instance's confirmed work.
+      if (
+        this.#ready &&
+        !this.#read &&
+        !this.#snapshot.saving &&
+        !this.#snapshot.opening &&
+        !this.#snapshot.dirty &&
+        !this.#snapshot.pending &&
+        (this.#snapshot.view !== null ||
+          this.recovery.getSnapshot().intent !== null) &&
+        !this.#physicalWritesPending()
+      ) {
+        void this.recovery.check();
+        void this.refresh();
+      }
+      return;
+    }
     this.#activated = true;
     this.setReady(this.#hostReady);
     this.#publish({});

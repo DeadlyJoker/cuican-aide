@@ -22,7 +22,8 @@ it("unknown retries preserve original body/key and revisions while current brief
   const owner = new ControlProjectAssetStageTurn(api(fetch), key);
   await expect(owner.start(selected)).rejects.toMatchObject({
     name: "ControlApiTransportError",
-    cause: { message: "lost ACK" },
+    message: "control_api_transport_unavailable",
+    cause: new TypeError("lost ACK"),
   });
   await expect(
     owner.start({
@@ -67,7 +68,8 @@ it("unknown original input cannot move to another package, binding, project or a
     owner = new ControlProjectAssetStageTurn(api(fetch), () => "key");
   await expect(owner.start(input)).rejects.toMatchObject({
     name: "ControlApiTransportError",
-    cause: { message: "unknown" },
+    message: "control_api_transport_unavailable",
+    cause: new TypeError("unknown"),
   });
   for (const changed of [
     { ...binding, projectId: "other" },
@@ -191,7 +193,8 @@ it("a later binding CAS conflict cannot prove an earlier unknown intent uncommit
   );
   await expect(owner.start(input)).rejects.toMatchObject({
     name: "ControlApiTransportError",
-    cause: { message: "lost ACK" },
+    message: "control_api_transport_unavailable",
+    cause: new TypeError("lost ACK"),
   });
   await expect(
     owner.start({

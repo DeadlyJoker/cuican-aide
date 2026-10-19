@@ -60,18 +60,28 @@ function fixture(
     associationEnabled?: boolean;
     surface?: "workbench" | "sidebar";
     foundation?: "required" | "optional";
+    workspaceTarget?: boolean;
   }> = {},
 ) {
   const h = uiHarness();
   const originalLease = selectionEnabled ? selectionJournalLease() : uiLease();
   const lease =
-    options.associationEnabled || options.foundation
+    options.associationEnabled || options.foundation || options.workspaceTarget
       ? {
           ...originalLease,
           descriptor: {
             ...originalLease.descriptor,
             requires: [
               ...originalLease.descriptor.requires,
+              ...(options.workspaceTarget
+                ? [
+                    {
+                      service: "crewon.project-workspace-target",
+                      apiVersion: "1",
+                      optional: true,
+                    },
+                  ]
+                : []),
               ...(options.associationEnabled
                 ? [
                     {
@@ -373,6 +383,25 @@ describe("installed module composition (real authenticated host, explicit import
     expect(f.h.instances[0].dispose).toHaveBeenCalledTimes(1);
   });
 
+  it.each(["workbench", "sidebar"] as const)(
+    "advertises only the creation read protocol on the %s surface",
+    async (surface) => {
+      const f = fixture(false, { surface, workspaceTarget: true });
+      await f.render(true);
+      expect(f.h.instances[0].update.mock.calls.at(-1)?.[0].data).toMatchObject(
+        {
+          hostPresentation: {
+            surface,
+            projectConversationCreationContext: "v1",
+          },
+        },
+      );
+      expect(
+        f.requests("POST").filter(([url]) => String(url).endsWith("/actions")),
+      ).toHaveLength(0);
+    },
+  );
+
   it("loads only an active module, updates host props, and closes every lease when leaving", async () => {
     const f = fixture();
     const originalTheme = document.documentElement.dataset.theme;
@@ -427,7 +456,7 @@ describe("installed module composition (real authenticated host, explicit import
     expect(f.opened()).toHaveLength(2);
     expect(f.h.instances).toHaveLength(2);
     expect(f.container.querySelector('[role="status"]')).toBeNull();
-    expect(vi.getTimerCount()).toBe(1);
+    expect(vi.getTimerCount()).toBe(2);
   });
 
   it("closes a late allocated lease without interfering with the newly active generation", async () => {
@@ -451,7 +480,7 @@ describe("installed module composition (real authenticated host, explicit import
     expect(f.container.querySelector('[role="status"]')).toBeNull();
     expect(f.importer).toHaveBeenCalledTimes(1);
     expect(f.diagnostic).not.toHaveBeenCalled();
-    expect(vi.getTimerCount()).toBe(1);
+    expect(vi.getTimerCount()).toBe(2);
   });
 
   it("rechecks a changed publication pin even if the contribution and package mount key stay the same", async () => {
@@ -477,15 +506,12 @@ describe("installed module composition (real authenticated host, explicit import
     expect(vi.getTimerCount()).toBe(0);
   });
 
-  it("withdraws a revoked lease during polling and only retries after explicit reentry", async () => {
+  it("withdraws a revoked lease at the next explicit presentation check and only retries after reentry", async () => {
     const f = fixture();
     await f.render(true);
     const instance = f.h.instances[0];
     f.revoke();
-    await act(async () => {
-      await vi.advanceTimersByTimeAsync(1_000);
-      await settle();
-    });
+    await f.render(true, dark);
     expect(f.container.querySelector('[role="alert"]')?.textContent).toContain(
       "模块暂时不可用",
     );
@@ -507,15 +533,12 @@ describe("installed module composition (real authenticated host, explicit import
     expect(f.container.querySelector('[role="alert"]')).toBeNull();
   });
 
-  it("aborts an awaited poll on leaving and ignores its late result after reopening", async () => {
+  it("aborts an awaited presentation check on leaving and ignores its late result after reopening", async () => {
     const f = fixture();
     await f.render(true);
     const poll = deferred<Response>();
     f.gateValidation(poll);
-    await act(async () => {
-      await vi.advanceTimersByTimeAsync(1_000);
-      await settle();
-    });
+    await f.render(true, dark);
     const checking = f.fetch.mock.calls.at(-1)![1]!.signal!;
     expect(checking.aborted).toBe(false);
     await f.render(false);
@@ -528,7 +551,7 @@ describe("installed module composition (real authenticated host, explicit import
     expect(f.container.querySelector('[role="alert"]')).toBeNull();
     expect(f.container.querySelector("[data-plugin-ui-root]")).toBe(child);
     expect(f.opened()).toHaveLength(2);
-    expect(vi.getTimerCount()).toBe(1);
+    expect(vi.getTimerCount()).toBe(2);
   });
 
   it.each([
@@ -603,10 +626,7 @@ describe("installed module composition (real authenticated host, explicit import
     });
     await f.render(true, light, "zh", onDiagnostic);
     f.revoke();
-    await act(async () => {
-      await vi.advanceTimersByTimeAsync(1_000);
-      await settle();
-    });
+    await f.render(true, dark, "zh", onDiagnostic);
     expect(onDiagnostic).toHaveBeenCalledTimes(1);
     expect(f.container.querySelector('[role="alert"]')).not.toBeNull();
     expect(f.container.querySelector("[data-plugin-ui-root]")).toBeNull();

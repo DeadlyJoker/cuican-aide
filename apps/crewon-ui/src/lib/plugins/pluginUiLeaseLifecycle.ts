@@ -30,6 +30,17 @@ function sameLease(left: PluginUiLease, right: PluginUiLease): boolean {
   return JSON.stringify(left) === JSON.stringify(right);
 }
 
+/** Created only after a trusted host confirms this exact, unchanged live lease. */
+export class PluginUiLeaseRenewalDeferredError extends Error {
+  readonly lease: PluginUiLease;
+
+  constructor(lease: PluginUiLease) {
+    super("plugin_ui_lease_renewal_deferred");
+    this.name = "PluginUiLeaseRenewalDeferredError";
+    this.lease = parsePluginUiLease(lease);
+  }
+}
+
 /** Local ordering only: every operation and renewal still uses the authenticated host ports. */
 export class PluginUiLeaseLifecycle {
   readonly #owners = new Map<string, Owner>();
@@ -148,9 +159,10 @@ export class PluginUiLeaseLifecycle {
     // Publish the flight synchronously so no new operation can enter the drain set.
     owner.renewal = renewal;
     void this.#renew(owner, renewal, request, commit).then(
-      (next) => {
+      (result) => {
         if (owner.renewal === renewal) owner.renewal = null;
-        resolve(next);
+        if (result.kind === "deferred") reject(result.error);
+        else resolve(result.lease);
       },
       (error: unknown) => {
         this.#withdraw(owner);
@@ -171,12 +183,27 @@ export class PluginUiLeaseLifecycle {
       renewalSignal: AbortSignal,
     ) => Promise<unknown>,
     commit: (previousLease: PluginUiLease, nextLease: PluginUiLease) => void,
-  ): Promise<PluginUiLease> {
+  ): Promise<
+    | Readonly<{ kind: "renewed"; lease: PluginUiLease }>
+    | Readonly<{ kind: "deferred"; error: PluginUiLeaseRenewalDeferredError }>
+  > {
     await Promise.allSettled([...owner.operations]);
     this.#current(owner);
     if (!sameLease(owner.lease, renewal.previous))
       uiFailure("plugin_ui_lease_identity_mismatch");
-    const response = await request(renewal.previous, renewal.controller.signal);
+    let response: unknown;
+    try {
+      response = await request(renewal.previous, renewal.controller.signal);
+    } catch (error) {
+      this.#current(owner);
+      if (
+        error instanceof PluginUiLeaseRenewalDeferredError &&
+        sameLease(error.lease, renewal.previous) &&
+        sameLease(owner.lease, renewal.previous)
+      )
+        return { kind: "deferred", error };
+      throw error;
+    }
     const next = parseRenewPluginUiMountResponse(response, renewal.previous);
     this.#current(owner);
     if (!sameLease(owner.lease, renewal.previous))
@@ -184,7 +211,7 @@ export class PluginUiLeaseLifecycle {
     commit(renewal.previous, next);
     this.#current(owner);
     owner.lease = next;
-    return next;
+    return { kind: "renewed", lease: next };
   }
 
   async #wait(renewal: Renewal, signal: AbortSignal): Promise<PluginUiLease> {

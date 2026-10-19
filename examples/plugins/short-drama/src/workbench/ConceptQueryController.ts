@@ -54,6 +54,7 @@ export class ConceptQueryController {
     | ProjectHistoricalQueryHostContext
     | null = null;
   #seenIntent: string | null = null;
+  #hostProjectId: string | null = null;
   #source: ConceptGenerationLocator | null = null;
   #record: ConceptGenerationSnapshot | null = null;
   #ready = false;
@@ -277,6 +278,22 @@ export class ConceptQueryController {
       )
     );
   }
+  /** A page switch leaves the original host journal available in its project. */
+  setHostProjectScope(projectId: string | null) {
+    this.#hostProjectId = projectId;
+    if (
+      this.#disposed ||
+      !projectId ||
+      this.#write ||
+      !this.#snapshot.request ||
+      this.#snapshot.request.reference.projectId === projectId
+    )
+      return;
+    ++this.#recoveryEpoch;
+    this.#host = null;
+    this.#seenIntent = null;
+    this.#update(initial());
+  }
   async query(operationId: string) {
     if (!this.canQuery(operationId)) return;
     const thread = this.#host!.thread!;
@@ -359,6 +376,7 @@ export class ConceptQueryController {
       if (this.#write === controller) {
         const locked = this.locked;
         this.#write = null;
+        this.setHostProjectScope(this.#hostProjectId);
         this.#update();
         if (locked !== this.locked) this.#ports.lockChanged();
       }

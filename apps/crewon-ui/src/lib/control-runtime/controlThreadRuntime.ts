@@ -1,4 +1,5 @@
 import { ControlProjectMediaInputStageTurn } from "./controlProjectMediaInputStageTurn";
+import { publishControlThreadRevision } from "./controlThreadRevisionSubscriptions";
 import {
   readThreadModelSelection,
   writeThreadModelSelection,
@@ -111,6 +112,7 @@ import {
   type ControlToolProjectionState,
 } from "./controlRunToolProjection";
 import type { ThreadRunPlanProjection } from "./controlRunPlanProjection";
+import type { ControlRunModelActivity } from "./controlRunModelActivity";
 import {
   applyControlRunDraftEvent,
   createControlRunDraftProjectionState,
@@ -179,6 +181,11 @@ type ActiveRunEventStream = {
 type ControlToolHistoryMode = "hydrate" | "skip";
 
 export type ControlThreadRuntimeCallbacks = Readonly<{
+  onModelActivity?: (
+    threadId: string,
+    runId: string,
+    activity: ControlRunModelActivity | null,
+  ) => void;
   onProjectConversationRequestChanged?: (threadId: string) => void;
   onTeamProgress?: (
     threadId: string,
@@ -218,11 +225,7 @@ export type ControlThreadRuntimeCallbacks = Readonly<{
     runId: string,
     preview: ControlPendingReplyDraft | null,
   ) => void;
-  onRunSyncError?: (
-    threadId: string,
-    runId: string,
-    error: unknown,
-  ) => void;
+  onRunSyncError?: (threadId: string, runId: string, error: unknown) => void;
   onRunSettled: (threadId: string, runId: string) => void;
   onTeamRunAccepted?: (
     threadId: string,
@@ -317,7 +320,7 @@ export class ControlThreadRuntime {
   #threadEventStreamFocus: string | null | undefined;
   #nextThreadStreamGeneration = 0;
   readonly #projectTurns: ControlProjectConversationTurn;
-  readonly #assetTurns:ControlProjectAssetStageTurn;
+  readonly #assetTurns: ControlProjectAssetStageTurn;
   readonly #mediaInputTurns: ControlProjectMediaInputStageTurn;
   #closed = false;
 
@@ -333,7 +336,10 @@ export class ControlThreadRuntime {
     this.#idempotencyKey =
       config.idempotencyKey ??
       ((operation) => `${operation}:${globalThis.crypto.randomUUID()}`);
-    this.#assetTurns=new ControlProjectAssetStageTurn(this.#client,this.#idempotencyKey);
+    this.#assetTurns = new ControlProjectAssetStageTurn(
+      this.#client,
+      this.#idempotencyKey,
+    );
     this.#mediaInputTurns = new ControlProjectMediaInputStageTurn(
       this.#client,
       this.#idempotencyKey,
@@ -744,9 +750,13 @@ export class ControlThreadRuntime {
   }
 
   async replayMessage(request: MessageReplayRequest): Promise<void> {
-    if ([...this.#runStreams.values()].some((stream) =>
-      stream.threadId === request.threadId && stream.terminal !== null,
-    )) throw new Error("message_replay_sync_pending");
+    if (
+      [...this.#runStreams.values()].some(
+        (stream) =>
+          stream.threadId === request.threadId && stream.terminal !== null,
+      )
+    )
+      throw new Error("message_replay_sync_pending");
     if (this.#messageReplays.has(request.threadId))
       throw new Error("message_replay_busy");
     this.#messageReplays.add(request.threadId);
@@ -1435,7 +1445,9 @@ export class ControlThreadRuntime {
   retainedProjectMediaInputStageSelection(threadId: string) {
     return this.#mediaInputTurns.retainedSelection(threadId);
   }
-  retainedProjectAssetStageSelection(threadId:string){return this.#assetTurns.retainedSelection(threadId);}
+  retainedProjectAssetStageSelection(threadId: string) {
+    return this.#assetTurns.retainedSelection(threadId);
+  }
   retainedProjectConversationSelection(threadId: string) {
     return this.#projectTurns.retainedSelection(threadId);
   }
@@ -1453,16 +1465,32 @@ export class ControlThreadRuntime {
       readThreadModelSelection(threadId)?.selectionId ?? null;
     if (settings?.projectMediaInputStage !== undefined)
       return startPresentedProjectMediaInputStageTurn({
-        threadId, text, settings,
+        threadId,
+        text,
+        settings,
         hasAttachments: images.length > 0 || mentions.length > 0,
         closed: () => this.#closed,
         turns: this.#mediaInputTurns,
-        getSnapshot: id => this.#getThreadSnapshot(id),
-        adopt: receipt => this.adoptExtensionTask(receipt),
-        readThread: id => this.readThread(id),
-        changed: id => this.#callbacks.onProjectConversationRequestChanged?.(id),
+        getSnapshot: (id) => this.#getThreadSnapshot(id),
+        adopt: (receipt) => this.adoptExtensionTask(receipt),
+        readThread: (id) => this.readThread(id),
+        changed: (id) =>
+          this.#callbacks.onProjectConversationRequestChanged?.(id),
       });
-    if(settings?.projectAssetStage!==undefined)return startPresentedProjectAssetStageTurn({threadId,text,settings,hasAttachments:images.length>0||mentions.length>0,closed:()=>this.#closed,turns:this.#assetTurns,getSnapshot:id=>this.#getThreadSnapshot(id),adopt:receipt=>this.adoptExtensionTask(receipt),readThread:id=>this.readThread(id),changed:id=>this.#callbacks.onProjectConversationRequestChanged?.(id)});
+    if (settings?.projectAssetStage !== undefined)
+      return startPresentedProjectAssetStageTurn({
+        threadId,
+        text,
+        settings,
+        hasAttachments: images.length > 0 || mentions.length > 0,
+        closed: () => this.#closed,
+        turns: this.#assetTurns,
+        getSnapshot: (id) => this.#getThreadSnapshot(id),
+        adopt: (receipt) => this.adoptExtensionTask(receipt),
+        readThread: (id) => this.readThread(id),
+        changed: (id) =>
+          this.#callbacks.onProjectConversationRequestChanged?.(id),
+      });
     if (settings?.projectConversation !== undefined) {
       if (this.#closed) throw new Error("control_thread_runtime_closed");
       if (
@@ -2151,6 +2179,7 @@ export class ControlThreadRuntime {
             stream.afterSequence = event.sequence;
           }
           this.#threadEventCursorByThread.set(threadId, stream.afterSequence);
+          publishControlThreadRevision(this, threadId);
           reconnectAttempt = 0;
         }
       } catch (error) {
@@ -2230,9 +2259,12 @@ export class ControlThreadRuntime {
               threadId,
             });
           }
-          if (collaborationMode !== "plan") {
-            this.#applyDraftEvent(threadId, runId, event);
-          }
+          this.#applyDraftEvent(
+            threadId,
+            runId,
+            event,
+            collaborationMode === "plan" ? "activity-only" : "live-text",
+          );
           const taskChangeItem = applyControlTaskChangeEvent(
             taskChangeState,
             event,
@@ -2520,8 +2552,12 @@ export class ControlThreadRuntime {
           isCurrent,
           presentsThread: () => active.presentsThread,
           onDraftEvent: (event) => {
-            if (collaborationMode !== "plan")
-              this.#applyDraftEvent(threadId, runId, event);
+            this.#applyDraftEvent(
+              threadId,
+              runId,
+              event,
+              collaborationMode === "plan" ? "activity-only" : "live-text",
+            );
           },
           onToolItem: (item) =>
             this.#callbacks.onToolItem(threadId, runId, item),
@@ -2649,7 +2685,12 @@ export class ControlThreadRuntime {
     }
     await active.settlement;
   }
-  #applyDraftEvent(threadId: string, runId: string, event: RunEventView): void {
+  #applyDraftEvent(
+    threadId: string,
+    runId: string,
+    event: RunEventView,
+    presentation: "activity-only" | "live-text",
+  ): void {
     const stream = this.#runStreams.get(runId);
     if (!stream) return;
     const current =
@@ -2657,6 +2698,13 @@ export class ControlThreadRuntime {
       createControlRunDraftProjectionState();
     const projected = applyControlRunDraftEvent(current, event);
     this.#draftStatesByRun.set(runId, projected.state);
+    if (projected.modelActivity !== undefined)
+      this.#callbacks.onModelActivity?.(
+        threadId,
+        runId,
+        projected.modelActivity,
+      );
+    if (presentation === "activity-only") return;
     this.#pendingReplyDrafts.apply(runId, projected);
     if (stream.terminal)
       this.#callbacks.onRunPendingDraft?.(

@@ -33,6 +33,7 @@ test(
       Awaited<ReturnType<typeof createStandaloneControlApiWithPlugins>>
     >();
     const { source, pkg, publications } = await conversationPackage(t, {
+      workspaceTargetProtocol: "1",
       beforeCleanup: async () => {
         for (const runtime of runtimes) await runtime.app.close();
         runtimes.clear();
@@ -112,6 +113,28 @@ test(
         title: "项目对话",
         idempotencyKey: "conversation-once",
       };
+    const context = await h.request(
+      "POST",
+      `/api/v1/plugins/ui/mounts/${lease.mountRef}/actions`,
+      {
+        action: "crewon.project-workspace-target.v1.getCreationContext",
+        input: {},
+      },
+    );
+    assert.equal(context.statusCode, 200, context.body);
+    assert.deepEqual(context.json().output, {
+      schemaVersion: "crewon.project-conversation-creation-context.v1",
+      workspaceMode: "legacy-nullable",
+    });
+    const invalidContext = await h.request(
+      "POST",
+      `/api/v1/plugins/ui/mounts/${lease.mountRef}/actions`,
+      {
+        action: "crewon.project-workspace-target.v1.getCreationContext",
+        input: { workspaceMode: "legacy-nullable" },
+      },
+    );
+    assert.notEqual(invalidContext.statusCode, 200);
     const first = await call("createConversation", body);
     assert.equal(first.statusCode, 200, first.body);
     const binding = first.json().output.binding;

@@ -1,0 +1,13 @@
+{
+  "observedAt": "2026-10-16T07:20:36.221Z",
+  "sizes": {
+    "prior": 125866,
+    "PluginProject": 130850,
+    "ProjectFoundation": 131156,
+    "ShortDramaFoundationTools": 131309,
+    "ShortDramaOutlineTools": 131462
+  },
+  "limit": 131072,
+  "exceeds": true,
+  "mutated": false
+}

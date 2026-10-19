@@ -4,6 +4,9 @@ import test from "node:test";
 import { createPluginInvocationDiagnostics } from "./installed-plugin-invocation-diagnostics.ts";
 
 const action = "crewon.project-generations.v1.generateConcept";
+const readinessAction = "crewon.project-generation-contexts.v1.getReadiness";
+const queryAction =
+  "crewon.project-generation-queries.v1.queryConceptGeneration";
 const prefix = "CREWON_PLUGIN_INVOCATION_DIAGNOSTIC:";
 type Record = {
   requestId: string;
@@ -152,6 +155,64 @@ test("concurrent generation phases retain their original request identity and mo
   }
 });
 
+test("readiness phases keep a separate request scope while generation is pending", async () => {
+  const f = fixture();
+  const pending = gate();
+  const generation = f.runPluginGenerationDiagnostics(
+    "req-generate",
+    action,
+    async () => {
+      await pending.promise;
+      return "generated";
+    },
+  );
+  assert.equal(
+    await f.runPluginGenerationDiagnostics(
+      "req-readiness",
+      readinessAction,
+      () =>
+        f.observePluginGenerationPhase("readiness.saved-input", async () => {
+          await f.observePluginGenerationPhase(
+            "readiness.bytes",
+            async () => undefined,
+          );
+          return "ready";
+        }),
+    ),
+    "ready",
+  );
+  assert.deepEqual(
+    f
+      .records()
+      .filter((r) => r.requestId === "req-readiness")
+      .map(({ phase, status }) => ({ phase, status })),
+    [
+      { phase: "route.invoke", status: "start" },
+      { phase: "readiness.saved-input", status: "start" },
+      { phase: "readiness.bytes", status: "start" },
+      { phase: "readiness.bytes", status: "end" },
+      { phase: "readiness.saved-input", status: "end" },
+      { phase: "route.invoke", status: "end" },
+    ],
+  );
+  const before = f.lines.length;
+  await f.runPluginGenerationDiagnostics(
+    "req-excluded",
+    readinessAction + " ",
+    () => f.observePluginGenerationPhase("readiness.access", async () => 1),
+  );
+  assert.equal(f.lines.length, before);
+  pending.release();
+  assert.equal(await generation, "generated");
+  assert.deepEqual(
+    f
+      .records()
+      .filter((r) => r.requestId === "req-generate")
+      .map((r) => r.status),
+    ["start", "end"],
+  );
+});
+
 test("original values and thrown identities survive diagnostic phases without inspecting secrets", async () => {
   const f = fixture();
   let inspected = 0;
@@ -241,7 +302,7 @@ test("disabled, outside scope, excluded actions and unsafe request IDs produce n
   );
   for (const excluded of [
     "report.generate",
-    "crewon.project-generation-queries.v1.queryConceptGeneration",
+    "crewon.project-generation-queries.v2.queryConceptGeneration",
     "",
     action + " ",
   ])
@@ -306,7 +367,7 @@ test("finished request scopes reject late asynchronous diagnostic output", async
   assert.equal(f.lines.length, 2);
 });
 
-test("each request stops at 96 records and a later request has its own budget", async () => {
+test("each request reserves terminal diagnostics within 96 records and later requests have their own budget", async () => {
   const f = fixture();
   await f.runPluginGenerationDiagnostics("req-a", action, async () => {
     for (let index = 0; index < 200; index++)
@@ -318,16 +379,47 @@ test("each request stops at 96 records and a later request has its own budget", 
         index,
       );
   });
-  assert.equal(f.lines.length, 96);
+  assert.equal(f.lines.length, 89);
+  assert.deepEqual(f.records().at(-1)?.phase, "route.invoke");
+  assert.deepEqual(f.records().at(-1)?.status, "end");
   assert.deepEqual(
     f.records().map((record) => record.sequence),
-    Array.from({ length: 96 }, (_, index) => index + 1),
+    Array.from({ length: 89 }, (_, index) => index + 1),
   );
   assert.equal(
     await f.runPluginGenerationDiagnostics("req-b", action, async () => 9),
     9,
   );
-  assert.equal(f.lines.length, 98);
+  assert.equal(f.lines.length, 91);
+});
+
+test("repeated checks leave room for the original query commit failure and route outcome", async () => {
+  const f = fixture();
+  const fault = new Error("original_failure");
+  await assert.rejects(
+    f.runPluginGenerationDiagnostics("req-terminal", queryAction, async () => {
+      for (let index = 0; index < 200; index++)
+        await f.observePluginGenerationPhase("query.current", async () => {});
+      return f.observePluginGenerationPhase("query.node-execute", () =>
+        f.observePluginGenerationPhase("query.task-commit", async () => {
+          throw fault;
+        }),
+      );
+    }),
+    (error) => error === fault,
+  );
+  assert.ok(f.lines.length <= 96);
+  assert.deepEqual(
+    f
+      .records()
+      .slice(-3)
+      .map(({ phase, status }) => ({ phase, status })),
+    [
+      { phase: "query.task-commit", status: "error" },
+      { phase: "query.node-execute", status: "error" },
+      { phase: "route.invoke", status: "error" },
+    ],
+  );
 });
 
 test("only 32 active scopes are observed without holding the 33rd business request", async () => {
@@ -430,4 +522,35 @@ test("unreadable enabled configuration and sink accessors stay disabled without 
   }
   assert.equal(gets, 0);
   assert.equal(calls, 3);
+});
+
+test("original-operation queries retain their own bounded diagnostic scope and original error", async () => {
+  const f = fixture();
+  const queryAction =
+    "crewon.project-generation-queries.v1.queryConceptGeneration";
+  const failure = new Error("private supplier details must remain private");
+  await assert.rejects(
+    f.runPluginGenerationDiagnostics("req-query", queryAction, () =>
+      f.observePluginGenerationPhase("query.node-execute", async () => {
+        throw failure;
+      }),
+    ),
+    (error) => error === failure,
+  );
+  assert.deepEqual(
+    f.records().map(({ phase, status }) => ({ phase, status })),
+    [
+      { phase: "route.invoke", status: "start" },
+      { phase: "query.node-execute", status: "start" },
+      { phase: "query.node-execute", status: "error" },
+      { phase: "route.invoke", status: "error" },
+    ],
+  );
+  assert.ok(f.records().every((record) => record.requestId === "req-query"));
+  assert.ok(f.lines.every((line) => !line.includes("supplier")));
+  const before = f.lines.length;
+  await f.runPluginGenerationDiagnostics("req-other", queryAction + " ", () =>
+    f.observePluginGenerationPhase("query.current", async () => 3),
+  );
+  assert.equal(f.lines.length, before);
 });

@@ -1,5 +1,8 @@
 import { describe, expect, it, vi } from "vitest";
-import { ControlApiClient } from "@crewon/control-client";
+import {
+  ControlApiClient,
+  ControlApiTransportError,
+} from "@crewon/control-client";
 import { ControlProjectConversationTurn } from "./controlProjectConversationTurn";
 const at = "2026-10-06T00:00:00.000Z";
 const binding = {
@@ -130,26 +133,73 @@ describe("original project Turn key and physical lifetime", () => {
     }
   });
 
+  it("releases a rejected model selection so a corrected model can be sent", async () => {
+    let keyCount = 0;
+    const key = vi.fn(() => `key-${++keyCount}`);
+    const owner = new ControlProjectConversationTurn(
+      api(async () => {
+        if (keyCount === 1)
+          return Response.json(
+            {
+              error: {
+                category: "validation",
+                code: "plugin_task_model_selection_invalid",
+                requestId: "fixture",
+              },
+            },
+            { status: 422 },
+          );
+        return Response.json(acknowledgement);
+      }),
+      key,
+    );
+    try {
+      await expect(owner.start(input)).rejects.toThrow(
+        "plugin_task_model_selection_invalid",
+      );
+      expect(owner.retainedSelection("thread")).toBeNull();
+      await expect(
+        owner.start({ ...input, modelId: "gpt-6-astra" }),
+      ).resolves.toEqual({ threadId: "thread", runId: "actual-run" });
+      expect(key).toHaveBeenCalledTimes(2);
+    } finally {
+      await owner.close();
+    }
+  });
+
   it("ambiguous response retry retains original revisions/body/key even when the Thread advanced", async () => {
     const bodies: unknown[] = [];
     const key = vi.fn(() => "original-key");
+    const lostAcknowledgement = new TypeError("lost ACK");
     const owner = new ControlProjectConversationTurn(
       api(async (_url, init) => {
         bodies.push(JSON.parse(init!.body as string));
-        if (bodies.length === 1) throw new TypeError("lost ACK");
+        if (bodies.length === 1) throw lostAcknowledgement;
         return Response.json({ ...acknowledgement, disposition: "replayed" });
       }),
       key,
     );
-    await expect(owner.start(input)).rejects.toMatchObject({
+    const first = owner.start(input);
+    await expect(first).rejects.toBeInstanceOf(ControlApiTransportError);
+    await expect(first).rejects.toMatchObject({
       name: "ControlApiTransportError",
-      cause: { message: "lost ACK" },
+      message: "control_api_transport_unavailable",
+      cause: lostAcknowledgement,
     });
     expect(owner.retainedSelection("thread")).toEqual(input.selection);
     expect(owner.retainedSelection("other-thread")).toBeNull();
     expect(() => owner.start({ ...input, content: "different" })).toThrow(
       "original_request_pending",
     );
+    expect(() =>
+      owner.start({
+        ...input,
+        selection: {
+          ...input.selection,
+          binding: { ...binding, projectId: "foreign-project" },
+        },
+      }),
+    ).toThrow("original_request_pending");
     expect(
       await owner.start({
         ...input,
@@ -164,7 +214,16 @@ describe("original project Turn key and physical lifetime", () => {
       "original_request_pending",
     );
     expect(bodies).toHaveLength(2);
-    expect(bodies[0]).toMatchObject({ modelId: input.modelId });
+    expect(bodies[0]).toMatchObject({
+      projectId: binding.projectId,
+      threadId: input.threadId,
+      content: input.content,
+      modelId: input.modelId,
+      expectedThreadRevision: input.expectedThreadRevision,
+      expectedBindingRevision: binding.revision,
+      idempotencyKey: "original-key",
+      stage: input.selection.stage,
+    });
     expect(bodies[0]).toEqual(bodies[1]);
     expect(key).toHaveBeenCalledTimes(1);
     expect(owner.retainedSelection("thread")).toEqual(input.selection);

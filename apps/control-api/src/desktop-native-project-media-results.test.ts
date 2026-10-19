@@ -5,9 +5,18 @@ import test from "node:test";
 import { readFile, rename, writeFile } from "node:fs/promises";
 import { loadDesktopProjectResultArchive } from "@crewon/media-runtime/desktop-project-result-archive";
 import { loadDesktopProjectMaterialArchive } from "@crewon/media-runtime/desktop-project-material-archive";
-import { desktopNativeMediaInputFixture as fixture } from "./desktop-native-project-media-input.test-support.ts";
+import { desktopNativeMediaInputFixture } from "./desktop-native-project-media-input.test-support.ts";
 import { isInstalledProjectMediaResultRuntime } from "./installed-project-media-result-runtime.ts";
 const options = { skip: process.platform === "win32", timeout: 30_000 };
+const fixture: typeof desktopNativeMediaInputFixture = (t, purposes, input) =>
+  desktopNativeMediaInputFixture(t, purposes, {
+    ...(process.env.CREWON_NATIVE_MEDIA_RESULT_TEST_PACKAGE
+      ? {
+          packageDirectory: process.env.CREWON_NATIVE_MEDIA_RESULT_TEST_PACKAGE,
+        }
+      : {}),
+    ...input,
+  });
 test(
   "Native result scope is explicitly composed, cold reopens and never contacts generation peer for history",
   options,

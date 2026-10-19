@@ -37,6 +37,11 @@ import {
   preserveControlRunSynchronizations,
   clearControlRunSynchronization,
 } from "./controlRunTerminalPresentation";
+import {
+  preserveControlRunModelActivities,
+  updateControlRunModelActivity,
+} from "./controlRunModelActivity";
+import { createProjectWorkspaceChangeObserver } from "../plugins/projectWorkspaceChanges";
 
 type ThreadSetter = (updater: (current: Thread[]) => Thread[]) => void;
 
@@ -108,6 +113,9 @@ export function useControlThreadRuntime(params: {
       client: params.client,
     });
     const synchronizingRuns = new Map<string, Set<string>>();
+    const workspaceChanges = createProjectWorkspaceChangeObserver(
+      params.client,
+    );
     let control: ControlThreadRuntime;
     control = new ControlThreadRuntime(
       {
@@ -136,9 +144,12 @@ export function useControlThreadRuntime(params: {
               current,
               preserveControlRunSynchronizations(
                 current.find((item) => item.id === thread.id),
-                mergeThreadMetadata(
+                preserveControlRunModelActivities(
                   current.find((item) => item.id === thread.id),
-                  thread,
+                  mergeThreadMetadata(
+                    current.find((item) => item.id === thread.id),
+                    thread,
+                  ),
                 ),
                 synchronizingRuns.get(thread.id) ?? new Set(),
               ),
@@ -203,6 +214,16 @@ export function useControlThreadRuntime(params: {
           if (!manageThreadsRef.current) return;
           params.appendStreamingTextDelta(threadId, delta);
         },
+        onModelActivity: (threadId, runId, activity) => {
+          if (!manageThreadsRef.current) return;
+          params.setThreads((current) =>
+            current.map((thread) =>
+              thread.id === threadId
+                ? updateControlRunModelActivity(thread, runId, activity)
+                : thread,
+            ),
+          );
+        },
         onTextReset: (threadId) => {
           if (!manageThreadsRef.current) return;
           params.resetStreamingText(threadId);
@@ -212,6 +233,7 @@ export function useControlThreadRuntime(params: {
           await params.waitForStreamingTextDrain(threadId);
         },
         onToolItem: (threadId, runId, item) => {
+          workspaceChanges.tool(threadId, runId, item);
           if (!manageThreadsRef.current) return;
           params.setThreads((current) =>
             appendItemInThread(current, threadId, runId, item),
@@ -277,6 +299,7 @@ export function useControlThreadRuntime(params: {
           );
         },
         onRunTerminal: (threadId, runId, terminal) => {
+          workspaceChanges.terminal(threadId, runId);
           let runs = synchronizingRuns.get(threadId);
           if (!runs) synchronizingRuns.set(threadId, (runs = new Set()));
           runs.add(runId);
@@ -431,6 +454,7 @@ export function useControlThreadRuntime(params: {
     control.setThreadEventStreamFocus(params.selectedThreadIdRef.current);
     setRuntime(control);
     return () => {
+      workspaceChanges.close();
       teamObservation?.close();
       control.close();
     };

@@ -4,7 +4,10 @@ import {
   parsePluginUiLease,
   type PluginUiLease,
 } from "@crewon/contracts/plugins";
-import { PluginUiLeaseLifecycle } from "./pluginUiLeaseLifecycle";
+import {
+  PluginUiLeaseLifecycle,
+  PluginUiLeaseRenewalDeferredError,
+} from "./pluginUiLeaseLifecycle";
 import { deferred, flush, uiLease } from "./pluginUiLoader.test-support";
 
 const NOW = Date.parse("2026-10-05T00:00:00.000Z");
@@ -27,6 +30,64 @@ beforeEach(() => {
 afterEach(() => vi.useRealTimers());
 
 describe("plugin UI lease owner ordering", () => {
+  it("retains only the confirmed unchanged owner after deferred renewal without replaying queued work or extending expiry", async () => {
+    const lifecycle = new PluginUiLeaseLifecycle();
+    const previous = lease();
+    lifecycle.register(previous);
+    const response = deferred<unknown>();
+    const request = vi.fn(async () => response.promise);
+    const commit = vi.fn();
+    const renewing = lifecycle.renew(previous, signal(), request, commit);
+    const queuedWork = vi.fn();
+    const queued = lifecycle.run(previous, signal(), queuedWork);
+    void renewing.catch(() => undefined);
+    void queued.catch(() => undefined);
+    const deferredError = new PluginUiLeaseRenewalDeferredError(previous);
+    response.reject(deferredError);
+    await expect(renewing).rejects.toBe(deferredError);
+    await expect(queued).rejects.toBe(deferredError);
+    expect(queuedWork).not.toHaveBeenCalled();
+    expect(commit).not.toHaveBeenCalled();
+    await expect(
+      lifecycle.run(previous, signal(), (current) => current),
+    ).resolves.toEqual(previous);
+    vi.setSystemTime(Date.parse(previous.expiresAt));
+    await expect(lifecycle.run(previous, signal(), queuedWork)).rejects.toThrow(
+      "plugin_ui_lease_expired",
+    );
+    await expect(
+      lifecycle.renew(previous, signal(), request, commit),
+    ).rejects.toThrow("plugin_ui_lease_expired");
+    expect(request).toHaveBeenCalledTimes(1);
+  });
+
+  it("never trusts deferred text, a changed lease, late expiry, or a deferred error thrown by commit", async () => {
+    const previous = lease();
+    for (const mode of ["message", "changed", "expired", "commit"] as const) {
+      vi.setSystemTime(NOW);
+      const lifecycle = new PluginUiLeaseLifecycle();
+      lifecycle.register(previous);
+      const request = async () => {
+        if (mode === "commit") return extension(previous);
+        if (mode === "expired")
+          vi.setSystemTime(Date.parse(previous.expiresAt));
+        if (mode === "message")
+          throw new Error("plugin_ui_lease_renewal_deferred");
+        throw new PluginUiLeaseRenewalDeferredError(
+          mode === "changed" ? extension(previous) : previous,
+        );
+      };
+      await expect(
+        lifecycle.renew(previous, signal(), request, () => {
+          throw new PluginUiLeaseRenewalDeferredError(previous);
+        }),
+      ).rejects.toThrow();
+      await expect(lifecycle.run(previous, signal(), vi.fn())).rejects.toThrow(
+        "plugin_ui_lease_owner_missing",
+      );
+    }
+  });
+
   it("drains real work and singleflights renewal before waiting actions use the same owner's latest lease", async () => {
     const lifecycle = new PluginUiLeaseLifecycle();
     const previous = lease();

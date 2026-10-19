@@ -1,0 +1,46 @@
+{
+  "builtAt": "2026-10-16T08:47:43.073Z",
+  "output": "/private/tmp/crewon-plugin-performance-20261015/comfy-panel-profile-20261016.asar",
+  "sha256": "0cd2d52a7f926f0d06643c96ca95426b0f4e6df2b293442b8ab8683c9b6548a9",
+  "headerSha256": "1527924ee1fbc05428f7c6570a8ec6ef03291fcc60a7ad9436980b18368ef6e1",
+  "nonNativeFilesIntegrityVerified": 17477,
+  "runtime": {
+    "schemaVersion": "crewon.extension-build-identity.v1",
+    "implementationDigest": "sha256:2d22f8c4b9b1ac130248d6c46383d788e5f97a346cd5b46a201088b42313a937",
+    "bundles": [
+      {
+        "file": "control-api.mjs",
+        "digest": "sha256:94730e99bb775dc9def8695c6757aab7244ce536fed74b0e1dc0c9ae85ff5340"
+      },
+      {
+        "file": "device-gateway.mjs",
+        "digest": "sha256:a75bcaee2d78fab139f01f4212d823dc0248a430df7c6e9650ee6eb12c6e0e52"
+      },
+      {
+        "file": "local-workspace-checks-mcp.mjs",
+        "digest": "sha256:00c30cb7aeb1699fc3c38a3a5e3318b03d8f9a8b97b22295ddd9671b6b0d5c64"
+      },
+      {
+        "file": "provider-model-catalog.mjs",
+        "digest": "sha256:a762f1e2f0e9bcd827505cff3443b3a5d826a8b7682963ce3227c9df2ed5f6f4"
+      },
+      {
+        "file": "provider-settings-coordinator.mjs",
+        "digest": "sha256:64d3d107b3a851c45c61f44c989d8d54fa68e606739cf5b74f06576857e16b96"
+      },
+      {
+        "file": "runtime-release.mjs",
+        "digest": "sha256:446737d0a9700426bac0a1464d4817ecda532653b88563594a20e5573de89326"
+      },
+      {
+        "file": "runtime-worker.mjs",
+        "digest": "sha256:cc563b4d73b9e4b3ed07679cbaf2d1d9c4c3bc1d108d7dba140c34ac39516dcc"
+      }
+    ],
+    "historicalWorkItemScope": "crewon.extension-work-item-scope.v1"
+  },
+  "installed": true,
+  "acceptedInClient": false,
+  "backupDirectory": "/private/tmp/crewon-plugin-performance-20261015/before-comfy-panel-20261016",
+  "installedAt": "2026-10-16T08:55:40.645740+00:00"
+}

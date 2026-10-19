@@ -51,6 +51,7 @@ export class ConceptGenerationIntentController {
     canGenerate: false,
   };
   #host: ProjectGenerationHostContext | null = null;
+  #hostProjectId: string | null = null;
   #seenHostIntent: string | null = null;
   #source: ProjectGenerationUiReference | null = null;
   #active = false;
@@ -225,6 +226,33 @@ export class ConceptGenerationIntentController {
     } else if (this.locked) this.#update({ retryable: false });
     this.#rebind();
   }
+  /** Withdraw only this page's projection; the host retains the original journal. */
+  setHostProjectScope(projectId: string | null) {
+    this.#hostProjectId = projectId;
+    if (
+      this.#disposed ||
+      !projectId ||
+      this.#write ||
+      !this.#snapshot.request ||
+      this.#snapshot.request.reference.projectId === projectId
+    )
+      return;
+    ++this.#recoveryEpoch;
+    this.#check?.abort();
+    this.#host = null;
+    this.#seenHostIntent = null;
+    this.#binding = null;
+    this.#update({
+      phase: "idle",
+      intentPhase: null,
+      request: null,
+      receipt: null,
+      retryable: false,
+      recovery: "idle",
+      reason: null,
+      canGenerate: false,
+    });
+  }
   #eligible() {
     const source = this.#source,
       record = this.#record;
@@ -371,6 +399,7 @@ export class ConceptGenerationIntentController {
       if (this.#write === controller) {
         const locked = this.locked;
         this.#write = null;
+        this.setHostProjectScope(this.#hostProjectId);
         this.#update({});
         if (locked !== this.locked) this.#ports.lockChanged();
       }

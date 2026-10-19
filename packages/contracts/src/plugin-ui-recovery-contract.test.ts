@@ -99,6 +99,24 @@ const accepted = (index = 0) => ({
   retryable: false,
   receipt: structuredClone(index === 2 ? selectionReceipt : taskReceipt),
 });
+test("a query may recover a verified non-admission after repeated dispatch while generation remains guarded", () => {
+  const value = {
+    ...hint(1),
+    revision: 4,
+    phase: "refused",
+    dispatchMayHaveOccurred: true,
+    dispatchAttemptCount: 2,
+    retryable: false,
+    reasonCode: "project_query_revision_not_admitted",
+  };
+  assert.equal(parsePluginUiRecoveryHint(value).phase, "refused");
+  assert.throws(() =>
+    parsePluginUiRecoveryHint({ ...value, request: requests[0] }),
+  );
+  assert.throws(() =>
+    parsePluginUiRecoveryHint({ ...value, reasonCode: "revision_conflict" }),
+  );
+});
 
 test("preserves the three original immutable command schemas, without scope or URL selectors", () => {
   for (const original of requests) {

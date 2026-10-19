@@ -16,7 +16,11 @@ import {
   type ProjectGenerationHostContext,
 } from "@crewon/contracts/plugins";
 import { AGENT_PLATFORM_SESSION_CHANGED_EVENT } from "../agent-platform/agentPlatformClient";
-import { installedPluginTaskRequest } from "./installedPluginTaskRequests";
+import { subscribeControlThreadRevision } from "../control-runtime/controlThreadRevisionSubscriptions";
+import {
+  installedPluginTaskRequest,
+  installedPluginTaskRead,
+} from "./installedPluginTaskRequests";
 import {
   installedPluginTaskModulePin,
   installedPluginTaskThread,
@@ -203,7 +207,9 @@ export function useInstalledPluginGenerationContext(
     if (!owner || !live) return;
     const changed = () => update((value) => value + 1);
     owner.listeners.add(changed);
-    const unsubscribe = owner.journal.subscribe(changed);
+    const unsubscribe = owner.journal.subscribe((intent) => {
+      if (intent.familyKey === owner.familyKey) changed();
+    });
     return () => {
       owner.listeners.delete(changed);
       unsubscribe();
@@ -234,6 +240,18 @@ export function useInstalledPluginGenerationContext(
   ]);
 
   useEffect(() => {
+    if (!live || !input.ports || !destination) return;
+    return subscribeControlThreadRevision(
+      input.ports.runtime,
+      destination,
+      () => {
+        setReads(null);
+        update((value) => value + 1);
+      },
+    );
+  }, [live, input.ports, destination]);
+
+  useEffect(() => {
     if (!owner || !live || !input.ports) return;
     const ports = input.ports;
     const controller = new AbortController();
@@ -256,7 +274,7 @@ export function useInstalledPluginGenerationContext(
         destination === null
           ? null
           : installedPluginTaskThread(
-              await installedPluginTaskRequest(
+              await installedPluginTaskRead(
                 ports.client,
                 (signal) => {
                   assertCurrent();
@@ -492,7 +510,7 @@ export function useInstalledPluginGenerationContext(
       const { projectId, assetId, assetRevision } = accepted.input.reference;
       const locator = { projectId, assetId, assetRevision };
       const result = parseGetConceptGenerationResponse(
-        await installedPluginTaskRequest(
+        await installedPluginTaskRead(
           ports.client,
           (signal) => {
             assertCurrent();

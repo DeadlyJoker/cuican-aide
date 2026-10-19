@@ -1,0 +1,54 @@
+{
+  "installedAt": "2026-10-16T11:42:45.621829+00:00",
+  "backup": "/private/tmp/crewon-plugin-performance-20261015/before-catalog-snapshot-20261016",
+  "asarSha256": "b07f0c0d0fe732ba389bf0b65aafc076dc45cd93138e2406327811446f1764d5",
+  "runtime": {
+    "schemaVersion": "crewon.extension-build-identity.v1",
+    "implementationDigest": "sha256:5d69c37f11c56ed16b36cf51c137903beed7379c07df717bdf61d3fad67442c5",
+    "bundles": [
+      {
+        "file": "control-api.mjs",
+        "digest": "sha256:d8e1972b479cc6a5e4cb9152cdad17807a26f74874bb38fee6c796242165a68a"
+      },
+      {
+        "file": "device-gateway.mjs",
+        "digest": "sha256:a75bcaee2d78fab139f01f4212d823dc0248a430df7c6e9650ee6eb12c6e0e52"
+      },
+      {
+        "file": "local-workspace-checks-mcp.mjs",
+        "digest": "sha256:00c30cb7aeb1699fc3c38a3a5e3318b03d8f9a8b97b22295ddd9671b6b0d5c64"
+      },
+      {
+        "file": "provider-model-catalog.mjs",
+        "digest": "sha256:a762f1e2f0e9bcd827505cff3443b3a5d826a8b7682963ce3227c9df2ed5f6f4"
+      },
+      {
+        "file": "provider-settings-coordinator.mjs",
+        "digest": "sha256:64d3d107b3a851c45c61f44c989d8d54fa68e606739cf5b74f06576857e16b96"
+      },
+      {
+        "file": "runtime-release.mjs",
+        "digest": "sha256:bb0887b254dc5c41fa1d2615400ab9a89f31d028309baf4b3c03278449fd4d82"
+      },
+      {
+        "file": "runtime-worker.mjs",
+        "digest": "sha256:52725cbba5b07b5796f95162129ade25e09a27ec897064ca7794127c5f64b399"
+      }
+    ],
+    "historicalWorkItemScope": "crewon.extension-work-item-scope.v1"
+  },
+  "codesignVerified": true,
+  "controlTypecheckPassed": true,
+  "workerTypecheckPassed": true,
+  "workerPeerAndHostTestsPassed": 38,
+  "workerPostgresCasesSkipped": 2,
+  "controlTestsPassed": 25,
+  "controlPostgresCasesSkipped": 3,
+  "boundaryPassed": true,
+  "clientAcceptancePassed": false,
+  "firstQueryAfterRestartPassed": false,
+  "clientMainPid": 73416,
+  "currentBlocker": "macos_keychain_decryption_authorization",
+  "startupSample": "/private/tmp/crewon-runtime-merge-20261016/catalog-snapshot-startup.sample.txt",
+  "lastUpdated": "2026-10-16T11:43:31.798923+00:00"
+}

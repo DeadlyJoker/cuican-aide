@@ -382,6 +382,14 @@ export {
 } from "./plugin-project-read-scope.ts";
 
 export { scopedPluginMetadataReceipt } from "./plugin-project-mutation-scope-support.ts";
+export * from "./project-media-image-review.ts";
+export { reviewProjectMediaVideoTechnical } from "./project-media-video-technical-review.ts";
+export type {
+  ProjectMediaVideoMetadata,
+  ProjectMediaVideoTechnicalPolicy,
+  ProjectMediaVideoTechnicalFinding,
+} from "./project-media-video-technical-review.ts";
+export * from "./project-media-image-review-job.ts";
 
 export {
   qualifyPluginProjectFoundationScope,

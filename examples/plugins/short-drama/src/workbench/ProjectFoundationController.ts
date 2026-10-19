@@ -83,6 +83,7 @@ export class ProjectFoundationController {
   #disposed = false;
   #epoch = 0;
   #read: AbortController | null = null;
+  #backgroundRead: AbortController | null = null;
   #sourceRead: AbortController | null = null;
   #chapterRead: AbortController | null = null;
   #latestProposalRevision = 0;
@@ -91,6 +92,7 @@ export class ProjectFoundationController {
   #write: AbortController | null = null;
   #intent: Pending | null = null;
   #proposalDirty = false;
+  #invalidatedProjectId: string | null = null;
   constructor(
     input: Readonly<{
       client: PluginProjectFoundationClient;
@@ -112,6 +114,26 @@ export class ProjectFoundationController {
   }
   refreshWriteActivity() {
     this.#publish({});
+    this.#refreshInvalidated();
+  }
+  /** Coalesce host read hints without replacing an editor or interrupting a physical write. */
+  invalidate(projectId: string) {
+    if (this.#disposed || this.#snapshot.projectId !== projectId) return;
+    this.#invalidatedProjectId = projectId;
+    this.#refreshInvalidated();
+  }
+  #refreshInvalidated() {
+    if (
+      this.#invalidatedProjectId === null ||
+      this.#invalidatedProjectId !== this.#snapshot.projectId ||
+      !this.#snapshot.available ||
+      this.#read !== null ||
+      this.locked ||
+      this.#physicalPending()
+    )
+      return;
+    this.#invalidatedProjectId = null;
+    void this.refresh("background");
   }
   setReady(available: boolean) {
     if (this.#disposed || this.#snapshot.available === available) return;
@@ -130,6 +152,7 @@ export class ProjectFoundationController {
       return;
     }
     this.#project = project;
+    this.#invalidatedProjectId = null;
     this.#proposalDirty = false;
     this.#latestProposalRevision = 0;
     ++this.#epoch;
@@ -202,7 +225,7 @@ export class ProjectFoundationController {
       this.#publish({ proposalDraft, notice: null });
     }
   }
-  async refresh() {
+  async refresh(mode: "foreground" | "background" = "foreground") {
     const projectId = this.#snapshot.projectId;
     if (
       this.#disposed ||
@@ -215,13 +238,17 @@ export class ProjectFoundationController {
     const request = new AbortController(),
       epoch = this.#epoch;
     this.#read = request;
-    this.#publish({ loading: true, error: null, notice: null });
+    this.#backgroundRead = mode === "background" ? request : null;
+    this.#publish({
+      ...(mode === "foreground" ? { loading: true, notice: null } : {}),
+      error: null,
+    });
     try {
       const { foundation } = await this.#client.getFoundation(
         { projectId },
         { signal: request.signal },
       );
-      if (!this.#current(epoch, request)) return;
+      if (!this.#readCurrent(epoch, request, mode)) return;
       this.#publish({
         foundation,
         origins: new Map([
@@ -239,7 +266,7 @@ export class ProjectFoundationController {
           },
           { signal: request.signal },
         );
-        if (!this.#current(epoch, request)) return;
+        if (!this.#readCurrent(epoch, request, mode)) return;
         this.#publish({
           proposal,
           ...(!this.#proposalDirty
@@ -252,15 +279,17 @@ export class ProjectFoundationController {
           { projectId, sourceRevision: foundation.source.revision },
           { signal: request.signal },
         );
-        if (!this.#current(epoch, request)) return;
+        if (!this.#readCurrent(epoch, request, mode)) return;
         this.#publish({ source });
       }
-      await this.#latest(epoch, request, 0);
+      await this.#latest(epoch, request, 0, mode);
     } catch (error) {
       if (this.#current(epoch, request))
         this.#publish({ loading: false, error: "无法读取创作资料，请重试。" });
     } finally {
       if (this.#read === request) this.#read = null;
+      if (this.#backgroundRead === request) this.#backgroundRead = null;
+      this.#refreshInvalidated();
     }
   }
   async continueProposals() {
@@ -283,16 +312,21 @@ export class ProjectFoundationController {
       if (this.#read === request) this.#read = null;
     }
   }
-  async #latest(epoch: number, request: AbortController, after: number) {
+  async #latest(
+    epoch: number,
+    request: AbortController,
+    after: number,
+    mode: "foreground" | "background" = "foreground",
+  ) {
     const projectId = this.#snapshot.projectId!;
-    this.#publish({ loading: true });
+    if (mode === "foreground") this.#publish({ loading: true });
     // At most 64 bounded pages per user action. Only the last page is retained, never the whole history/model context.
     for (let count = 0; count < 64; count++) {
       const page = await this.#client.listProposals(
         { projectId, afterProposalRevision: after, limit: 3 },
         { signal: request.signal },
       );
-      if (!this.#current(epoch, request)) return;
+      if (!this.#readCurrent(epoch, request, mode)) return;
       const proposal = page.proposals.at(-1) ?? this.#snapshot.proposal;
       this.#latestProposalRevision = Math.max(
         this.#latestProposalRevision,
@@ -494,6 +528,8 @@ export class ProjectFoundationController {
       return false;
     }
     ++this.#epoch;
+    if (this.#backgroundRead && this.#backgroundRead === this.#read)
+      this.#invalidatedProjectId = this.#snapshot.projectId;
     this.#read?.abort();
     this.#sourceRead?.abort();
     this.#chapterRead?.abort();
@@ -617,6 +653,7 @@ export class ProjectFoundationController {
     } finally {
       if (this.#write === request) this.#write = null;
       this.#publish({});
+      this.#refreshInvalidated();
     }
   }
   #current(epoch: number, request: AbortController) {
@@ -626,6 +663,18 @@ export class ProjectFoundationController {
       epoch === this.#epoch &&
       !request.signal.aborted
     );
+  }
+  #readCurrent(
+    epoch: number,
+    request: AbortController,
+    mode: "foreground" | "background",
+  ) {
+    if (!this.#current(epoch, request)) return false;
+    if (mode === "background" && (this.locked || this.#physicalPending())) {
+      this.#invalidatedProjectId = this.#snapshot.projectId;
+      return false;
+    }
+    return true;
   }
   #publish(patch: Partial<FoundationSnapshot>) {
     if (this.#disposed) return;

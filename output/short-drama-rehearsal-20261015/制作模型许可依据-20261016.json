@@ -1,0 +1,28 @@
+{
+  "checkedAt": "2026-10-16T06:51:06.854443+00:00",
+  "scope": "Official upstream licensing basis; deployed weight identity and completed project-media provenance remain unverified. Not final distribution clearance.",
+  "sources": [
+    {
+      "model": "FLUX.1-Krea-dev",
+      "url": "https://huggingface.co/black-forest-labs/FLUX.1-Krea-dev/blob/main/LICENSE.md",
+      "license": "FLUX.1 dev Non-Commercial License v1.1.2",
+      "interpretation": "Model/service use and generated output use have distinct terms. Section2d permits commercial output use subject to restrictions. This does not establish a commercial model-hosting license for the deployed service.",
+      "deployedIdentityVerified": false
+    },
+    {
+      "model": "Wan2.2-I2V-A14B",
+      "url": "https://huggingface.co/Wan-AI/Wan2.2-I2V-A14B",
+      "license": "Apache-2.0",
+      "interpretation": "Official model card names Apache2 and disclaims ownership of generated content; downstream use still follows its terms.",
+      "deployedIdentityVerified": false
+    },
+    {
+      "model": "VoxCPM2",
+      "url": "https://huggingface.co/openbmb/VoxCPM2",
+      "license": "Apache-2.0",
+      "interpretation": "Official card identifies commercial use and Chinese voice design without a reference recording. Use original fictional voices, not a real-person clone.",
+      "deployedIdentityVerified": false
+    }
+  ],
+  "projectMediaGenerated": false
+}

@@ -134,7 +134,7 @@ function slot(value) {
   };
 }
 
-function options(input) {
+function options(input, outputRole) {
   const entries = record(input);
   if (
     Object.keys(entries).some(
@@ -148,31 +148,59 @@ function options(input) {
     fail("options_invalid");
   const result = {
     outputNodeId: nodeId(entries.outputNodeId.value),
-    prompt: slot(entries.prompt.value),
+    prompt:
+      outputRole === VIDEO_OUTPUT && entries.prompt.value === null
+        ? null
+        : slot(entries.prompt.value),
     outputPrefix: slot(entries.outputPrefix.value),
     objectInfo: entries.objectInfo?.value,
   };
   if (
     result.outputPrefix.nodeId !== result.outputNodeId ||
     result.outputPrefix.input !== "filename_prefix" ||
-    (result.prompt.nodeId === result.outputPrefix.nodeId &&
-      result.prompt.input === result.outputPrefix.input)
+    (result.prompt?.nodeId === result.outputPrefix.nodeId &&
+      result.prompt?.input === result.outputPrefix.input)
   )
     fail("slot_invalid");
   return result;
 }
 
+const IMAGE_OUTPUT = Object.freeze({ className: "SaveImage", input: "images" });
+const VIDEO_OUTPUT = Object.freeze({ className: "SaveVideo", input: "video" });
+const AUDIO_OUTPUT = Object.freeze({ className: "SaveAudio", input: "audio" });
+
 /** Author-side API JSON validation only; registration/valid JSON do not prove runtime readiness. */
 export function validateComfyApiGraph(input, inputOptions) {
+  return validateGraph(input, inputOptions, IMAGE_OUTPUT);
+}
+
+/** Explicit video authoring; it cannot qualify a v1 image workflow or authorize execution. */
+export function validateComfyApiVideoGraph(input, inputOptions) {
+  return validateGraph(input, inputOptions, VIDEO_OUTPUT);
+}
+
+/** Explicit lossless audio authoring; no execution or v1 image-result qualification. */
+export function validateComfyApiAudioGraph(input, inputOptions) {
+  return validateGraph(input, inputOptions, AUDIO_OUTPUT);
+}
+
+function validateGraph(input, inputOptions, outputRole) {
   const source = record(input);
   const ids = Object.keys(source);
   if (!ids.length || ids.length > 512) fail("node_limit");
   for (const id of ids) nodeId(id);
-  const config = options(inputOptions);
+  const config = options(inputOptions, outputRole);
   const graph = cloneJson(input);
   const metadata =
-    config.objectInfo === undefined ? null : record(config.objectInfo);
+    config.objectInfo === undefined
+      ? null
+      : record(
+          outputRole === IMAGE_OUTPUT
+            ? config.objectInfo
+            : cloneJson(config.objectInfo),
+        );
   const outputCounts = new Map();
+  const outputTypes = new Map();
   const dependencies = new Map();
   for (const id of ids) {
     const node = graph[id];
@@ -199,6 +227,7 @@ export function validateComfyApiGraph(input, inputOptions) {
       if (!Array.isArray(outputs) || types.isProxy(outputs))
         fail("object_info_invalid");
       outputCounts.set(id, outputs.length);
+      outputTypes.set(id, outputs);
     }
     dependencies.set(id, []);
   }
@@ -228,21 +257,28 @@ export function validateComfyApiGraph(input, inputOptions) {
   for (const id of ids) visit(id);
   const output = graph[config.outputNodeId];
   if (
-    output?.class_type !== "SaveImage" ||
-    !Array.isArray(output.inputs.images) ||
-    output.inputs.images.length !== 2
+    output?.class_type !== outputRole.className ||
+    !Array.isArray(output.inputs[outputRole.input]) ||
+    output.inputs[outputRole.input].length !== 2
   )
     fail("output_role_invalid");
-  const promptNode = graph[config.prompt.nodeId];
-  if (
-    !promptNode ||
-    !Object.hasOwn(promptNode.inputs, config.prompt.input) ||
-    !Object.hasOwn(output.inputs, config.outputPrefix.input)
-  )
+  if (outputRole === VIDEO_OUTPUT) {
+    if (!metadata) fail("video_object_info_required");
+    const wire = output.inputs.video;
+    if (outputTypes.get(wire[0])?.[wire[1]] !== "VIDEO")
+      fail("video_link_type_invalid");
+    validateVideoSaveInputs(output.inputs, metadata.SaveVideo.value);
+  }
+  if (outputRole === AUDIO_OUTPUT) {
+    if (!metadata) fail("audio_object_info_required");
+    const wire = output.inputs.audio;
+    if (outputTypes.get(wire[0])?.[wire[1]] !== "AUDIO")
+      fail("audio_link_type_invalid");
+    validateAudioSaveInputs(output.inputs, metadata.SaveAudio.value);
+  }
+  if (!Object.hasOwn(output.inputs, config.outputPrefix.input))
     fail("slot_missing");
-  const prompt = promptNode.inputs[config.prompt.input];
   const prefix = output.inputs[config.outputPrefix.input];
-  text(prompt, 2000, PROMPT_CONTROLS, true);
   text(prefix, 128, ALL_CONTROLS, true);
   const ancestors = new Set();
   function collect(id) {
@@ -251,12 +287,30 @@ export function validateComfyApiGraph(input, inputOptions) {
     for (const dependency of dependencies.get(id)) collect(dependency);
   }
   collect(config.outputNodeId);
-  if (!ancestors.has(config.prompt.nodeId)) fail("prompt_disconnected");
+  if (config.prompt !== null) {
+    const promptNode = graph[config.prompt.nodeId];
+    if (!promptNode || !Object.hasOwn(promptNode.inputs, config.prompt.input))
+      fail("slot_missing");
+    text(promptNode.inputs[config.prompt.input], 2000, PROMPT_CONTROLS, true);
+    if (!ancestors.has(config.prompt.nodeId)) fail("prompt_disconnected");
+  }
   return freezeJson(graph);
 }
 
 /** Renders only the explicit reviewed prompt and output prefix slots, preserving every graph entry. */
 export function renderComfyApiGraph(input, inputOptions, inputValues) {
+  return renderGraph(input, inputOptions, inputValues, IMAGE_OUTPUT);
+}
+
+export function renderComfyApiVideoGraph(input, inputOptions, inputValues) {
+  return renderGraph(input, inputOptions, inputValues, VIDEO_OUTPUT);
+}
+
+export function renderComfyApiAudioGraph(input, inputOptions, inputValues) {
+  return renderGraph(input, inputOptions, inputValues, AUDIO_OUTPUT);
+}
+
+function renderGraph(input, inputOptions, inputValues, outputRole) {
   const values = record(inputValues);
   if (
     Object.keys(values).length !== 2 ||
@@ -264,13 +318,127 @@ export function renderComfyApiGraph(input, inputOptions, inputValues) {
     !values.outputPrefix
   )
     fail("render_values_invalid");
-  const prompt = text(values.prompt.value, 2000, PROMPT_CONTROLS);
+  const config = options(inputOptions, outputRole);
+  if (config.prompt === null && values.prompt.value !== null)
+    fail("prompt_slot_absent");
+  const prompt =
+    config.prompt === null
+      ? null
+      : text(values.prompt.value, 2000, PROMPT_CONTROLS);
   const outputPrefix = text(values.outputPrefix.value, 128, ALL_CONTROLS);
-  const config = options(inputOptions);
-  const graph = cloneJson(validateComfyApiGraph(input, inputOptions));
-  graph[config.prompt.nodeId].inputs[config.prompt.input] = prompt;
+  const graph = cloneJson(validateGraph(input, inputOptions, outputRole));
+  if (config.prompt !== null)
+    graph[config.prompt.nodeId].inputs[config.prompt.input] = prompt;
   graph[config.outputPrefix.nodeId].inputs[config.outputPrefix.input] =
     outputPrefix;
   if (Buffer.byteLength(JSON.stringify(graph)) > MAX_BYTES) fail("byte_limit");
   return freezeJson(graph);
+}
+
+/** SaveVideo V3 selects branches with flattened dotted keys, never a nested request object. */
+function validateVideoSaveInputs(inputs, objectInfo) {
+  const metadata = objectInfo;
+  record(metadata.input);
+  const allowed = new Set();
+  function visit(declaration, prefix = "", depth = 0) {
+    if (depth > 8) fail("video_input_schema_invalid");
+    record(declaration);
+    for (const group of ["required", "optional"]) {
+      const fields = declaration[group] ?? {};
+      record(fields);
+      if (Object.keys(fields).length > 64) fail("video_input_schema_invalid");
+      for (const [name, spec] of Object.entries(fields)) {
+        if (
+          !/^[A-Za-z_][A-Za-z0-9_]*$/u.test(name) ||
+          !Array.isArray(spec) ||
+          !spec.length
+        )
+          fail("video_input_schema_invalid");
+        const key = prefix ? `${prefix}.${name}` : name;
+        allowed.add(key);
+        if (!Object.hasOwn(inputs, key)) {
+          if (group === "required") fail("video_input_missing");
+          continue;
+        }
+        const value = inputs[key],
+          type = spec[0],
+          parameters = spec[1] ?? {};
+        record(parameters);
+        if (type === "COMFY_DYNAMICCOMBO_V3") {
+          if (
+            !Array.isArray(parameters.options) ||
+            parameters.options.length > 64
+          )
+            fail("video_input_schema_invalid");
+          for (const option of parameters.options) {
+            record(option);
+            if (typeof option.key !== "string" || !option.inputs)
+              fail("video_input_schema_invalid");
+          }
+          const selected = parameters.options.filter(
+            (option) => option.key === value,
+          );
+          if (typeof value !== "string" || selected.length !== 1)
+            fail("video_input_choice_invalid");
+          visit(selected[0].inputs, key, depth + 1);
+        } else if (type === "VIDEO") {
+          if (key !== "video" || !Array.isArray(value))
+            fail("video_input_type_invalid");
+        } else if (Array.isArray(type)) {
+          if (!type.includes(value)) fail("video_input_choice_invalid");
+        } else if (type === "STRING") {
+          if (typeof value !== "string") fail("video_input_type_invalid");
+        } else if (type === "BOOLEAN") {
+          if (typeof value !== "boolean") fail("video_input_type_invalid");
+        } else if (type === "INT" || type === "FLOAT") {
+          if (
+            typeof value !== "number" ||
+            !Number.isFinite(value) ||
+            (type === "INT" && !Number.isSafeInteger(value))
+          )
+            fail("video_input_type_invalid");
+          if (
+            [parameters.min, parameters.max].some(
+              (limit) =>
+                limit !== undefined &&
+                (typeof limit !== "number" || !Number.isFinite(limit)),
+            )
+          )
+            fail("video_input_schema_invalid");
+          if (
+            (parameters.min !== undefined && value < parameters.min) ||
+            (parameters.max !== undefined && value > parameters.max)
+          )
+            fail("video_input_range_invalid");
+        } else fail("video_input_schema_invalid");
+      }
+    }
+  }
+  visit(metadata.input);
+  if (Object.keys(inputs).some((key) => !allowed.has(key)))
+    fail("video_input_branch_invalid");
+  // This adapter emits the current format.codec branch, not the hidden legacy codec alias.
+  if (Object.hasOwn(inputs, "codec")) fail("video_legacy_codec_ambiguous");
+}
+
+/** Current SaveAudio emits FLAC. Do not invent a format/codec branch or accept a server file path. */
+function validateAudioSaveInputs(inputs, metadata) {
+  const declaration = record(metadata.input);
+  const required = declaration.required?.value;
+  record(required);
+  if (
+    Object.keys(required).length !== 2 ||
+    !Array.isArray(required.audio) ||
+    required.audio[0] !== "AUDIO" ||
+    !Array.isArray(required.filename_prefix) ||
+    required.filename_prefix[0] !== "STRING"
+  )
+    fail("audio_input_schema_invalid");
+  if (
+    Object.keys(inputs).length !== 2 ||
+    !Object.hasOwn(inputs, "audio") ||
+    !Object.hasOwn(inputs, "filename_prefix") ||
+    typeof inputs.filename_prefix !== "string"
+  )
+    fail("audio_input_invalid");
 }

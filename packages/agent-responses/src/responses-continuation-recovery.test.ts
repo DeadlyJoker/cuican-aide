@@ -325,7 +325,7 @@ function createTransport(
   );
 }
 
-function request(): ModelRequest {
+function request() {
   return {
     schemaVersion: "crewon.model-request.v0",
     runId: "run-1",
@@ -344,7 +344,7 @@ function request(): ModelRequest {
     },
     tools: [],
     maxOutputBytes: 32768,
-  };
+  } satisfies ModelRequest;
 }
 
 function checkpoint() {

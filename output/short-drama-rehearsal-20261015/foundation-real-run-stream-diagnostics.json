@@ -1,0 +1,275 @@
+{
+  "recordedAt": "2026-10-15T12:27:09.366770+00:00",
+  "runId": "plugin-PD7Shp2-C0w4j-rDGrHyIMvqOREoCBafMnAuoCgOoro",
+  "model": "gpt-6-astra",
+  "status": "canceled through actual UI after two stream timeouts; candidate not saved",
+  "projectId": "01a13f43-094c-767a-9414-b5622b236255",
+  "bindingRevision": 2,
+  "sourceVersion": "50.2.4",
+  "foundationRevision": 2,
+  "parametersRevision": 2,
+  "toolsSucceeded": [
+    "foundation_scope",
+    "foundation_read",
+    "foundation_proposals"
+  ],
+  "candidateCount": 0,
+  "calls": [
+    {
+      "callId": "175b76bc-6bb6-4426-b9e3-e764008b09da",
+      "startedAt": "2026-10-15T12:16:25.858Z",
+      "finishedAt": "2026-10-15T12:17:11.240Z",
+      "outcome": "completed",
+      "httpTiming": {
+        "admittedMs": 6,
+        "dispatchedMs": 6,
+        "finishedMs": 45382,
+        "firstByteMs": 12082,
+        "firstCompletedItemMs": 32053,
+        "firstSemanticMs": 32053,
+        "headersMs": 12080,
+        "lastByteMs": 45193,
+        "lastSemanticMs": 45257,
+        "readClosedMs": 45257,
+        "streamEndMs": 45382,
+        "terminalMs": 45381
+      },
+      "httpDiagnostics": {
+        "read": {
+          "end": "releasedBeforeEof"
+        },
+        "response": {
+          "cfRay": "a4aec17138e14adb-LAX",
+          "contentType": "text/event-stream",
+          "oneApiRequestId": "202610151216346482568118268d9d6g7hCIqpC",
+          "server": "cloudflare",
+          "status": 200
+        },
+        "stream": {
+          "byteCount": 103328,
+          "chunkCount": 55,
+          "commentFrameCount": 0,
+          "completedItemCount": 1,
+          "dataFrameCount": 9,
+          "frameCount": 9,
+          "lastEventType": "response.completed",
+          "pendingFrameBytes": 0,
+          "reasoningDeltaCount": 0,
+          "terminalEventCount": 1,
+          "textDeltaCount": 0,
+          "toolArgumentDeltaCount": 1,
+          "unknownEventCount": 0
+        },
+        "termination": {
+          "reason": "protocolTerminal"
+        }
+      }
+    },
+    {
+      "callId": "ef2bf3cf-b7bd-474c-8527-e4e2bb9250ad",
+      "startedAt": "2026-10-15T12:17:16.981Z",
+      "finishedAt": "2026-10-15T12:17:38.253Z",
+      "outcome": "completed",
+      "httpTiming": {
+        "admittedMs": 9,
+        "dispatchedMs": 9,
+        "finishedMs": 21271,
+        "firstByteMs": 3271,
+        "firstCompletedItemMs": 14728,
+        "firstSemanticMs": 14725,
+        "headersMs": 3268,
+        "lastByteMs": 21265,
+        "lastSemanticMs": 21266,
+        "readClosedMs": 21266,
+        "streamEndMs": 21271,
+        "terminalMs": 21271
+      },
+      "httpDiagnostics": {
+        "read": {
+          "end": "releasedBeforeEof"
+        },
+        "response": {
+          "cfRay": "a4aec2890d9b3105-LAX",
+          "contentType": "text/event-stream",
+          "oneApiRequestId": "202610151217186973546968268d9d6fskNwvj1",
+          "server": "cloudflare",
+          "status": 200
+        },
+        "stream": {
+          "byteCount": 107267,
+          "chunkCount": 61,
+          "commentFrameCount": 0,
+          "completedItemCount": 1,
+          "dataFrameCount": 43,
+          "frameCount": 43,
+          "lastEventType": "response.completed",
+          "pendingFrameBytes": 0,
+          "reasoningDeltaCount": 0,
+          "terminalEventCount": 1,
+          "textDeltaCount": 0,
+          "toolArgumentDeltaCount": 37,
+          "unknownEventCount": 0
+        },
+        "termination": {
+          "reason": "protocolTerminal"
+        }
+      }
+    },
+    {
+      "callId": "36eb92f6-e753-42d3-b349-d4aeada9fb5a",
+      "startedAt": "2026-10-15T12:17:40.328Z",
+      "finishedAt": "2026-10-15T12:18:59.690Z",
+      "outcome": "failed",
+      "httpTiming": {
+        "admittedMs": 1,
+        "dispatchedMs": 1,
+        "finishedMs": 79361,
+        "firstByteMs": 12143,
+        "headersMs": 12142,
+        "lastByteMs": 19353,
+        "readClosedMs": 79361
+      },
+      "httpDiagnostics": {
+        "read": {
+          "end": "releasedBeforeEof"
+        },
+        "response": {
+          "cfRay": "a4aec34d5a1edb8a-LAX",
+          "contentType": "text/event-stream",
+          "oneApiRequestId": "202610151217501453820998268d9d6vvMz4W8d",
+          "server": "cloudflare",
+          "status": 200
+        },
+        "stream": {
+          "byteCount": 40618,
+          "chunkCount": 31,
+          "commentFrameCount": 0,
+          "completedItemCount": 0,
+          "dataFrameCount": 1,
+          "frameCount": 1,
+          "lastEventType": "response.created",
+          "pendingFrameBytes": 9596,
+          "reasoningDeltaCount": 0,
+          "terminalEventCount": 0,
+          "textDeltaCount": 0,
+          "toolArgumentDeltaCount": 0,
+          "unknownEventCount": 0
+        },
+        "termination": {
+          "code": "responses_idle_timeout",
+          "reason": "idleTimeout"
+        }
+      }
+    },
+    {
+      "callId": "80670c5f-d322-43f8-a312-102ee233976a",
+      "startedAt": "2026-10-15T12:18:59.930Z",
+      "finishedAt": "2026-10-15T12:20:41.440Z",
+      "outcome": "failed",
+      "httpTiming": {
+        "admittedMs": 1,
+        "dispatchedMs": 1,
+        "finishedMs": 101509,
+        "firstByteMs": 4239,
+        "firstCompletedItemMs": 24827,
+        "firstSemanticMs": 20335,
+        "headersMs": 4237,
+        "lastByteMs": 41502,
+        "lastSemanticMs": 24827,
+        "readClosedMs": 101508
+      },
+      "httpDiagnostics": {
+        "read": {
+          "end": "releasedBeforeEof"
+        },
+        "response": {
+          "cfRay": "a4aec50e7b4ed938-LAX",
+          "contentType": "text/event-stream",
+          "oneApiRequestId": "202610151219019699026668268d9d69MvY2U3F",
+          "server": "cloudflare",
+          "status": 200
+        },
+        "stream": {
+          "byteCount": 110139,
+          "chunkCount": 62,
+          "commentFrameCount": 0,
+          "completedItemCount": 1,
+          "dataFrameCount": 42,
+          "frameCount": 42,
+          "lastEventType": "response.output_item.done",
+          "pendingFrameBytes": 28786,
+          "reasoningDeltaCount": 0,
+          "terminalEventCount": 0,
+          "textDeltaCount": 0,
+          "toolArgumentDeltaCount": 35,
+          "unknownEventCount": 0
+        },
+        "termination": {
+          "code": "responses_idle_timeout",
+          "reason": "idleTimeout"
+        }
+      }
+    },
+    {
+      "callId": "0dc328e7-585a-4604-8c02-12eab804fe59",
+      "startedAt": "2026-10-15T12:20:45.130Z",
+      "finishedAt": "2026-10-15T12:21:24.560Z",
+      "outcome": "canceled",
+      "httpTiming": {
+        "admittedMs": 2,
+        "dispatchedMs": 2,
+        "finishedMs": 39430,
+        "firstByteMs": 4659,
+        "firstSemanticMs": 18671,
+        "headersMs": 4659,
+        "lastByteMs": 38840,
+        "lastSemanticMs": 38840,
+        "readClosedMs": 39428
+      },
+      "httpDiagnostics": {
+        "read": {
+          "end": "releasedBeforeEof"
+        },
+        "response": {
+          "cfRay": "a4aec7a12ac5f514-LAX",
+          "contentType": "text/event-stream",
+          "oneApiRequestId": "202610151220485276720388268d9d6tgNH2tWy",
+          "server": "cloudflare",
+          "status": 200
+        },
+        "stream": {
+          "byteCount": 193486,
+          "chunkCount": 163,
+          "commentFrameCount": 0,
+          "completedItemCount": 0,
+          "dataFrameCount": 497,
+          "frameCount": 497,
+          "lastEventType": "response.function_call_arguments.delta",
+          "pendingFrameBytes": 0,
+          "reasoningDeltaCount": 0,
+          "terminalEventCount": 0,
+          "textDeltaCount": 0,
+          "toolArgumentDeltaCount": 492,
+          "unknownEventCount": 0
+        },
+        "termination": {
+          "code": "segment_canceled",
+          "reason": "canceled"
+        }
+      }
+    }
+  ],
+  "liveManagerServiceDurationsSecondsApprox": [
+    13,
+    11,
+    13,
+    17,
+    37
+  ],
+  "lastCallWasActivelyStreamingWhenCanceled": true,
+  "limits": [
+    "Pending bytes alone cannot distinguish missing frame delimiters from interrupted frame transmission or blocked consumption.",
+    "The last call was generating complete tool-argument deltas when stopped; it must not be described as another idle timeout.",
+    "Successful reads do not constitute completed proposal/script acceptance."
+  ]
+}

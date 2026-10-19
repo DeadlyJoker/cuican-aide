@@ -203,7 +203,7 @@ describe("actual Native host-owned plugin bootstrap inputs", () => {
     if (kind === "uid") fsObservation.wrongUid = true; // UID mismatch only is an explicit metadata fault fixture.
     if (kind === "directory") chmodSync(f.dataDirectory, 0o755);
     if (kind === "oversize")
-      writeFileSync(f.approvalPath, "x".repeat(128 * 1024 + 1));
+      writeFileSync(f.approvalPath, "x".repeat(256 * 1024 + 1));
     if (kind === "utf8") writeFileSync(f.approvalPath, Buffer.from([0xff]));
     await expect(prepareDesktopPluginBootstrap(f.input)).rejects.toThrow();
     expect(readdirSync(f.dataDirectory)).not.toContain("plugin-profile.json");
@@ -393,7 +393,7 @@ describe("actual Native host-owned plugin bootstrap inputs", () => {
       "changed_invalid",
     );
     expect(grown).toBe(true);
-    expect(fsObservation.readBufferBytes).toEqual([128 * 1024 + 1]);
+    expect(fsObservation.readBufferBytes).toEqual([256 * 1024 + 1]);
     expect(readdirSync(f.dataDirectory)).toEqual(["plugin-approvals.json"]);
   });
 

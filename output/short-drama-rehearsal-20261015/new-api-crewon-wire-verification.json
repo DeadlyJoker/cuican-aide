@@ -1,0 +1,8 @@
+{
+  "boundary": "Actual Go gateway captured named fixture bytes, real CrewON parser and direct local HTTP; no real model, client UI or business Run.",
+  "bytes": 327,
+  "frameTypes": ["response.created", "response.completed"],
+  "protocolCompleted": 1,
+  "responseKeptOpen": true,
+  "elapsedMs": 18.201
+}

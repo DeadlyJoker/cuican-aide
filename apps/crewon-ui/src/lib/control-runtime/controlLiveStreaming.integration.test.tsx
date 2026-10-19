@@ -356,3 +356,202 @@ it("renders 500 live HTTP deltas including standalone spaces and newlines throug
     container.remove();
   }
 }, 15_000);
+
+it("presents tool completion, model waiting, a real retry, resumed text and terminal idle through the actual SSE hook", async () => {
+  const fixture = liveHttpFixture();
+  const container = document.createElement("div");
+  document.body.append(container);
+  const root = createRoot(container);
+  let state!: ReturnType<typeof useAppThreadState>;
+  let authority!: ReturnType<typeof useControlThreadRuntime>;
+  const notice = vi.fn();
+  function View() {
+    state = useAppThreadState();
+    authority = useControlThreadRuntime({
+      ...state,
+      client: fixture.client,
+      manageThreads: true,
+      setThreadGoal() {},
+      setNotice: notice,
+    });
+    const shell = commandShellRuntimeState({
+      ...state,
+      activeTurnId: null,
+      renderCommandShell: true,
+      selectedThread:
+        state.threads.find((thread) => thread.id === state.selectedThreadId) ??
+        null,
+    });
+    return shell.selectedThread ? (
+      <StreamingTextScope presentation={state.streamingTextPresentation}>
+        <CommandThreadRoom
+          {...shell}
+          selectedThread={shell.selectedThread}
+          cwd=""
+          locale="zh"
+          workMode="code"
+          onModeChange={() => {}}
+        />
+      </StreamingTextScope>
+    ) : null;
+  }
+  const views: unknown[] = [];
+  const capture = (phase: string) =>
+    views.push({
+      phase,
+      busy: container.querySelector('[role="log"]')?.getAttribute("aria-busy"),
+      indicator: container.querySelector(".thinking-card")?.outerHTML ?? null,
+      tool:
+        container
+          .querySelector(".dynamic-tool-card")
+          ?.getAttribute("data-status") ?? null,
+      turn: state.threads[0]?.turns[0]?.status,
+    });
+  try {
+    await act(async () => root.render(<View />));
+    await vi.waitFor(() => expect(authority.connected).toBe(true));
+    let runId!: string;
+    await act(async () => {
+      state.setSelectedThreadId(settlementThreadId);
+      state.setThreads([
+        await authority.runtime!.readThread(settlementThreadId),
+      ]);
+      runId = (
+        await authority.runtime!.startTurn(
+          settlementThreadId,
+          "先读项目，再继续编写剧本",
+        )
+      ).turn.id;
+    });
+    await vi.waitFor(() => expect(fixture.cursors).toEqual([0]));
+    const send = async (
+      sequence: number,
+      value: Pick<RunEventView, "type" | "data">,
+    ) => {
+      await act(async () =>
+        fixture.feed.send({
+          eventId: `${runId}:event-${sequence}`,
+          runId,
+          sequence,
+          occurredAt: settlementTime,
+          ...value,
+        } as RunEventView),
+      );
+    };
+    await send(1, {
+      type: "segment.started",
+      data: { segmentId: "segment-1", attempt: 1 },
+    });
+    await send(2, {
+      type: "model.output.delta",
+      data: { segmentId: "segment-1", delta: "先读取项目。" },
+    });
+    await vi.waitFor(() =>
+      expect(container.textContent).toContain("先读取项目。"),
+    );
+    await send(3, {
+      type: "tool.requested",
+      data: {
+        segmentId: "segment-1",
+        callId: "inspect-project",
+        kind: "function",
+        name: "read_outline",
+        inputPreview: "{}",
+        inputTruncated: false,
+      },
+    });
+    await vi.waitFor(() =>
+      expect(
+        state.threads[0]?.turns[0]?.items.some(
+          (item) =>
+            item.type === "dynamicToolCall" && item.status === "inProgress",
+        ),
+      ).toBe(true),
+    );
+    expect(container.innerHTML).toContain('data-status="inProgress"');
+    expect(container.querySelector(".thinking-card")).toBeNull();
+    capture("tool running without a duplicate model indicator");
+    await send(4, {
+      type: "tool.completed",
+      data: {
+        segmentId: "segment-1",
+        callId: "inspect-project",
+        kind: "function",
+        name: "read_outline",
+        isError: false,
+        outputTruncated: false,
+        artifactAvailable: false,
+        outputPreview: "Outline read",
+      },
+    });
+    await vi.waitFor(() =>
+      expect(container.querySelector(".thinking-card")?.textContent).toContain(
+        "正在思考",
+      ),
+    );
+    expect(container.textContent).toContain("先读取项目。");
+    capture(
+      "tool completed; next model waits while the earlier prefix remains visible",
+    );
+    await send(5, {
+      type: "segment.started",
+      data: { segmentId: "segment-2", attempt: 1 },
+    });
+    await send(6, {
+      type: "model.sampling.retry",
+      data: {
+        segmentId: "segment-2",
+        samplingAttempt: 2,
+        maxRetries: 3,
+        code: "responses_idle_timeout",
+        discardedOutput: false,
+      },
+    });
+    await vi.waitFor(() =>
+      expect(container.querySelector(".thinking-card")?.textContent).toContain(
+        "连接中断，正在重试…",
+      ),
+    );
+    expect((await fixture.client.getRun(runId)).run.status).toBe("running");
+    capture(
+      "durable model retry remains active rather than claiming completion",
+    );
+    await send(7, {
+      type: "model.output.delta",
+      data: { segmentId: "segment-2", delta: "续写正文" },
+    });
+    await vi.waitFor(() => expect(container.textContent).toContain("续写正文"));
+    expect(container.querySelector(".thinking-card")).toBeNull();
+    capture("first resumed assistant text clears the retry indicator");
+    await send(8, {
+      type: "model.output.delta",
+      data: { segmentId: "segment-2", delta: "。" },
+    });
+    await vi.waitFor(() =>
+      expect(container.textContent).toContain("续写正文。"),
+    );
+    await act(async () => {
+      const run = fixture.complete(runId, "续写正文。", 9);
+      run.revision = 9;
+      fixture.feed.finish(settlementCompleted(runId, 9));
+    });
+    await vi.waitFor(() =>
+      expect(state.threads[0]?.turns[0]?.status).toBe("completed"),
+    );
+    await vi.waitFor(() =>
+      expect(state.streamingTextByThread[settlementThreadId]).toBeUndefined(),
+    );
+    expect(container.querySelector(".thinking-card")).toBeNull();
+    expect(
+      container.querySelector('[role="log"]')?.getAttribute("aria-busy"),
+    ).toBe("false");
+    expect(container.textContent).toContain("续写正文。");
+    capture("canonical terminal is idle with the saved assistant response");
+    expect(views).toMatchSnapshot();
+    expect(notice).not.toHaveBeenCalled();
+  } finally {
+    await act(async () => root.unmount());
+    fixture.close();
+    container.remove();
+  }
+}, 10_000);

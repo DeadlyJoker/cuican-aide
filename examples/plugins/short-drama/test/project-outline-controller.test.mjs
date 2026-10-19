@@ -149,3 +149,59 @@ test("codec rejects getters, excessive payload, foreign scope and a non-progress
   );
   assert.deepEqual(parseProjectOutlineUiResponse(request, page), page);
 });
+
+test("background outline hint preserves explicit history and does not enter loading", async () => {
+  const service = outlineReadFixture(),
+    c = new ProjectOutlineController(
+      createPluginProjectOutlineUiClient(service.services),
+    );
+  try {
+    c.setProject("outline-project");
+    c.setReady(true);
+    await tick();
+    await c.loadHistory();
+    await c.openRevision(c.getSnapshot().history[1]);
+    const states = [];
+    c.subscribe(() => states.push(c.getSnapshot().state));
+    c.invalidate("outline-project");
+    await tick();
+    await tick();
+    assert.equal(c.getSnapshot().revision.contentRevision, 2);
+    assert.equal(c.getSnapshot().view.artifact.selectedContentRevision, 1);
+    assert.ok(!states.includes("loading"));
+  } finally {
+    c.dispose();
+  }
+});
+
+test("outline hints coalesce behind physical writes and reject another project", async () => {
+  const service = outlineReadFixture();
+  let pending = false;
+  const c = new ProjectOutlineController(
+    createPluginProjectOutlineUiClient(service.services),
+    { physicalWritesPending: () => pending },
+  );
+  try {
+    c.setProject("outline-project");
+    c.setReady(true);
+    await tick();
+    pending = true;
+    const before = service.calls.length;
+    c.invalidate("other");
+    c.invalidate("outline-project");
+    c.invalidate("outline-project");
+    await tick();
+    assert.equal(service.calls.length, before);
+    pending = false;
+    c.refreshWriteActivity();
+    await tick();
+    await tick();
+    assert.equal(
+      service.calls.slice(before).filter((x) => x.action.endsWith("getOutline"))
+        .length,
+      1,
+    );
+  } finally {
+    c.dispose();
+  }
+});

@@ -1,0 +1,39 @@
+{
+  "projectId": "01a13f43-094c-767a-9414-b5622b236255",
+  "observedAt": "2026-10-16T09:24:43.711343+00:00",
+  "scope": "Read-only original project source baseline before saved API acceptance",
+  "tables": {
+    "creative_projects": {
+      "count": 1,
+      "sha256": "5a160b53a28a587e22a531981df05f0f5fe3b1782e8038eb6099452b37ad1290"
+    },
+    "project_foundations": {
+      "count": 1,
+      "sha256": "671ab62668f2899e70cfe646acb700a57dcac690dcd2199a1e5b549296eaab7d"
+    },
+    "project_text_artifacts": {
+      "count": 2,
+      "sha256": "b7f1af127dac3fcd5ecc99bdd9168c1ed6475a1d2c3304b2b89377c504c10940"
+    },
+    "project_text_revisions": {
+      "count": 5,
+      "sha256": "3c0dead48f916e1a3647517f76c86d2b50789ddace5ecff1cb8a807c4bf7bc73"
+    },
+    "project_assets": {
+      "count": 3,
+      "sha256": "a2a99d5282b29b268c2deefbc70fa01341c9a60ea9730d09c7fcf5f19cbf1c89"
+    },
+    "project_asset_revisions": {
+      "count": 3,
+      "sha256": "81126dce5556e93abc1af2b0bc113ae8aa7ed9e01122c5030997fdbb78674d37"
+    },
+    "creative_concept_assets": {
+      "count": 1,
+      "sha256": "611e3eed955638431c3e966e39570dc9ba9c6a426f9d8ea319fb61c5f9ae8375"
+    },
+    "creative_concept_revisions": {
+      "count": 1,
+      "sha256": "3f4c266caa16a438768dc62c98bb9e1017e0cef4cde4ea640d00327cf610cfaf"
+    }
+  }
+}

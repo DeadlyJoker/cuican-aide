@@ -1,0 +1,679 @@
+{
+  "recordedAt": "2026-10-16T11:41:57.973046+00:00",
+  "records": [
+    {
+      "requestId": "req-g3",
+      "pid": 66906,
+      "elapsedMs": 0.123,
+      "sequence": 1,
+      "phase": "route.invoke",
+      "status": "start"
+    },
+    {
+      "requestId": "req-g3",
+      "pid": 66906,
+      "elapsedMs": 4004.606,
+      "sequence": 2,
+      "phase": "query.current",
+      "status": "start"
+    },
+    {
+      "requestId": "req-g3",
+      "pid": 66906,
+      "elapsedMs": 4020.77,
+      "sequence": 3,
+      "phase": "query.current",
+      "status": "end"
+    },
+    {
+      "requestId": "req-g3",
+      "pid": 66906,
+      "elapsedMs": 4021.125,
+      "sequence": 4,
+      "phase": "query.target-package",
+      "status": "start"
+    },
+    {
+      "requestId": "req-g3",
+      "pid": 66906,
+      "elapsedMs": 4021.79,
+      "sequence": 5,
+      "phase": "query.target-package",
+      "status": "end"
+    },
+    {
+      "requestId": "req-g3",
+      "pid": 66906,
+      "elapsedMs": 4021.834,
+      "sequence": 6,
+      "phase": "query.source-bytes",
+      "status": "start"
+    },
+    {
+      "requestId": "req-g3",
+      "pid": 66906,
+      "elapsedMs": 4879.298,
+      "sequence": 7,
+      "phase": "query.source-bytes",
+      "status": "end"
+    },
+    {
+      "requestId": "req-g3",
+      "pid": 66906,
+      "elapsedMs": 4879.333,
+      "sequence": 8,
+      "phase": "query.target-bytes",
+      "status": "start"
+    },
+    {
+      "requestId": "req-g3",
+      "pid": 66906,
+      "elapsedMs": 4956.766,
+      "sequence": 9,
+      "phase": "query.target-bytes",
+      "status": "end"
+    },
+    {
+      "requestId": "req-g3",
+      "pid": 66906,
+      "elapsedMs": 4956.923,
+      "sequence": 10,
+      "phase": "query.target-policy",
+      "status": "start"
+    },
+    {
+      "requestId": "req-g3",
+      "pid": 66906,
+      "elapsedMs": 4958.645,
+      "sequence": 11,
+      "phase": "query.target-policy",
+      "status": "end"
+    },
+    {
+      "requestId": "req-g3",
+      "pid": 66906,
+      "elapsedMs": 4958.995,
+      "sequence": 12,
+      "phase": "query.transaction-current",
+      "status": "start"
+    },
+    {
+      "requestId": "req-g3",
+      "pid": 66906,
+      "elapsedMs": 5588.89,
+      "sequence": 13,
+      "phase": "query.transaction-current",
+      "status": "end"
+    },
+    {
+      "requestId": "req-g3",
+      "pid": 66906,
+      "elapsedMs": 5589.697,
+      "sequence": 14,
+      "phase": "query.current",
+      "status": "start"
+    },
+    {
+      "requestId": "req-g3",
+      "pid": 66906,
+      "elapsedMs": 5592.808,
+      "sequence": 15,
+      "phase": "query.current",
+      "status": "end"
+    },
+    {
+      "requestId": "req-g3",
+      "pid": 66906,
+      "elapsedMs": 5592.861,
+      "sequence": 16,
+      "phase": "query.saved-generation",
+      "status": "start"
+    },
+    {
+      "requestId": "req-g3",
+      "pid": 66906,
+      "elapsedMs": 5638.073,
+      "sequence": 17,
+      "phase": "query.saved-generation",
+      "status": "end"
+    },
+    {
+      "requestId": "req-g3",
+      "pid": 66906,
+      "elapsedMs": 5638.339,
+      "sequence": 18,
+      "phase": "query.shared-ready",
+      "status": "start"
+    },
+    {
+      "requestId": "req-g3",
+      "pid": 66906,
+      "elapsedMs": 5638.761,
+      "sequence": 19,
+      "phase": "query.shared-ready",
+      "status": "end"
+    },
+    {
+      "requestId": "req-g3",
+      "pid": 66906,
+      "elapsedMs": 5638.782,
+      "sequence": 20,
+      "phase": "query.transaction-current",
+      "status": "start"
+    },
+    {
+      "requestId": "req-g3",
+      "pid": 66906,
+      "elapsedMs": 5798.762,
+      "sequence": 21,
+      "phase": "query.transaction-current",
+      "status": "end"
+    },
+    {
+      "requestId": "req-g3",
+      "pid": 66906,
+      "elapsedMs": 5802.065,
+      "sequence": 22,
+      "phase": "query.current",
+      "status": "start"
+    },
+    {
+      "requestId": "req-g3",
+      "pid": 66906,
+      "elapsedMs": 5805.161,
+      "sequence": 23,
+      "phase": "query.current",
+      "status": "end"
+    },
+    {
+      "requestId": "req-g3",
+      "pid": 66906,
+      "elapsedMs": 5805.223,
+      "sequence": 24,
+      "phase": "query.node-execute",
+      "status": "start"
+    },
+    {
+      "requestId": "req-g3",
+      "pid": 66906,
+      "elapsedMs": 5812.277,
+      "sequence": 25,
+      "phase": "query.transaction-current",
+      "status": "start"
+    },
+    {
+      "requestId": "req-g3",
+      "pid": 66906,
+      "elapsedMs": 6100.013,
+      "sequence": 26,
+      "phase": "query.transaction-current",
+      "status": "end"
+    },
+    {
+      "requestId": "req-g3",
+      "pid": 66906,
+      "elapsedMs": 6101.931,
+      "sequence": 27,
+      "phase": "query.current",
+      "status": "start"
+    },
+    {
+      "requestId": "req-g3",
+      "pid": 66906,
+      "elapsedMs": 6104.997,
+      "sequence": 28,
+      "phase": "query.current",
+      "status": "end"
+    },
+    {
+      "requestId": "req-g3",
+      "pid": 66906,
+      "elapsedMs": 6122.742,
+      "sequence": 29,
+      "phase": "query.transaction-current",
+      "status": "start"
+    },
+    {
+      "requestId": "req-g3",
+      "pid": 66906,
+      "elapsedMs": 6504.516,
+      "sequence": 30,
+      "phase": "query.transaction-current",
+      "status": "end"
+    },
+    {
+      "requestId": "req-g3",
+      "pid": 66906,
+      "elapsedMs": 6505.191,
+      "sequence": 31,
+      "phase": "query.current",
+      "status": "start"
+    },
+    {
+      "requestId": "req-g3",
+      "pid": 66906,
+      "elapsedMs": 6511.797,
+      "sequence": 32,
+      "phase": "query.current",
+      "status": "end"
+    },
+    {
+      "requestId": "req-g3",
+      "pid": 66906,
+      "elapsedMs": 6527.184,
+      "sequence": 33,
+      "phase": "query.task-commit",
+      "status": "start"
+    },
+    {
+      "requestId": "req-g3",
+      "pid": 66906,
+      "elapsedMs": 6591.365,
+      "sequence": 34,
+      "phase": "query.transaction-current",
+      "status": "start"
+    },
+    {
+      "requestId": "req-g3",
+      "pid": 66906,
+      "elapsedMs": 6814.835,
+      "sequence": 35,
+      "phase": "query.transaction-current",
+      "status": "end"
+    },
+    {
+      "requestId": "req-g3",
+      "pid": 66906,
+      "elapsedMs": 6815.615,
+      "sequence": 36,
+      "phase": "query.current",
+      "status": "start"
+    },
+    {
+      "requestId": "req-g3",
+      "pid": 66906,
+      "elapsedMs": 6819.988,
+      "sequence": 37,
+      "phase": "query.current",
+      "status": "end"
+    },
+    {
+      "requestId": "req-g3",
+      "pid": 66906,
+      "elapsedMs": 11891.412,
+      "sequence": 38,
+      "phase": "query.task-commit",
+      "status": "error"
+    },
+    {
+      "requestId": "req-g3",
+      "pid": 66906,
+      "elapsedMs": 11891.503,
+      "sequence": 39,
+      "phase": "query.node-execute",
+      "status": "error"
+    },
+    {
+      "requestId": "req-g3",
+      "pid": 66906,
+      "elapsedMs": 11891.653,
+      "sequence": 40,
+      "phase": "route.invoke",
+      "status": "error"
+    },
+    {
+      "requestId": "req-1lz",
+      "pid": 66906,
+      "elapsedMs": 0.015,
+      "sequence": 1,
+      "phase": "route.invoke",
+      "status": "start"
+    },
+    {
+      "requestId": "req-1lz",
+      "pid": 66906,
+      "elapsedMs": 4811.075,
+      "sequence": 2,
+      "phase": "query.current",
+      "status": "start"
+    },
+    {
+      "requestId": "req-1lz",
+      "pid": 66906,
+      "elapsedMs": 4813.59,
+      "sequence": 3,
+      "phase": "query.current",
+      "status": "end"
+    },
+    {
+      "requestId": "req-1lz",
+      "pid": 66906,
+      "elapsedMs": 4813.625,
+      "sequence": 4,
+      "phase": "query.target-package",
+      "status": "start"
+    },
+    {
+      "requestId": "req-1lz",
+      "pid": 66906,
+      "elapsedMs": 4813.879,
+      "sequence": 5,
+      "phase": "query.target-package",
+      "status": "end"
+    },
+    {
+      "requestId": "req-1lz",
+      "pid": 66906,
+      "elapsedMs": 4813.891,
+      "sequence": 6,
+      "phase": "query.source-bytes",
+      "status": "start"
+    },
+    {
+      "requestId": "req-1lz",
+      "pid": 66906,
+      "elapsedMs": 4904.598,
+      "sequence": 7,
+      "phase": "query.source-bytes",
+      "status": "end"
+    },
+    {
+      "requestId": "req-1lz",
+      "pid": 66906,
+      "elapsedMs": 4904.628,
+      "sequence": 8,
+      "phase": "query.target-bytes",
+      "status": "start"
+    },
+    {
+      "requestId": "req-1lz",
+      "pid": 66906,
+      "elapsedMs": 4986.043,
+      "sequence": 9,
+      "phase": "query.target-bytes",
+      "status": "end"
+    },
+    {
+      "requestId": "req-1lz",
+      "pid": 66906,
+      "elapsedMs": 4986.222,
+      "sequence": 10,
+      "phase": "query.target-policy",
+      "status": "start"
+    },
+    {
+      "requestId": "req-1lz",
+      "pid": 66906,
+      "elapsedMs": 4987.761,
+      "sequence": 11,
+      "phase": "query.target-policy",
+      "status": "end"
+    },
+    {
+      "requestId": "req-1lz",
+      "pid": 66906,
+      "elapsedMs": 4987.865,
+      "sequence": 12,
+      "phase": "query.transaction-current",
+      "status": "start"
+    },
+    {
+      "requestId": "req-1lz",
+      "pid": 66906,
+      "elapsedMs": 5201.472,
+      "sequence": 13,
+      "phase": "query.transaction-current",
+      "status": "end"
+    },
+    {
+      "requestId": "req-1lz",
+      "pid": 66906,
+      "elapsedMs": 5202.745,
+      "sequence": 14,
+      "phase": "query.current",
+      "status": "start"
+    },
+    {
+      "requestId": "req-1lz",
+      "pid": 66906,
+      "elapsedMs": 5204.797,
+      "sequence": 15,
+      "phase": "query.current",
+      "status": "end"
+    },
+    {
+      "requestId": "req-1lz",
+      "pid": 66906,
+      "elapsedMs": 5204.832,
+      "sequence": 16,
+      "phase": "query.saved-generation",
+      "status": "start"
+    },
+    {
+      "requestId": "req-1lz",
+      "pid": 66906,
+      "elapsedMs": 5273.317,
+      "sequence": 17,
+      "phase": "query.saved-generation",
+      "status": "end"
+    },
+    {
+      "requestId": "req-1lz",
+      "pid": 66906,
+      "elapsedMs": 5273.611,
+      "sequence": 18,
+      "phase": "query.shared-ready",
+      "status": "start"
+    },
+    {
+      "requestId": "req-1lz",
+      "pid": 66906,
+      "elapsedMs": 5274.091,
+      "sequence": 19,
+      "phase": "query.shared-ready",
+      "status": "end"
+    },
+    {
+      "requestId": "req-1lz",
+      "pid": 66906,
+      "elapsedMs": 5274.097,
+      "sequence": 20,
+      "phase": "query.transaction-current",
+      "status": "start"
+    },
+    {
+      "requestId": "req-1lz",
+      "pid": 66906,
+      "elapsedMs": 5457.39,
+      "sequence": 21,
+      "phase": "query.transaction-current",
+      "status": "end"
+    },
+    {
+      "requestId": "req-1lz",
+      "pid": 66906,
+      "elapsedMs": 5460.133,
+      "sequence": 22,
+      "phase": "query.current",
+      "status": "start"
+    },
+    {
+      "requestId": "req-1lz",
+      "pid": 66906,
+      "elapsedMs": 5463.974,
+      "sequence": 23,
+      "phase": "query.current",
+      "status": "end"
+    },
+    {
+      "requestId": "req-1lz",
+      "pid": 66906,
+      "elapsedMs": 5464.068,
+      "sequence": 24,
+      "phase": "query.node-execute",
+      "status": "start"
+    },
+    {
+      "requestId": "req-1lz",
+      "pid": 66906,
+      "elapsedMs": 5470.398,
+      "sequence": 25,
+      "phase": "query.transaction-current",
+      "status": "start"
+    },
+    {
+      "requestId": "req-1lz",
+      "pid": 66906,
+      "elapsedMs": 5654.188,
+      "sequence": 26,
+      "phase": "query.transaction-current",
+      "status": "end"
+    },
+    {
+      "requestId": "req-1lz",
+      "pid": 66906,
+      "elapsedMs": 5654.831,
+      "sequence": 27,
+      "phase": "query.current",
+      "status": "start"
+    },
+    {
+      "requestId": "req-1lz",
+      "pid": 66906,
+      "elapsedMs": 5656.264,
+      "sequence": 28,
+      "phase": "query.current",
+      "status": "end"
+    },
+    {
+      "requestId": "req-1lz",
+      "pid": 66906,
+      "elapsedMs": 5687.665,
+      "sequence": 29,
+      "phase": "query.transaction-current",
+      "status": "start"
+    },
+    {
+      "requestId": "req-1lz",
+      "pid": 66906,
+      "elapsedMs": 5881.517,
+      "sequence": 30,
+      "phase": "query.transaction-current",
+      "status": "end"
+    },
+    {
+      "requestId": "req-1lz",
+      "pid": 66906,
+      "elapsedMs": 5883.354,
+      "sequence": 31,
+      "phase": "query.current",
+      "status": "start"
+    },
+    {
+      "requestId": "req-1lz",
+      "pid": 66906,
+      "elapsedMs": 5891.65,
+      "sequence": 32,
+      "phase": "query.current",
+      "status": "end"
+    },
+    {
+      "requestId": "req-1lz",
+      "pid": 66906,
+      "elapsedMs": 5898.744,
+      "sequence": 33,
+      "phase": "query.task-commit",
+      "status": "start"
+    },
+    {
+      "requestId": "req-1lz",
+      "pid": 66906,
+      "elapsedMs": 5932.336,
+      "sequence": 34,
+      "phase": "query.transaction-current",
+      "status": "start"
+    },
+    {
+      "requestId": "req-1lz",
+      "pid": 66906,
+      "elapsedMs": 6152.587,
+      "sequence": 35,
+      "phase": "query.transaction-current",
+      "status": "end"
+    },
+    {
+      "requestId": "req-1lz",
+      "pid": 66906,
+      "elapsedMs": 6156.353,
+      "sequence": 36,
+      "phase": "query.current",
+      "status": "start"
+    },
+    {
+      "requestId": "req-1lz",
+      "pid": 66906,
+      "elapsedMs": 6160.608,
+      "sequence": 37,
+      "phase": "query.current",
+      "status": "end"
+    },
+    {
+      "requestId": "req-1lz",
+      "pid": 66906,
+      "elapsedMs": 11733.559,
+      "sequence": 38,
+      "phase": "query.transaction-current",
+      "status": "start"
+    },
+    {
+      "requestId": "req-1lz",
+      "pid": 66906,
+      "elapsedMs": 11844.965,
+      "sequence": 39,
+      "phase": "query.transaction-current",
+      "status": "error"
+    },
+    {
+      "requestId": "req-1lz",
+      "pid": 66906,
+      "elapsedMs": 11845.476,
+      "sequence": 40,
+      "phase": "query.task-commit",
+      "status": "error"
+    },
+    {
+      "requestId": "req-1lz",
+      "pid": 66906,
+      "elapsedMs": 11845.557,
+      "sequence": 41,
+      "phase": "query.node-execute",
+      "status": "error"
+    },
+    {
+      "requestId": "req-1lz",
+      "pid": 66906,
+      "elapsedMs": 11848.262,
+      "sequence": 42,
+      "phase": "route.invoke",
+      "status": "error"
+    }
+  ],
+  "releaseModelVariants": 8,
+  "distinctPackageConfigurations": 1,
+  "sameConfigurationVariantCounts": [
+    8
+  ],
+  "diagnosticScope": "real client original-query admission only; no model or new supplier POST",
+  "queryAdmissionComplete": false,
+  "measuredAuthorityFilesCheckMeanMs": 2.8577033600000004,
+  "measuredDnsLookupMs": 28.240249999999996,
+  "sourceDuplicateVerificationBefore": {
+    "actual": 2,
+    "expected": 1,
+    "log": "/private/tmp/crewon-runtime-merge-20261016/catalog-duplicate-verification-before-ready.log"
+  },
+  "workerPeerAndHostTestsPassed": 38,
+  "postgresSkipped": 2,
+  "workerTypecheckPassed": true,
+  "nextRepair": "request-local catalog grouping by exact identity and configuration; permissions, live source snapshots and full byte verification retained"
+}

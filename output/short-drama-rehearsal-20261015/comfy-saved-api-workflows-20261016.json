@@ -1,0 +1,6169 @@
+{
+  "observedAt": "2026-10-16T09:07:55.721865+00:00",
+  "page": "https://uu564342-7921122e7ab9.westd.seetacloud.com:8443/?_=1792137907414",
+  "scope": "API生成 saved workflow definitions only; no generation submitted",
+  "count": 48,
+  "workflows": [
+    {
+      "id": "API-U22-9图3音",
+      "configured": true,
+      "inputs": [
+        {
+          "slot": "403:ref_image_0",
+          "alias": "ref_image_0",
+          "label": "图像 ref_image_0"
+        },
+        {
+          "slot": "403:ref_image_1",
+          "alias": "ref_image_1",
+          "label": "图像 ref_image_1"
+        },
+        {
+          "slot": "403:ref_image_2",
+          "alias": "ref_image_2",
+          "label": "图像 ref_image_2"
+        },
+        {
+          "slot": "403:ref_image_3",
+          "alias": "ref_image_3",
+          "label": "图像 ref_image_3"
+        },
+        {
+          "slot": "403:ref_image_4",
+          "alias": "ref_image_4",
+          "label": "图像 ref_image_4"
+        },
+        {
+          "slot": "403:ref_image_5",
+          "alias": "ref_image_5",
+          "label": "图像 ref_image_5"
+        },
+        {
+          "slot": "403:ref_image_6",
+          "alias": "ref_image_6",
+          "label": "图像 ref_image_6"
+        },
+        {
+          "slot": "403:ref_image_7",
+          "alias": "ref_image_7",
+          "label": "图像 ref_image_7"
+        },
+        {
+          "slot": "403:ref_image_8",
+          "alias": "ref_image_8",
+          "label": "图像 ref_image_8"
+        },
+        {
+          "slot": "403:ref_audio_0",
+          "alias": "ref_audio_0",
+          "label": "音频 ref_audio_0"
+        },
+        {
+          "slot": "403:ref_audio_1",
+          "alias": "ref_audio_1",
+          "label": "音频 ref_audio_1"
+        },
+        {
+          "slot": "403:ref_audio_2",
+          "alias": "ref_audio_2",
+          "label": "音频 ref_audio_2"
+        },
+        {
+          "slot": "403:prompt",
+          "alias": "prompt",
+          "label": "提示词"
+        },
+        {
+          "slot": "403:seconds",
+          "alias": "seconds",
+          "label": "seconds"
+        },
+        {
+          "slot": "403:aspect_ratio",
+          "alias": "aspect_ratio",
+          "label": "aspect_ratio"
+        },
+        {
+          "slot": "403:megapixels",
+          "alias": "megapixels",
+          "label": "megapixels"
+        }
+      ],
+      "nodeCount": 15,
+      "classes": [
+        "BasicScheduler",
+        "BlockSparseAttention",
+        "ConditioningZeroOut",
+        "KSamplerSelect",
+        "MiniMaxChunkFeedForward",
+        "MiniMaxH3ReferenceToVideo",
+        "MiniMaxH3SigmaShift",
+        "ModelPreviewOverrideKJ",
+        "SelfLiftH3Sampler",
+        "VAEDecode",
+        "VAEDecodeAudio",
+        "VHS_VideoCombine",
+        "VRAMCleanup",
+        "ZealmanH3ModelLoader",
+        "ZealmanH3PickReferenceMedia"
+      ],
+      "modelReferences": [
+        {
+          "node": "329",
+          "class": "ModelPreviewOverrideKJ",
+          "field": "tiny_vae",
+          "file": "taeh3.safetensors"
+        },
+        {
+          "node": "397",
+          "class": "SelfLiftH3Sampler",
+          "field": "upscaler_model",
+          "file": "h3_upscaler_lms_v0.1.safetensors"
+        },
+        {
+          "node": "411",
+          "class": "ZealmanH3ModelLoader",
+          "field": "unet_name",
+          "file": "minimax/minimax_h3_hybrid_fl2va_ref2va_b25-49-int8.safetensors"
+        },
+        {
+          "node": "411",
+          "class": "ZealmanH3ModelLoader",
+          "field": "clip_name",
+          "file": "qwen3vl_32b_minimax_h3_nvfp4_awq.safetensors"
+        },
+        {
+          "node": "411",
+          "class": "ZealmanH3ModelLoader",
+          "field": "video_vae",
+          "file": "minimax_h3_video_vae_int8_convrot.safetensors"
+        },
+        {
+          "node": "411",
+          "class": "ZealmanH3ModelLoader",
+          "field": "audio_vae",
+          "file": "minimax_h3_audio_vae_fp32.safetensors"
+        }
+      ],
+      "mediaOrder": [
+        "403:ref_image_0",
+        "403:ref_image_1",
+        "403:ref_image_2",
+        "403:ref_image_3",
+        "403:ref_image_4",
+        "403:ref_image_5",
+        "403:ref_image_6",
+        "403:ref_image_7",
+        "403:ref_image_8",
+        "403:ref_audio_0",
+        "403:ref_audio_1",
+        "403:ref_audio_2"
+      ],
+      "preflight": {
+        "missingNodeTypes": [
+          {
+            "node": "403",
+            "class": "ZealmanH3PickReferenceMedia"
+          },
+          {
+            "node": "411",
+            "class": "ZealmanH3ModelLoader"
+          }
+        ],
+        "unlistedModelChoices": [],
+        "generationTested": false
+      }
+    },
+    {
+      "id": "API-U06V9-9图3音",
+      "configured": true,
+      "inputs": [
+        {
+          "slot": "137:image",
+          "alias": "ref_image_0",
+          "label": "参考图 0"
+        },
+        {
+          "slot": "139:image",
+          "alias": "ref_image_1",
+          "label": "参考图 1"
+        },
+        {
+          "slot": "144:image",
+          "alias": "ref_image_2",
+          "label": "参考图 2"
+        },
+        {
+          "slot": "151:image",
+          "alias": "ref_image_3",
+          "label": "参考图 3"
+        },
+        {
+          "slot": "653:image",
+          "alias": "ref_image_4",
+          "label": "参考图 4"
+        },
+        {
+          "slot": "654:image",
+          "alias": "ref_image_5",
+          "label": "参考图 5"
+        },
+        {
+          "slot": "655:image",
+          "alias": "ref_image_6",
+          "label": "参考图 6"
+        },
+        {
+          "slot": "656:image",
+          "alias": "ref_image_7",
+          "label": "参考图 7"
+        },
+        {
+          "slot": "657:image",
+          "alias": "ref_image_8",
+          "label": "参考图 8"
+        },
+        {
+          "slot": "664:prompt",
+          "alias": "prompt",
+          "label": "提示词"
+        },
+        {
+          "slot": "3888:audio",
+          "alias": "ref_audio_1",
+          "label": "参考音频 1"
+        },
+        {
+          "slot": "3889:audio",
+          "alias": "ref_audio_2",
+          "label": "参考音频 2"
+        },
+        {
+          "slot": "3890:audio",
+          "alias": "ref_audio_0",
+          "label": "参考音频 0"
+        },
+        {
+          "slot": "3887:3878:aspect_ratio",
+          "alias": "aspect_ratio",
+          "label": "ResolutionSelector比例/分辨率倍数 (aspect_ratio)"
+        },
+        {
+          "slot": "3887:3878:megapixels",
+          "alias": "megapixels",
+          "label": "ResolutionSelector比例/分辨率倍数 (megapixels)"
+        },
+        {
+          "slot": "3887:132:value",
+          "alias": "value",
+          "label": "value"
+        }
+      ],
+      "nodeCount": 36,
+      "classes": [
+        "BasicGuider",
+        "CLIPLoader",
+        "CR Prompt Text",
+        "ComfyMathExpression",
+        "KSamplerSelect",
+        "LoadImage",
+        "LoraLoaderModelOnly",
+        "ManualSigmas",
+        "MiniMaxH3ReferenceToVideo",
+        "MiniMaxH3VAEDecodeFast",
+        "MiniMaxLowVRAMAttention",
+        "ModelAttentionBackend",
+        "ModelPreviewOverrideKJ",
+        "PrimitiveFloat",
+        "RandomNoise",
+        "ResolutionSelector",
+        "SamplerCustomAdvanced",
+        "SenseNovaH3DistilledBridge",
+        "UNETLoader",
+        "VAEDecodeAudio",
+        "VAELoader",
+        "VHS_LoadAudioUpload",
+        "VHS_VideoCombine",
+        "VRAMCleanup",
+        "easy seed"
+      ],
+      "modelReferences": [
+        {
+          "node": "677",
+          "class": "ModelPreviewOverrideKJ",
+          "field": "tiny_vae",
+          "file": "taeh3.safetensors"
+        },
+        {
+          "node": "3887:710",
+          "class": "LoraLoaderModelOnly",
+          "field": "lora_name",
+          "file": "minimax/minimax_h3_turbo_v4_step600_ema_pruned_comfyui.safetensors"
+        },
+        {
+          "node": "3887:119",
+          "class": "VAELoader",
+          "field": "vae_name",
+          "file": "minimax_h3_video_vae_fp16.safetensors"
+        },
+        {
+          "node": "3887:120",
+          "class": "VAELoader",
+          "field": "vae_name",
+          "file": "minimax_h3_audio_vae_fp32.safetensors"
+        },
+        {
+          "node": "3887:128",
+          "class": "CLIPLoader",
+          "field": "clip_name",
+          "file": "qwen3vl_32b_minimax_h3_bf16.safetensors"
+        },
+        {
+          "node": "3887:620",
+          "class": "UNETLoader",
+          "field": "unet_name",
+          "file": "minimax/Minimax-h3_Singularity_ref2va_Pruned_v1.3_int8.safetensors"
+        },
+        {
+          "node": "3891:3880",
+          "class": "SenseNovaH3DistilledBridge",
+          "field": "distilled_adapter",
+          "file": "MiniMaxH3_SemanticBridge_v1.safetensors"
+        }
+      ],
+      "mediaOrder": [
+        "137:image",
+        "139:image",
+        "144:image",
+        "151:image",
+        "653:image",
+        "654:image",
+        "655:image",
+        "656:image",
+        "657:image",
+        "3890:audio",
+        "3888:audio",
+        "3889:audio"
+      ],
+      "preflight": {
+        "missingNodeTypes": [],
+        "unlistedModelChoices": [],
+        "generationTested": false
+      }
+    },
+    {
+      "id": "API-U06-无加速多参",
+      "configured": true,
+      "inputs": [
+        {
+          "slot": "132:value",
+          "alias": "value",
+          "label": "时长 (value)"
+        },
+        {
+          "slot": "137:image",
+          "alias": "ref_image_0",
+          "label": "参考图 0"
+        },
+        {
+          "slot": "139:image",
+          "alias": "ref_image_1",
+          "label": "参考图 1"
+        },
+        {
+          "slot": "142:seed",
+          "alias": "seed",
+          "label": "随机种子"
+        },
+        {
+          "slot": "144:image",
+          "alias": "ref_image_2",
+          "label": "参考图 2"
+        },
+        {
+          "slot": "151:image",
+          "alias": "ref_image_3",
+          "label": "参考图 3"
+        },
+        {
+          "slot": "653:image",
+          "alias": "ref_image_4",
+          "label": "参考图 4"
+        },
+        {
+          "slot": "654:image",
+          "alias": "ref_image_5",
+          "label": "参考图 5"
+        },
+        {
+          "slot": "655:image",
+          "alias": "ref_image_6",
+          "label": "参考图 6"
+        },
+        {
+          "slot": "656:image",
+          "alias": "ref_image_7",
+          "label": "参考图 7"
+        },
+        {
+          "slot": "657:image",
+          "alias": "ref_image_8",
+          "label": "参考图 8"
+        },
+        {
+          "slot": "664:prompt",
+          "alias": "prompt",
+          "label": "提示词"
+        },
+        {
+          "slot": "665:aspect_ratio",
+          "alias": "aspect_ratio",
+          "label": "比例/分辨率 (aspect_ratio)"
+        },
+        {
+          "slot": "665:megapixels",
+          "alias": "megapixels",
+          "label": "比例/分辨率 (megapixels)"
+        },
+        {
+          "slot": "719:audio",
+          "alias": "ref_audio_0",
+          "label": "参考音频 0"
+        },
+        {
+          "slot": "720:audio",
+          "alias": "ref_audio_1",
+          "label": "参考音频 1"
+        },
+        {
+          "slot": "721:audio",
+          "alias": "ref_audio_2",
+          "label": "参考音频 2"
+        },
+        {
+          "slot": "728:steps",
+          "alias": "steps",
+          "label": "步数 (迭代步数)"
+        }
+      ],
+      "nodeCount": 38,
+      "classes": [
+        "BasicGuider",
+        "BasicScheduler",
+        "CLIPLoader",
+        "CR Prompt Text",
+        "ComfyMathExpression",
+        "KSamplerSelect",
+        "LoadAudio",
+        "LoadImage",
+        "MiniMaxChunkFeedForward",
+        "MiniMaxH3ReferenceToVideo",
+        "MiniMaxLowVRAMAttention",
+        "ModelAttentionBackend",
+        "ModelPreviewOverrideKJ",
+        "PrimitiveFloat",
+        "RandomNoise",
+        "ResolutionSelector",
+        "SamplerCustomAdvanced",
+        "TrimAudioDuration",
+        "UNETLoader",
+        "VAEDecode",
+        "VAEDecodeAudio",
+        "VAELoader",
+        "VHS_VideoCombine",
+        "VRAMCleanup",
+        "easy seed"
+      ],
+      "modelReferences": [
+        {
+          "node": "119",
+          "class": "VAELoader",
+          "field": "vae_name",
+          "file": "minimax_h3_video_vae_int8_convrot.safetensors"
+        },
+        {
+          "node": "120",
+          "class": "VAELoader",
+          "field": "vae_name",
+          "file": "minimax_h3_audio_vae_fp32.safetensors"
+        },
+        {
+          "node": "128",
+          "class": "CLIPLoader",
+          "field": "clip_name",
+          "file": "qwen3vl_32b_minimax_h3_nvfp4_awq.safetensors"
+        },
+        {
+          "node": "620",
+          "class": "UNETLoader",
+          "field": "unet_name",
+          "file": "minimax/minimax_h3_ref2va_pruned_int8_convrot.safetensors"
+        },
+        {
+          "node": "677",
+          "class": "ModelPreviewOverrideKJ",
+          "field": "tiny_vae",
+          "file": "taeh3.safetensors"
+        }
+      ],
+      "mediaOrder": [
+        "137:image",
+        "139:image",
+        "144:image",
+        "151:image",
+        "653:image",
+        "654:image",
+        "655:image",
+        "656:image",
+        "657:image",
+        "719:audio",
+        "720:audio",
+        "721:audio"
+      ],
+      "preflight": {
+        "missingNodeTypes": [],
+        "unlistedModelChoices": [],
+        "generationTested": false
+      }
+    },
+    {
+      "id": "API-B18-Qwenimage2.1",
+      "configured": true,
+      "inputs": [
+        {
+          "slot": "23:steps",
+          "alias": "steps",
+          "label": "迭代步数"
+        },
+        {
+          "slot": "37:prompt",
+          "alias": "prompt",
+          "label": "提示词"
+        },
+        {
+          "slot": "37:negative_prompt",
+          "alias": "negative_prompt",
+          "label": "negative_prompt"
+        },
+        {
+          "slot": "42:aspect_ratio",
+          "alias": "aspect_ratio",
+          "label": "aspect_ratio"
+        },
+        {
+          "slot": "42:megapixels",
+          "alias": "megapixels",
+          "label": "megapixels"
+        }
+      ],
+      "nodeCount": 12,
+      "classes": [
+        "CLIPLoader",
+        "EmptyLatentImage",
+        "KSampler",
+        "ModelAttentionBackend",
+        "ModelSamplingFlux",
+        "QwenImage21Cache",
+        "ResolutionSelector",
+        "SaveImageAdvanced",
+        "TextEncodeQwenImage21",
+        "UNETLoader",
+        "VAEDecode",
+        "VAELoader"
+      ],
+      "modelReferences": [
+        {
+          "node": "4",
+          "class": "CLIPLoader",
+          "field": "clip_name",
+          "file": "qwen3vl_8b_int8_convrot.safetensors"
+        },
+        {
+          "node": "5",
+          "class": "UNETLoader",
+          "field": "unet_name",
+          "file": "qwen/qwen_image_2.1_int8_convrot.safetensors"
+        },
+        {
+          "node": "13",
+          "class": "VAELoader",
+          "field": "vae_name",
+          "file": "qwen_image_2.1_vae_bf16.safetensors"
+        }
+      ],
+      "mediaOrder": [],
+      "preflight": {
+        "missingNodeTypes": [],
+        "unlistedModelChoices": [],
+        "generationTested": false
+      }
+    },
+    {
+      "id": "API-U32",
+      "configured": true,
+      "inputs": [
+        {
+          "slot": "27:value",
+          "alias": "value",
+          "label": "value"
+        },
+        {
+          "slot": "29:aspect_ratio",
+          "alias": "aspect_ratio",
+          "label": "分辨率 (aspect_ratio)"
+        },
+        {
+          "slot": "29:megapixels",
+          "alias": "megapixels",
+          "label": "分辨率 (megapixels)"
+        },
+        {
+          "slot": "86:image",
+          "alias": "ref_image_0",
+          "label": "参考图 0"
+        },
+        {
+          "slot": "87:image",
+          "alias": "ref_image_1",
+          "label": "参考图 1"
+        },
+        {
+          "slot": "88:value",
+          "alias": "prompt",
+          "label": "提示词"
+        },
+        {
+          "slot": "97:image",
+          "alias": "ref_image_2",
+          "label": "参考图 2"
+        },
+        {
+          "slot": "98:image",
+          "alias": "ref_image_3",
+          "label": "参考图 3"
+        },
+        {
+          "slot": "99:image",
+          "alias": "ref_image_5",
+          "label": "参考图 5"
+        },
+        {
+          "slot": "100:image",
+          "alias": "ref_image_4",
+          "label": "参考图 4"
+        },
+        {
+          "slot": "101:image",
+          "alias": "ref_image_7",
+          "label": "参考图 7"
+        },
+        {
+          "slot": "102:image",
+          "alias": "ref_image_6",
+          "label": "参考图 6"
+        },
+        {
+          "slot": "103:image",
+          "alias": "ref_image_8",
+          "label": "参考图 8"
+        }
+      ],
+      "nodeCount": 32,
+      "classes": [
+        "BasicScheduler",
+        "CLIPLoader",
+        "ComfyMathExpression",
+        "ConditioningZeroOut",
+        "H3SigmaRefiner",
+        "KSamplerSelect",
+        "LoadImage",
+        "LoraLoaderBypassModelOnly",
+        "LoraLoaderModelOnly",
+        "MiniMaxH3AVDecodeT8",
+        "MiniMaxH3AudioConditioningT8",
+        "PrimitiveFloat",
+        "PrimitiveStringMultiline",
+        "ResolutionSelector",
+        "SelfLiftH3Sampler",
+        "SelfLiftH3TST",
+        "SolAttnMiniMax",
+        "UNETLoader",
+        "VAELoader",
+        "VHS_VideoCombine",
+        "VRAMCleanup"
+      ],
+      "modelReferences": [
+        {
+          "node": "1",
+          "class": "VAELoader",
+          "field": "vae_name",
+          "file": "minimax_h3_video_vae_fp16.safetensors"
+        },
+        {
+          "node": "2",
+          "class": "VAELoader",
+          "field": "vae_name",
+          "file": "minimax_h3_audio_vae_fp32.safetensors"
+        },
+        {
+          "node": "3",
+          "class": "CLIPLoader",
+          "field": "clip_name",
+          "file": "qwen3vl_32b_minimax_h3_int8_convrot.safetensors"
+        },
+        {
+          "node": "4",
+          "class": "UNETLoader",
+          "field": "unet_name",
+          "file": "minimax/minimax_h3_hybrid_fl2va_ref2va_b25-49-int8.safetensors"
+        },
+        {
+          "node": "5",
+          "class": "LoraLoaderBypassModelOnly",
+          "field": "lora_name",
+          "file": "minimax/minimax_h3_turbo_v4_step600_ema_pruned_comfyui.safetensors"
+        },
+        {
+          "node": "45",
+          "class": "LoraLoaderModelOnly",
+          "field": "lora_name",
+          "file": "minimax/Motion_Repair.safetensors"
+        },
+        {
+          "node": "47",
+          "class": "LoraLoaderModelOnly",
+          "field": "lora_name",
+          "file": "minimax/Bunny_weapon_combatV1.safetensors"
+        },
+        {
+          "node": "79",
+          "class": "SelfLiftH3Sampler",
+          "field": "upscaler_model",
+          "file": "minimax_h3_latent_upscaler_3d_bf16.safetensors"
+        },
+        {
+          "node": "83",
+          "class": "LoraLoaderModelOnly",
+          "field": "lora_name",
+          "file": "minimax/H3_Combat_V2.safetensors"
+        }
+      ],
+      "mediaOrder": [
+        "86:image",
+        "87:image",
+        "97:image",
+        "98:image",
+        "100:image",
+        "99:image",
+        "102:image",
+        "101:image",
+        "103:image"
+      ],
+      "preflight": {
+        "missingNodeTypes": [],
+        "unlistedModelChoices": [],
+        "generationTested": false
+      }
+    },
+    {
+      "id": "API-U30",
+      "configured": true,
+      "inputs": [
+        {
+          "slot": "259:ref_image_0",
+          "alias": "ref_image_0",
+          "label": "图像 ref_image_0"
+        },
+        {
+          "slot": "259:ref_image_1",
+          "alias": "ref_image_1",
+          "label": "图像 ref_image_1"
+        },
+        {
+          "slot": "259:ref_image_2",
+          "alias": "ref_image_2",
+          "label": "图像 ref_image_2"
+        },
+        {
+          "slot": "259:ref_image_3",
+          "alias": "ref_image_3",
+          "label": "图像 ref_image_3"
+        },
+        {
+          "slot": "259:ref_image_4",
+          "alias": "ref_image_4",
+          "label": "图像 ref_image_4"
+        },
+        {
+          "slot": "259:ref_image_5",
+          "alias": "ref_image_5",
+          "label": "图像 ref_image_5"
+        },
+        {
+          "slot": "259:ref_image_6",
+          "alias": "ref_image_6",
+          "label": "图像 ref_image_6"
+        },
+        {
+          "slot": "259:ref_image_7",
+          "alias": "ref_image_7",
+          "label": "图像 ref_image_7"
+        },
+        {
+          "slot": "259:ref_image_8",
+          "alias": "ref_image_8",
+          "label": "图像 ref_image_8"
+        },
+        {
+          "slot": "259:ref_audio_0",
+          "alias": "ref_audio_0",
+          "label": "音频 ref_audio_0"
+        },
+        {
+          "slot": "259:ref_audio_1",
+          "alias": "ref_audio_1",
+          "label": "音频 ref_audio_1"
+        },
+        {
+          "slot": "259:ref_audio_2",
+          "alias": "ref_audio_2",
+          "label": "音频 ref_audio_2"
+        },
+        {
+          "slot": "259:prompt",
+          "alias": "prompt",
+          "label": "提示词"
+        },
+        {
+          "slot": "259:seconds",
+          "alias": "seconds",
+          "label": "seconds"
+        },
+        {
+          "slot": "259:aspect_ratio",
+          "alias": "aspect_ratio",
+          "label": "aspect_ratio"
+        },
+        {
+          "slot": "259:megapixels",
+          "alias": "megapixels",
+          "label": "megapixels"
+        }
+      ],
+      "nodeCount": 29,
+      "classes": [
+        "BasicGuider",
+        "BasicScheduler",
+        "BlockSparseAttention",
+        "DisableNoise",
+        "ExtendIntermediateSigmas",
+        "KSamplerSelect",
+        "LTXVConcatAVLatent",
+        "LTXVSeparateAVLatent",
+        "LoraLoaderModelOnly",
+        "MiniMaxChunkFeedForward",
+        "MiniMaxH3ReferenceToVideo",
+        "MinimaxH3LatentUpscaler3D",
+        "ModelPreviewOverrideKJ",
+        "RandomNoise",
+        "SamplerCustomAdvanced",
+        "SenseNovaH3DistilledBridge",
+        "SplitSigmas",
+        "VAEDecode",
+        "VAEDecodeAudio",
+        "VHS_VideoCombine",
+        "VRAMCleanup",
+        "ZealmanH3ModelLoader",
+        "ZealmanH3PickReferenceMedia",
+        "easy float"
+      ],
+      "modelReferences": [
+        {
+          "node": "124",
+          "class": "MinimaxH3LatentUpscaler3D",
+          "field": "model_name",
+          "file": "minimax_h3_latent_upscaler_3d_bf16.safetensors"
+        },
+        {
+          "node": "127",
+          "class": "LoraLoaderModelOnly",
+          "field": "lora_name",
+          "file": "minimax/minimax_h3_lms_v1.0_r64.safetensors"
+        },
+        {
+          "node": "208",
+          "class": "ModelPreviewOverrideKJ",
+          "field": "tiny_vae",
+          "file": "taeh3.safetensors"
+        },
+        {
+          "node": "214",
+          "class": "SenseNovaH3DistilledBridge",
+          "field": "distilled_adapter",
+          "file": "t8_compat/MiniMaxH3_SemanticBridge_v1_T8_Compat.safetensors"
+        },
+        {
+          "node": "301",
+          "class": "ZealmanH3ModelLoader",
+          "field": "unet_name",
+          "file": "minimax/Minimax-h3_Singularity_ref2va_Pruned_v1.3_int8.safetensors"
+        },
+        {
+          "node": "301",
+          "class": "ZealmanH3ModelLoader",
+          "field": "clip_name",
+          "file": "qwen3vl_32b_minimax_h3_int8_convrot.safetensors"
+        },
+        {
+          "node": "301",
+          "class": "ZealmanH3ModelLoader",
+          "field": "video_vae",
+          "file": "minimax_h3_video_vae_int8_convrot.safetensors"
+        },
+        {
+          "node": "301",
+          "class": "ZealmanH3ModelLoader",
+          "field": "audio_vae",
+          "file": "minimax_h3_audio_vae_fp32.safetensors"
+        }
+      ],
+      "mediaOrder": [
+        "259:ref_image_0",
+        "259:ref_image_1",
+        "259:ref_image_2",
+        "259:ref_image_3",
+        "259:ref_image_4",
+        "259:ref_image_5",
+        "259:ref_image_6",
+        "259:ref_image_7",
+        "259:ref_image_8",
+        "259:ref_audio_0",
+        "259:ref_audio_1",
+        "259:ref_audio_2"
+      ],
+      "preflight": {
+        "missingNodeTypes": [
+          {
+            "node": "259",
+            "class": "ZealmanH3PickReferenceMedia"
+          },
+          {
+            "node": "301",
+            "class": "ZealmanH3ModelLoader"
+          }
+        ],
+        "unlistedModelChoices": [],
+        "generationTested": false
+      }
+    },
+    {
+      "id": "API-U24-文武双修T8版",
+      "configured": true,
+      "inputs": [
+        {
+          "slot": "11:noise_seed",
+          "alias": "noise_seed",
+          "label": "noise_seed"
+        },
+        {
+          "slot": "27:value",
+          "alias": "value",
+          "label": "时长 (value)"
+        },
+        {
+          "slot": "28:prompt",
+          "alias": "prompt",
+          "label": "提示词"
+        },
+        {
+          "slot": "29:aspect_ratio",
+          "alias": "aspect_ratio",
+          "label": "1采分辨率默认0.4太高会失败 (aspect_ratio)"
+        },
+        {
+          "slot": "29:megapixels",
+          "alias": "megapixels",
+          "label": "1采分辨率默认0.4太高会失败 (megapixels)"
+        },
+        {
+          "slot": "54:value",
+          "alias": "value_2",
+          "label": "2采倍率 (value)"
+        },
+        {
+          "slot": "58:image",
+          "alias": "ref_image_2",
+          "label": "参考图 2"
+        },
+        {
+          "slot": "59:image",
+          "alias": "ref_image_3",
+          "label": "参考图 3"
+        },
+        {
+          "slot": "60:image",
+          "alias": "ref_image_4",
+          "label": "参考图 4"
+        },
+        {
+          "slot": "61:image",
+          "alias": "ref_image_5",
+          "label": "参考图 5"
+        },
+        {
+          "slot": "62:image",
+          "alias": "ref_image_6",
+          "label": "参考图 6"
+        },
+        {
+          "slot": "63:image",
+          "alias": "ref_image_7",
+          "label": "参考图 7"
+        },
+        {
+          "slot": "64:image",
+          "alias": "ref_image_8",
+          "label": "参考图 8"
+        },
+        {
+          "slot": "65:image",
+          "alias": "ref_image_1",
+          "label": "参考图 1"
+        },
+        {
+          "slot": "66:image",
+          "alias": "ref_image_0",
+          "label": "参考图 0"
+        },
+        {
+          "slot": "107:audio",
+          "alias": "ref_audio_0",
+          "label": "参考音频 0"
+        },
+        {
+          "slot": "108:audio",
+          "alias": "ref_audio_1",
+          "label": "参考音频 1"
+        },
+        {
+          "slot": "109:audio",
+          "alias": "ref_audio_2",
+          "label": "参考音频 2"
+        }
+      ],
+      "nodeCount": 51,
+      "classes": [
+        "BasicGuider",
+        "CLIPLoader",
+        "CR Prompt Text",
+        "ComfyMathExpression",
+        "LoadImage",
+        "LoraLoaderBypassModelOnly",
+        "LoraLoaderModelOnly",
+        "MiniMaxH3AVDecodeT8",
+        "MiniMaxH3AudioConditioningT8",
+        "MiniMaxH3DualClockSamplerT8",
+        "MiniMaxH3LearnedLatentUpscaleT8Advanced",
+        "MiniMaxH3LearnedTwoPassParityPlanT8Advanced",
+        "MiniMaxH3MemoryEfficientSageAttentionPatch",
+        "MiniMaxH3TwoPassDetailMixerT8Advanced",
+        "MiniMaxH3TwoPassLatentReconcileT8Advanced",
+        "ModelAttentionBackend",
+        "ModelPreviewOverrideKJ",
+        "PrimitiveFloat",
+        "RandomNoise",
+        "ResolutionSelector",
+        "SamplerCustomAdvanced",
+        "UNETLoader",
+        "VAELoader",
+        "VHS_LoadAudioUpload",
+        "VHS_VideoCombine",
+        "VRAMCleanup"
+      ],
+      "modelReferences": [
+        {
+          "node": "1",
+          "class": "VAELoader",
+          "field": "vae_name",
+          "file": "minimax_h3_video_vae_fp16.safetensors"
+        },
+        {
+          "node": "2",
+          "class": "VAELoader",
+          "field": "vae_name",
+          "file": "minimax_h3_audio_vae_fp32.safetensors"
+        },
+        {
+          "node": "3",
+          "class": "CLIPLoader",
+          "field": "clip_name",
+          "file": "qwen3vl_32b_minimax_h3_nvfp4_awq.safetensors"
+        },
+        {
+          "node": "4",
+          "class": "UNETLoader",
+          "field": "unet_name",
+          "file": "minimax/minimax_h3_hybrid_fl2va_ref2va_b25-49-int8.safetensors"
+        },
+        {
+          "node": "5",
+          "class": "LoraLoaderBypassModelOnly",
+          "field": "lora_name",
+          "file": "minimax/minimax_h3_fl2v_turbo_4step_v1.2_768p_comfyui_bf16.safetensors"
+        },
+        {
+          "node": "13",
+          "class": "MiniMaxH3LearnedLatentUpscaleT8Advanced",
+          "field": "model_name",
+          "file": "minimax_h3_latent_upscaler_3d_fp16.safetensors"
+        },
+        {
+          "node": "44",
+          "class": "LoraLoaderModelOnly",
+          "field": "lora_name",
+          "file": "minimax/minimax_h3_turbo_4step_10ErosMax_test4_pruned_curveproj1025_exp_v001-T8.safetensors"
+        },
+        {
+          "node": "45",
+          "class": "LoraLoaderModelOnly",
+          "field": "lora_name",
+          "file": "minimax/Motion_Repair.safetensors"
+        },
+        {
+          "node": "46",
+          "class": "LoraLoaderModelOnly",
+          "field": "lora_name",
+          "file": "minimax/Motion_Repair.safetensors"
+        },
+        {
+          "node": "47",
+          "class": "LoraLoaderBypassModelOnly",
+          "field": "lora_name",
+          "file": "minimax/minimax_h3_turbo_v4_step600_ema_DasiwaREF2VAHybridV1_0_curveproj1025_compat_v001.safetensors"
+        },
+        {
+          "node": "48",
+          "class": "LoraLoaderModelOnly",
+          "field": "lora_name",
+          "file": "minimax/MinimaxH3真实电影质感V0.1.safetensors"
+        },
+        {
+          "node": "49",
+          "class": "LoraLoaderModelOnly",
+          "field": "lora_name",
+          "file": "minimax/MinimaxH3真实电影质感V0.1.safetensors"
+        },
+        {
+          "node": "50",
+          "class": "LoraLoaderModelOnly",
+          "field": "lora_name",
+          "file": "minimax/minimax_h3_turbo_4step_10ErosMax_test4_pruned_curveproj1025_exp_v001-T8.safetensors"
+        },
+        {
+          "node": "51",
+          "class": "LoraLoaderBypassModelOnly",
+          "field": "lora_name",
+          "file": "minimax/minimax_h3_turbo_v4_step600_ema_DasiwaREF2VAHybridV1_0_curveproj1025_compat_v001.safetensors"
+        },
+        {
+          "node": "52",
+          "class": "LoraLoaderModelOnly",
+          "field": "lora_name",
+          "file": "minimax/H3_Combat_V2.safetensors"
+        },
+        {
+          "node": "53",
+          "class": "LoraLoaderModelOnly",
+          "field": "lora_name",
+          "file": "minimax/H3_Combat_V2.safetensors"
+        },
+        {
+          "node": "112",
+          "class": "ModelPreviewOverrideKJ",
+          "field": "tiny_vae",
+          "file": "taeh3.safetensors"
+        },
+        {
+          "node": "113",
+          "class": "ModelPreviewOverrideKJ",
+          "field": "tiny_vae",
+          "file": "taeh3.safetensors"
+        }
+      ],
+      "mediaOrder": [
+        "66:image",
+        "65:image",
+        "58:image",
+        "59:image",
+        "60:image",
+        "61:image",
+        "62:image",
+        "63:image",
+        "64:image",
+        "107:audio",
+        "108:audio",
+        "109:audio"
+      ],
+      "preflight": {
+        "missingNodeTypes": [],
+        "unlistedModelChoices": [],
+        "generationTested": false
+      }
+    },
+    {
+      "id": "API-U08",
+      "configured": true,
+      "inputs": [
+        {
+          "slot": "7:aspect_ratio",
+          "alias": "aspect_ratio",
+          "label": "1采-只改宽高比 (aspect_ratio)"
+        },
+        {
+          "slot": "7:megapixels",
+          "alias": "megapixels",
+          "label": "1采-只改宽高比 (megapixels)"
+        },
+        {
+          "slot": "8:value",
+          "alias": "value",
+          "label": "value"
+        },
+        {
+          "slot": "81:aspect_ratio",
+          "alias": "aspect_ratio_2",
+          "label": "2采和1采宽高比要一致 (aspect_ratio)"
+        },
+        {
+          "slot": "81:megapixels",
+          "alias": "megapixels_2",
+          "label": "2采和1采宽高比要一致 (megapixels)"
+        },
+        {
+          "slot": "103:value",
+          "alias": "prompt",
+          "label": "提示词"
+        },
+        {
+          "slot": "104:image",
+          "alias": "ref_image_0",
+          "label": "参考图 0"
+        },
+        {
+          "slot": "105:image",
+          "alias": "ref_image_1",
+          "label": "参考图 1"
+        },
+        {
+          "slot": "136:audio",
+          "alias": "ref_audio_0",
+          "label": "参考音频 0"
+        },
+        {
+          "slot": "137:audio",
+          "alias": "ref_audio_1",
+          "label": "参考音频 1"
+        },
+        {
+          "slot": "138:audio",
+          "alias": "ref_audio_2",
+          "label": "参考音频 2"
+        },
+        {
+          "slot": "139:image",
+          "alias": "ref_image_2",
+          "label": "参考图 2"
+        },
+        {
+          "slot": "140:image",
+          "alias": "ref_image_3",
+          "label": "参考图 3"
+        },
+        {
+          "slot": "141:image",
+          "alias": "ref_image_4",
+          "label": "参考图 4"
+        },
+        {
+          "slot": "142:image",
+          "alias": "ref_image_5",
+          "label": "参考图 5"
+        },
+        {
+          "slot": "143:image",
+          "alias": "ref_image_6",
+          "label": "参考图 6"
+        },
+        {
+          "slot": "144:image",
+          "alias": "ref_image_7",
+          "label": "参考图 7"
+        },
+        {
+          "slot": "145:image",
+          "alias": "ref_image_8",
+          "label": "参考图 8"
+        }
+      ],
+      "nodeCount": 39,
+      "classes": [
+        "BasicGuider",
+        "BasicScheduler",
+        "CLIPLoader",
+        "ComfyMathExpression",
+        "DiffusionModelLoaderKJ",
+        "KSamplerSelect",
+        "LoadImage",
+        "MMH3LatentUpscaleWithModelParams",
+        "MMH3UltimateUpscale",
+        "ManualSigmas",
+        "MiniMaxH3ReferenceToVideo",
+        "MiniMaxH3SigmaShift",
+        "PrimitiveFloat",
+        "PrimitiveStringMultiline",
+        "RandomNoise",
+        "ResolutionSelector",
+        "SamplerCustomAdvanced",
+        "StringConcatenate",
+        "VAEDecode",
+        "VAEDecodeAudio",
+        "VAELoader",
+        "VHS_LoadAudioUpload",
+        "VHS_VideoCombine",
+        "VRAMCleanup"
+      ],
+      "modelReferences": [
+        {
+          "node": "2",
+          "class": "CLIPLoader",
+          "field": "clip_name",
+          "file": "qwen3vl_32b_minimax_h3_int8_convrot.safetensors"
+        },
+        {
+          "node": "3",
+          "class": "VAELoader",
+          "field": "vae_name",
+          "file": "minimax_h3_video_vae_int8_convrot.safetensors"
+        },
+        {
+          "node": "4",
+          "class": "VAELoader",
+          "field": "vae_name",
+          "file": "minimax_h3_audio_vae_fp32.safetensors"
+        },
+        {
+          "node": "24",
+          "class": "DiffusionModelLoaderKJ",
+          "field": "model_name",
+          "file": "minimax/minimax_h3_fused_refdelta_r1024_turbo8_mystic07_int8_convrot.safetensors"
+        },
+        {
+          "node": "82",
+          "class": "MMH3LatentUpscaleWithModelParams",
+          "field": "model_name",
+          "file": "minimax_h3_latent_upscaler_3d_fp16.safetensors"
+        }
+      ],
+      "mediaOrder": [
+        "104:image",
+        "105:image",
+        "139:image",
+        "140:image",
+        "141:image",
+        "142:image",
+        "143:image",
+        "144:image",
+        "145:image",
+        "136:audio",
+        "137:audio",
+        "138:audio"
+      ],
+      "preflight": {
+        "missingNodeTypes": [],
+        "unlistedModelChoices": [],
+        "generationTested": false
+      }
+    },
+    {
+      "id": "API-U06-9图版API-V5",
+      "configured": true,
+      "inputs": [
+        {
+          "slot": "132:value",
+          "alias": "value",
+          "label": "秒数 (value)"
+        },
+        {
+          "slot": "137:image",
+          "alias": "ref_image_0",
+          "label": "参考图 0"
+        },
+        {
+          "slot": "139:image",
+          "alias": "ref_image_1",
+          "label": "参考图 1"
+        },
+        {
+          "slot": "144:image",
+          "alias": "ref_image_2",
+          "label": "参考图 2"
+        },
+        {
+          "slot": "151:image",
+          "alias": "ref_image_3",
+          "label": "参考图 3"
+        },
+        {
+          "slot": "653:image",
+          "alias": "ref_image_4",
+          "label": "参考图 4"
+        },
+        {
+          "slot": "654:image",
+          "alias": "ref_image_5",
+          "label": "参考图 5"
+        },
+        {
+          "slot": "655:image",
+          "alias": "ref_image_6",
+          "label": "参考图 6"
+        },
+        {
+          "slot": "656:image",
+          "alias": "ref_image_7",
+          "label": "参考图 7"
+        },
+        {
+          "slot": "657:image",
+          "alias": "ref_image_8",
+          "label": "参考图 8"
+        },
+        {
+          "slot": "664:prompt",
+          "alias": "prompt",
+          "label": "提示词 (prompt)"
+        },
+        {
+          "slot": "665:自定义宽",
+          "alias": "param_4",
+          "label": "自定义宽"
+        },
+        {
+          "slot": "665:自定义高",
+          "alias": "param_5",
+          "label": "自定义高"
+        }
+      ],
+      "nodeCount": 36,
+      "classes": [
+        "BasicGuider",
+        "BasicScheduler",
+        "CLIPLoader",
+        "CR Prompt Text",
+        "ComfyMathExpression",
+        "H3SigmaRefiner",
+        "KSamplerSelect",
+        "LoadImage",
+        "LoraLoaderModelOnly",
+        "MiniMaxChunkFeedForward",
+        "MiniMaxH3ReferenceToVideo",
+        "MiniMaxLowVRAMAttention",
+        "Model Switch (JPS)",
+        "ModelAttentionBackend",
+        "ModelPreviewOverrideKJ",
+        "PrimitiveFloat",
+        "RAMCleanup",
+        "RandomNoise",
+        "SamplerCustomAdvanced",
+        "UNETLoader",
+        "VAEDecode",
+        "VAEDecodeAudio",
+        "VAELoader",
+        "VHS_VideoCombine",
+        "VRAMCleanup",
+        "WJILatentPreset",
+        "easy seed"
+      ],
+      "modelReferences": [
+        {
+          "node": "119",
+          "class": "VAELoader",
+          "field": "vae_name",
+          "file": "minimax_h3_video_vae_fp16.safetensors"
+        },
+        {
+          "node": "120",
+          "class": "VAELoader",
+          "field": "vae_name",
+          "file": "minimax_h3_audio_vae_fp32.safetensors"
+        },
+        {
+          "node": "128",
+          "class": "CLIPLoader",
+          "field": "clip_name",
+          "file": "qwen3vl_32b_minimax_h3_nvfp4_awq.safetensors"
+        },
+        {
+          "node": "620",
+          "class": "UNETLoader",
+          "field": "unet_name",
+          "file": "minimax/minimax_h3_ref2va_pruned_int8_convrot.safetensors"
+        },
+        {
+          "node": "677",
+          "class": "ModelPreviewOverrideKJ",
+          "field": "tiny_vae",
+          "file": "taeh3.safetensors"
+        },
+        {
+          "node": "710",
+          "class": "LoraLoaderModelOnly",
+          "field": "lora_name",
+          "file": "minimax/minimax_h3_fl2v_turbo_8step_v1.0_comfyui_bf16.safetensors"
+        }
+      ],
+      "mediaOrder": [
+        "137:image",
+        "139:image",
+        "144:image",
+        "151:image",
+        "653:image",
+        "654:image",
+        "655:image",
+        "656:image",
+        "657:image"
+      ],
+      "preflight": {
+        "missingNodeTypes": [],
+        "unlistedModelChoices": [],
+        "generationTested": false
+      }
+    },
+    {
+      "id": "API-U06-9图3音频-V5",
+      "configured": true,
+      "inputs": [
+        {
+          "slot": "132:value",
+          "alias": "value",
+          "label": "value"
+        },
+        {
+          "slot": "137:image",
+          "alias": "ref_image_0",
+          "label": "参考图 0"
+        },
+        {
+          "slot": "139:image",
+          "alias": "ref_image_1",
+          "label": "参考图 1"
+        },
+        {
+          "slot": "142:seed",
+          "alias": "seed",
+          "label": "随机种子"
+        },
+        {
+          "slot": "144:image",
+          "alias": "ref_image_2",
+          "label": "参考图 2"
+        },
+        {
+          "slot": "151:image",
+          "alias": "ref_image_3",
+          "label": "参考图 3"
+        },
+        {
+          "slot": "653:image",
+          "alias": "ref_image_4",
+          "label": "参考图 4"
+        },
+        {
+          "slot": "654:image",
+          "alias": "ref_image_5",
+          "label": "参考图 5"
+        },
+        {
+          "slot": "655:image",
+          "alias": "ref_image_6",
+          "label": "参考图 6"
+        },
+        {
+          "slot": "656:image",
+          "alias": "ref_image_7",
+          "label": "参考图 7"
+        },
+        {
+          "slot": "657:image",
+          "alias": "ref_image_8",
+          "label": "参考图 8"
+        },
+        {
+          "slot": "664:prompt",
+          "alias": "prompt",
+          "label": "prompt"
+        },
+        {
+          "slot": "665:自定义宽",
+          "alias": "param_4",
+          "label": "自定义宽"
+        },
+        {
+          "slot": "665:自定义高",
+          "alias": "param_5",
+          "label": "自定义高"
+        },
+        {
+          "slot": "719:audio",
+          "alias": "ref_audio_0",
+          "label": "参考音频 0"
+        },
+        {
+          "slot": "720:audio",
+          "alias": "ref_audio_1",
+          "label": "参考音频 1"
+        },
+        {
+          "slot": "721:audio",
+          "alias": "ref_audio_2",
+          "label": "参考音频 2"
+        }
+      ],
+      "nodeCount": 40,
+      "classes": [
+        "BasicGuider",
+        "BasicScheduler",
+        "CLIPLoader",
+        "CR Prompt Text",
+        "ComfyMathExpression",
+        "H3SigmaRefiner",
+        "KSamplerSelect",
+        "LoadAudio",
+        "LoadImage",
+        "LoraLoaderModelOnly",
+        "MiniMaxChunkFeedForward",
+        "MiniMaxH3ReferenceToVideo",
+        "MiniMaxLowVRAMAttention",
+        "ModelAttentionBackend",
+        "PrimitiveFloat",
+        "RAMCleanup",
+        "RandomNoise",
+        "SamplerCustomAdvanced",
+        "TrimAudioDuration",
+        "UNETLoader",
+        "VAEDecode",
+        "VAEDecodeAudio",
+        "VAELoader",
+        "VHS_VideoCombine",
+        "VRAMCleanup",
+        "WJILatentPreset",
+        "easy seed"
+      ],
+      "modelReferences": [
+        {
+          "node": "119",
+          "class": "VAELoader",
+          "field": "vae_name",
+          "file": "minimax_h3_video_vae_fp16.safetensors"
+        },
+        {
+          "node": "120",
+          "class": "VAELoader",
+          "field": "vae_name",
+          "file": "minimax_h3_audio_vae_fp32.safetensors"
+        },
+        {
+          "node": "128",
+          "class": "CLIPLoader",
+          "field": "clip_name",
+          "file": "qwen3vl_32b_minimax_h3_nvfp4_awq.safetensors"
+        },
+        {
+          "node": "620",
+          "class": "UNETLoader",
+          "field": "unet_name",
+          "file": "minimax/minimax_h3_ref2va_pruned_int8_convrot.safetensors"
+        },
+        {
+          "node": "710",
+          "class": "LoraLoaderModelOnly",
+          "field": "lora_name",
+          "file": "minimax/minimax_h3_ref2v_turbo_4step_v0.1_comfyui_bf16.safetensors"
+        }
+      ],
+      "mediaOrder": [
+        "137:image",
+        "139:image",
+        "144:image",
+        "151:image",
+        "653:image",
+        "654:image",
+        "655:image",
+        "656:image",
+        "657:image",
+        "719:audio",
+        "720:audio",
+        "721:audio"
+      ],
+      "preflight": {
+        "missingNodeTypes": [],
+        "unlistedModelChoices": [],
+        "generationTested": false
+      }
+    },
+    {
+      "id": "API-Y08-四宫格-LTX-2.3图生视频优化版",
+      "configured": true,
+      "inputs": [
+        {
+          "slot": "71:text",
+          "alias": "prompt",
+          "label": "提示词"
+        },
+        {
+          "slot": "127:image",
+          "alias": "ref_image_0",
+          "label": "参考图 0"
+        },
+        {
+          "slot": "136:value",
+          "alias": "value_3",
+          "label": "视频长（12秒） (value)"
+        },
+        {
+          "slot": "150:custom_width",
+          "alias": "custom_width",
+          "label": "custom_width"
+        },
+        {
+          "slot": "150:custom_height",
+          "alias": "custom_height",
+          "label": "custom_height"
+        },
+        {
+          "slot": "222:prompt",
+          "alias": "prompt_3",
+          "label": "prompt"
+        },
+        {
+          "slot": "223:prompt",
+          "alias": "prompt_4",
+          "label": "prompt"
+        }
+      ],
+      "nodeCount": 40,
+      "classes": [
+        "CFGGuider",
+        "CLIPTextEncode",
+        "CR Float To Integer",
+        "CR Prompt Text",
+        "DualCLIPLoader",
+        "EmptyLTXVLatentVideo",
+        "GuHaiAutoImageSplit",
+        "INTConstant",
+        "ImageFromBatch+",
+        "ImageResizeKJv2",
+        "KSamplerSelect",
+        "LTXVAddGuideMulti",
+        "LTXVAudioVAEDecode",
+        "LTXVConcatAVLatent",
+        "LTXVConditioning",
+        "LTXVCropGuides",
+        "LTXVEmptyLatentAudio",
+        "LTXVSeparateAVLatent",
+        "LatentUpscaleModelLoader",
+        "LoadImage",
+        "ManualSigmas",
+        "PrimitiveFloat",
+        "RandomNoise",
+        "SamplerCustomAdvanced",
+        "SimpleMath+",
+        "TTResolutionSelector",
+        "UNETLoader",
+        "VAEDecodeTiled",
+        "VAELoader",
+        "VAELoaderKJ",
+        "VHS_VideoCombine",
+        "easy cleanGpuUsed"
+      ],
+      "modelReferences": [
+        {
+          "node": "14",
+          "class": "LatentUpscaleModelLoader",
+          "field": "model_name",
+          "file": "ltx-2.3-spatial-upscaler-x2-1.0.safetensors"
+        },
+        {
+          "node": "53",
+          "class": "DualCLIPLoader",
+          "field": "clip_name1",
+          "file": "gemma_3_12B_it_fp8_e4m3fn.safetensors"
+        },
+        {
+          "node": "53",
+          "class": "DualCLIPLoader",
+          "field": "clip_name2",
+          "file": "ltx-2.3_text_projection_bf16.safetensors"
+        },
+        {
+          "node": "56",
+          "class": "VAELoader",
+          "field": "vae_name",
+          "file": "LTX23_video_vae_bf16.safetensors"
+        },
+        {
+          "node": "60",
+          "class": "VAELoaderKJ",
+          "field": "vae_name",
+          "file": "LTX23_audio_vae_bf16.safetensors"
+        },
+        {
+          "node": "151",
+          "class": "UNETLoader",
+          "field": "unet_name",
+          "file": "Ltx/ltx-2.3-22b-distilled-1.1_transformer_only_fp8_scaled.safetensors"
+        }
+      ],
+      "mediaOrder": ["127:image"],
+      "preflight": {
+        "missingNodeTypes": [],
+        "unlistedModelChoices": [],
+        "generationTested": false
+      }
+    },
+    {
+      "id": "API-U17-9图1视频3音频V1-api",
+      "configured": true,
+      "inputs": [
+        {
+          "slot": "115:aspect_ratio",
+          "alias": "aspect_ratio",
+          "label": "官方分辨率写法 (aspect_ratio)"
+        },
+        {
+          "slot": "115:megapixels",
+          "alias": "megapixels",
+          "label": "官方分辨率写法 (megapixels)"
+        },
+        {
+          "slot": "132:value",
+          "alias": "value",
+          "label": "时长 (value)"
+        },
+        {
+          "slot": "182:value",
+          "alias": "value_2",
+          "label": "放大倍率 (value)"
+        },
+        {
+          "slot": "246:image",
+          "alias": "ref_image_3",
+          "label": "参考图 3"
+        },
+        {
+          "slot": "247:image",
+          "alias": "ref_image_2",
+          "label": "参考图 2"
+        },
+        {
+          "slot": "248:image",
+          "alias": "ref_image_0",
+          "label": "参考图 0"
+        },
+        {
+          "slot": "249:image",
+          "alias": "ref_image_1",
+          "label": "参考图 1"
+        },
+        {
+          "slot": "256:video",
+          "alias": "ref_video_0",
+          "label": "参考视频 0"
+        },
+        {
+          "slot": "259:audio",
+          "alias": "ref_audio_0",
+          "label": "参考音频 0"
+        },
+        {
+          "slot": "260:audio",
+          "alias": "ref_audio_1",
+          "label": "参考音频 1"
+        },
+        {
+          "slot": "261:audio",
+          "alias": "ref_audio_2",
+          "label": "参考音频 2"
+        },
+        {
+          "slot": "279:image",
+          "alias": "ref_image_4",
+          "label": "参考图 4"
+        },
+        {
+          "slot": "280:image",
+          "alias": "ref_image_5",
+          "label": "参考图 5"
+        },
+        {
+          "slot": "281:image",
+          "alias": "ref_image_6",
+          "label": "参考图 6"
+        },
+        {
+          "slot": "282:image",
+          "alias": "ref_image_7",
+          "label": "参考图 7"
+        },
+        {
+          "slot": "283:image",
+          "alias": "ref_image_8",
+          "label": "参考图 8"
+        }
+      ],
+      "nodeCount": 58,
+      "classes": [
+        "BasicGuider",
+        "BasicScheduler",
+        "CLIPLoader",
+        "ComfyMathExpression",
+        "CreateVideo",
+        "ExtendIntermediateSigmas",
+        "GetImageRangeFromBatch",
+        "ImageResizeKJv2",
+        "KSamplerSelect",
+        "LTXVConcatAVLatent",
+        "LTXVSeparateAVLatent",
+        "LoadAudio",
+        "LoadImage",
+        "LoraLoaderModelOnly",
+        "MiniMaxChunkFeedForward",
+        "MiniMaxH3ReferenceToVideo",
+        "MiniMaxLowVRAMAttention",
+        "MinimaxH3LatentUpscaler3D",
+        "ModelAttentionBackend",
+        "ModelPreviewOverrideKJ",
+        "PrimitiveFloat",
+        "PrimitiveInt",
+        "PrimitiveStringMultiline",
+        "RAMCleanup",
+        "RTXVideoSuperResolution",
+        "RandomNoise",
+        "ResolutionSelector",
+        "SamplerCustomAdvanced",
+        "SaveVideo",
+        "SplitSigmas",
+        "TrimAudioDuration",
+        "UNETLoader",
+        "VAEDecode",
+        "VAEDecodeAudio",
+        "VAELoader",
+        "VHS_LoadVideo",
+        "VRAMCleanup",
+        "easy cleanGpuUsed",
+        "easy clearCacheAll"
+      ],
+      "modelReferences": [
+        {
+          "node": "119",
+          "class": "VAELoader",
+          "field": "vae_name",
+          "file": "minimax_h3_video_vae_fp16.safetensors"
+        },
+        {
+          "node": "120",
+          "class": "VAELoader",
+          "field": "vae_name",
+          "file": "minimax_h3_audio_vae_fp32.safetensors"
+        },
+        {
+          "node": "128",
+          "class": "CLIPLoader",
+          "field": "clip_name",
+          "file": "qwen3vl_32b_minimax_h3_nvfp4_awq.safetensors"
+        },
+        {
+          "node": "150",
+          "class": "LoraLoaderModelOnly",
+          "field": "lora_name",
+          "file": "minimax/minimax_h3_fl2v_turbo_8step_v1.0_comfyui_bf16.safetensors"
+        },
+        {
+          "node": "226",
+          "class": "MinimaxH3LatentUpscaler3D",
+          "field": "model_name",
+          "file": "minimax_h3_latent_upscaler_3d_bf16.safetensors"
+        },
+        {
+          "node": "233",
+          "class": "LoraLoaderModelOnly",
+          "field": "lora_name",
+          "file": "minimax/minimax_h3_fl2v_turbo_4step_v1.1_768p_comfyui_bf16.safetensors"
+        },
+        {
+          "node": "236",
+          "class": "UNETLoader",
+          "field": "unet_name",
+          "file": "minimax/minimax_h3_hybrid_fl2va_ref2va_b25-49-int8.safetensors"
+        },
+        {
+          "node": "251",
+          "class": "ModelPreviewOverrideKJ",
+          "field": "tiny_vae",
+          "file": "taeh3.safetensors"
+        },
+        {
+          "node": "252",
+          "class": "ModelPreviewOverrideKJ",
+          "field": "tiny_vae",
+          "file": "taeh3.safetensors"
+        }
+      ],
+      "mediaOrder": [
+        "248:image",
+        "249:image",
+        "247:image",
+        "246:image",
+        "279:image",
+        "280:image",
+        "281:image",
+        "282:image",
+        "283:image",
+        "256:video",
+        "259:audio",
+        "260:audio",
+        "261:audio"
+      ],
+      "preflight": {
+        "missingNodeTypes": [],
+        "unlistedModelChoices": [],
+        "generationTested": false
+      }
+    },
+    {
+      "id": "API-U11-Minimax-图片音频对口型API",
+      "configured": true,
+      "inputs": [
+        {
+          "slot": "155:audio",
+          "alias": "ref_audio_0",
+          "label": "参考音频 0"
+        },
+        {
+          "slot": "155:duration",
+          "alias": "duration",
+          "label": "duration"
+        },
+        {
+          "slot": "202:自定义宽",
+          "alias": "param_4",
+          "label": "自定义宽"
+        },
+        {
+          "slot": "202:自定义高",
+          "alias": "param_5",
+          "label": "自定义高"
+        },
+        {
+          "slot": "232:fps",
+          "alias": "fps",
+          "label": "fps"
+        },
+        {
+          "slot": "232:video_trim_seconds",
+          "alias": "video_trim_seconds",
+          "label": "video_trim_seconds"
+        },
+        {
+          "slot": "232:audio_trim_seconds",
+          "alias": "audio_trim_seconds",
+          "label": "audio_trim_seconds"
+        },
+        {
+          "slot": "232:image_max_side",
+          "alias": "image_max_side",
+          "label": "image_max_side"
+        },
+        {
+          "slot": "232:video_max_side",
+          "alias": "video_max_side",
+          "label": "video_max_side"
+        },
+        {
+          "slot": "233:image",
+          "alias": "ref_image_0",
+          "label": "参考图 0"
+        }
+      ],
+      "nodeCount": 33,
+      "classes": [
+        "BasicGuider",
+        "BasicScheduler",
+        "CLIPLoader",
+        "ComfyMathExpression",
+        "DenoAudioAnalysisFinalize",
+        "DenoAudioTranscript",
+        "DenoMiniMaxH3ReferenceToVideo",
+        "DenoPromptText",
+        "H3SigmaRefiner",
+        "KSamplerSelect",
+        "LoadImage",
+        "LoraLoaderModelOnly",
+        "MiniMaxChunkFeedForward",
+        "MiniMaxLowVRAMAttention",
+        "ModelAttentionBackend",
+        "ModelPreviewOverrideKJ",
+        "RAMCleanup",
+        "RandomNoise",
+        "SamplerCustomAdvanced",
+        "StringConcatenate",
+        "TextGenerate",
+        "UNETLoader",
+        "VAEDecode",
+        "VAELoader",
+        "VHS_LoadAudioUpload",
+        "VHS_VideoCombine",
+        "VRAMCleanup",
+        "WJILatentPreset",
+        "ZealmanH3LoadImageToRefImages",
+        "ZealmanLLM_Generate",
+        "ZealmanLLM_ModelLoader"
+      ],
+      "modelReferences": [
+        {
+          "node": "119",
+          "class": "VAELoader",
+          "field": "vae_name",
+          "file": "minimax_h3_video_vae_fp16.safetensors"
+        },
+        {
+          "node": "120",
+          "class": "VAELoader",
+          "field": "vae_name",
+          "file": "minimax_h3_audio_vae_fp32.safetensors"
+        },
+        {
+          "node": "127",
+          "class": "UNETLoader",
+          "field": "unet_name",
+          "file": "minimax/minimax_h3_ref2va_pruned_int8_convrot.safetensors"
+        },
+        {
+          "node": "128",
+          "class": "CLIPLoader",
+          "field": "clip_name",
+          "file": "qwen3vl_32b_minimax_h3_int8_convrot.safetensors"
+        },
+        {
+          "node": "181",
+          "class": "CLIPLoader",
+          "field": "clip_name",
+          "file": "gemma4_e4b_it_fp8_scaled.safetensors"
+        },
+        {
+          "node": "200",
+          "class": "LoraLoaderModelOnly",
+          "field": "lora_name",
+          "file": "minimax/minimax_h3_fl2v_turbo_4step_v1.0_768p_comfyui_bf16.safetensors"
+        },
+        {
+          "node": "201",
+          "class": "ModelPreviewOverrideKJ",
+          "field": "tiny_vae",
+          "file": "taeh3.safetensors"
+        },
+        {
+          "node": "225",
+          "class": "ZealmanLLM_ModelLoader",
+          "field": "主模型",
+          "file": "Qwen3.8-27B-Q4_K_M.gguf"
+        },
+        {
+          "node": "225",
+          "class": "ZealmanLLM_ModelLoader",
+          "field": "视觉投影mmproj",
+          "file": "Qwen3.8-mmproj-BF16.gguf"
+        }
+      ],
+      "mediaOrder": ["155:audio", "233:image"],
+      "preflight": {
+        "missingNodeTypes": [],
+        "unlistedModelChoices": [],
+        "generationTested": false
+      }
+    },
+    {
+      "id": "API-U09-9图版API-V2",
+      "configured": true,
+      "inputs": [
+        {
+          "slot": "132:value",
+          "alias": "value",
+          "label": "秒数 (value)"
+        },
+        {
+          "slot": "137:image",
+          "alias": "ref_image_0",
+          "label": "参考图 0"
+        },
+        {
+          "slot": "138:value",
+          "alias": "prompt",
+          "label": "提示词 (value)"
+        },
+        {
+          "slot": "139:image",
+          "alias": "ref_image_1",
+          "label": "参考图 1"
+        },
+        {
+          "slot": "146:image",
+          "alias": "ref_image_2",
+          "label": "参考图 2"
+        },
+        {
+          "slot": "147:image",
+          "alias": "ref_image_3",
+          "label": "参考图 3"
+        },
+        {
+          "slot": "148:image",
+          "alias": "ref_image_4",
+          "label": "参考图 4"
+        },
+        {
+          "slot": "149:image",
+          "alias": "ref_image_5",
+          "label": "参考图 5"
+        },
+        {
+          "slot": "150:image",
+          "alias": "ref_image_6",
+          "label": "参考图 6"
+        },
+        {
+          "slot": "151:image",
+          "alias": "ref_image_7",
+          "label": "参考图 7"
+        },
+        {
+          "slot": "170:image",
+          "alias": "ref_image_8",
+          "label": "参考图 8"
+        },
+        {
+          "slot": "320:aspect_ratio",
+          "alias": "aspect_ratio",
+          "label": "1采宽高比"
+        },
+        {
+          "slot": "320:megapixels",
+          "alias": "megapixels",
+          "label": "1采百万像素"
+        },
+        {
+          "slot": "321:aspect_ratio",
+          "alias": "aspect_ratio_2",
+          "label": "2采宽高比"
+        },
+        {
+          "slot": "321:megapixels",
+          "alias": "megapixels_2",
+          "label": "2采百万像素"
+        }
+      ],
+      "nodeCount": 60,
+      "classes": [
+        "BasicGuider",
+        "BasicScheduler",
+        "CLIPLoader",
+        "ComfyMathExpression",
+        "H3SigmaRefiner",
+        "INTConstant",
+        "ImageResizeKJv2",
+        "KSamplerSelect",
+        "LoadImage",
+        "LoraLoaderModelOnly",
+        "MiniMaxChunkFeedForward",
+        "MiniMaxH3ReferenceToVideo",
+        "MiniMaxLowVRAMAttention",
+        "ModelAttentionBackend",
+        "ModelPreviewOverrideKJ",
+        "PT_H3ConcatAVLatent",
+        "PrimitiveFloat",
+        "PrimitiveStringMultiline",
+        "RAMCleanup",
+        "RandomNoise",
+        "ResizeShortestToNode",
+        "ResolutionSelector",
+        "SamplerCustomAdvanced",
+        "UNETLoader",
+        "VAEDecode",
+        "VAEDecodeAudio",
+        "VAEEncode",
+        "VAEEncodeAudio",
+        "VAELoader",
+        "VHS_VideoCombine",
+        "VRAMCleanup",
+        "easy clearCacheAll"
+      ],
+      "modelReferences": [
+        {
+          "node": "119",
+          "class": "VAELoader",
+          "field": "vae_name",
+          "file": "minimax_h3_video_vae_int8_convrot.safetensors"
+        },
+        {
+          "node": "120",
+          "class": "VAELoader",
+          "field": "vae_name",
+          "file": "minimax_h3_audio_vae_fp32.safetensors"
+        },
+        {
+          "node": "127",
+          "class": "UNETLoader",
+          "field": "unet_name",
+          "file": "minimax/minimax_h3_ref2va_int8_convrot.safetensors"
+        },
+        {
+          "node": "128",
+          "class": "CLIPLoader",
+          "field": "clip_name",
+          "file": "qwen3vl_32b_minimax_h3_int8_convrot.safetensors"
+        },
+        {
+          "node": "306",
+          "class": "UNETLoader",
+          "field": "unet_name",
+          "file": "minimax/minimax_h3_ref2va_pruned_w4a8_mixed.safetensors"
+        },
+        {
+          "node": "310",
+          "class": "LoraLoaderModelOnly",
+          "field": "lora_name",
+          "file": "minimax/minimax_h3_fl2v_turbo_8step_v1.0_comfyui_bf16.safetensors"
+        },
+        {
+          "node": "322",
+          "class": "ModelPreviewOverrideKJ",
+          "field": "tiny_vae",
+          "file": "taeh3.safetensors"
+        }
+      ],
+      "mediaOrder": [
+        "137:image",
+        "139:image",
+        "146:image",
+        "147:image",
+        "148:image",
+        "149:image",
+        "150:image",
+        "151:image",
+        "170:image"
+      ],
+      "preflight": {
+        "missingNodeTypes": [],
+        "unlistedModelChoices": [],
+        "generationTested": false
+      }
+    },
+    {
+      "id": "API-U07-A",
+      "configured": true,
+      "inputs": [
+        {
+          "slot": "312:value",
+          "alias": "prompt",
+          "label": "value"
+        },
+        {
+          "slot": "323:value",
+          "alias": "value",
+          "label": "value"
+        },
+        {
+          "slot": "374:自定义宽",
+          "alias": "param_4",
+          "label": "自定义宽"
+        },
+        {
+          "slot": "374:自定义高",
+          "alias": "param_5",
+          "label": "自定义高"
+        },
+        {
+          "slot": "375:image",
+          "alias": "ref_image_0",
+          "label": "参考图 0"
+        },
+        {
+          "slot": "376:image",
+          "alias": "ref_image_1",
+          "label": "参考图 1"
+        },
+        {
+          "slot": "377:image",
+          "alias": "ref_image_2",
+          "label": "参考图 2"
+        },
+        {
+          "slot": "378:image",
+          "alias": "ref_image_3",
+          "label": "参考图 3"
+        },
+        {
+          "slot": "379:image",
+          "alias": "ref_image_4",
+          "label": "参考图 4"
+        },
+        {
+          "slot": "380:image",
+          "alias": "ref_image_5",
+          "label": "参考图 5"
+        },
+        {
+          "slot": "381:image",
+          "alias": "ref_image_6",
+          "label": "参考图 6"
+        },
+        {
+          "slot": "382:image",
+          "alias": "ref_image_7",
+          "label": "参考图 7"
+        },
+        {
+          "slot": "383:image",
+          "alias": "ref_image_8",
+          "label": "参考图 8"
+        },
+        {
+          "slot": "384:audio",
+          "alias": "ref_audio_0",
+          "label": "参考音频 0"
+        },
+        {
+          "slot": "385:audio",
+          "alias": "ref_audio_1",
+          "label": "参考音频 1"
+        },
+        {
+          "slot": "386:audio",
+          "alias": "ref_audio_2",
+          "label": "参考音频 2"
+        },
+        {
+          "slot": "387:video",
+          "alias": "ref_video_0",
+          "label": "参考视频 0"
+        },
+        {
+          "slot": "388:video",
+          "alias": "ref_video_1",
+          "label": "参考视频 1"
+        },
+        {
+          "slot": "389:video",
+          "alias": "ref_video_2",
+          "label": "参考视频 2"
+        }
+      ],
+      "nodeCount": 34,
+      "classes": [
+        "BasicGuider",
+        "CLIPLoader",
+        "ComfyMathExpression",
+        "H3SigmaRefiner",
+        "LoadAudio",
+        "LoadImage",
+        "LoraLoaderModelOnly",
+        "MiniMaxH3AVDecodeT8",
+        "MiniMaxH3AudioConditioningT8",
+        "MiniMaxH3MemoryEfficientSageAttentionPatch",
+        "MiniMaxH3MultiRateSamplerEXPT8",
+        "PrimitiveFloat",
+        "PrimitiveStringMultiline",
+        "RandomNoise",
+        "ReservedVRAMSetter",
+        "SamplerCustomAdvanced",
+        "UNETLoader",
+        "VAELoader",
+        "VHS_LoadVideo",
+        "VHS_VideoCombine",
+        "WJILatentPreset"
+      ],
+      "modelReferences": [
+        {
+          "node": "316",
+          "class": "CLIPLoader",
+          "field": "clip_name",
+          "file": "qwen3vl_32b_minimax_h3_nvfp4_awq.safetensors"
+        },
+        {
+          "node": "318",
+          "class": "VAELoader",
+          "field": "vae_name",
+          "file": "minimax_h3_video_vae_fp16.safetensors"
+        },
+        {
+          "node": "319",
+          "class": "VAELoader",
+          "field": "vae_name",
+          "file": "minimax_h3_audio_vae_fp32.safetensors"
+        },
+        {
+          "node": "327",
+          "class": "LoraLoaderModelOnly",
+          "field": "lora_name",
+          "file": "minimax/minimax_h3_turbo_4步加速_comfyui.safetensors"
+        },
+        {
+          "node": "332",
+          "class": "UNETLoader",
+          "field": "unet_name",
+          "file": "minimax/minimax_h3_ref2va_int8_convrot.safetensors"
+        }
+      ],
+      "mediaOrder": [
+        "375:image",
+        "376:image",
+        "377:image",
+        "378:image",
+        "379:image",
+        "380:image",
+        "381:image",
+        "382:image",
+        "383:image",
+        "384:audio",
+        "385:audio",
+        "386:audio",
+        "387:video",
+        "388:video",
+        "389:video"
+      ],
+      "preflight": {
+        "missingNodeTypes": [],
+        "unlistedModelChoices": [],
+        "generationTested": false
+      }
+    },
+    {
+      "id": "API-U03-minimax_h3_文生视频基础版API-V2",
+      "configured": true,
+      "inputs": [
+        {
+          "slot": "120:自定义宽",
+          "alias": "param_4",
+          "label": "自定义宽"
+        },
+        {
+          "slot": "120:自定义高",
+          "alias": "param_5",
+          "label": "自定义高"
+        },
+        {
+          "slot": "137:prompt",
+          "alias": "prompt",
+          "label": "prompt"
+        },
+        {
+          "slot": "139:value",
+          "alias": "value",
+          "label": "value"
+        }
+      ],
+      "nodeCount": 23,
+      "classes": [
+        "BasicGuider",
+        "BasicScheduler",
+        "CLIPLoader",
+        "ComfyMathExpression",
+        "H3SigmaRefiner",
+        "KSamplerSelect",
+        "MiniMaxChunkFeedForward",
+        "MiniMaxH3ImageToVideo",
+        "MiniMaxLowVRAMAttention",
+        "ModelAttentionBackend",
+        "ModelPreviewOverrideKJ",
+        "PrimitiveFloat",
+        "RAMCleanup",
+        "RandomNoise",
+        "SamplerCustomAdvanced",
+        "UNETLoader",
+        "VAEDecode",
+        "VAEDecodeAudio",
+        "VAELoader",
+        "VHS_VideoCombine",
+        "VRAMCleanup",
+        "WJILatentPreset"
+      ],
+      "modelReferences": [
+        {
+          "node": "126",
+          "class": "VAELoader",
+          "field": "vae_name",
+          "file": "minimax_h3_video_vae_fp16.safetensors"
+        },
+        {
+          "node": "127",
+          "class": "VAELoader",
+          "field": "vae_name",
+          "file": "minimax_h3_audio_vae_fp32.safetensors"
+        },
+        {
+          "node": "134",
+          "class": "CLIPLoader",
+          "field": "clip_name",
+          "file": "qwen3vl_32b_minimax_h3_nvfp4_awq.safetensors"
+        },
+        {
+          "node": "140",
+          "class": "UNETLoader",
+          "field": "unet_name",
+          "file": "minimax/minimax_h3_fl2va_pruned_int8_convrot.safetensors"
+        },
+        {
+          "node": "144",
+          "class": "ModelPreviewOverrideKJ",
+          "field": "tiny_vae",
+          "file": "taeh3.safetensors"
+        }
+      ],
+      "mediaOrder": [],
+      "preflight": {
+        "missingNodeTypes": [],
+        "unlistedModelChoices": [],
+        "generationTested": false
+      }
+    },
+    {
+      "id": "API-U03-minimax_h3_light2v-文生视频加速版API-V2",
+      "configured": true,
+      "inputs": [
+        {
+          "slot": "120:自定义宽",
+          "alias": "param_4",
+          "label": "自定义宽"
+        },
+        {
+          "slot": "120:自定义高",
+          "alias": "param_5",
+          "label": "自定义高"
+        },
+        {
+          "slot": "139:prompt",
+          "alias": "prompt",
+          "label": "prompt"
+        },
+        {
+          "slot": "141:value",
+          "alias": "value",
+          "label": "value"
+        }
+      ],
+      "nodeCount": 22,
+      "classes": [
+        "BasicGuider",
+        "BasicScheduler",
+        "CLIPLoader",
+        "ComfyMathExpression",
+        "CreateVideo",
+        "H3SigmaRefiner",
+        "KSamplerSelect",
+        "LoraLoaderModelOnly",
+        "MiniMaxH3ImageToVideo",
+        "ModelAttentionBackend",
+        "PrimitiveFloat",
+        "RAMCleanup",
+        "RandomNoise",
+        "SamplerCustomAdvanced",
+        "SaveVideo",
+        "UNETLoader",
+        "VAEDecode",
+        "VAEDecodeAudio",
+        "VAELoader",
+        "VRAMCleanup",
+        "WJILatentPreset"
+      ],
+      "modelReferences": [
+        {
+          "node": "128",
+          "class": "VAELoader",
+          "field": "vae_name",
+          "file": "minimax_h3_video_vae_fp16.safetensors"
+        },
+        {
+          "node": "129",
+          "class": "VAELoader",
+          "field": "vae_name",
+          "file": "minimax_h3_audio_vae_fp32.safetensors"
+        },
+        {
+          "node": "136",
+          "class": "CLIPLoader",
+          "field": "clip_name",
+          "file": "qwen3vl_32b_minimax_h3_nvfp4_awq.safetensors"
+        },
+        {
+          "node": "142",
+          "class": "UNETLoader",
+          "field": "unet_name",
+          "file": "minimax/minimax_h3_fl2va_pruned_int8_convrot.safetensors"
+        },
+        {
+          "node": "144",
+          "class": "LoraLoaderModelOnly",
+          "field": "lora_name",
+          "file": "minimax/minimax_h3_fl2v_turbo_8step_v1.0_comfyui_bf16.safetensors"
+        }
+      ],
+      "mediaOrder": [],
+      "preflight": {
+        "missingNodeTypes": [],
+        "unlistedModelChoices": [],
+        "generationTested": false
+      }
+    },
+    {
+      "id": "API-U02-minimax_h3_图生视频基础版-V2",
+      "configured": true,
+      "inputs": [
+        {
+          "slot": "114:image",
+          "alias": "ref_image_0",
+          "label": "参考图 0"
+        },
+        {
+          "slot": "122:自定义宽",
+          "alias": "param_4",
+          "label": "自定义宽"
+        },
+        {
+          "slot": "122:自定义高",
+          "alias": "param_5",
+          "label": "自定义高"
+        },
+        {
+          "slot": "139:prompt",
+          "alias": "prompt",
+          "label": "prompt"
+        },
+        {
+          "slot": "141:value",
+          "alias": "value",
+          "label": "value"
+        },
+        {
+          "slot": "144:image",
+          "alias": "ref_image_1",
+          "label": "参考图 1"
+        }
+      ],
+      "nodeCount": 25,
+      "classes": [
+        "BasicGuider",
+        "BasicScheduler",
+        "CLIPLoader",
+        "ComfyMathExpression",
+        "CreateVideo",
+        "H3SigmaRefiner",
+        "KSamplerSelect",
+        "LoadImage",
+        "MiniMaxChunkFeedForward",
+        "MiniMaxH3ImageToVideo",
+        "MiniMaxLowVRAMAttention",
+        "ModelPreviewOverrideKJ",
+        "PrimitiveFloat",
+        "RAMCleanup",
+        "RandomNoise",
+        "SamplerCustomAdvanced",
+        "SaveVideo",
+        "UNETLoader",
+        "VAEDecode",
+        "VAEDecodeAudio",
+        "VAELoader",
+        "VRAMCleanup",
+        "WJILatentPreset"
+      ],
+      "modelReferences": [
+        {
+          "node": "128",
+          "class": "VAELoader",
+          "field": "vae_name",
+          "file": "minimax_h3_video_vae_fp16.safetensors"
+        },
+        {
+          "node": "129",
+          "class": "VAELoader",
+          "field": "vae_name",
+          "file": "minimax_h3_audio_vae_fp32.safetensors"
+        },
+        {
+          "node": "136",
+          "class": "CLIPLoader",
+          "field": "clip_name",
+          "file": "qwen3vl_32b_minimax_h3_nvfp4_awq.safetensors"
+        },
+        {
+          "node": "142",
+          "class": "UNETLoader",
+          "field": "unet_name",
+          "file": "minimax/minimax_h3_fl2va_pruned_int8_convrot.safetensors"
+        },
+        {
+          "node": "148",
+          "class": "ModelPreviewOverrideKJ",
+          "field": "tiny_vae",
+          "file": "taeh3.safetensors"
+        }
+      ],
+      "mediaOrder": ["114:image", "144:image"],
+      "preflight": {
+        "missingNodeTypes": [],
+        "unlistedModelChoices": [],
+        "generationTested": false
+      }
+    },
+    {
+      "id": "API-U01-minimax_h3_基础版API",
+      "configured": true,
+      "inputs": [
+        {
+          "slot": "137:image",
+          "alias": "ref_image_0",
+          "label": "参考图 0"
+        },
+        {
+          "slot": "139:image",
+          "alias": "ref_image_1",
+          "label": "参考图 1"
+        },
+        {
+          "slot": "141:image",
+          "alias": "ref_image_2",
+          "label": "参考图 2"
+        },
+        {
+          "slot": "145:自定义宽",
+          "alias": "param_4",
+          "label": "自定义宽"
+        },
+        {
+          "slot": "145:自定义高",
+          "alias": "param_5",
+          "label": "自定义高"
+        },
+        {
+          "slot": "146:prompt",
+          "alias": "prompt",
+          "label": "prompt"
+        },
+        {
+          "slot": "147:value",
+          "alias": "value",
+          "label": "value"
+        }
+      ],
+      "nodeCount": 25,
+      "classes": [
+        "BasicGuider",
+        "BasicScheduler",
+        "CLIPLoader",
+        "CR Prompt Text",
+        "ComfyMathExpression",
+        "CreateVideo",
+        "H3SigmaRefiner",
+        "KSamplerSelect",
+        "LoadImage",
+        "MiniMaxH3ReferenceToVideo",
+        "ModelAttentionBackend",
+        "PrimitiveFloat",
+        "RAMCleanup",
+        "RandomNoise",
+        "SamplerCustomAdvanced",
+        "SaveVideo",
+        "UNETLoader",
+        "VAEDecode",
+        "VAEDecodeAudio",
+        "VAELoader",
+        "VRAMCleanup",
+        "WJILatentPreset"
+      ],
+      "modelReferences": [
+        {
+          "node": "119",
+          "class": "VAELoader",
+          "field": "vae_name",
+          "file": "minimax_h3_video_vae_fp16.safetensors"
+        },
+        {
+          "node": "120",
+          "class": "VAELoader",
+          "field": "vae_name",
+          "file": "minimax_h3_audio_vae_fp32.safetensors"
+        },
+        {
+          "node": "127",
+          "class": "UNETLoader",
+          "field": "unet_name",
+          "file": "minimax/minimax_h3_ref2va_int8_convrot.safetensors"
+        },
+        {
+          "node": "128",
+          "class": "CLIPLoader",
+          "field": "clip_name",
+          "file": "qwen3vl_32b_minimax_h3_int8_convrot.safetensors"
+        }
+      ],
+      "mediaOrder": ["137:image", "139:image", "141:image"],
+      "preflight": {
+        "missingNodeTypes": [],
+        "unlistedModelChoices": [],
+        "generationTested": false
+      }
+    },
+    {
+      "id": "API-U00-minimax_h3提示词QWEN3.8群主版",
+      "configured": true,
+      "inputs": [
+        {
+          "slot": "1:image",
+          "alias": "ref_image_0",
+          "label": "参考图 0"
+        },
+        {
+          "slot": "2:image",
+          "alias": "ref_image_1",
+          "label": "参考图 1"
+        },
+        {
+          "slot": "3:image",
+          "alias": "ref_image_2",
+          "label": "参考图 2"
+        },
+        {
+          "slot": "4:image",
+          "alias": "ref_image_3",
+          "label": "参考图 3"
+        },
+        {
+          "slot": "5:image",
+          "alias": "ref_image_4",
+          "label": "参考图 4"
+        },
+        {
+          "slot": "6:image",
+          "alias": "ref_image_5",
+          "label": "参考图 5"
+        },
+        {
+          "slot": "7:image",
+          "alias": "ref_image_6",
+          "label": "参考图 6"
+        },
+        {
+          "slot": "8:image",
+          "alias": "ref_image_7",
+          "label": "参考图 7"
+        },
+        {
+          "slot": "9:image",
+          "alias": "ref_image_8",
+          "label": "参考图 8"
+        },
+        {
+          "slot": "15:提示词",
+          "alias": "param_6",
+          "label": "提示词"
+        }
+      ],
+      "nodeCount": 12,
+      "classes": [
+        "LoadImage",
+        "ShowText|pysssss",
+        "ZealmanLLM_Generate",
+        "ZealmanLLM_ModelLoader"
+      ],
+      "modelReferences": [
+        {
+          "node": "14",
+          "class": "ZealmanLLM_ModelLoader",
+          "field": "主模型",
+          "file": "Qwen3.8-27B-Q4_K_M.gguf"
+        },
+        {
+          "node": "14",
+          "class": "ZealmanLLM_ModelLoader",
+          "field": "视觉投影mmproj",
+          "file": "Qwen3.8-mmproj-BF16.gguf"
+        }
+      ],
+      "mediaOrder": [
+        "1:image",
+        "2:image",
+        "3:image",
+        "4:image",
+        "5:image",
+        "6:image",
+        "7:image",
+        "8:image",
+        "9:image"
+      ],
+      "preflight": {
+        "missingNodeTypes": [],
+        "unlistedModelChoices": [],
+        "generationTested": false
+      }
+    },
+    {
+      "id": "API-T4-Krea2-int8-角色设定三视图",
+      "configured": true,
+      "inputs": [
+        {
+          "slot": "52:width",
+          "alias": "width",
+          "label": "宽度"
+        },
+        {
+          "slot": "52:height",
+          "alias": "height",
+          "label": "高度"
+        },
+        {
+          "slot": "121:prompt",
+          "alias": "prompt",
+          "label": "prompt"
+        },
+        {
+          "slot": "133:value",
+          "alias": "value",
+          "label": "改写三视图提示词优化 (value)"
+        }
+      ],
+      "nodeCount": 22,
+      "classes": [
+        "CLIPLoader",
+        "CLIPTextEncode",
+        "CR Prompt Text",
+        "ComfySwitchNode",
+        "ConditioningZeroOut",
+        "EmptyLatentImage",
+        "KSampler",
+        "LoraLoaderModelOnly",
+        "PrimitiveBoolean",
+        "RAMCleanup",
+        "SaveImage",
+        "Seed (rgthree)",
+        "ShowText|pysssss",
+        "UNETLoader",
+        "VAEDecode",
+        "VAELoader",
+        "VRAMCleanup",
+        "llama_cpp_instruct_adv",
+        "llama_cpp_model_loader",
+        "llama_cpp_parameters"
+      ],
+      "modelReferences": [
+        {
+          "node": "55",
+          "class": "UNETLoader",
+          "field": "unet_name",
+          "file": "krea/redcraft2KREA2INT8_11INT8Native.safetensors"
+        },
+        {
+          "node": "56",
+          "class": "CLIPLoader",
+          "field": "clip_name",
+          "file": "qwen3vl_4b_uncensored_int8_convrot.safetensors"
+        },
+        {
+          "node": "57",
+          "class": "VAELoader",
+          "field": "vae_name",
+          "file": "qwen_image_vae.safetensors"
+        },
+        {
+          "node": "110",
+          "class": "llama_cpp_model_loader",
+          "field": "model",
+          "file": "Qwen3.5-9B-Uncensored-HauhauCS-Aggressive-Q8_0.gguf"
+        },
+        {
+          "node": "110",
+          "class": "llama_cpp_model_loader",
+          "field": "mmproj",
+          "file": "mmproj-Qwen3.5-9B-Uncensored-HauhauCS-Aggressive-BF16.gguf"
+        },
+        {
+          "node": "129",
+          "class": "LoraLoaderModelOnly",
+          "field": "lora_name",
+          "file": "krea2/krea2-Cc风情万种-人像.safetensors"
+        }
+      ],
+      "mediaOrder": [],
+      "preflight": {
+        "missingNodeTypes": [],
+        "unlistedModelChoices": [],
+        "generationTested": false
+      }
+    },
+    {
+      "id": "API-T10-Krea2做剧图像4视图",
+      "configured": true,
+      "inputs": [
+        {
+          "slot": "141:width",
+          "alias": "width_2",
+          "label": "宽度"
+        },
+        {
+          "slot": "141:height",
+          "alias": "height_2",
+          "label": "高度"
+        },
+        {
+          "slot": "142:seed",
+          "alias": "seed",
+          "label": "随机种子"
+        },
+        {
+          "slot": "146:image",
+          "alias": "ref_image_0",
+          "label": "参考图 0"
+        }
+      ],
+      "nodeCount": 15,
+      "classes": [
+        "CLIPLoader",
+        "EmptySD3LatentImage",
+        "GetImageSize",
+        "ImageResizeKJv2",
+        "KSampler",
+        "Krea2EditGroundedEncode",
+        "Krea2EditModelPatch",
+        "LoadImage",
+        "LoraLoaderModelOnly",
+        "SaveImage",
+        "UNETLoader",
+        "VAEDecode",
+        "VAEEncode",
+        "VAELoader"
+      ],
+      "modelReferences": [
+        {
+          "node": "122",
+          "class": "CLIPLoader",
+          "field": "clip_name",
+          "file": "qwen3vl_4b_fp8_scaled.safetensors"
+        },
+        {
+          "node": "123",
+          "class": "VAELoader",
+          "field": "vae_name",
+          "file": "qwen_image_vae.safetensors"
+        },
+        {
+          "node": "128",
+          "class": "UNETLoader",
+          "field": "unet_name",
+          "file": "krea/krea2_turbo_int8_convrot.safetensors"
+        },
+        {
+          "node": "145",
+          "class": "LoraLoaderModelOnly",
+          "field": "lora_name",
+          "file": "krea2/krea2_4panel.safetensors"
+        }
+      ],
+      "mediaOrder": ["146:image"],
+      "preflight": {
+        "missingNodeTypes": [],
+        "unlistedModelChoices": [],
+        "generationTested": false
+      }
+    },
+    {
+      "id": "API-P17-动作迁移4090-48G显卡专用V8",
+      "configured": true,
+      "inputs": [
+        {
+          "slot": "275:video",
+          "alias": "ref_video_0",
+          "label": "参考视频 0"
+        },
+        {
+          "slot": "299:image",
+          "alias": "ref_image_0",
+          "label": "参考图 0"
+        },
+        {
+          "slot": "300:value",
+          "alias": "value_8",
+          "label": "加载帧数上限 (value)"
+        },
+        {
+          "slot": "316:value",
+          "alias": "value_9",
+          "label": "宽度 (value)"
+        },
+        {
+          "slot": "317:value",
+          "alias": "value_10",
+          "label": "高度 (value)"
+        },
+        {
+          "slot": "370:value",
+          "alias": "value_13",
+          "label": "开启运镜 (value)"
+        }
+      ],
+      "nodeCount": 87,
+      "classes": [
+        "BBoxYOLO",
+        "BatchCount+",
+        "BodyRatioMapperProportionTransfer",
+        "BodyRatioMapperSDPoseRender",
+        "CLIPVisionLoader",
+        "CR Text",
+        "CheckpointLoaderSimple",
+        "DrawViTPose",
+        "ImageBatch",
+        "ImageFromBatch",
+        "ImageResizeKJv2",
+        "ImageScaleToTotalPixels",
+        "ImpactSwitch",
+        "LayerUtility: ImageScaleByAspectRatio V2",
+        "LazySwitchKJ",
+        "LoadImage",
+        "OnnxDetectionModelLoader",
+        "PoseAndFaceDetection",
+        "PreviewImage",
+        "RAMCleanup",
+        "RepeatImageBatch",
+        "SDPoseDrawKeypoints",
+        "SDPoseKeypointExtractor",
+        "VHS_LoadVideo",
+        "VHS_VideoCombine",
+        "VHS_VideoInfo",
+        "VRAMCleanup",
+        "WanVideoAnimateEmbeds",
+        "WanVideoBlockSwap",
+        "WanVideoClipVisionEncode",
+        "WanVideoContextOptions",
+        "WanVideoDecode",
+        "WanVideoEncode",
+        "WanVideoLoraSelectMulti",
+        "WanVideoModelLoader",
+        "WanVideoSampler",
+        "WanVideoSetBlockSwap",
+        "WanVideoSetLoRAs",
+        "WanVideoTextEncodeCached",
+        "WanVideoUni3C_ControlnetLoader",
+        "WanVideoUni3C_embeds",
+        "WanVideoVAELoader",
+        "YOLOModelLoader",
+        "easy anythingIndexSwitch",
+        "easy boolean",
+        "easy cleanGpuUsed",
+        "easy compare",
+        "easy float",
+        "easy imageSize",
+        "easy int",
+        "easy mathInt"
+      ],
+      "modelReferences": [
+        {
+          "node": "178",
+          "class": "CLIPVisionLoader",
+          "field": "clip_name",
+          "file": "clip_vision_h.safetensors"
+        },
+        {
+          "node": "204",
+          "class": "OnnxDetectionModelLoader",
+          "field": "vitpose_model",
+          "file": "vitpose-l-wholebody.onnx"
+        },
+        {
+          "node": "204",
+          "class": "OnnxDetectionModelLoader",
+          "field": "yolo_model",
+          "file": "yolov10m.onnx"
+        },
+        {
+          "node": "248",
+          "class": "WanVideoLoraSelectMulti",
+          "field": "lora_0",
+          "file": "animate/Q弹3.safetensors"
+        },
+        {
+          "node": "276",
+          "class": "WanVideoLoraSelectMulti",
+          "field": "lora_0",
+          "file": "Wan/WanAnimate_relight_lora_fp16.safetensors"
+        },
+        {
+          "node": "276",
+          "class": "WanVideoLoraSelectMulti",
+          "field": "lora_1",
+          "file": "Wan/Wan2.2-Lightning_I2V-A14B-4steps-lora_LOW_fp16.safetensors"
+        },
+        {
+          "node": "276",
+          "class": "WanVideoLoraSelectMulti",
+          "field": "lora_2",
+          "file": "Wan/FastWan_T2V_14B_480p_lora_rank_128_bf16.safetensors"
+        },
+        {
+          "node": "276",
+          "class": "WanVideoLoraSelectMulti",
+          "field": "lora_3",
+          "file": "Wan/Wan21-PusaV1-LoRA-14B-rank512-bf16.safetensors"
+        },
+        {
+          "node": "276",
+          "class": "WanVideoLoraSelectMulti",
+          "field": "lora_4",
+          "file": "Wan/Wan2.2-Fun-A14B-InP-low-noise-HPS2.1.safetensors"
+        },
+        {
+          "node": "277",
+          "class": "WanVideoVAELoader",
+          "field": "model_name",
+          "file": "Wan2_1_VAE_fp32.safetensors"
+        },
+        {
+          "node": "278",
+          "class": "WanVideoTextEncodeCached",
+          "field": "model_name",
+          "file": "umt5-xxl-enc-fp8_e4m3fn.safetensors"
+        },
+        {
+          "node": "287",
+          "class": "WanVideoModelLoader",
+          "field": "model",
+          "file": "Wan/Wan2_2-Animate-14B_fp8_scaled_e4m3fn_KJ_v2.safetensors"
+        },
+        {
+          "node": "323",
+          "class": "CheckpointLoaderSimple",
+          "field": "ckpt_name",
+          "file": "sdpose_wholebody_fp16.safetensors"
+        },
+        {
+          "node": "327",
+          "class": "YOLOModelLoader",
+          "field": "model_name",
+          "file": "yolo11x-pose.pt"
+        },
+        {
+          "node": "345",
+          "class": "WanVideoUni3C_ControlnetLoader",
+          "field": "model",
+          "file": "Wan21_Uni3C_controlnet_fp16.safetensors"
+        },
+        {
+          "node": "387",
+          "class": "YOLOModelLoader",
+          "field": "model_name",
+          "file": "person_detect_v0_l_yv11.pt"
+        }
+      ],
+      "mediaOrder": ["275:video", "299:image"],
+      "preflight": {
+        "missingNodeTypes": [],
+        "unlistedModelChoices": [],
+        "generationTested": false
+      }
+    },
+    {
+      "id": "API-P07-动作迁移-Wan2.2AnimateV4",
+      "configured": true,
+      "inputs": [
+        {
+          "slot": "57:image",
+          "alias": "ref_image_0",
+          "label": "参考图 0"
+        },
+        {
+          "slot": "997:video",
+          "alias": "ref_video_0",
+          "label": "参考视频 0"
+        },
+        {
+          "slot": "1001:value",
+          "alias": "value",
+          "label": "value"
+        },
+        {
+          "slot": "1002:value",
+          "alias": "value_2",
+          "label": "value"
+        },
+        {
+          "slot": "1003:value",
+          "alias": "value_3",
+          "label": "value"
+        }
+      ],
+      "nodeCount": 41,
+      "classes": [
+        "BatchCount+",
+        "CLIPVisionLoader",
+        "DrawViTPose",
+        "INTConstant",
+        "ImageBatch",
+        "ImageFromBatch",
+        "ImageResizeKJv2",
+        "LoadImage",
+        "OnnxDetectionModelLoader",
+        "PoseAndFaceDetection",
+        "PrimitiveFloat",
+        "RAMCleanup",
+        "RepeatImageBatch",
+        "ReservedVRAMSetter",
+        "VHS_LoadVideo",
+        "VHS_VideoCombine",
+        "VHS_VideoInfo",
+        "VRAMCleanup",
+        "WanVideoAnimateEmbeds",
+        "WanVideoBlockSwap",
+        "WanVideoClipVisionEncode",
+        "WanVideoContextOptions",
+        "WanVideoDecode",
+        "WanVideoLoraSelectMulti",
+        "WanVideoModelLoader",
+        "WanVideoSampler",
+        "WanVideoSetBlockSwap",
+        "WanVideoSetLoRAs",
+        "WanVideoTextEncodeCached",
+        "WanVideoVAELoader",
+        "easy mathInt"
+      ],
+      "modelReferences": [
+        {
+          "node": "22",
+          "class": "WanVideoModelLoader",
+          "field": "model",
+          "file": "Wan/Wan2_2-Animate-14B_fp8_scaled_e4m3fn_KJ_v2.safetensors"
+        },
+        {
+          "node": "38",
+          "class": "WanVideoVAELoader",
+          "field": "model_name",
+          "file": "wan_2.1_vae.safetensors"
+        },
+        {
+          "node": "65",
+          "class": "WanVideoTextEncodeCached",
+          "field": "model_name",
+          "file": "umt5-xxl-enc-fp8_e4m3fn.safetensors"
+        },
+        {
+          "node": "71",
+          "class": "CLIPVisionLoader",
+          "field": "clip_name",
+          "file": "clip_vision_h.safetensors"
+        },
+        {
+          "node": "171",
+          "class": "WanVideoLoraSelectMulti",
+          "field": "lora_0",
+          "file": "Wan/WanAnimate_relight_lora_fp16.safetensors"
+        },
+        {
+          "node": "171",
+          "class": "WanVideoLoraSelectMulti",
+          "field": "lora_1",
+          "file": "Wan/Wan2.2-Lightning_I2V-A14B-4steps-lora_LOW_fp16.safetensors"
+        },
+        {
+          "node": "171",
+          "class": "WanVideoLoraSelectMulti",
+          "field": "lora_2",
+          "file": "Wan/FastWan_T2V_14B_480p_lora_rank_128_bf16.safetensors"
+        },
+        {
+          "node": "171",
+          "class": "WanVideoLoraSelectMulti",
+          "field": "lora_3",
+          "file": "Wan/Wan21-PusaV1-LoRA-14B-rank512-bf16.safetensors"
+        },
+        {
+          "node": "171",
+          "class": "WanVideoLoraSelectMulti",
+          "field": "lora_4",
+          "file": "Wan/Wan2.2-Fun-A14B-InP-low-noise-HPS2.1.safetensors"
+        },
+        {
+          "node": "509",
+          "class": "OnnxDetectionModelLoader",
+          "field": "vitpose_model",
+          "file": "vitpose-l-wholebody.onnx"
+        },
+        {
+          "node": "509",
+          "class": "OnnxDetectionModelLoader",
+          "field": "yolo_model",
+          "file": "yolov10m.onnx"
+        }
+      ],
+      "mediaOrder": ["57:image", "997:video"],
+      "preflight": {
+        "missingNodeTypes": [],
+        "unlistedModelChoices": [],
+        "generationTested": false
+      }
+    },
+    {
+      "id": "API-P02-动作迁移-Wan2.2Animate角色迁移",
+      "configured": true,
+      "inputs": [
+        {
+          "slot": "33:image",
+          "alias": "ref_image_0",
+          "label": "参考图 0"
+        },
+        {
+          "slot": "51:video",
+          "alias": "ref_video_0",
+          "label": "参考视频 0"
+        },
+        {
+          "slot": "89:value",
+          "alias": "value",
+          "label": "value"
+        },
+        {
+          "slot": "90:value",
+          "alias": "value_2",
+          "label": "value"
+        },
+        {
+          "slot": "91:text",
+          "alias": "prompt",
+          "label": "提示词"
+        },
+        {
+          "slot": "100:value",
+          "alias": "value_3",
+          "label": "秒数 (value)"
+        }
+      ],
+      "nodeCount": 34,
+      "classes": [
+        "CLIPVisionLoader",
+        "DrawViTPose",
+        "GetImageSizeAndCount",
+        "INTConstant",
+        "ImageConcatMulti",
+        "ImageResizeKJv2",
+        "LoadImage",
+        "MathExpression|pysssss",
+        "OnnxDetectionModelLoader",
+        "PoseAndFaceDetection",
+        "Text Multiline",
+        "VHS_LoadVideo",
+        "VHS_VideoCombine",
+        "VRAMCleanup",
+        "WanVideoAnimateEmbeds",
+        "WanVideoBlockSwap",
+        "WanVideoClipVisionEncode",
+        "WanVideoDecode",
+        "WanVideoLoraSelect",
+        "WanVideoModelLoader",
+        "WanVideoSampler",
+        "WanVideoSetBlockSwap",
+        "WanVideoSetLoRAs",
+        "WanVideoTextEncodeCached",
+        "WanVideoVAELoader",
+        "easy cleanGpuUsed"
+      ],
+      "modelReferences": [
+        {
+          "node": "32",
+          "class": "WanVideoTextEncodeCached",
+          "field": "model_name",
+          "file": "umt5-xxl-enc-fp8_e4m3fn.safetensors"
+        },
+        {
+          "node": "43",
+          "class": "WanVideoVAELoader",
+          "field": "model_name",
+          "file": "wan_2.1_vae.safetensors"
+        },
+        {
+          "node": "50",
+          "class": "WanVideoModelLoader",
+          "field": "model",
+          "file": "Wan/Wan2.2-Animate-14B-fp8_v2.safetensors"
+        },
+        {
+          "node": "67",
+          "class": "WanVideoLoraSelect",
+          "field": "lora",
+          "file": "Wan/Wan2.2-Lightning_I2V-A14B-4steps-lora_LOW_fp16.safetensors"
+        },
+        {
+          "node": "75",
+          "class": "WanVideoLoraSelect",
+          "field": "lora",
+          "file": "Wan/FastWan_T2V_14B_480p_lora_rank_128_bf16.safetensors"
+        },
+        {
+          "node": "76",
+          "class": "WanVideoLoraSelect",
+          "field": "lora",
+          "file": "Wan/Wan21-PusaV1-LoRA-14B-rank512-bf16.safetensors"
+        },
+        {
+          "node": "77",
+          "class": "WanVideoLoraSelect",
+          "field": "lora",
+          "file": "Wan/WanAnimate_relight_lora_fp16.safetensors"
+        },
+        {
+          "node": "78",
+          "class": "WanVideoLoraSelect",
+          "field": "lora",
+          "file": "Wan/Wan2.2-Fun-A14B-InP-LOW-HPS2.1_resized_dynamic_avg_rank_15_bf16.safetensors"
+        },
+        {
+          "node": "95",
+          "class": "CLIPVisionLoader",
+          "field": "clip_name",
+          "file": "clip_vision_h.safetensors"
+        },
+        {
+          "node": "110",
+          "class": "OnnxDetectionModelLoader",
+          "field": "vitpose_model",
+          "file": "vitpose-l-wholebody.onnx"
+        },
+        {
+          "node": "110",
+          "class": "OnnxDetectionModelLoader",
+          "field": "yolo_model",
+          "file": "yolov10m.onnx"
+        }
+      ],
+      "mediaOrder": ["33:image", "51:video"],
+      "preflight": {
+        "missingNodeTypes": [],
+        "unlistedModelChoices": [],
+        "generationTested": false
+      }
+    },
+    {
+      "id": "API-N2-单人声音克隆FishAudioS2pro",
+      "configured": true,
+      "inputs": [
+        {
+          "slot": "21:audio",
+          "alias": "ref_audio_0",
+          "label": "参考音频 0"
+        },
+        {
+          "slot": "25:text",
+          "alias": "prompt_2",
+          "label": "提示词"
+        }
+      ],
+      "nodeCount": 5,
+      "classes": [
+        "Apply Whisper",
+        "CR Prompt Text",
+        "FishS2VoiceCloneTTS",
+        "LoadAudio",
+        "SaveAudio"
+      ],
+      "modelReferences": [],
+      "mediaOrder": ["21:audio"],
+      "preflight": {
+        "missingNodeTypes": [],
+        "unlistedModelChoices": [],
+        "generationTested": false
+      }
+    },
+    {
+      "id": "API-J13-小珠光90秒全自动版-单人InfiniteTalk",
+      "configured": true,
+      "inputs": [
+        {
+          "slot": "221:image",
+          "alias": "ref_image_0",
+          "label": "上传图像"
+        },
+        {
+          "slot": "255:prompt",
+          "alias": "prompt",
+          "label": "人物动作描述 (prompt)"
+        },
+        {
+          "slot": "2900:audio",
+          "alias": "ref_audio_0",
+          "label": "参考音频 0"
+        },
+        {
+          "slot": "2900:start_time",
+          "alias": "start_time",
+          "label": "开始时间默认0，如果从第5秒开始就写5"
+        },
+        {
+          "slot": "2900:duration",
+          "alias": "duration",
+          "label": "结束时间可写30就是前30秒, 默认0为不截取，最大90秒"
+        },
+        {
+          "slot": "3238:Number",
+          "alias": "Number",
+          "label": "生成视频长边 (Number)"
+        }
+      ],
+      "nodeCount": 193,
+      "classes": [
+        "Audio Duration (mtb)",
+        "AudioEncoderEncode",
+        "AudioEncoderLoader",
+        "CLIPLoader",
+        "CLIPTextEncode",
+        "CLIPVisionEncode",
+        "CLIPVisionLoader",
+        "ImageBatch",
+        "ImageFromBatch",
+        "ImpactCompare",
+        "Int",
+        "KSampler",
+        "LayerUtility: ImageScaleByAspectRatio V2",
+        "LazySwitchKJ",
+        "LoadImage",
+        "MathExpression|pysssss",
+        "MelBandRoFormerModelLoader",
+        "MelBandRoFormerSampler",
+        "ModelPatchLoader",
+        "NormalizeAudioLoudness",
+        "PreviewImage",
+        "PrimitiveFloat",
+        "RAMCleanup",
+        "Seed (rgthree)",
+        "UNETLoader",
+        "VAEDecode",
+        "VAELoader",
+        "VHS_LoadAudioUpload",
+        "VHS_VideoCombine",
+        "VRAMCleanup",
+        "WanInfiniteTalkToVideo",
+        "easy anythingIndexSwitch",
+        "easy indexAnything",
+        "easy int",
+        "easy mathInt",
+        "easy promptLine",
+        "easy showAnything"
+      ],
+      "modelReferences": [
+        {
+          "node": "2855",
+          "class": "VAELoader",
+          "field": "vae_name",
+          "file": "wan_2.1_vae.safetensors"
+        },
+        {
+          "node": "2856",
+          "class": "CLIPLoader",
+          "field": "clip_name",
+          "file": "umt5_xxl_fp8_e4m3fn_scaled.safetensors"
+        },
+        {
+          "node": "2864",
+          "class": "ModelPatchLoader",
+          "field": "name",
+          "file": "Wan2_1-InfiniTetalk-Single_fp16.safetensors"
+        },
+        {
+          "node": "2865",
+          "class": "AudioEncoderLoader",
+          "field": "audio_encoder_name",
+          "file": "wav2vec2-chinese-base_fp16.safetensors"
+        },
+        {
+          "node": "2866",
+          "class": "UNETLoader",
+          "field": "unet_name",
+          "file": "Wan/wan2.1_i2v_720p_scaled_fp8_e4m3_lightx2v_4step_comfyui.safetensors"
+        },
+        {
+          "node": "2867",
+          "class": "CLIPVisionLoader",
+          "field": "clip_name",
+          "file": "clip_vision_h.safetensors"
+        },
+        {
+          "node": "2869",
+          "class": "MelBandRoFormerModelLoader",
+          "field": "model_name",
+          "file": "MelRoFormer/MelBandRoformer_fp16.safetensors"
+        }
+      ],
+      "mediaOrder": ["221:image", "2900:audio"],
+      "preflight": {
+        "missingNodeTypes": [],
+        "unlistedModelChoices": [],
+        "generationTested": false
+      }
+    },
+    {
+      "id": "API-J11-LTX2.3高清超自然电商数字人",
+      "configured": true,
+      "inputs": [
+        {
+          "slot": "14:image",
+          "alias": "ref_image_0",
+          "label": "参考图 0"
+        },
+        {
+          "slot": "39:audio",
+          "alias": "ref_audio_0",
+          "label": "参考音频 0"
+        },
+        {
+          "slot": "167:Number",
+          "alias": "Number_2",
+          "label": "Number"
+        },
+        {
+          "slot": "168:Number",
+          "alias": "Number_3",
+          "label": "Number"
+        },
+        {
+          "slot": "187:prompt",
+          "alias": "prompt_3",
+          "label": "prompt"
+        },
+        {
+          "slot": "188:prompt",
+          "alias": "prompt_4",
+          "label": "prompt"
+        },
+        {
+          "slot": "189:prompt",
+          "alias": "prompt_5",
+          "label": "prompt"
+        }
+      ],
+      "nodeCount": 40,
+      "classes": [
+        "Audio Duration (mtb)",
+        "AudioCrop",
+        "CLIPTextEncode",
+        "CR Prompt Text",
+        "DiffusionModelLoaderKJ",
+        "DualCLIPLoader",
+        "EmptyLTXVLatentVideo",
+        "Float",
+        "ImageResizeKJv2",
+        "Int",
+        "KSamplerSelect",
+        "LTXVAudioVAEEncode",
+        "LTXVConcatAVLatent",
+        "LTXVConditioning",
+        "LTXVImgToVideoInplaceKJ",
+        "LTXVSeparateAVLatent",
+        "LoadAudio",
+        "LoadImage",
+        "LoraLoaderModelOnly",
+        "ManualSigmas",
+        "MathExpression|pysssss",
+        "MelBandRoFormerModelLoader",
+        "MelBandRoFormerSampler",
+        "PreviewImage",
+        "PromptRelayEncode",
+        "SamplerCustom",
+        "SetLatentNoiseMask",
+        "SolidMask",
+        "TTResolutionSelector",
+        "VAEDecodeTiled",
+        "VAELoaderKJ",
+        "VHS_VideoCombine",
+        "easy cleanGpuUsed",
+        "easy showAnything"
+      ],
+      "modelReferences": [
+        {
+          "node": "1",
+          "class": "DiffusionModelLoaderKJ",
+          "field": "model_name",
+          "file": "Ltx/ltx-2.3-22b-distilled-1.1_transformer_only_fp8_scaled.safetensors"
+        },
+        {
+          "node": "2",
+          "class": "LoraLoaderModelOnly",
+          "field": "lora_name",
+          "file": "Ltx/Ltx2.3-Licon-VBVR-I2V-240K-R32.safetensors"
+        },
+        {
+          "node": "8",
+          "class": "DualCLIPLoader",
+          "field": "clip_name1",
+          "file": "gemma_3_12B_it_fp8_e4m3fn.safetensors"
+        },
+        {
+          "node": "8",
+          "class": "DualCLIPLoader",
+          "field": "clip_name2",
+          "file": "ltx-2.3_text_projection_bf16.safetensors"
+        },
+        {
+          "node": "10",
+          "class": "VAELoaderKJ",
+          "field": "vae_name",
+          "file": "LTX23_audio_vae_bf16.safetensors"
+        },
+        {
+          "node": "11",
+          "class": "VAELoaderKJ",
+          "field": "vae_name",
+          "file": "LTX23_video_vae_bf16.safetensors"
+        },
+        {
+          "node": "51",
+          "class": "MelBandRoFormerModelLoader",
+          "field": "model_name",
+          "file": "MelRoFormer/MelBandRoformer_fp32.safetensors"
+        }
+      ],
+      "mediaOrder": ["14:image", "39:audio"],
+      "preflight": {
+        "missingNodeTypes": [],
+        "unlistedModelChoices": [],
+        "generationTested": false
+      }
+    },
+    {
+      "id": "API-H41-AI代码侠土豆-LTX2.3-MSR多参考图生成",
+      "configured": true,
+      "inputs": [
+        {
+          "slot": "90:custom_width",
+          "alias": "custom_width",
+          "label": "custom_width"
+        },
+        {
+          "slot": "90:custom_height",
+          "alias": "custom_height",
+          "label": "custom_height"
+        },
+        {
+          "slot": "102:image",
+          "alias": "ref_image_0",
+          "label": "参考图 0"
+        },
+        {
+          "slot": "103:image",
+          "alias": "ref_image_1",
+          "label": "参考图 1"
+        },
+        {
+          "slot": "139:value",
+          "alias": "value_3",
+          "label": "时长秒 (value)"
+        },
+        {
+          "slot": "159:image",
+          "alias": "ref_image_2",
+          "label": "参考图 2"
+        },
+        {
+          "slot": "181:prompt",
+          "alias": "prompt_2",
+          "label": "prompt"
+        },
+        {
+          "slot": "182:prompt",
+          "alias": "prompt_3",
+          "label": "这是用户写提示词的指导 (prompt)"
+        }
+      ],
+      "nodeCount": 37,
+      "classes": [
+        "CFGGuider",
+        "CLIPTextEncode",
+        "CM_FloatToInt",
+        "CR Prompt Text",
+        "DiffusionModelLoaderKJ",
+        "DualCLIPLoader",
+        "EmptyLTXVLatentVideo",
+        "INTConstant",
+        "ImageResizeKJv2",
+        "KSamplerSelect",
+        "LTXAddVideoICLoRAGuide",
+        "LTXICLoRALoaderModelOnly",
+        "LTXVAudioVAEDecode",
+        "LTXVConcatAVLatent",
+        "LTXVConditioning",
+        "LTXVCropGuides",
+        "LTXVEmptyLatentAudio",
+        "LTXVSeparateAVLatent",
+        "LiconMSR",
+        "LoadImage",
+        "ManualSigmas",
+        "PrimitiveFloat",
+        "RandomNoise",
+        "SamplerCustomAdvanced",
+        "SimpleMath+",
+        "TTResolutionSelector",
+        "VAEDecode",
+        "VAELoaderKJ",
+        "VHS_VideoCombine",
+        "easy cleanGpuUsed"
+      ],
+      "modelReferences": [
+        {
+          "node": "81",
+          "class": "LTXICLoRALoaderModelOnly",
+          "field": "lora_name",
+          "file": "Ltx/LTX-2.3-Licon-MSR-V2.safetensors"
+        },
+        {
+          "node": "183",
+          "class": "DiffusionModelLoaderKJ",
+          "field": "model_name",
+          "file": "Ltx/ltx-2.3-22b-distilled-1.1_transformer_only_int8_convrot.safetensors"
+        },
+        {
+          "node": "184",
+          "class": "DualCLIPLoader",
+          "field": "clip_name1",
+          "file": "gemma_3_12B_it-int8tensormixed.safetensors"
+        },
+        {
+          "node": "184",
+          "class": "DualCLIPLoader",
+          "field": "clip_name2",
+          "file": "ltx-2.3_text_projection_bf16.safetensors"
+        },
+        {
+          "node": "185",
+          "class": "VAELoaderKJ",
+          "field": "vae_name",
+          "file": "LTX23_audio_vae_bf16.safetensors"
+        },
+        {
+          "node": "186",
+          "class": "VAELoaderKJ",
+          "field": "vae_name",
+          "file": "LTX23_video_vae_bf16.safetensors"
+        }
+      ],
+      "mediaOrder": ["102:image", "103:image", "159:image"],
+      "preflight": {
+        "missingNodeTypes": [],
+        "unlistedModelChoices": [],
+        "generationTested": false
+      }
+    },
+    {
+      "id": "API-H31-ltx2.3声音-图像生成视频",
+      "configured": true,
+      "inputs": [
+        {
+          "slot": "269:image",
+          "alias": "ref_image_0",
+          "label": "参考图 0"
+        },
+        {
+          "slot": "276:audio",
+          "alias": "ref_audio_0",
+          "label": "参考音频 0"
+        },
+        {
+          "slot": "368:value",
+          "alias": "value",
+          "label": "value"
+        },
+        {
+          "slot": "371:value",
+          "alias": "value_3",
+          "label": "value"
+        },
+        {
+          "slot": "377:value",
+          "alias": "value_5",
+          "label": "value"
+        },
+        {
+          "slot": "393:prompt",
+          "alias": "prompt_2",
+          "label": "prompt"
+        }
+      ],
+      "nodeCount": 50,
+      "classes": [
+        "CFGGuider",
+        "CLIPTextEncode",
+        "CR Prompt Text",
+        "CheckpointLoaderSimple",
+        "ComfyMathExpression",
+        "CreateVideo",
+        "EmptyLTXVLatentVideo",
+        "KSamplerSelect",
+        "LTXAVTextEncoderLoader",
+        "LTXVAudioVAEDecode",
+        "LTXVAudioVAEEncode",
+        "LTXVAudioVAELoader",
+        "LTXVConcatAVLatent",
+        "LTXVConditioning",
+        "LTXVCropGuides",
+        "LTXVImgToVideoInplace",
+        "LTXVLatentUpsampler",
+        "LTXVPreprocess",
+        "LTXVSeparateAVLatent",
+        "LatentUpscaleModelLoader",
+        "LoadAudio",
+        "LoadImage",
+        "LoraLoaderModelOnly",
+        "ManualSigmas",
+        "PrimitiveBoolean",
+        "PrimitiveFloat",
+        "PrimitiveInt",
+        "RandomNoise",
+        "ResizeImageMaskNode",
+        "ResizeImagesByLongerEdge",
+        "SamplerCustomAdvanced",
+        "SaveVideo",
+        "SetLatentNoiseMask",
+        "SolidMask",
+        "TrimAudioDuration",
+        "VAEDecodeTiled"
+      ],
+      "modelReferences": [
+        {
+          "node": "370",
+          "class": "LTXVAudioVAELoader",
+          "field": "ckpt_name",
+          "file": "ltx-2.3-22b-dev-fp8.safetensors"
+        },
+        {
+          "node": "382",
+          "class": "LatentUpscaleModelLoader",
+          "field": "model_name",
+          "file": "ltx-2.3-spatial-upscaler-x2-1.1.safetensors"
+        },
+        {
+          "node": "383",
+          "class": "LoraLoaderModelOnly",
+          "field": "lora_name",
+          "file": "Ltx/ltx-2.3-22b-distilled-lora-384.safetensors"
+        },
+        {
+          "node": "384",
+          "class": "CheckpointLoaderSimple",
+          "field": "ckpt_name",
+          "file": "ltx-2.3-22b-dev-fp8.safetensors"
+        },
+        {
+          "node": "385",
+          "class": "LTXAVTextEncoderLoader",
+          "field": "text_encoder",
+          "file": "gemma_3_12B_it_fp4_mixed.safetensors"
+        },
+        {
+          "node": "385",
+          "class": "LTXAVTextEncoderLoader",
+          "field": "ckpt_name",
+          "file": "ltx-2.3-22b-dev-fp8.safetensors"
+        }
+      ],
+      "mediaOrder": ["269:image", "276:audio"],
+      "preflight": {
+        "missingNodeTypes": [],
+        "unlistedModelChoices": [],
+        "generationTested": false
+      }
+    },
+    {
+      "id": "API-H28-LTX2.3-高动态图生视频",
+      "configured": true,
+      "inputs": [
+        {
+          "slot": "269:image",
+          "alias": "ref_image_0",
+          "label": "参考图 0"
+        },
+        {
+          "slot": "315:text",
+          "alias": "prompt",
+          "label": "负面提示词"
+        },
+        {
+          "slot": "457:Number",
+          "alias": "Number",
+          "label": "高度 (Number)"
+        },
+        {
+          "slot": "459:Number",
+          "alias": "Number_2",
+          "label": "宽度 (Number)"
+        },
+        {
+          "slot": "467:Number",
+          "alias": "Number_3",
+          "label": "秒 (Number)"
+        },
+        {
+          "slot": "469:Number",
+          "alias": "Number_4",
+          "label": "帧率 (Number)"
+        },
+        {
+          "slot": "475:prompt",
+          "alias": "prompt_2",
+          "label": "正面提示词 (prompt)"
+        }
+      ],
+      "nodeCount": 57,
+      "classes": [
+        "CFGGuider",
+        "CLIPTextEncode",
+        "CR Prompt Text",
+        "ComfyMathExpression",
+        "DualCLIPLoader",
+        "EmptyLTXVLatentVideo",
+        "Float",
+        "ImageResizeKJv2",
+        "Int",
+        "KSamplerSelect",
+        "LTXVAudioVAEDecode",
+        "LTXVConcatAVLatent",
+        "LTXVConditioning",
+        "LTXVCropGuides",
+        "LTXVEmptyLatentAudio",
+        "LTXVImgToVideoInplace",
+        "LTXVLatentUpsampler",
+        "LTXVPreprocess",
+        "LTXVSeparateAVLatent",
+        "LatentUpscaleModelLoader",
+        "LoadImage",
+        "LoraLoader",
+        "ManualSigmas",
+        "PreviewImage",
+        "RandomNoise",
+        "ResizeImagesByLongerEdge",
+        "SamplerCustomAdvanced",
+        "SimpleMath+",
+        "UNETLoader",
+        "VAEDecodeTiled",
+        "VAELoaderKJ",
+        "VHS_VideoCombine"
+      ],
+      "modelReferences": [
+        {
+          "node": "313",
+          "class": "LatentUpscaleModelLoader",
+          "field": "model_name",
+          "file": "ltx-2.3-spatial-upscaler-x2-1.0.safetensors"
+        },
+        {
+          "node": "318",
+          "class": "UNETLoader",
+          "field": "unet_name",
+          "file": "Ltx/ltx-2.3-22b-distilled_transformer_only_fp8_input_scaled_v3.safetensors"
+        },
+        {
+          "node": "319",
+          "class": "VAELoaderKJ",
+          "field": "vae_name",
+          "file": "LTX23_video_vae_bf16.safetensors"
+        },
+        {
+          "node": "320",
+          "class": "VAELoaderKJ",
+          "field": "vae_name",
+          "file": "LTX23_audio_vae_bf16.safetensors"
+        },
+        {
+          "node": "324",
+          "class": "DualCLIPLoader",
+          "field": "clip_name1",
+          "file": "gemma_3_12B_it_fp8_e4m3fn.safetensors"
+        },
+        {
+          "node": "324",
+          "class": "DualCLIPLoader",
+          "field": "clip_name2",
+          "file": "ltx-2.3_text_projection_bf16.safetensors"
+        },
+        {
+          "node": "436",
+          "class": "LoraLoader",
+          "field": "lora_name",
+          "file": "gemma-3-12b-it-abliterated_heretic_lora_rank64_bf16.safetensors"
+        }
+      ],
+      "mediaOrder": ["269:image"],
+      "preflight": {
+        "missingNodeTypes": [],
+        "unlistedModelChoices": [],
+        "generationTested": false
+      }
+    },
+    {
+      "id": "API-H17-文图生视频-LTX2.3全面优化版",
+      "configured": true,
+      "inputs": [
+        {
+          "slot": "2004:image",
+          "alias": "ref_image_0",
+          "label": "参考图 0"
+        },
+        {
+          "slot": "2612:text",
+          "alias": "prompt",
+          "label": "负面"
+        },
+        {
+          "slot": "5013:text",
+          "alias": "prompt_2",
+          "label": "提示词"
+        },
+        {
+          "slot": "5018:value",
+          "alias": "value_3",
+          "label": "value"
+        },
+        {
+          "slot": "5020:value",
+          "alias": "value_4",
+          "label": "value"
+        }
+      ],
+      "nodeCount": 48,
+      "classes": [
+        "CFGGuider",
+        "CLIPTextEncode",
+        "CM_FloatToInt",
+        "CR Text",
+        "CheckpointLoaderSimple",
+        "EmptyLTXVLatentVideo",
+        "INTConstant",
+        "KSamplerSelect",
+        "LTXAVTextEncoderLoader",
+        "LTXVAudioVAEDecode",
+        "LTXVAudioVAELoader",
+        "LTXVChunkFeedForward",
+        "LTXVConcatAVLatent",
+        "LTXVConditioning",
+        "LTXVEmptyLatentAudio",
+        "LTXVImgToVideoConditionOnly",
+        "LTXVLatentUpsampler",
+        "LTXVPreprocess",
+        "LTXVSeparateAVLatent",
+        "LatentUpscaleModelLoader",
+        "LayerUtility: ImageScaleByAspectRatio V2",
+        "LoadImage",
+        "LoraLoaderModelOnly",
+        "ManualSigmas",
+        "MathExpression|pysssss",
+        "ModelPatchTorchSettings",
+        "PathchSageAttentionKJ",
+        "PrimitiveBoolean",
+        "PrimitiveFloat",
+        "PrimitiveInt",
+        "RandomNoise",
+        "ReservedVRAMSetter",
+        "SamplerCustomAdvanced",
+        "VAEDecodeTiled",
+        "VHS_VideoCombine"
+      ],
+      "modelReferences": [
+        {
+          "node": "3940",
+          "class": "CheckpointLoaderSimple",
+          "field": "ckpt_name",
+          "file": "ltx-2.3-22b-dev.safetensors"
+        },
+        {
+          "node": "4010",
+          "class": "LTXVAudioVAELoader",
+          "field": "ckpt_name",
+          "file": "ltx-2.3-22b-dev.safetensors"
+        },
+        {
+          "node": "4922",
+          "class": "LoraLoaderModelOnly",
+          "field": "lora_name",
+          "file": "Ltx/ltx-2.3-22b-distilled-lora-384.safetensors"
+        },
+        {
+          "node": "4974",
+          "class": "LatentUpscaleModelLoader",
+          "field": "model_name",
+          "file": "ltx-2.3-spatial-upscaler-x2-1.0.safetensors"
+        },
+        {
+          "node": "4982",
+          "class": "LTXAVTextEncoderLoader",
+          "field": "text_encoder",
+          "file": "gemma_3_12B_it_fp8_e4m3fn.safetensors"
+        },
+        {
+          "node": "4982",
+          "class": "LTXAVTextEncoderLoader",
+          "field": "ckpt_name",
+          "file": "ltx-2.3-22b-dev.safetensors"
+        }
+      ],
+      "mediaOrder": ["2004:image"],
+      "preflight": {
+        "missingNodeTypes": [],
+        "unlistedModelChoices": [],
+        "generationTested": false
+      }
+    },
+    {
+      "id": "API-G10-图生视频-Wan2.2SmoothMixV2",
+      "configured": true,
+      "inputs": [
+        {
+          "slot": "224:image",
+          "alias": "ref_image_0",
+          "label": "参考图 0"
+        },
+        {
+          "slot": "231:seed",
+          "alias": "seed",
+          "label": "随机种子"
+        },
+        {
+          "slot": "238:value",
+          "alias": "value",
+          "label": "value"
+        },
+        {
+          "slot": "248:value",
+          "alias": "value_2",
+          "label": "value"
+        },
+        {
+          "slot": "257:value",
+          "alias": "prompt_2",
+          "label": "value"
+        }
+      ],
+      "nodeCount": 34,
+      "classes": [
+        "CLIPLoader",
+        "CLIPTextEncode",
+        "CLIPVisionEncode",
+        "CLIPVisionLoader",
+        "INTConstant",
+        "ImageScaleBy",
+        "KSamplerAdvanced",
+        "LayerUtility: ImageScaleByAspectRatio V2",
+        "LoadImage",
+        "LoraLoaderModelOnly",
+        "MathExpression|pysssss",
+        "ModelSamplingSD3",
+        "Pick From Batch (mtb)",
+        "PrimitiveStringMultiline",
+        "RIFE VFI",
+        "SaveImage",
+        "Seed (rgthree)",
+        "ShowText|pysssss",
+        "StringConcatenate",
+        "UNETLoader",
+        "VAEDecode",
+        "VAELoader",
+        "VHS_VideoCombine",
+        "WanImageToVideo",
+        "easy cleanGpuUsed"
+      ],
+      "modelReferences": [
+        {
+          "node": "220",
+          "class": "UNETLoader",
+          "field": "unet_name",
+          "file": "Wan/smoothMixWan2214BI2V_i2vV20High.safetensors"
+        },
+        {
+          "node": "221",
+          "class": "CLIPLoader",
+          "field": "clip_name",
+          "file": "umt5_xxl_fp8_e4m3fn_scaled.safetensors"
+        },
+        {
+          "node": "222",
+          "class": "VAELoader",
+          "field": "vae_name",
+          "file": "wan_2.1_vae.safetensors"
+        },
+        {
+          "node": "227",
+          "class": "UNETLoader",
+          "field": "unet_name",
+          "file": "Wan/smoothMixWan2214BI2V_i2vV20Low.safetensors"
+        },
+        {
+          "node": "236",
+          "class": "CLIPVisionLoader",
+          "field": "clip_name",
+          "file": "clip_vision_h.safetensors"
+        },
+        {
+          "node": "239",
+          "class": "LoraLoaderModelOnly",
+          "field": "lora_name",
+          "file": "Lightx2v/lightx2v_I2V_14B_480p_cfg_step_distill_rank256_bf16.safetensors"
+        },
+        {
+          "node": "240",
+          "class": "LoraLoaderModelOnly",
+          "field": "lora_name",
+          "file": "Lightx2v/lightx2v_I2V_14B_480p_cfg_step_distill_rank256_bf16.safetensors"
+        },
+        {
+          "node": "241",
+          "class": "RIFE VFI",
+          "field": "ckpt_name",
+          "file": "rife49.pth"
+        },
+        {
+          "node": "255",
+          "class": "LoraLoaderModelOnly",
+          "field": "lora_name",
+          "file": "Wan/SVI_v2_PRO_Wan2.2-I2V-A14B_HIGH_lora_rank_128_fp16.safetensors"
+        },
+        {
+          "node": "256",
+          "class": "LoraLoaderModelOnly",
+          "field": "lora_name",
+          "file": "Wan/SVI_v2_PRO_Wan2.2-I2V-A14B_LOW_lora_rank_128_fp16.safetensors"
+        }
+      ],
+      "mediaOrder": ["224:image"],
+      "preflight": {
+        "missingNodeTypes": [],
+        "unlistedModelChoices": [],
+        "generationTested": false
+      }
+    },
+    {
+      "id": "API-G07-图生视频-Wan2.2-LightX2V-WorkFisher",
+      "configured": true,
+      "inputs": [
+        {
+          "slot": "29:text",
+          "alias": "prompt_2",
+          "label": "提示词"
+        },
+        {
+          "slot": "30:Number",
+          "alias": "Number",
+          "label": "Number"
+        },
+        {
+          "slot": "34:image",
+          "alias": "ref_image_0",
+          "label": "参考图 0"
+        },
+        {
+          "slot": "397:value",
+          "alias": "value_3",
+          "label": "value"
+        }
+      ],
+      "nodeCount": 32,
+      "classes": [
+        "CLIPLoader",
+        "CLIPTextEncode",
+        "INTConstant",
+        "Int",
+        "KSamplerAdvanced",
+        "LayerUtility: ImageScaleByAspectRatio V2",
+        "LoadImage",
+        "LoraLoaderModelOnly",
+        "MathExpression|pysssss",
+        "ModelPatchTorchSettings",
+        "ModelSamplingSD3",
+        "PathchSageAttentionKJ",
+        "PreviewImage",
+        "RIFE VFI",
+        "UNETLoader",
+        "VAEDecode",
+        "VAELoader",
+        "VHS_VideoCombine",
+        "WanImageToVideo",
+        "easy cleanGpuUsed",
+        "wanBlockSwap"
+      ],
+      "modelReferences": [
+        {
+          "node": "9",
+          "class": "VAELoader",
+          "field": "vae_name",
+          "file": "wan_2.1_vae.safetensors"
+        },
+        {
+          "node": "16",
+          "class": "RIFE VFI",
+          "field": "ckpt_name",
+          "file": "rife47.pth"
+        },
+        {
+          "node": "25",
+          "class": "CLIPLoader",
+          "field": "clip_name",
+          "file": "umt5_xxl_fp16.safetensors"
+        },
+        {
+          "node": "27",
+          "class": "UNETLoader",
+          "field": "unet_name",
+          "file": "Wan/wan2.2_i2v_A14b_high_noise_scaled_fp8_e4m3_lightx2v_4step_comfyui.safetensors"
+        },
+        {
+          "node": "28",
+          "class": "UNETLoader",
+          "field": "unet_name",
+          "file": "Wan/wan2.2_i2v_A14b_low_noise_scaled_fp8_e4m3_lightx2v_4step_comfyui.safetensors"
+        },
+        {
+          "node": "36",
+          "class": "LoraLoaderModelOnly",
+          "field": "lora_name",
+          "file": "Lightx2v/lightx2v_I2V_14B_480p_cfg_step_distill_rank256_bf16.safetensors"
+        },
+        {
+          "node": "62",
+          "class": "LoraLoaderModelOnly",
+          "field": "lora_name",
+          "file": "Wan/Wan2.2-Fun-A14B-InP-high-noise-MPS.safetensors"
+        },
+        {
+          "node": "63",
+          "class": "LoraLoaderModelOnly",
+          "field": "lora_name",
+          "file": "Wan/Wan2.2-Fun-A14B-InP-low-noise-HPS2.1.safetensors"
+        }
+      ],
+      "mediaOrder": ["34:image"],
+      "preflight": {
+        "missingNodeTypes": [],
+        "unlistedModelChoices": [],
+        "generationTested": false
+      }
+    },
+    {
+      "id": "API-G03-图生视频-Wan2.2SmoothMix",
+      "configured": true,
+      "inputs": [
+        {
+          "slot": "52:image",
+          "alias": "ref_image_0",
+          "label": "参考图 0"
+        },
+        {
+          "slot": "82:seed",
+          "alias": "seed",
+          "label": "随机种子"
+        },
+        {
+          "slot": "88:value",
+          "alias": "prompt",
+          "label": "value"
+        },
+        {
+          "slot": "116:value",
+          "alias": "value",
+          "label": "秒数"
+        },
+        {
+          "slot": "125:value",
+          "alias": "value_2",
+          "label": "边长 (value)"
+        }
+      ],
+      "nodeCount": 33,
+      "classes": [
+        "CLIPLoader",
+        "CLIPTextEncode",
+        "INTConstant",
+        "ImageScaleBy",
+        "KSamplerAdvanced",
+        "LayerUtility: ImageScaleByAspectRatio V2",
+        "LoadImage",
+        "MathExpression|pysssss",
+        "ModelPatchTorchSettings",
+        "ModelSamplingSD3",
+        "PathchSageAttentionKJ",
+        "Pick From Batch (mtb)",
+        "PrimitiveStringMultiline",
+        "RIFE VFI",
+        "SaveImage",
+        "Seed (rgthree)",
+        "StringConcatenate",
+        "UNETLoader",
+        "VAEDecode",
+        "VAELoader",
+        "VHS_VideoCombine",
+        "WanImageToVideo",
+        "easy cleanGpuUsed",
+        "easy showAnything"
+      ],
+      "modelReferences": [
+        {
+          "node": "131:38",
+          "class": "CLIPLoader",
+          "field": "clip_name",
+          "file": "umt5_xxl_fp8_e4m3fn_scaled.safetensors"
+        },
+        {
+          "node": "131:39",
+          "class": "VAELoader",
+          "field": "vae_name",
+          "file": "wan_2.1_vae.safetensors"
+        },
+        {
+          "node": "131:37",
+          "class": "UNETLoader",
+          "field": "unet_name",
+          "file": "Wan/smoothMixWan22I2VT2V_i2vHigh.safetensors"
+        },
+        {
+          "node": "131:56",
+          "class": "UNETLoader",
+          "field": "unet_name",
+          "file": "Wan/smoothMixWan22I2VT2V_i2vLow.safetensors"
+        },
+        {
+          "node": "132:75",
+          "class": "RIFE VFI",
+          "field": "ckpt_name",
+          "file": "rife49.pth"
+        }
+      ],
+      "mediaOrder": ["52:image"],
+      "preflight": {
+        "missingNodeTypes": [],
+        "unlistedModelChoices": [],
+        "generationTested": false
+      }
+    },
+    {
+      "id": "API-G02-首尾帧-Wan2.2首尾帧视频",
+      "configured": true,
+      "inputs": [
+        {
+          "slot": "119:text",
+          "alias": "prompt",
+          "label": "提示词"
+        },
+        {
+          "slot": "144:value",
+          "alias": "value",
+          "label": "边长 (value)"
+        },
+        {
+          "slot": "145:image",
+          "alias": "ref_image_0",
+          "label": "首帧图"
+        },
+        {
+          "slot": "153:Number",
+          "alias": "Number",
+          "label": "秒数 (Number)"
+        },
+        {
+          "slot": "165:image",
+          "alias": "ref_image_1",
+          "label": "尾帧图"
+        },
+        {
+          "slot": "182:seed",
+          "alias": "seed_2",
+          "label": "随机种子 (随机种子)"
+        }
+      ],
+      "nodeCount": 35,
+      "classes": [
+        "CogVideoEnhanceAVideo",
+        "CreateCFGScheduleFloatList",
+        "ImageListToImageBatch",
+        "ImpactInt",
+        "Int",
+        "LayerUtility: ImageMaskScaleAs",
+        "LayerUtility: ImageScaleByAspectRatio V2",
+        "LoadImage",
+        "LoadWanVideoT5TextEncoder",
+        "MathExpression|pysssss",
+        "Text Multiline",
+        "VHS_VideoCombine",
+        "WanVideoBlockSwap",
+        "WanVideoDecode",
+        "WanVideoImageToVideoEncode",
+        "WanVideoLoraSelect",
+        "WanVideoModelLoader",
+        "WanVideoSLG",
+        "WanVideoSampler",
+        "WanVideoSetBlockSwap",
+        "WanVideoSetLoRAs",
+        "WanVideoTextEncode",
+        "WanVideoTorchCompileSettings",
+        "WanVideoVAELoader",
+        "easy cleanGpuUsed",
+        "easy imageBatchToImageList",
+        "easy int",
+        "easy seed"
+      ],
+      "modelReferences": [
+        {
+          "node": "121",
+          "class": "WanVideoModelLoader",
+          "field": "model",
+          "file": "Wan/wan2.2_i2v_high_noise_14B_fp8_scaled.safetensors"
+        },
+        {
+          "node": "122",
+          "class": "WanVideoModelLoader",
+          "field": "model",
+          "file": "Wan/wan2.2_i2v_low_noise_14B_fp8_scaled.safetensors"
+        },
+        {
+          "node": "123",
+          "class": "WanVideoLoraSelect",
+          "field": "lora",
+          "file": "Lightx2v/lightx2v_T2V_14B_cfg_step_distill_v2_lora_rank128_bf16.safetensors"
+        },
+        {
+          "node": "124",
+          "class": "WanVideoVAELoader",
+          "field": "model_name",
+          "file": "wan_2.1_vae.safetensors"
+        },
+        {
+          "node": "125",
+          "class": "LoadWanVideoT5TextEncoder",
+          "field": "model_name",
+          "file": "umt5-xxl-enc-fp8_e4m3fn.safetensors"
+        },
+        {
+          "node": "159",
+          "class": "WanVideoLoraSelect",
+          "field": "lora",
+          "file": "Lightx2v/lightx2v_T2V_14B_cfg_step_distill_v2_lora_rank128_bf16.safetensors"
+        }
+      ],
+      "mediaOrder": ["145:image", "165:image"],
+      "preflight": {
+        "missingNodeTypes": [],
+        "unlistedModelChoices": [],
+        "generationTested": false
+      }
+    },
+    {
+      "id": "API-G01-图生视频-Wan2.2万相基础版",
+      "configured": true,
+      "inputs": [
+        {
+          "slot": "119:text",
+          "alias": "prompt",
+          "label": "提示词"
+        },
+        {
+          "slot": "142:seed",
+          "alias": "seed_2",
+          "label": "随机种子"
+        },
+        {
+          "slot": "144:value",
+          "alias": "value",
+          "label": "value"
+        },
+        {
+          "slot": "145:image",
+          "alias": "ref_image_0",
+          "label": "参考图 0"
+        },
+        {
+          "slot": "153:Number",
+          "alias": "Number",
+          "label": "Number"
+        }
+      ],
+      "nodeCount": 29,
+      "classes": [
+        "CreateCFGScheduleFloatList",
+        "ImageListToImageBatch",
+        "ImpactInt",
+        "Int",
+        "LayerUtility: ImageScaleByAspectRatio V2",
+        "LoadImage",
+        "LoadWanVideoT5TextEncoder",
+        "MathExpression|pysssss",
+        "Text Multiline",
+        "VHS_VideoCombine",
+        "WanVideoBlockSwap",
+        "WanVideoDecode",
+        "WanVideoImageToVideoEncode",
+        "WanVideoLoraSelect",
+        "WanVideoModelLoader",
+        "WanVideoSampler",
+        "WanVideoSetBlockSwap",
+        "WanVideoSetLoRAs",
+        "WanVideoTextEncode",
+        "WanVideoVAELoader",
+        "easy imageBatchToImageList",
+        "easy int"
+      ],
+      "modelReferences": [
+        {
+          "node": "121",
+          "class": "WanVideoModelLoader",
+          "field": "model",
+          "file": "Wan/wan2.2_i2v_high_noise_14B_fp8_scaled.safetensors"
+        },
+        {
+          "node": "122",
+          "class": "WanVideoModelLoader",
+          "field": "model",
+          "file": "Wan/wan2.2_i2v_low_noise_14B_fp8_scaled.safetensors"
+        },
+        {
+          "node": "123",
+          "class": "WanVideoLoraSelect",
+          "field": "lora",
+          "file": "Lightx2v/lightx2v_I2V_14B_480p_cfg_step_distill_rank128_bf16.safetensors"
+        },
+        {
+          "node": "124",
+          "class": "WanVideoVAELoader",
+          "field": "model_name",
+          "file": "wan_2.1_vae.safetensors"
+        },
+        {
+          "node": "125",
+          "class": "LoadWanVideoT5TextEncoder",
+          "field": "model_name",
+          "file": "umt5-xxl-enc-fp8_e4m3fn.safetensors"
+        },
+        {
+          "node": "159",
+          "class": "WanVideoLoraSelect",
+          "field": "lora",
+          "file": "Lightx2v/lightx2v_I2V_14B_480p_cfg_step_distill_rank128_bf16.safetensors"
+        }
+      ],
+      "mediaOrder": ["145:image"],
+      "preflight": {
+        "missingNodeTypes": [],
+        "unlistedModelChoices": [],
+        "generationTested": false
+      }
+    },
+    {
+      "id": "API-D20-RAW画质重建Adonis_Workflow",
+      "configured": true,
+      "inputs": [
+        {
+          "slot": "118:image",
+          "alias": "ref_image_0",
+          "label": "参考图 0"
+        }
+      ],
+      "nodeCount": 22,
+      "classes": [
+        "CLIPLoader",
+        "CLIPTextEncode",
+        "ClownsharKSampler_Beta",
+        "ConditioningZeroOut",
+        "EmptyFlux2LatentImage",
+        "FastFilmGrain",
+        "INTConstant",
+        "ImageScaleToTotalPixelsX",
+        "LoadImage",
+        "LoraLoaderModelOnly",
+        "PrimitiveStringMultiline",
+        "ReferenceLatent",
+        "SaveImage",
+        "SharkOptions_Beta",
+        "UNETLoader",
+        "VAEDecode",
+        "VAEEncode",
+        "VAELoader",
+        "easy seed"
+      ],
+      "modelReferences": [
+        {
+          "node": "366",
+          "class": "UNETLoader",
+          "field": "unet_name",
+          "file": "flux/flux-2-klein-9b-fp8.safetensors"
+        },
+        {
+          "node": "382",
+          "class": "LoraLoaderModelOnly",
+          "field": "lora_name",
+          "file": "Flux/flux2klein_adonis_refine.safetensors"
+        },
+        {
+          "node": "383",
+          "class": "LoraLoaderModelOnly",
+          "field": "lora_name",
+          "file": "Flux/flux2klein_adonis_base.safetensors"
+        },
+        {
+          "node": "384",
+          "class": "VAELoader",
+          "field": "vae_name",
+          "file": "flux2-vae.safetensors"
+        },
+        {
+          "node": "386",
+          "class": "CLIPLoader",
+          "field": "clip_name",
+          "file": "qwen_3_8b_fp8mixed.safetensors"
+        }
+      ],
+      "mediaOrder": ["118:image"],
+      "preflight": {
+        "missingNodeTypes": [],
+        "unlistedModelChoices": [],
+        "generationTested": false
+      }
+    },
+    {
+      "id": "API-D18-klein9b真人剧制造机-多图编辑",
+      "configured": true,
+      "inputs": [
+        {
+          "slot": "1072:positive",
+          "alias": "positive",
+          "label": "positive"
+        },
+        {
+          "slot": "1103:image",
+          "alias": "ref_image_0",
+          "label": "参考图 0"
+        },
+        {
+          "slot": "1103:enabled",
+          "alias": "enabled_0",
+          "label": "参考图 0 启用"
+        },
+        {
+          "slot": "1104:image",
+          "alias": "ref_image_1",
+          "label": "参考图 1"
+        },
+        {
+          "slot": "1104:enabled",
+          "alias": "enabled_1",
+          "label": "参考图 1 启用"
+        },
+        {
+          "slot": "1105:image",
+          "alias": "ref_image_2",
+          "label": "参考图 2"
+        },
+        {
+          "slot": "1105:enabled",
+          "alias": "enabled_2",
+          "label": "参考图 2 启用"
+        },
+        {
+          "slot": "1106:image",
+          "alias": "ref_image_3",
+          "label": "参考图 3"
+        },
+        {
+          "slot": "1106:enabled",
+          "alias": "enabled_3",
+          "label": "参考图 3 启用"
+        },
+        {
+          "slot": "1112:image",
+          "alias": "ref_image_4",
+          "label": "参考图 4"
+        },
+        {
+          "slot": "1112:enabled",
+          "alias": "enabled_4",
+          "label": "参考图 4 启用"
+        },
+        {
+          "slot": "1117:image",
+          "alias": "ref_image_5",
+          "label": "参考图 5"
+        },
+        {
+          "slot": "1117:enabled",
+          "alias": "enabled_5",
+          "label": "参考图 5 启用"
+        },
+        {
+          "slot": "1232:width",
+          "alias": "width",
+          "label": "宽度"
+        },
+        {
+          "slot": "1232:height",
+          "alias": "height",
+          "label": "高度"
+        },
+        {
+          "slot": "1102:867:seed",
+          "alias": "seed_2",
+          "label": "随机种子"
+        }
+      ],
+      "nodeCount": 72,
+      "classes": [
+        "CLIPLoader",
+        "CLIPTextEncode",
+        "ConditioningZeroOut",
+        "EmptyLatentImage",
+        "FluxGuidance",
+        "FluxKontextImageScale",
+        "ImageConcatMulti",
+        "ImageScaleBy",
+        "KSampler",
+        "LayerUtility: ImageReel",
+        "LayerUtility: ImageReelComposit",
+        "LayerUtility: ImageScaleByAspectRatio V2",
+        "LoadImageWithSwitch",
+        "PreviewImage",
+        "ReferenceLatent",
+        "SaveImage",
+        "SeedVR2LoadDiTModel",
+        "SeedVR2LoadVAEModel",
+        "SeedVR2VideoUpscaler",
+        "ShowText|pysssss",
+        "Switch conditioning [Crystools]",
+        "Switch image [Crystools]",
+        "UNETLoader",
+        "VAEDecode",
+        "VAEEncode",
+        "VAELoader",
+        "easy loadImageBase64",
+        "easy positive",
+        "llama_cpp_instruct_adv",
+        "llama_cpp_model_loader",
+        "llama_cpp_parameters",
+        "segment_text"
+      ],
+      "modelReferences": [
+        {
+          "node": "1057",
+          "class": "llama_cpp_model_loader",
+          "field": "model",
+          "file": "Qwen3.5-9B-Uncensored-HauhauCS-Aggressive-Q4_K_M.gguf"
+        },
+        {
+          "node": "1057",
+          "class": "llama_cpp_model_loader",
+          "field": "mmproj",
+          "file": "mmproj-Qwen3.5-9B-Uncensored-HauhauCS-Aggressive-BF16.gguf"
+        },
+        {
+          "node": "1238",
+          "class": "SeedVR2LoadDiTModel",
+          "field": "model",
+          "file": "seedvr2_ema_3b_fp16.safetensors"
+        },
+        {
+          "node": "1239",
+          "class": "SeedVR2LoadVAEModel",
+          "field": "model",
+          "file": "ema_vae_fp16.safetensors"
+        },
+        {
+          "node": "1102:1101",
+          "class": "VAELoader",
+          "field": "vae_name",
+          "file": "flux2-vae.safetensors"
+        },
+        {
+          "node": "1102:1100",
+          "class": "CLIPLoader",
+          "field": "clip_name",
+          "file": "qwen_3_8b_fp8mixed.safetensors"
+        },
+        {
+          "node": "1102:1099",
+          "class": "UNETLoader",
+          "field": "unet_name",
+          "file": "flux/flux-2-klein-9b.safetensors"
+        }
+      ],
+      "mediaOrder": [
+        "1103:image",
+        "1104:image",
+        "1105:image",
+        "1106:image",
+        "1112:image",
+        "1117:image"
+      ],
+      "preflight": {
+        "missingNodeTypes": [],
+        "unlistedModelChoices": [],
+        "generationTested": false
+      }
+    },
+    {
+      "id": "API-D14-分镜-Flux克莱因9B多角度多场景",
+      "configured": true,
+      "inputs": [
+        {
+          "slot": "259:image",
+          "alias": "ref_image_0",
+          "label": "参考图 0"
+        }
+      ],
+      "nodeCount": 27,
+      "classes": [
+        "CFGGuider",
+        "CLIPLoader",
+        "CLIPTextEncode",
+        "EmptyFlux2LatentImage",
+        "Flux2Scheduler",
+        "GetImageSize",
+        "INTConstant",
+        "KSamplerSelect",
+        "LayerUtility: ImageScaleByAspectRatio V2",
+        "LoadImage",
+        "RandomNoise",
+        "ReferenceLatent",
+        "SamplerCustomAdvanced",
+        "SaveImage",
+        "ShowText|pysssss",
+        "Text Multiline",
+        "UNETLoader",
+        "VAEDecode",
+        "VAEEncode",
+        "VAELoader",
+        "easy promptLine",
+        "llama_cpp_instruct_adv",
+        "llama_cpp_model_loader",
+        "llama_cpp_parameters"
+      ],
+      "modelReferences": [
+        {
+          "node": "232",
+          "class": "VAELoader",
+          "field": "vae_name",
+          "file": "flux2-vae.safetensors"
+        },
+        {
+          "node": "236",
+          "class": "CLIPLoader",
+          "field": "clip_name",
+          "file": "qwen_3_8b_fp8mixed.safetensors"
+        },
+        {
+          "node": "239",
+          "class": "UNETLoader",
+          "field": "unet_name",
+          "file": "flux/flux-2-klein-9b-fp8.safetensors"
+        },
+        {
+          "node": "263",
+          "class": "llama_cpp_model_loader",
+          "field": "model",
+          "file": "Qwen3.5-9B-Uncensored-HauhauCS-Aggressive-Q8_0.gguf"
+        },
+        {
+          "node": "263",
+          "class": "llama_cpp_model_loader",
+          "field": "mmproj",
+          "file": "mmproj-Qwen3.5-9B-Uncensored-HauhauCS-Aggressive-BF16.gguf"
+        }
+      ],
+      "mediaOrder": ["259:image"],
+      "preflight": {
+        "missingNodeTypes": [],
+        "unlistedModelChoices": [],
+        "generationTested": false
+      }
+    },
+    {
+      "id": "API-C19-人物设定三视图zimage双采",
+      "configured": true,
+      "inputs": [
+        {
+          "slot": "42:prompt",
+          "alias": "prompt",
+          "label": "prompt"
+        },
+        {
+          "slot": "47:width",
+          "alias": "width",
+          "label": "宽度"
+        },
+        {
+          "slot": "47:height",
+          "alias": "height",
+          "label": "高度"
+        }
+      ],
+      "nodeCount": 23,
+      "classes": [
+        "CLIPTextEncode",
+        "CR Prompt Text",
+        "CheckpointLoaderSimple",
+        "ConditioningZeroOut",
+        "EmptyLatentImage",
+        "ImageScaleBy",
+        "KSampler",
+        "KSamplerAdvanced",
+        "RAMCleanup",
+        "SaveImage",
+        "SeedVR2LoadDiTModel",
+        "SeedVR2LoadVAEModel",
+        "SeedVR2VideoUpscaler",
+        "ShowText|pysssss",
+        "TextConcatenator",
+        "UNETLoader",
+        "VAEDecode",
+        "VRAMCleanup",
+        "llama_cpp_instruct_adv",
+        "llama_cpp_model_loader",
+        "llama_cpp_parameters"
+      ],
+      "modelReferences": [
+        {
+          "node": "39",
+          "class": "llama_cpp_model_loader",
+          "field": "model",
+          "file": "Qwen3.5-9B-Uncensored-HauhauCS-Aggressive-Q8_0.gguf"
+        },
+        {
+          "node": "39",
+          "class": "llama_cpp_model_loader",
+          "field": "mmproj",
+          "file": "mmproj-Qwen3.5-9B-Uncensored-HauhauCS-Aggressive-BF16.gguf"
+        },
+        {
+          "node": "48",
+          "class": "CheckpointLoaderSimple",
+          "field": "ckpt_name",
+          "file": "Zimage/Z-Image-Base-8steps-White_Marble-AIO_v2-bf16.safetensors"
+        },
+        {
+          "node": "58",
+          "class": "UNETLoader",
+          "field": "unet_name",
+          "file": "Zimage/z_image_turbo_bf16.safetensors"
+        },
+        {
+          "node": "67",
+          "class": "SeedVR2LoadDiTModel",
+          "field": "model",
+          "file": "seedvr2_ema_3b-Q4_K_M.gguf"
+        },
+        {
+          "node": "68",
+          "class": "SeedVR2LoadVAEModel",
+          "field": "model",
+          "file": "ema_vae_fp16.safetensors"
+        }
+      ],
+      "mediaOrder": [],
+      "preflight": {
+        "missingNodeTypes": [],
+        "unlistedModelChoices": [],
+        "generationTested": false
+      }
+    },
+    {
+      "id": "API-C18-豹豹喵呜制作-白玉AIO三采超高清写真生成",
+      "configured": true,
+      "inputs": [
+        {
+          "slot": "77:text",
+          "alias": "prompt_2",
+          "label": "提示词"
+        },
+        {
+          "slot": "81:seed",
+          "alias": "seed",
+          "label": "随机种子"
+        },
+        {
+          "slot": "113:自定义宽",
+          "alias": "param_4",
+          "label": "自定义宽"
+        },
+        {
+          "slot": "113:自定义高",
+          "alias": "param_5",
+          "label": "自定义高"
+        }
+      ],
+      "nodeCount": 48,
+      "classes": [
+        "Any Switch (rgthree)",
+        "CLIPLoader",
+        "CLIPTextEncode",
+        "CR Seed",
+        "CR Text",
+        "CheckpointLoaderSimple",
+        "ConditioningZeroOut",
+        "FloatConstant",
+        "Flux2KleinEditTextEncode_EditUtils",
+        "GetImageSize",
+        "ImageScaleBy",
+        "KSampler",
+        "KSamplerAdvanced",
+        "LCSColorAnchor",
+        "LCSLoadData",
+        "LCSSharpnessCalibrate",
+        "LCSSharpnessIntervene",
+        "LayerUtility: ImageScaleByAspectRatio V2",
+        "LayerUtility: ImageScaleRestore V2",
+        "Lora Loader Stack (rgthree)",
+        "MathExpression|pysssss",
+        "PreviewImage",
+        "SaveImage",
+        "SimpleMath+",
+        "TTP_Image_Assy",
+        "TTP_Image_Tile_Batch",
+        "TTP_Tile_image_size",
+        "UNETLoader",
+        "VAEDecode",
+        "VAELoader",
+        "WJIDehaze",
+        "WJIFrequencyMixer",
+        "WJIFrequencySeparation",
+        "WJILatentPreset",
+        "easy imageBatchToImageList",
+        "easy imageColorMatch",
+        "easy imageListToImageBatch",
+        "easy showAnything"
+      ],
+      "modelReferences": [
+        {
+          "node": "27",
+          "class": "CheckpointLoaderSimple",
+          "field": "ckpt_name",
+          "file": "Zimage/Z-Image-Base-8steps-White_Marble-AIO_v2-bf16.safetensors"
+        },
+        {
+          "node": "33",
+          "class": "UNETLoader",
+          "field": "unet_name",
+          "file": "flux/Flux2-Klein-9B-True-v2-fp8mixed.safetensors"
+        },
+        {
+          "node": "34",
+          "class": "CLIPLoader",
+          "field": "clip_name",
+          "file": "qwen_3_8b_fp8mixed.safetensors"
+        },
+        {
+          "node": "35",
+          "class": "VAELoader",
+          "field": "vae_name",
+          "file": "flux2-vae.safetensors"
+        },
+        {
+          "node": "40",
+          "class": "Lora Loader Stack (rgthree)",
+          "field": "lora_01",
+          "file": "Flux/klein_9B_Turbo_r128.safetensors"
+        },
+        {
+          "node": "40",
+          "class": "Lora Loader Stack (rgthree)",
+          "field": "lora_02",
+          "file": "Flux/f2k_9B_小志一致性(0.5-0.7)lcs_consist_0412预览版preview.safetensors"
+        },
+        {
+          "node": "50",
+          "class": "UNETLoader",
+          "field": "unet_name",
+          "file": "Zimage/z_image_turbo_bf16.safetensors"
+        }
+      ],
+      "mediaOrder": [],
+      "preflight": {
+        "missingNodeTypes": [],
+        "unlistedModelChoices": [],
+        "generationTested": false
+      }
+    },
+    {
+      "id": "API-C16-短剧文生图专用-支持场景-角色",
+      "configured": true,
+      "inputs": [
+        {
+          "slot": "22:seed",
+          "alias": "seed",
+          "label": "随机种子"
+        },
+        {
+          "slot": "49:text",
+          "alias": "prompt_2",
+          "label": "提示词"
+        },
+        {
+          "slot": "60:value",
+          "alias": "value",
+          "label": "value"
+        },
+        {
+          "slot": "61:value",
+          "alias": "value_2",
+          "label": "value"
+        }
+      ],
+      "nodeCount": 20,
+      "classes": [
+        "CLIPLoader",
+        "CLIPTextEncode",
+        "CR Text",
+        "EmptyLatentImage",
+        "INTConstant",
+        "ImageScaleToTotalPixels",
+        "KSampler",
+        "LoraLoaderModelOnly",
+        "SaveImage",
+        "SeedVR2LoadDiTModel",
+        "SeedVR2LoadVAEModel",
+        "SeedVR2VideoUpscaler",
+        "UNETLoader",
+        "VAEDecode",
+        "VAELoader"
+      ],
+      "modelReferences": [
+        {
+          "node": "11",
+          "class": "VAELoader",
+          "field": "vae_name",
+          "file": "ae.safetensors"
+        },
+        {
+          "node": "12",
+          "class": "CLIPLoader",
+          "field": "clip_name",
+          "file": "qwen_3_4b.safetensors"
+        },
+        {
+          "node": "14",
+          "class": "LoraLoaderModelOnly",
+          "field": "lora_name",
+          "file": "Zimage/Z-Image-Fun-Lora-Distill-8-Steps-2603-ComfyUI.safetensors"
+        },
+        {
+          "node": "18",
+          "class": "UNETLoader",
+          "field": "unet_name",
+          "file": "Zimage/z_image_bf16.safetensors"
+        },
+        {
+          "node": "23",
+          "class": "LoraLoaderModelOnly",
+          "field": "lora_name",
+          "file": "Zimage/Kook_Zimage_瑶光.safetensors"
+        },
+        {
+          "node": "33",
+          "class": "LoraLoaderModelOnly",
+          "field": "lora_name",
+          "file": "Zimage/Kook_Zimage_如梦似幻.safetensors"
+        },
+        {
+          "node": "53",
+          "class": "SeedVR2LoadDiTModel",
+          "field": "model",
+          "file": "seedvr2_ema_3b_fp8_e4m3fn.safetensors"
+        },
+        {
+          "node": "54",
+          "class": "SeedVR2LoadVAEModel",
+          "field": "model",
+          "file": "ema_vae_fp16.safetensors"
+        }
+      ],
+      "mediaOrder": [],
+      "preflight": {
+        "missingNodeTypes": [],
+        "unlistedModelChoices": [],
+        "generationTested": false
+      }
+    },
+    {
+      "id": "API-B20-Qwen-Image-2.1-Turbo高速编辑版",
+      "configured": true,
+      "inputs": [
+        {
+          "slot": "4:prompt",
+          "alias": "prompt",
+          "label": "提示词"
+        },
+        {
+          "slot": "4:negative_prompt",
+          "alias": "negative_prompt",
+          "label": "negative_prompt"
+        },
+        {
+          "slot": "21:image",
+          "alias": "ref_image_0",
+          "label": "参考图 0"
+        }
+      ],
+      "nodeCount": 10,
+      "classes": [
+        "CLIPLoader",
+        "KSamplerSelect",
+        "LoadImage",
+        "ManualSigmas",
+        "SamplerCustom",
+        "SaveImage",
+        "TextEncodeQwenImage21",
+        "UNETLoader",
+        "VAEDecode",
+        "VAELoader"
+      ],
+      "modelReferences": [
+        {
+          "node": "22:3",
+          "class": "VAELoader",
+          "field": "vae_name",
+          "file": "qwen_image_2.1_vae_bf16.safetensors"
+        },
+        {
+          "node": "22:2",
+          "class": "CLIPLoader",
+          "field": "clip_name",
+          "file": "qwen3vl_8b_bf16.safetensors"
+        },
+        {
+          "node": "22:1",
+          "class": "UNETLoader",
+          "field": "unet_name",
+          "file": "qwen/qwen_image_2.1_bf16.safetensors"
+        }
+      ],
+      "mediaOrder": ["21:image"],
+      "preflight": {
+        "missingNodeTypes": [],
+        "unlistedModelChoices": [],
+        "generationTested": false
+      }
+    },
+    {
+      "id": "API-B13-千问角色一键多角度_multiple_character_angles-v1.0",
+      "configured": true,
+      "inputs": [
+        {
+          "slot": "25:image",
+          "alias": "ref_image_0",
+          "label": "参考图 0"
+        }
+      ],
+      "nodeCount": 94,
+      "classes": [
+        "CFGNorm",
+        "CLIPLoader",
+        "ImageScaleToTotalPixels",
+        "KSampler",
+        "LoadImage",
+        "LoraLoaderModelOnly",
+        "ModelSamplingAuraFlow",
+        "PreviewImage",
+        "PrimitiveStringMultiline",
+        "SaveImage",
+        "TextEncodeQwenImageEditPlus",
+        "UNETLoader",
+        "VAEDecode",
+        "VAEEncode",
+        "VAELoader"
+      ],
+      "modelReferences": [
+        {
+          "node": "48:9",
+          "class": "VAELoader",
+          "field": "vae_name",
+          "file": "qwen_image_vae.safetensors"
+        },
+        {
+          "node": "48:10",
+          "class": "CLIPLoader",
+          "field": "clip_name",
+          "file": "qwen_2.5_vl_7b_fp8_scaled.safetensors"
+        },
+        {
+          "node": "48:12",
+          "class": "UNETLoader",
+          "field": "unet_name",
+          "file": "qwen/qwen_image_edit_2509_fp8_e4m3fn.safetensors"
+        },
+        {
+          "node": "48:20",
+          "class": "LoraLoaderModelOnly",
+          "field": "lora_name",
+          "file": "Qwen/Qwen-Edit-2509-Multiple-angles.safetensors"
+        },
+        {
+          "node": "48:26",
+          "class": "LoraLoaderModelOnly",
+          "field": "lora_name",
+          "file": "Qwen/Qwen-Image-Edit-2509-Lightning-4steps-V1.0-bf16.safetensors"
+        }
+      ],
+      "mediaOrder": ["25:image"],
+      "preflight": {
+        "missingNodeTypes": [],
+        "unlistedModelChoices": [],
+        "generationTested": false
+      }
+    },
+    {
+      "id": "API-A08-洗图-Qwen二次元转真人高清放大",
+      "configured": true,
+      "inputs": [
+        {
+          "slot": "78:image",
+          "alias": "ref_image_0",
+          "label": "参考图 0"
+        },
+        {
+          "slot": "347:seed",
+          "alias": "seed",
+          "label": "随机种子"
+        }
+      ],
+      "nodeCount": 50,
+      "classes": [
+        "AIO_Preprocessor",
+        "CLIPLoader",
+        "CLIPTextEncode",
+        "ConditioningZeroOut",
+        "ControlNetApplyAdvanced",
+        "ControlNetLoader",
+        "FluxKontextMultiReferenceLatentMethod",
+        "ImageScaleBy",
+        "ImageScaleToTotalPixels",
+        "ImpactExecutionOrderController",
+        "JoinStrings",
+        "KSampler",
+        "LayerUtility: ImageScaleByAspectRatio V2",
+        "LoadImage",
+        "LoraLoaderModelOnly",
+        "PreviewImage",
+        "RAMCleanup",
+        "SaveImage",
+        "SeedVR2LoadDiTModel",
+        "SeedVR2LoadVAEModel",
+        "SeedVR2VideoUpscaler",
+        "SetUnionControlNetType",
+        "ShowText|pysssss",
+        "Text Multiline",
+        "TextEncodeQwenImageEdit",
+        "TextEncodeQwenImageEditPlus",
+        "UNETLoader",
+        "VAEDecode",
+        "VAEEncode",
+        "VAELoader",
+        "VRAMCleanup",
+        "easy cleanGpuUsed",
+        "easy clearCacheAll",
+        "llama_cpp_instruct_adv",
+        "llama_cpp_model_loader",
+        "llama_cpp_parameters"
+      ],
+      "modelReferences": [
+        {
+          "node": "38",
+          "class": "CLIPLoader",
+          "field": "clip_name",
+          "file": "qwen_2.5_vl_7b_fp8_scaled.safetensors"
+        },
+        {
+          "node": "39",
+          "class": "VAELoader",
+          "field": "vae_name",
+          "file": "qwen_image_vae.safetensors"
+        },
+        {
+          "node": "431",
+          "class": "LoraLoaderModelOnly",
+          "field": "lora_name",
+          "file": "Qwen/AnythingtoRealCharacters2511_20.safetensors"
+        },
+        {
+          "node": "439",
+          "class": "LoraLoaderModelOnly",
+          "field": "lora_name",
+          "file": "Qwen/BJD娃娃V2.0_04.safetensors"
+        },
+        {
+          "node": "444",
+          "class": "LoraLoaderModelOnly",
+          "field": "lora_name",
+          "file": "Qwen/Qwen动漫转写实真人V2_V2.safetensors"
+        },
+        {
+          "node": "446",
+          "class": "LoraLoaderModelOnly",
+          "field": "lora_name",
+          "file": "Qwen/Qwen-Image-Edit-2511-Lightning-8steps-V1.0-bf16.safetensors"
+        },
+        {
+          "node": "472",
+          "class": "SeedVR2LoadVAEModel",
+          "field": "model",
+          "file": "ema_vae_fp16.safetensors"
+        },
+        {
+          "node": "474",
+          "class": "SeedVR2LoadDiTModel",
+          "field": "model",
+          "file": "seedvr2_ema_3b-Q4_K_M.gguf"
+        },
+        {
+          "node": "480",
+          "class": "UNETLoader",
+          "field": "unet_name",
+          "file": "Zimage/z_image_turbo_int8_convrot.safetensors"
+        },
+        {
+          "node": "489",
+          "class": "CLIPLoader",
+          "field": "clip_name",
+          "file": "qwen_3_4b_int8_convrot.safetensors"
+        },
+        {
+          "node": "493",
+          "class": "VAELoader",
+          "field": "vae_name",
+          "file": "flux_ultra_vae.safetensors"
+        },
+        {
+          "node": "526",
+          "class": "ControlNetLoader",
+          "field": "control_net_name",
+          "file": "Qwen-Image-ControlNet-Union.safetensors"
+        },
+        {
+          "node": "554",
+          "class": "UNETLoader",
+          "field": "unet_name",
+          "file": "qwen/qwen_image_edit_2511_int8_convrot.safetensors"
+        },
+        {
+          "node": "565",
+          "class": "llama_cpp_model_loader",
+          "field": "model",
+          "file": "Qwen3.6-35B-A3B-UD-Q2_K_XL.gguf"
+        },
+        {
+          "node": "565",
+          "class": "llama_cpp_model_loader",
+          "field": "mmproj",
+          "file": "mmproj-Qwen3.6-35B-A3B-Uncensored-HauhauCS-Aggressive-f16.gguf"
+        }
+      ],
+      "mediaOrder": ["78:image"],
+      "preflight": {
+        "missingNodeTypes": [],
+        "unlistedModelChoices": [],
+        "generationTested": false
+      }
+    },
+    {
+      "id": "API-A01-文生图-Qwen2512高清放大",
+      "configured": true,
+      "inputs": [
+        {
+          "slot": "3:seed",
+          "alias": "seed",
+          "label": "随机种子"
+        },
+        {
+          "slot": "187:text",
+          "alias": "prompt",
+          "label": "提示词"
+        },
+        {
+          "slot": "437:text",
+          "alias": "prompt_2",
+          "label": "提示词"
+        },
+        {
+          "slot": "515:value",
+          "alias": "value",
+          "label": "value"
+        },
+        {
+          "slot": "516:value",
+          "alias": "value_2",
+          "label": "value"
+        }
+      ],
+      "nodeCount": 19,
+      "classes": [
+        "CLIPLoader",
+        "CLIPTextEncode",
+        "CR SDXL Aspect Ratio",
+        "INTConstant",
+        "ImageScaleBy",
+        "KSampler",
+        "LayerColor: AutoAdjustV2",
+        "LoraLoaderModelOnly",
+        "SaveImage",
+        "SeedVR2LoadDiTModel",
+        "SeedVR2LoadVAEModel",
+        "SeedVR2VideoUpscaler",
+        "UNETLoader",
+        "VAEDecode",
+        "VAELoader"
+      ],
+      "modelReferences": [
+        {
+          "node": "38",
+          "class": "CLIPLoader",
+          "field": "clip_name",
+          "file": "qwen_2.5_vl_7b_fp8_scaled.safetensors"
+        },
+        {
+          "node": "39",
+          "class": "VAELoader",
+          "field": "vae_name",
+          "file": "qwen_image_vae.safetensors"
+        },
+        {
+          "node": "165",
+          "class": "UNETLoader",
+          "field": "unet_name",
+          "file": "qwen/qwen_image_2512_fp8_e4m3fn.safetensors"
+        },
+        {
+          "node": "287",
+          "class": "LoraLoaderModelOnly",
+          "field": "lora_name",
+          "file": "Qwen/Qwen-Image-2512-Lightning-4steps-V1.0-fp32.safetensors"
+        },
+        {
+          "node": "502",
+          "class": "LoraLoaderModelOnly",
+          "field": "lora_name",
+          "file": "Qwen/Kook_Qwen_V3极致真实.safetensors"
+        },
+        {
+          "node": "503",
+          "class": "LoraLoaderModelOnly",
+          "field": "lora_name",
+          "file": "Qwen/Kook_Qwen_真实幻想V2.safetensors"
+        },
+        {
+          "node": "507",
+          "class": "SeedVR2LoadVAEModel",
+          "field": "model",
+          "file": "ema_vae_fp16.safetensors"
+        },
+        {
+          "node": "511",
+          "class": "SeedVR2LoadDiTModel",
+          "field": "model",
+          "file": "seedvr2_ema_3b_fp16.safetensors"
+        }
+      ],
+      "mediaOrder": [],
+      "preflight": {
+        "missingNodeTypes": [],
+        "unlistedModelChoices": [],
+        "generationTested": false
+      }
+    },
+    {
+      "id": "API-U22-9图3视3音",
+      "configured": true,
+      "inputs": [
+        {
+          "slot": "403:ref_image_0",
+          "alias": "ref_image_0",
+          "label": "图像 ref_image_0"
+        },
+        {
+          "slot": "403:ref_image_1",
+          "alias": "ref_image_1",
+          "label": "图像 ref_image_1"
+        },
+        {
+          "slot": "403:ref_image_2",
+          "alias": "ref_image_2",
+          "label": "图像 ref_image_2"
+        },
+        {
+          "slot": "403:ref_image_3",
+          "alias": "ref_image_3",
+          "label": "图像 ref_image_3"
+        },
+        {
+          "slot": "403:ref_image_4",
+          "alias": "ref_image_4",
+          "label": "图像 ref_image_4"
+        },
+        {
+          "slot": "403:ref_image_5",
+          "alias": "ref_image_5",
+          "label": "图像 ref_image_5"
+        },
+        {
+          "slot": "403:ref_image_6",
+          "alias": "ref_image_6",
+          "label": "图像 ref_image_6"
+        },
+        {
+          "slot": "403:ref_image_7",
+          "alias": "ref_image_7",
+          "label": "图像 ref_image_7"
+        },
+        {
+          "slot": "403:ref_image_8",
+          "alias": "ref_image_8",
+          "label": "图像 ref_image_8"
+        },
+        {
+          "slot": "403:ref_video_0",
+          "alias": "ref_video_0",
+          "label": "视频 ref_video_0"
+        },
+        {
+          "slot": "403:ref_video_1",
+          "alias": "ref_video_1",
+          "label": "视频 ref_video_1"
+        },
+        {
+          "slot": "403:ref_video_2",
+          "alias": "ref_video_2",
+          "label": "视频 ref_video_2"
+        },
+        {
+          "slot": "403:ref_audio_0",
+          "alias": "ref_audio_0",
+          "label": "音频 ref_audio_0"
+        },
+        {
+          "slot": "403:ref_audio_1",
+          "alias": "ref_audio_1",
+          "label": "音频 ref_audio_1"
+        },
+        {
+          "slot": "403:ref_audio_2",
+          "alias": "ref_audio_2",
+          "label": "音频 ref_audio_2"
+        },
+        {
+          "slot": "403:prompt",
+          "alias": "prompt",
+          "label": "提示词"
+        },
+        {
+          "slot": "403:seconds",
+          "alias": "seconds",
+          "label": "seconds"
+        },
+        {
+          "slot": "403:aspect_ratio",
+          "alias": "aspect_ratio",
+          "label": "aspect_ratio"
+        },
+        {
+          "slot": "403:megapixels",
+          "alias": "megapixels",
+          "label": "megapixels"
+        }
+      ],
+      "nodeCount": 14,
+      "classes": [
+        "BasicScheduler",
+        "BlockSparseAttention",
+        "ConditioningZeroOut",
+        "KSamplerSelect",
+        "MiniMaxChunkFeedForward",
+        "MiniMaxH3ReferenceToVideo",
+        "MiniMaxH3SigmaShift",
+        "ModelPreviewOverrideKJ",
+        "SelfLiftH3Sampler",
+        "VAEDecode",
+        "VAEDecodeAudio",
+        "VHS_VideoCombine",
+        "ZealmanH3ModelLoader",
+        "ZealmanH3PickReferenceMedia"
+      ],
+      "modelReferences": [
+        {
+          "node": "329",
+          "class": "ModelPreviewOverrideKJ",
+          "field": "tiny_vae",
+          "file": "taeh3.safetensors"
+        },
+        {
+          "node": "397",
+          "class": "SelfLiftH3Sampler",
+          "field": "upscaler_model",
+          "file": "h3_upscaler_lms_v0.1.safetensors"
+        },
+        {
+          "node": "411",
+          "class": "ZealmanH3ModelLoader",
+          "field": "unet_name",
+          "file": "minimax/minimax_h3_hybrid_fl2va_ref2va_b25-49-int8.safetensors"
+        },
+        {
+          "node": "411",
+          "class": "ZealmanH3ModelLoader",
+          "field": "clip_name",
+          "file": "qwen3vl_32b_minimax_h3_nvfp4_awq.safetensors"
+        },
+        {
+          "node": "411",
+          "class": "ZealmanH3ModelLoader",
+          "field": "video_vae",
+          "file": "minimax_h3_video_vae_int8_convrot.safetensors"
+        },
+        {
+          "node": "411",
+          "class": "ZealmanH3ModelLoader",
+          "field": "audio_vae",
+          "file": "minimax_h3_audio_vae_fp32.safetensors"
+        }
+      ],
+      "mediaOrder": [
+        "403:ref_image_0",
+        "403:ref_image_1",
+        "403:ref_image_2",
+        "403:ref_image_3",
+        "403:ref_image_4",
+        "403:ref_image_5",
+        "403:ref_image_6",
+        "403:ref_image_7",
+        "403:ref_image_8",
+        "403:ref_video_0",
+        "403:ref_video_1",
+        "403:ref_video_2",
+        "403:ref_audio_0",
+        "403:ref_audio_1",
+        "403:ref_audio_2"
+      ],
+      "preflight": {
+        "missingNodeTypes": [
+          {
+            "node": "403",
+            "class": "ZealmanH3PickReferenceMedia"
+          },
+          {
+            "node": "411",
+            "class": "ZealmanH3ModelLoader"
+          }
+        ],
+        "unlistedModelChoices": [],
+        "generationTested": false
+      }
+    }
+  ],
+  "preflightSource": "Live ComfyUI /object_info: class presence and literal model filename option checks only; media inputs, memory, execution and output quality are not proven."
+}

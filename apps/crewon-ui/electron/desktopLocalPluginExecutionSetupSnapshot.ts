@@ -1,7 +1,12 @@
+import {
+  isDesktopShortDramaImagePreset,
+  type DesktopShortDramaImagePreset,
+} from "../src/lib/desktop/desktopLocalPluginExecutionSetupProtocol.ts";
 import { captureDesktopLocalShortDramaMediaInputs } from "./desktopLocalShortDramaMediaInputs.ts";
 import {
   captureDesktopLocalShortDramaMediaGenerations,
   SHORT_MEDIA_UPLOAD_PATHS,
+  shortDramaMediaUploadPaths,
 } from "./desktopLocalShortDramaMediaGenerations.ts";
 import { createHash } from "node:crypto";
 import { lstatSync, type Stats } from "node:fs";
@@ -62,10 +67,44 @@ export const SHORT_NETWORK_PATHS = Object.freeze([
   Object.freeze({ method: "GET" as const, operationPathPrefix: "/history/" }),
   Object.freeze({ method: "GET" as const, path: "/view" }),
 ]);
+export const SHORT_WORKFLOW_PANEL_NETWORK_PATHS = Object.freeze([
+  Object.freeze({ method: "POST" as const, path: "/api/workflow/generate" }),
+  Object.freeze({ method: "GET" as const, path: "/api/comfy/proxy/queue" }),
+  Object.freeze({
+    method: "GET" as const,
+    operationPathPrefix: "/api/comfy/proxy/history?prompt_id=",
+  }),
+  Object.freeze({ method: "GET" as const, path: "/api/comfy/view" }),
+]);
+/** Recognize only the exact previously issued grant when previewing its scoped query upgrade. */
+const legacyWorkflowPanelPaths = Object.freeze([
+  Object.freeze({ method: "POST" as const, path: "/api/workflow/generate" }),
+  Object.freeze({ method: "GET" as const, path: "/api/comfy/proxy/queue" }),
+  Object.freeze({ method: "GET" as const, path: "/api/comfy/proxy/history" }),
+  Object.freeze({ method: "GET" as const, path: "/api/comfy/view" }),
+]);
+export function shortDramaNetworkPaths(configuration: ExtensionConfiguration) {
+  return configuration.parameters.serviceProtocol === "workflow-panel-v1" ||
+    configuration.parameters.serviceProtocol === "workflow-api-v1"
+    ? SHORT_WORKFLOW_PANEL_NETWORK_PATHS
+    : SHORT_NETWORK_PATHS;
+}
 const SHORT_MEDIA_NETWORK_PATHS = Object.freeze([
   ...SHORT_NETWORK_PATHS,
   ...SHORT_MEDIA_UPLOAD_PATHS,
 ]);
+function shortDramaMediaNetworkPaths(configuration: ExtensionConfiguration) {
+  if (
+    configuration.parameters.serviceProtocol === undefined ||
+    configuration.parameters.serviceProtocol === "native"
+  )
+    return SHORT_MEDIA_NETWORK_PATHS;
+  return Object.freeze([
+    ...shortDramaNetworkPaths(configuration),
+    ...shortDramaMediaUploadPaths(configuration.parameters.serviceProtocol),
+  ]);
+}
+
 export type PolicyDocument = Readonly<{
   schemaVersion: "crewon.desktop-native-plugin-policy.v1";
   packages: readonly Readonly<{
@@ -95,7 +134,7 @@ export type SetupSnapshot = {
     typeof captureDesktopLocalShortDramaMediaGenerations
   >;
   baseUrl: string;
-  preset: "krea2-portrait" | "krea2-character-three-view";
+  preset: DesktopShortDramaImagePreset;
 };
 export const setupHash = (value: string | Buffer) =>
   `sha256:${createHash("sha256").update(value).digest("hex")}`;
@@ -317,11 +356,22 @@ export async function captureSetupSnapshot(input: {
     registration,
     records.configuration,
   );
-  const parameters = fields(configuration.parameters, ["baseUrl", "preset"]);
+  const parameters = fields(configuration.parameters, [
+    "baseUrl",
+    "preset",
+    ...(Object.hasOwn(configuration.parameters, "serviceProtocol")
+      ? ["serviceProtocol"]
+      : []),
+  ]);
   if (
     typeof parameters.baseUrl !== "string" ||
-    (parameters.preset !== "krea2-portrait" &&
-      parameters.preset !== "krea2-character-three-view")
+    (parameters.serviceProtocol !== undefined &&
+      parameters.serviceProtocol !== "native" &&
+      parameters.serviceProtocol !== "workflow-panel-v1" &&
+      parameters.serviceProtocol !== "workflow-api-v1") ||
+    !isDesktopShortDramaImagePreset(parameters.preset) ||
+    parameters.preset.startsWith("api-") !==
+      (parameters.serviceProtocol === "workflow-api-v1")
   )
     setupInvalid("configuration_unsupported");
   const snapshot: SetupSnapshot = {
@@ -343,18 +393,23 @@ export async function captureSetupSnapshot(input: {
     baseUrl: parameters.baseUrl,
     preset: parameters.preset,
   };
+  // Reference upload remains a separate, protocol-specific consent on the Main preview.
   snapshot.mediaGenerations = captureDesktopLocalShortDramaMediaGenerations({
     snapshot: packageSnapshot,
     manifest: registration.manifest,
     mediaInputs: snapshot.mediaInputs,
     approval,
+    serviceProtocol: parameters.serviceProtocol,
     uploadApproved:
       policy?.networkGrants.some(
         (grant) =>
           grant.packageDigest === snapshot.pkg.packageDigest &&
           grant.baseUrl === snapshot.baseUrl &&
           grant.baseUrlParameter === "baseUrl" &&
-          isDeepStrictEqual(grant.paths, SHORT_MEDIA_NETWORK_PATHS),
+          isDeepStrictEqual(
+            grant.paths,
+            shortDramaMediaNetworkPaths(configuration),
+          ),
       ) === true,
   });
   // The original authority parser checks canonical HTTPS and the exact bounded path rules.
@@ -453,7 +508,7 @@ export function mergeSetupPolicy(
     ...pkg,
     baseUrl: snapshot.baseUrl,
     baseUrlParameter: "baseUrl",
-    paths: SHORT_NETWORK_PATHS,
+    paths: shortDramaNetworkPaths(snapshot.configuration),
   };
   const { approvalRequirement: _unused, ...networkGrant } = grant;
   const previousPackage = snapshot.policy?.packages.find(
@@ -466,18 +521,28 @@ export function mergeSetupPolicy(
   );
   const mediaNetworkGrant = {
     ...networkGrant,
-    paths: SHORT_MEDIA_NETWORK_PATHS,
+    paths: shortDramaMediaNetworkPaths(snapshot.configuration),
   };
   const previousMediaGrant = isDeepStrictEqual(
     previousGrant,
     mediaNetworkGrant,
   );
+  const previousWorkflowPanelGrant =
+    (snapshot.configuration.parameters.serviceProtocol ===
+      "workflow-panel-v1" ||
+      snapshot.configuration.parameters.serviceProtocol ===
+        "workflow-api-v1") &&
+    isDeepStrictEqual(previousGrant, {
+      ...networkGrant,
+      paths: legacyWorkflowPanelPaths,
+    });
   if (
     (previousPackage !== undefined &&
       !isDeepStrictEqual(previousPackage, pkg)) ||
     (previousGrant !== undefined &&
       !isDeepStrictEqual(previousGrant, networkGrant) &&
-      !previousMediaGrant)
+      !previousMediaGrant &&
+      !previousWorkflowPanelGrant)
   )
     setupInvalid("policy_conflict");
   const packages = [

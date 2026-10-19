@@ -5,7 +5,10 @@ import type {
 } from "@crewon/application";
 import { extensionCanonicalJson } from "@crewon/domain";
 import type { DesktopPluginConfiguration } from "./desktop-plugin-configuration.ts";
-import { parseDesktopPluginConfiguration } from "./desktop-plugin-configuration.ts";
+import {
+  assertDesktopPluginConfigurationFileCurrent,
+  parseDesktopPluginConfiguration,
+} from "./desktop-plugin-configuration.ts";
 import {
   captureCreativeProjectCompositionConfig,
   captureStandaloneCreativeProjectCompositionConfig,
@@ -120,22 +123,56 @@ export function composeDesktopProjectStartup(
       }
     },
   });
+  // Native can deliberately start the default runtime after every plugin is
+  // uninstalled or blocked. Metadata opt-ins remain useful, but cannot create
+  // generation/query authority in the absence of an issued execution owner.
+  const managementOnly =
+    configuration.schemaVersion === "crewon.desktop-plugin-bootstrap.v3" &&
+    input.tasks === undefined &&
+    input.activation === undefined &&
+    input.nativeControl === undefined;
+  if (managementOnly)
+    assertDesktopPluginConfigurationFileCurrent(input.configuration);
   const capture =
     configuration.schemaVersion === "crewon.desktop-plugin-bootstrap.v3"
       ? captureCreativeProjectCompositionConfig
       : captureStandaloneCreativeProjectCompositionConfig;
+  const selectionVerifier =
+    resultSelections === undefined
+      ? undefined
+      : createComfyUiProjectGenerationImageResultVerifier({
+          identities: resultSelections.identities,
+        });
   const captured = capture({
     ...data,
+    ...(managementOnly
+      ? {
+          pluginGenerations: undefined,
+          pluginQueries: undefined,
+          historicalQueries: undefined,
+        }
+      : {}),
     authorization,
     ...(foundation === undefined ? {} : { foundation }),
+    // Reference writes already published by the asset owner must re-prove the
+    // selected generation through the same reviewed, pure decoder. This adds
+    // no supplier I/O or task authority, including in metadata-only startup.
+    ...(selectionVerifier !== undefined &&
+    data.assetArtifacts !== undefined &&
+    (data.assetUi !== undefined || data.assetRecovery !== undefined)
+      ? {
+          assetReferences: {
+            version: "crewon.project-asset-reference.v1",
+            verifier: selectionVerifier,
+          },
+        }
+      : {}),
     ...(resultSelections === undefined
       ? {}
       : {
           resultSelections: {
             version: resultSelections.version,
-            verifier: createComfyUiProjectGenerationImageResultVerifier({
-              identities: resultSelections.identities,
-            }),
+            verifier: selectionVerifier!,
           },
         }),
   })!;
@@ -149,9 +186,11 @@ export function composeDesktopProjectStartup(
       : { nativeControl: input.nativeControl }),
   })!;
   issueDesktopProjectFoundationStartup(configuration, creativeProjects);
-  const recovery = capturePluginUiRecoveryConfiguration(uiRecovery, {
-    publicationMode: "metadata-read",
-  });
+  const recovery = managementOnly
+    ? undefined
+    : capturePluginUiRecoveryConfiguration(uiRecovery, {
+        publicationMode: "metadata-read",
+      });
   return Object.freeze({
     creativeProjects,
     ...(recovery === undefined ? {} : { uiRecovery: recovery }),

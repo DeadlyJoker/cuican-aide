@@ -15,6 +15,111 @@ import {
 import { projectQueryTaskFixture } from "./project-query-task.test-support.ts";
 import { taskDigester } from "./extension-plugin-task.test-support.ts";
 import { uiDeferred } from "./plugin-ui.test-support.ts";
+import { RunStoreError } from "./run-store-port.ts";
+import { isQueryRevisionNotAdmitted } from "./project-query-nonadmission.ts";
+
+test("an advanced thread and subsequent absent receipt prove a query CAS did not admit a Run", async () => {
+  const f = await projectQueryTaskFixture();
+  const load = f.dependencies.store.loadThreadInSpace.bind(
+    f.dependencies.store,
+  );
+  const fault = new RunStoreError("revision_conflict");
+  let committed = 0;
+  const tasks = new ExtensionTaskApplicationService({
+    ...f.dependencies,
+    store: {
+      ...f.dependencies.store,
+      async loadThreadInSpace(input) {
+        const thread = await load(input);
+        return thread
+          ? { ...thread, revision: f.command.expectedThreadRevision + 1 }
+          : null;
+      },
+    },
+    extensions: {
+      ...f.extensions,
+      async commitExtensionTurn() {
+        committed++;
+        throw fault;
+      },
+    },
+  });
+  await assert.rejects(
+    tasks.createPublishedProjectQueryTaskFromPlugin(f.input),
+    (error) => {
+      assert.ok(
+        isQueryRevisionNotAdmitted(error, f.request, f.sourcePin, taskDigester),
+      );
+      assert.equal(
+        isQueryRevisionNotAdmitted(
+          error,
+          { ...f.request, idempotencyKey: "foreign-key" },
+          f.sourcePin,
+          taskDigester,
+        ),
+        false,
+      );
+      assert.equal(
+        isQueryRevisionNotAdmitted(
+          new ApplicationError(
+            "conflict",
+            "project_query_revision_not_admitted",
+          ),
+          f.request,
+          f.sourcePin,
+          taskDigester,
+        ),
+        false,
+      );
+      return true;
+    },
+  );
+  assert.equal(committed, 1);
+  assert.equal(f.state.links.size, 0);
+});
+
+test("a receipt found after a query commit error prevents non-admission and remains replayable", async () => {
+  const f = await projectQueryTaskFixture();
+  const load = f.dependencies.store.loadThreadInSpace.bind(
+    f.dependencies.store,
+  );
+  const commit = f.extensions.commitExtensionTurn.bind(f.extensions);
+  let loseReply = true;
+  const tasks = new ExtensionTaskApplicationService({
+    ...f.dependencies,
+    store: {
+      ...f.dependencies.store,
+      async loadThreadInSpace(input) {
+        const t = await load(input);
+        return t
+          ? { ...t, revision: f.command.expectedThreadRevision + 1 }
+          : null;
+      },
+    },
+    extensions: {
+      ...f.extensions,
+      async commitExtensionTurn(...args) {
+        const result = await commit(...args);
+        if (loseReply) throw new RunStoreError("revision_conflict");
+        return result;
+      },
+    },
+  });
+  await assert.rejects(
+    tasks.createPublishedProjectQueryTaskFromPlugin(f.input),
+    (error) => {
+      assert.equal(
+        isQueryRevisionNotAdmitted(error, f.request, f.sourcePin, taskDigester),
+        false,
+      );
+      return true;
+    },
+  );
+  loseReply = false;
+  const replay = await tasks.createPublishedProjectQueryTaskFromPlugin(f.input);
+  assert.equal(replay.turn.disposition, "replayed");
+  assert.equal(f.state.links.size, 1);
+});
 
 test("business query reuses the original paid source with current query package and no additional credits", async () => {
   const f = await projectQueryTaskFixture();

@@ -5,7 +5,7 @@ import type {
   PluginToolExecutionPolicy,
   PluginToolRuntimeContext,
 } from "@crewon/plugin-sdk/node";
-import { krea2Workflow, parseKreaPreset } from "./workflow.js";
+import { captureImageExecutionProfile } from "./image-execution-profile.js";
 
 export const SUBMIT = "crewon_short_drama__submit";
 export const OBSERVE = "crewon_short_drama__observe";
@@ -140,10 +140,9 @@ export function toolInput(
   const value = (input as Record<string, unknown>)[key];
   if (typeof value !== "string") throw new Error("krea_plugin_input_invalid");
   if (key === "prompt")
-    krea2Workflow(
+    captureImageExecutionProfile(context.configuration).submission(
       value,
       "00000000-0000-0000-0000-000000000000",
-      parseKreaPreset(context.configuration.parameters.preset),
     );
   else promptId(value);
   return value;

@@ -236,3 +236,29 @@ it("media preparation preview is bounded and cannot acquire generation/network o
   expect(() => parse({ ...mediaInputPreparation, workflows })).toThrow();
   expect(calls).toBe(0);
 });
+
+it("captures only the exact reviewed workflow API upload route in the separate consent", () => {
+  const f = new ExecutionSetupFixture();
+  const base = { ...f.preview(), ...mediaGenerationPreview() };
+  const value = captureExecutionSetupPreview(
+    {
+      ...base,
+      mediaGenerationPreparation: {
+        ...base.mediaGenerationPreparation,
+        additionalNetworkPaths: [
+          { method: "POST", path: "/api/comfy/upload/file" },
+        ],
+      },
+    },
+    f.identity,
+    executionTestParameters,
+  );
+  expect(value.mediaGenerationPreparation?.additionalNetworkPaths).toEqual([
+    { method: "POST", path: "/api/comfy/upload/file" },
+  ]);
+  expect(
+    Object.isFrozen(
+      value.mediaGenerationPreparation?.additionalNetworkPaths[0],
+    ),
+  ).toBe(true);
+});

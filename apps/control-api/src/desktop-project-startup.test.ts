@@ -294,3 +294,53 @@ test("actual Standalone entry refuses a Native observer on legacy projects befor
   assert.equal(databaseRead, false);
   assert.equal(observed, false);
 });
+
+test("Native asset-reference writes receive the existing reviewed selection verifier without adding execution or network authority", async (t) => {
+  const root = await realpath(
+    await mkdtemp(join(tmpdir(), "crewon-native-reference-composition-")),
+  );
+  await chmod(root, 0o700);
+  t.after(() => rm(root, { recursive: true, force: true }));
+  const path = join(root, "bootstrap.json");
+  await writeFile(
+    path,
+    JSON.stringify({
+      ...base,
+      schemaVersion: "crewon.desktop-plugin-bootstrap.v3",
+      projects: {
+        ...projects,
+        version: "crewon.desktop-project-execution.v1",
+        textArtifacts: { version: "crewon.project-text.v1" },
+        assetArtifacts: { version: "crewon.project-asset.v1" },
+        assetUi: { publications: [module] },
+      },
+    }),
+    { mode: 0o600 },
+  );
+  const parsed = await loadDesktopPluginConfiguration(path, { actor });
+  const configured = composeDesktopProjectStartup({
+    configuration: parsed,
+    actor,
+  }).creativeProjects!;
+  assert.ok(
+    configured.assetReferences,
+    "the published save-reference action needs the existing approved decoder",
+  );
+  assert.equal(
+    configured.assetReferences.version,
+    "crewon.project-asset-reference.v1",
+  );
+  assert.equal(
+    typeof configured.assetReferences.verifier.verifyImage,
+    "function",
+  );
+  assert.equal(configured.pluginGenerations, undefined);
+  assert.equal(configured.pluginQueries, undefined);
+  assert.equal(
+    composeDesktopProjectStartup({
+      configuration: parseDesktopPluginConfiguration(v2),
+      actor,
+    }).creativeProjects!.assetReferences,
+    undefined,
+  );
+});

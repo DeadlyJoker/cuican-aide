@@ -1,0 +1,14 @@
+{
+  "recordedAt": "2026-10-15T18:25:59.430Z",
+  "purpose": "Unauthenticated public service metadata only; no model or account request",
+  "url": "https://api.aicuican.com/api/status",
+  "status": 200,
+  "contentType": "application/json; charset=utf-8",
+  "metadata": {
+    "version": "v1.0.0-rc.8-27-g12deba956-portal.1",
+    "system_name": "璀璨API",
+    "start_time": 1791885640
+  },
+  "success": true,
+  "elapsedMs": 1930
+}

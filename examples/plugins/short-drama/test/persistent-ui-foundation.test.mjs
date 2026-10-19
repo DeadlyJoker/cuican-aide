@@ -10,13 +10,16 @@ import {
 } from "./foundation-ui.test-support.mjs";
 import { sourceUploadFixture } from "./source-upload-ui.test-support.mjs";
 import { persistentProps } from "./persistent-ui.test-support.mjs";
+import { textService } from "./text-ui.test-support.mjs";
+import { sourceUiDefinition } from "./source-ui.test-support.mjs";
 const version = process.env.CREWON_EXAMPLE_PLUGIN_VERSION ?? "39.0.0";
 const directory =
   process.env.CREWON_SHORT_DRAMA_TEST_PACKAGE_DIRECTORY ??
   new URL(`../dist/${version}/`, import.meta.url).pathname;
-const { default: definition } = await import(
-  pathToFileURL(join(directory, "ui.mjs")).href
-);
+const definition =
+  process.env.CREWON_SHORT_DRAMA_TEST_SOURCE_UI === "1"
+    ? await sourceUiDefinition()
+    : (await import(pathToFileURL(join(directory, "ui.mjs")).href)).default;
 after(async () => browser.happyDOM.close());
 async function ready(service, props = foundationProps()) {
   const f = fixture(definition, { props, services: service.services });
@@ -102,10 +105,7 @@ test("creative entry keeps all parameters across review/cancel/theme and writes 
     );
     assert.equal(service.metadata.methodCalls("createProject").length, 0);
     await snapshot("foundation-creative-navigation", navigationHtml(f));
-    assert.equal(
-      f.container.querySelector('[data-project-page="outline"]'),
-      null,
-    );
+    assert.ok(f.container.querySelector('[data-project-page="outline"]'));
     assert.equal(
       f.container.querySelector('[data-project-page="source"]'),
       null,
@@ -114,6 +114,257 @@ test("creative entry keeps all parameters across review/cancel/theme and writes 
     assert.equal(
       service.calls.some((c) =>
         /generation|startStage|createConversation/.test(c.action),
+      ),
+      false,
+    );
+  } finally {
+    await f.dispose();
+  }
+});
+
+function integratedProject(origin, stage = "overview") {
+  const foundation = foundationService();
+  const created = foundation.seed(origin);
+  const projectId = created.project.projectId;
+  const texts = textService();
+  texts.metadata.records.set(
+    projectId,
+    foundation.metadata.records.get(projectId),
+  );
+  const navigation = [],
+    calls = [];
+  const props = (nextStage, theme) => {
+    const value = foundationProps(theme);
+    return {
+      ...value,
+      data: {
+        ...value.data,
+        hostPresentation: {
+          surface: "workbench",
+          context: { projectId, stage: nextStage },
+        },
+      },
+    };
+  };
+  const f = fixture(definition, {
+    props: props(stage),
+    services: {
+      async invoke(action, input, options) {
+        calls.push(action);
+        if (action.startsWith("crewon.plugin-navigation")) {
+          navigation.push(structuredClone(input));
+          return {};
+        }
+        if (
+          action.startsWith("crewon.project-texts.") ||
+          action.startsWith("crewon.project-text-recovery.")
+        )
+          return texts.services.invoke(action, input, options);
+        return foundation.services.invoke(action, input, options);
+      },
+    },
+  });
+  return { ...f, foundation, texts, projectId, navigation, calls, props };
+}
+
+test("Foundation projects can revise the brief through the original metadata owner without dispatching production", async () => {
+  const f = integratedProject("creative");
+  try {
+    await settle();
+    const editor = f.container.querySelector("#creative-brief");
+    assert.ok(editor, "Foundation overview must retain the brief editor");
+    const original = editor.value;
+    assert.equal(f.button("保存为新版本").disabled, true);
+    await f.input(editor, "x".repeat(8193));
+    assert.equal(f.button("保存为新版本").disabled, true);
+    assert.match(f.container.textContent, /需求超过 8,192 字节/);
+    await f.input(editor, original + "\n文字采用后继续制作成片，保留原故事。");
+    f.instance.update(f.props("overview", { "--text": "#eeeeee" }));
+    await settle();
+    assert.equal(
+      f.container.querySelector("#creative-brief").value,
+      original + "\n文字采用后继续制作成片，保留原故事。",
+    );
+    await f.click(f.button("保存为新版本"));
+    const writes = f.foundation.metadata.methodCalls("appendBrief");
+    assert.equal(writes.length, 1);
+    assert.equal(writes[0].input.projectId, f.projectId);
+    assert.equal(
+      writes[0].input.request.text,
+      original + "\n文字采用后继续制作成片，保留原故事。",
+    );
+    assert.match(f.container.textContent, /文字采用后继续制作成片/);
+    assert.equal(f.button("保存为新版本").disabled, true);
+    await f.click(f.button("v2 · 查看历史"));
+    const history = f.container.querySelector("dialog[open]");
+    assert.ok(history);
+    assert.match(history.textContent, /需求 v1/);
+    assert.match(history.textContent, /需求 v2/);
+    assert.match(history.textContent, /文字采用后继续制作成片/);
+    assert.equal(
+      f.calls.some((action) =>
+        /startStage|generation|saveScriptCandidate|selectRevision/.test(action),
+      ),
+      false,
+    );
+  } finally {
+    await f.dispose();
+  }
+});
+
+test("integrated creative project can enter and retain its real outline stage without execution", async () => {
+  const f = integratedProject("creative");
+  try {
+    await settle();
+    const outline = f.container.querySelector('[data-project-page="outline"]');
+    assert.ok(
+      outline,
+      "creative projects expose their existing outline capability",
+    );
+    assert.match(outline.textContent, /故事大纲/);
+    assert.equal(
+      f.container.querySelector('[data-project-page="source"]'),
+      null,
+    );
+    await f.click(outline);
+    assert.deepEqual(f.navigation.at(-1).context, {
+      projectId: f.projectId,
+      stage: "outline",
+    });
+    assert.ok(
+      f.container.querySelector(
+        '.story-script-workbench[aria-label="故事大纲"]',
+      ),
+    );
+    assert.equal(
+      f.container
+        .querySelector('[data-project-page="outline"]')
+        .getAttribute("aria-current"),
+      "page",
+    );
+    f.instance.update(f.props("outline", { "--text": "#eeeeee" }));
+    await settle();
+    assert.ok(
+      f.container.querySelector(
+        '.story-script-workbench[aria-label="故事大纲"]',
+      ),
+    );
+    await f.click(f.button("刷新内容"));
+    assert.ok(
+      f.container.querySelector(
+        '.story-script-workbench[aria-label="故事大纲"]',
+      ),
+    );
+    assert.equal(
+      f.calls.some((action) =>
+        /startStage|createConversation|generation|saveOutlineCandidate|selectRevision/.test(
+          action,
+        ),
+      ),
+      false,
+    );
+  } finally {
+    await f.dispose();
+  }
+});
+
+test("cold integrated creative outline keeps its candidate unselected until explicit UI adoption", async () => {
+  const f = integratedProject("creative", "outline");
+  try {
+    await settle();
+    assert.ok(
+      f.container.querySelector(
+        '.story-script-workbench[aria-label="故事大纲"]',
+      ),
+    );
+    await f.input(
+      f.container.querySelector('[aria-label="一句话故事"]'),
+      "90秒的来信故事。",
+    );
+    await f.input(
+      f.container.querySelector('[aria-label="故事梗概"]'),
+      "两人在雨夜发现来信的真相。",
+    );
+    await f.click(f.button("添加一集"));
+    await f.input(
+      f.container.querySelector('[aria-label="第 1 集标题"]'),
+      "来信",
+    );
+    await f.input(
+      f.container.querySelector('[aria-label="第 1 集故事"]'),
+      "90秒内从误解走向和解。",
+    );
+    await f.click(f.button("保存候选版本"));
+    const saved = [...f.texts.artifacts.values()][0];
+    assert.equal(saved.artifact.selectedContentRevision, null);
+    assert.equal(
+      f.texts.calls.filter((c) => c.method === "selectRevision").length,
+      0,
+    );
+    assert.equal(
+      f.container.querySelector('[aria-label="查看第 1 集剧本"]'),
+      null,
+    );
+    await f.click(f.button("采用此版本"));
+    assert.equal(saved.artifact.selectedContentRevision, 1);
+    assert.equal(
+      f.texts.calls.filter((c) => c.method === "selectRevision").length,
+      1,
+    );
+    await f.click(f.container.querySelector('[aria-label="查看第 1 集剧本"]'));
+    assert.deepEqual(f.navigation.at(-1).context, {
+      projectId: f.projectId,
+      stage: "script",
+    });
+    const episode = saved.revisions[0].content.episodes[0];
+    assert.equal(
+      f.texts.calls.filter((c) => c.method === "getScript").at(-1).input
+        .episodeId,
+      episode.episodeId,
+    );
+    assert.ok(
+      f.container.querySelector(
+        '.story-script-workbench[aria-label="分集剧本"]',
+      ),
+    );
+    assert.equal(
+      f.calls.some((action) =>
+        /startStage|createConversation|generation|saveScriptCandidate/.test(
+          action,
+        ),
+      ),
+      false,
+    );
+  } finally {
+    await f.dispose();
+  }
+});
+
+test("integrated novel keeps source and adaptation navigation and its confirmation gate", async () => {
+  const f = integratedProject("novel", "outline");
+  try {
+    await settle();
+    assert.match(
+      f.container.querySelector('[data-project-page="outline"]').textContent,
+      /改编大纲/,
+    );
+    assert.ok(f.container.querySelector('[data-project-page="source"]'));
+    assert.equal(
+      f.container
+        .querySelector('[data-project-page="outline"]')
+        .getAttribute("aria-current"),
+      "page",
+    );
+    assert.match(f.container.textContent, /先在改编概览确认方案/);
+    assert.equal(
+      f.foundation.foundations.get(f.projectId).confirmedProposal,
+      null,
+    );
+    assert.equal(
+      f.calls.some((action) =>
+        /startStage|createConversation|generation|saveOutlineCandidate|selectRevision/.test(
+          action,
+        ),
       ),
       false,
     );

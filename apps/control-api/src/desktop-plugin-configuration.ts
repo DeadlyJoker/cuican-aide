@@ -1,17 +1,11 @@
 import { checkNativeOwnershipFile } from "./desktop-native-ownership-check.ts";
+import { DESKTOP_PLUGIN_APPROVAL_MAX_BYTES } from "@crewon/contracts/plugins";
 import {
   captureProjectFoundationStartupConfiguration,
   type ProjectFoundationStartupConfiguration,
 } from "./project-foundation-composition.ts";
 import { assertCreativeProjectPluginPublications } from "./creative-project-plugin-ui-composition.ts";
-import {
-  closeSync,
-  constants,
-  fstatSync,
-  lstatSync,
-  openSync,
-  readSync,
-} from "node:fs";
+import { constants, lstatSync } from "node:fs";
 import { lstat, open } from "node:fs/promises";
 import { dirname, isAbsolute, resolve } from "node:path";
 import type { BigIntStats } from "node:fs";
@@ -92,11 +86,10 @@ const fileIssued = new WeakMap<
   Readonly<{
     filename: string;
     leaf: BigIntStats;
-    bytes: Buffer;
     directories: readonly Readonly<{ path: string; stat: BigIntStats }>[];
   }>
 >();
-const MAX_BYTES = 256 * 1024;
+const MAX_BYTES = DESKTOP_PLUGIN_APPROVAL_MAX_BYTES;
 
 export function parseDesktopPluginConfiguration(
   input: unknown,
@@ -405,7 +398,6 @@ export async function loadDesktopPluginConfiguration(
       Object.freeze({
         filename,
         leaf: after,
-        bytes: Buffer.from(bytes.subarray(0, length)),
         directories: Object.freeze(paths.slice(1)),
       }),
     );
@@ -445,36 +437,13 @@ export function assertDesktopPluginConfigurationFileCurrent(
         !sameLeaf(before, issued.leaf)
       )
         invalid();
-      const fd = openSync(
-        issued.filename,
-        constants.O_RDONLY | constants.O_NOFOLLOW | constants.O_NONBLOCK,
-      );
-      try {
-        if (!sameLeaf(fstatSync(fd, { bigint: true }), issued.leaf)) invalid();
-        const storage = Buffer.allocUnsafe(MAX_BYTES + 1);
-        let length = 0;
-        while (length < storage.length) {
-          const count = readSync(
-            fd,
-            storage,
-            length,
-            storage.length - length,
-            null,
-          );
-          if (count === 0) break;
-          length += count;
-        }
-        if (
-          length !== Number(issued.leaf.size) ||
-          !storage.subarray(0, length).equals(issued.bytes) ||
-          !sameLeaf(fstatSync(fd, { bigint: true }), issued.leaf) ||
-          !sameLeaf(lstatSync(issued.filename, { bigint: true }), issued.leaf)
-        )
-          invalid();
-        directories();
-      } finally {
-        closeSync(fd);
-      }
+      // The private loader already captured exact bytes through O_NOFOLLOW.
+      // Recheck fresh nanosecond metadata at every boundary; no TTL or retained
+      // permission spans an await. A content edit changes ctime even if mtime
+      // and file size are restored.
+      directories();
+      if (!sameLeaf(lstatSync(issued.filename, { bigint: true }), issued.leaf))
+        invalid();
     } catch {
       invalid();
     }

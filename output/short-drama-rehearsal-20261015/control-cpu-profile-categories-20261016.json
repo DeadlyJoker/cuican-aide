@@ -1,0 +1,49 @@
+{
+  "method": "Each sample charged once per category if any ancestor matches. Categories overlap and are not additive. V8 samples main-thread wall time, including native blocking.",
+  "profiles": [
+    {
+      "file": "control-13979-1.cpuprofile",
+      "durationMs": 45425,
+      "ownershipBoundaryMs": 23249,
+      "nativeOpenMs": 24512,
+      "idleMs": 7710
+    },
+    {
+      "file": "control-13979-2.cpuprofile",
+      "durationMs": 45233,
+      "ownershipBoundaryMs": 13421,
+      "nativeOpenMs": 17093,
+      "idleMs": 21446
+    },
+    {
+      "file": "control-13979-3.cpuprofile",
+      "durationMs": 45173,
+      "ownershipBoundaryMs": 6041,
+      "nativeOpenMs": 6665,
+      "idleMs": 33243
+    },
+    {
+      "file": "control-13979-4.cpuprofile",
+      "durationMs": 45165,
+      "ownershipBoundaryMs": 13729,
+      "nativeOpenMs": 17605,
+      "idleMs": 22614
+    },
+    {
+      "file": "control-13979-5.cpuprofile",
+      "durationMs": 45199,
+      "ownershipBoundaryMs": 4076,
+      "nativeOpenMs": 3739,
+      "idleMs": 36871
+    },
+    {
+      "file": "control-13979-6.cpuprofile",
+      "durationMs": 45099,
+      "ownershipBoundaryMs": 6697,
+      "nativeOpenMs": 7018,
+      "idleMs": 31441
+    }
+  ],
+  "functionalBaselineValid": false,
+  "limitation": "The added sampling header changed control-api.mjs but its extension-build-identity entry was not updated. Profiles identify synchronous ownership file work; this run cannot establish normal feature latency or serve as an A/B functional baseline."
+}

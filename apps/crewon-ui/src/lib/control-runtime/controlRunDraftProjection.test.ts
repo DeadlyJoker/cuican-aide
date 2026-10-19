@@ -22,6 +22,114 @@ function event(
 }
 
 describe("control Run draft projection", () => {
+  it("projects tool continuation, retries and the first real output as phase changes without per-chunk activity updates", () => {
+    let state = createControlRunDraftProjectionState();
+    const apply = (
+      sequence: number,
+      value: Pick<RunEventView, "type" | "data">,
+    ) => {
+      const result = applyControlRunDraftEvent(state, event(sequence, value));
+      state = result.state;
+      return result;
+    };
+    expect(
+      apply(1, {
+        type: "tool.completed",
+        data: {
+          segmentId: "segment-1",
+          callId: "tool-1",
+          kind: "function",
+          name: "read",
+          isError: false,
+          outputTruncated: false,
+          artifactAvailable: false,
+        },
+      }).modelActivity,
+    ).toBe("waiting");
+    expect(
+      apply(2, {
+        type: "segment.started",
+        data: { segmentId: "segment-2", attempt: 1 },
+      }).modelActivity,
+    ).toBeUndefined();
+    expect(
+      apply(3, {
+        type: "model.sampling.retry",
+        data: {
+          segmentId: "segment-2",
+          samplingAttempt: 2,
+          maxRetries: 3,
+          code: "responses_idle_timeout",
+          discardedOutput: false,
+        },
+      }).modelActivity,
+    ).toBe("retrying");
+    expect(
+      apply(4, {
+        type: "model.output.delta",
+        data: { segmentId: "segment-2", delta: " \n" },
+      }).modelActivity,
+    ).toBeUndefined();
+    expect(state.modelActivity).toBe("retrying");
+    expect(
+      apply(5, {
+        type: "model.output.delta",
+        data: { segmentId: "segment-2", delta: "后续正文" },
+      }).modelActivity,
+    ).toBeNull();
+    for (let index = 6; index < 1006; index++)
+      expect(
+        apply(index, {
+          type: "model.output.delta",
+          data: { segmentId: "segment-2", delta: "文字" },
+        }).modelActivity,
+      ).toBeUndefined();
+    expect(
+      apply(1006, {
+        type: "run.completed",
+        data: { outputRef: "message:final" },
+      }).modelActivity,
+    ).toBeUndefined();
+    expect(state.modelActivity).toBeUndefined();
+  });
+
+  it.each([
+    "run.completed",
+    "run.failed",
+    "run.canceled",
+    "tool.requested",
+  ] as const)(
+    "clears retry presentation on %s without waiting for canonical output",
+    (type) => {
+      const current = {
+        segmentId: "segment-1",
+        modelActivity: "retrying" as const,
+      };
+      const value =
+        type === "run.completed"
+          ? { type, data: { outputRef: null } }
+          : type === "run.failed"
+            ? { type, data: { code: "provider_failed", retryable: false } }
+            : type === "run.canceled"
+              ? { type, data: { reason: "user_request" } }
+              : {
+                  type,
+                  data: {
+                    segmentId: "segment-1",
+                    callId: "tool-1",
+                    name: "read",
+                    kind: "function",
+                  },
+                };
+      const result = applyControlRunDraftEvent(
+        current,
+        event(9, value as Pick<RunEventView, "type" | "data">),
+      );
+      expect(result.modelActivity).toBeNull();
+      expect(result.state.modelActivity).toBeUndefined();
+    },
+  );
+
   it("claims a fresh thread draft before replaying a segment", () => {
     const started = applyControlRunDraftEvent(
       createControlRunDraftProjectionState(),

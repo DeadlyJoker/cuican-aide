@@ -28,9 +28,12 @@ import {
   type ProjectGenerationHostContext,
   defineUiPlugin,
   createPluginUiNavigationClient,
-  resolvePluginProjectWorkspaceTarget,
   type PluginUiProps,
 } from "@crewon/plugin-sdk/ui";
+import {
+  projectConversationCreationContextCapability,
+  resolveProjectConversationWorkspace,
+} from "./project-conversation-creation-context";
 import { flushSync } from "react-dom";
 import { createRoot } from "react-dom/client";
 import { ShortDramaWorkbenchPreview } from "./workbench/ShortDramaWorkbenchPreview";
@@ -38,6 +41,7 @@ import stylesheet from "./workbench/ShortDramaWorkbenchPreview.css";
 import panelStyles from "./workbench/ShortDramaPanel.css";
 import referenceImage from "./assets/crewon-krea2-reference.png";
 import { CreativeProjectController } from "./workbench/creative-project-controller";
+import { projectRecoveryProjection } from "./workbench/ProjectRecoveryProjection";
 import { ShortDramaPersistentWorkbench } from "./workbench/ShortDramaPersistentWorkbench";
 import { PluginWriteActivity } from "./workbench/PluginWriteActivity";
 import { createGenerationRecordReadClient } from "./workbench/GenerationRecordReadClient";
@@ -177,6 +181,31 @@ function dataFlag(data: PluginUiProps["data"], name: string): boolean {
     Object.getOwnPropertyDescriptor(data, name)?.value === true
   );
 }
+function projectChangeRevision(
+  data: PluginUiProps["data"],
+  field:
+    | "projectFoundationChangeRevision"
+    | "projectTextChangeRevision"
+    | "projectAssetChangeRevision",
+): number {
+  if (!data || typeof data !== "object" || Array.isArray(data)) return 0;
+  const presentation = Object.getOwnPropertyDescriptor(
+    data,
+    "hostPresentation",
+  )?.value;
+  if (
+    !presentation ||
+    typeof presentation !== "object" ||
+    Array.isArray(presentation)
+  )
+    return 0;
+  const revision = Object.getOwnPropertyDescriptor(presentation, field)?.value;
+  return typeof revision === "number" &&
+    Number.isSafeInteger(revision) &&
+    revision > 0
+    ? revision
+    : 0;
+}
 function generationContext(
   data: PluginUiProps["data"],
 ): ProjectGenerationHostContext | null {
@@ -247,6 +276,7 @@ export default defineUiPlugin({
     root.append(owner);
     const reactRoot = createRoot(content);
     const preview = dataFlag(props.data, "shortDramaPreview");
+    let currentData = props.data;
     let controller: CreativeProjectController | null = null;
     let texts: ProjectTextController | null = null;
     let outlines: ProjectOutlineController | null = null;
@@ -263,6 +293,7 @@ export default defineUiPlugin({
     const writes = new PluginWriteActivity(services, () => {
       controller?.refreshWriteActivity();
       texts?.refreshWriteActivity();
+      outlines?.refreshWriteActivity();
       foundations?.refreshWriteActivity();
       conversations?.refreshWriteActivity();
       association?.refreshWriteActivity();
@@ -325,6 +356,7 @@ export default defineUiPlugin({
       ? null
       : new ProjectOutlineController(
           createPluginProjectOutlineUiClient(clients),
+          { physicalWritesPending: () => writes.pending },
         );
     outlineEdits = outlines
       ? new ProjectOutlineEditController({
@@ -354,7 +386,11 @@ export default defineUiPlugin({
                   input: { projectId: string },
                   options: { signal: AbortSignal },
                 ) =>
-                  resolvePluginProjectWorkspaceTarget(clients, input, options),
+                  resolveProjectConversationWorkspace(clients, input, {
+                    ...options,
+                    creationContext:
+                      projectConversationCreationContextCapability(currentData),
+                  }),
               }
             : {}),
         });
@@ -450,6 +486,24 @@ export default defineUiPlugin({
       owner.dataset.theme = next.theme.mode;
       owner.style.colorScheme = next.theme.mode;
       const ready = dataFlag(next.data, "pluginUiReady");
+      currentData = next.data;
+      const hostPageContext = (
+        next.data as {
+          hostPresentation?: { context?: { projectId?: string } };
+        } | null
+      )?.hostPresentation?.context;
+      const hostProjectId =
+        typeof hostPageContext?.projectId === "string" &&
+        hostPageContext.projectId.length > 0
+          ? hostPageContext.projectId
+          : null;
+      const recovery = projectRecoveryProjection(hostProjectId, {
+        selection: selectionContext(next.data),
+        generation: generationContext(next.data),
+        query: queryContext(next.data),
+        historicalQuery: historicalQueryContext(next.data),
+      });
+      controller?.setHostProjectScope(hostProjectId);
       const associationThread =
         next.data && typeof next.data === "object" && !Array.isArray(next.data)
           ? Object.getOwnPropertyDescriptor(
@@ -471,15 +525,10 @@ export default defineUiPlugin({
       mediaResults?.setReady(ready);
       mediaOutputs?.setReady(ready);
       mediaInputs?.setReady(ready);
-      mediaGenerations?.setThread(generationContext(next.data)?.thread ?? null);
+      mediaGenerations?.setThread(recovery.contexts.generation?.thread ?? null);
       mediaGenerations?.setReady(ready);
       if (!ready) controller?.setReady(false);
-      controller?.setRecoveryContexts({
-        selection: selectionContext(next.data),
-        generation: generationContext(next.data),
-        query: queryContext(next.data),
-        historicalQuery: historicalQueryContext(next.data),
-      });
+      controller?.setRecoveryContexts(recovery.contexts);
       if (ready) controller?.setReady(true);
       flushSync(() =>
         reactRoot.render(
@@ -507,6 +556,18 @@ export default defineUiPlugin({
                   } | null
                 )?.hostPresentation?.context ?? null
               }
+              foundationChangeRevision={projectChangeRevision(
+                next.data,
+                "projectFoundationChangeRevision",
+              )}
+              textChangeRevision={projectChangeRevision(
+                next.data,
+                "projectTextChangeRevision",
+              )}
+              assetChangeRevision={projectChangeRevision(
+                next.data,
+                "projectAssetChangeRevision",
+              )}
               onOpenHostPage={
                 (next.data as { hostPresentation?: unknown } | null)
                   ?.hostPresentation
@@ -538,6 +599,7 @@ export default defineUiPlugin({
               mediaInputs={mediaInputs ?? undefined}
               mediaGenerations={mediaGenerations ?? undefined}
               planningDraft={planningDraft(next.data)}
+              otherProjectRecovery={recovery.otherProjects}
               association={association ?? undefined}
               associationReady={ready}
               associationThreadId={

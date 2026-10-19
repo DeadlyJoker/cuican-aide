@@ -39,9 +39,9 @@ export function projectCreationSkill(scope: PublicProjectContextScope | null) {
         "novel-outline",
         [
           "先把想法整理为题材、受众、集数、单集时长、核心冲突与风格。缺少集数/时长/题材时一次问清，不擅自定案。",
-          "给出简短创作建议与下一步。讨论阶段只读；确认需求、大纲、剧本分别在对应阶段保存，不能越阶段执行或自动生成收费媒体。",
+          "讨论的 Project 文本 scope 只读，不授权需求、大纲或剧本写入；需求修订仍用 brief 的获准工具。创作方案另读真实 foundation_scope，仅其非空且 allowedOperations 包含 foundation_proposal_save 时，才按冻结版本保存同项目方案候选。拒绝、撤权或读取失败不得借文本 scope、旧 Foundation 权限或切换阶段保存；不自动确认、推进下游或生成收费媒体。",
         ],
-        "讨论阶段给出简短建议；需求阶段使用 brief 保存工具，保留原始材料与用户确定的参数。",
+        "讨论仅按真实 Foundation 独立权限保存方案候选，否则给出建议；需求阶段使用 brief 获准工具保存需求修订。保存 ACK 后才称已保存，候选不等于已确认。",
       );
     case "outline":
       return guide(

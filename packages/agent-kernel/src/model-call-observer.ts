@@ -1,10 +1,25 @@
+export { MODEL_HTTP_STREAM_EVENT_TYPES } from "@crewon/domain";
+export type {
+  ModelHttpStreamEventType,
+  PendingJsonState,
+  ModelHttpPendingInspection,
+} from "@crewon/domain";
 import { randomUUID } from "node:crypto";
 import type {
   ModelCallObservation,
   ModelHttpDiagnostics,
   ModelHttpTiming,
+  ModelHttpStreamEventType,
+  ModelHttpStreamDiagnostics,
+  ModelHttpPendingInspection,
 } from "@crewon/domain";
-import { MODEL_SPENDING_ADMISSION_CODES } from "@crewon/domain";
+import {
+  MODEL_HTTP_STREAM_EVENT_TYPES,
+  MODEL_HTTP_PENDING_JSON_STATES,
+  MODEL_HTTP_STREAM_COUNT_FIELDS,
+  MODEL_HTTP_STREAM_COUNTER_LIMIT,
+  MODEL_SPENDING_ADMISSION_CODES,
+} from "@crewon/domain";
 import {
   ModelTransportError,
   type ModelTransportEvent,
@@ -78,8 +93,30 @@ export async function beginModelCall(input: {
   } = {};
   const httpPhase = (phase: keyof ModelHttpTiming) => {
     if (input.transport !== "http") return;
-    if (httpTiming[phase] === undefined || phase === "lastByteMs")
+    if (
+      httpTiming[phase] === undefined ||
+      phase === "lastByteMs" ||
+      phase === "lastSemanticMs"
+    )
       httpTiming[phase] = Math.max(0, Math.round(performance.now() - started));
+  };
+  const stream: {
+    -readonly [K in keyof ModelHttpStreamDiagnostics]: ModelHttpStreamDiagnostics[K];
+  } = {
+    ...(Object.fromEntries(
+      MODEL_HTTP_STREAM_COUNT_FIELDS.map((key) => [key, 0]),
+    ) as Record<(typeof MODEL_HTTP_STREAM_COUNT_FIELDS)[number], number>),
+    pendingFrameBytes: 0,
+  };
+  const count = (
+    key: (typeof MODEL_HTTP_STREAM_COUNT_FIELDS)[number],
+    amount = 1,
+  ) => {
+    stream[key] = Math.min(
+      MODEL_HTTP_STREAM_COUNTER_LIMIT,
+      stream[key] + amount,
+    );
+    httpDiagnostics.stream = stream;
   };
   httpPhase("admittedMs");
   // Cancellation during the durable admission must prevent the subsequent I/O.
@@ -103,6 +140,74 @@ export async function beginModelCall(input: {
   return {
     responseIdentity,
     httpPhase,
+    httpStreamChunk(bytes: number) {
+      if (input.transport !== "http") return;
+      count("chunkCount");
+      count("byteCount", bytes);
+    },
+    httpStreamFrame(kind: "comment" | "data" | "done" | "ignored") {
+      if (input.transport !== "http") return;
+      count("frameCount");
+      if (kind === "comment") count("commentFrameCount");
+      if (kind === "data") count("dataFrameCount");
+    },
+    httpStreamPending(bytes: number) {
+      if (input.transport !== "http") return;
+      stream.pendingFrameBytes = Math.min(256 * 1024, bytes);
+      httpDiagnostics.stream = stream;
+    },
+    httpStreamPendingInspection(inspection: ModelHttpPendingInspection) {
+      if (input.transport !== "http") return;
+      // Diagnostic failures must never replace the stream's original outcome.
+      try {
+        const fields = Object.getOwnPropertyDescriptors(inspection);
+        const state = fields.pendingJsonState;
+        const type = fields.pendingEventType;
+        if (
+          !state ||
+          !Object.hasOwn(state, "value") ||
+          !(MODEL_HTTP_PENDING_JSON_STATES as readonly unknown[]).includes(
+            state.value,
+          ) ||
+          Reflect.ownKeys(fields).some(
+            (key) => key !== "pendingJsonState" && key !== "pendingEventType",
+          ) ||
+          (type &&
+            (!Object.hasOwn(type, "value") ||
+              state.value !== "complete-object" ||
+              !(MODEL_HTTP_STREAM_EVENT_TYPES as readonly unknown[]).includes(
+                type.value,
+              )))
+        )
+          return;
+        stream.pendingJsonState = state.value;
+        if (type) stream.pendingEventType = type.value;
+        else delete stream.pendingEventType;
+        httpDiagnostics.stream = stream;
+      } catch {
+        /* Optional evidence cannot fail accounting or delivery. */
+      }
+    },
+    httpStreamEvent(
+      eventType: ModelHttpStreamEventType,
+      semantic: boolean,
+      category?:
+        | "textDeltaCount"
+        | "reasoningDeltaCount"
+        | "toolArgumentDeltaCount"
+        | "completedItemCount"
+        | "terminalEventCount",
+    ) {
+      if (input.transport !== "http") return;
+      stream.lastEventType = eventType;
+      httpDiagnostics.stream = stream;
+      if (eventType === "unknown") count("unknownEventCount");
+      if (category !== undefined) count(category);
+      if (semantic) {
+        httpPhase("firstSemanticMs");
+        httpPhase("lastSemanticMs");
+      }
+    },
     httpResponse(
       status: number,
       headers: Parameters<typeof modelHttpResponseDiagnostics>[1],

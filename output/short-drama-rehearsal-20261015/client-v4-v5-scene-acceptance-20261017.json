@@ -1,0 +1,208 @@
+{
+  "projectId": "01a13f43-094c-767a-9414-b5622b236255",
+  "threadId": "01a13f61-7f59-77ed-bd1e-c5c7c2a4d67f",
+  "v4": {
+    "filename": "comfyui_00005_.png",
+    "adopted": false,
+    "visualReview": "rejected: L-shaped counter and stray vertical characters on left edge",
+    "screenshot": "client-v4-result-quality-rejected-20261017.png"
+  },
+  "v5": {
+    "filename": "comfyui_00006_.png",
+    "operationId": "3c6ab482-2a7f-b9b8-3cb7-f964ce8fd153",
+    "qualityVerdict": "usable empty scene reference: straight rectangular closed-base counter, passages both sides, lamp, blank sheet and envelope; no visible people or obvious lettering",
+    "selected": true,
+    "reopenedAndReadSelectionFromServer": true,
+    "selectionRevision": 1,
+    "screenshot": "client-v5-selection-reopened-20261017.png",
+    "reviewPerformedBy": "assistant inspecting actual rendered client image, not an automatic in-product review job"
+  },
+  "clientGenerationQuerySelectionReceipts": [
+    {
+      "kind": "generation",
+      "key": "b8743802-5d13-4ddf-8ba3-cd9354b8decb",
+      "phase": "accepted",
+      "dispatchAttempts": 1,
+      "request": {
+        "action": "crewon.project-generations.v1.generateConcept",
+        "input": {
+          "expectedThreadRevision": 33,
+          "idempotencyKey": "b8743802-5d13-4ddf-8ba3-cd9354b8decb",
+          "reference": {
+            "assetId": "01a143cb-306d-763f-9ae5-436695a837b4",
+            "assetRevision": 4,
+            "expectedAssetMetadataRevision": 4,
+            "expectedProjectRevision": 8,
+            "projectId": "01a13f43-094c-767a-9414-b5622b236255"
+          },
+          "threadId": "01a13f61-7f59-77ed-bd1e-c5c7c2a4d67f"
+        }
+      },
+      "receipt": {
+        "configurationRevision": 24,
+        "disposition": "committed",
+        "messageId": "plugin-Jl6XkG1JRLuYou2lA3kJaio50Vjw3WfHlQ3KFLiRlEI",
+        "runId": "plugin-fhqxRGimBQd6l9Mk8-RK7RdzjAGXqrlCbV5PXtWgmd4",
+        "threadId": "01a13f61-7f59-77ed-bd1e-c5c7c2a4d67f",
+        "threadRevision": 34
+      }
+    },
+    {
+      "kind": "query",
+      "key": "2e48b2ee-bb0b-48f0-a559-6e1a283f2822",
+      "phase": "accepted",
+      "dispatchAttempts": 1,
+      "request": {
+        "action": "crewon.project-generation-queries.v1.queryConceptGeneration",
+        "input": {
+          "expectedThreadRevision": 35,
+          "idempotencyKey": "2e48b2ee-bb0b-48f0-a559-6e1a283f2822",
+          "operationId": "6dc9bfc7-472b-b5f7-b256-82d821e090bb",
+          "reference": {
+            "assetId": "01a143cb-306d-763f-9ae5-436695a837b4",
+            "assetRevision": 4,
+            "projectId": "01a13f43-094c-767a-9414-b5622b236255"
+          },
+          "threadId": "01a13f61-7f59-77ed-bd1e-c5c7c2a4d67f"
+        }
+      },
+      "receipt": {
+        "configurationRevision": 24,
+        "disposition": "committed",
+        "messageId": "plugin-u_ZVK6h2Gji51_rUVrhGcMD-cDPCF7zVImW-z-wJvzg",
+        "runId": "plugin-m_tIwy3EZBoNVBHDQBerM3xd8gvdQT52UOsM8QwBfoY",
+        "threadId": "01a13f61-7f59-77ed-bd1e-c5c7c2a4d67f",
+        "threadRevision": 36
+      }
+    },
+    {
+      "kind": "generation",
+      "key": "2d5bd689-4d0b-4137-b950-1a0d13c849f6",
+      "phase": "accepted",
+      "dispatchAttempts": 1,
+      "request": {
+        "action": "crewon.project-generations.v1.generateConcept",
+        "input": {
+          "expectedThreadRevision": 37,
+          "idempotencyKey": "2d5bd689-4d0b-4137-b950-1a0d13c849f6",
+          "reference": {
+            "assetId": "01a143cb-306d-763f-9ae5-436695a837b4",
+            "assetRevision": 5,
+            "expectedAssetMetadataRevision": 5,
+            "expectedProjectRevision": 9,
+            "projectId": "01a13f43-094c-767a-9414-b5622b236255"
+          },
+          "threadId": "01a13f61-7f59-77ed-bd1e-c5c7c2a4d67f"
+        }
+      },
+      "receipt": {
+        "configurationRevision": 24,
+        "disposition": "committed",
+        "messageId": "plugin-xd9z22jnhkx3o9PR-1dFwVQeF8KW_r_hjA8pphA-C7E",
+        "runId": "plugin-JS1h2XfsgnzqzIpgtHAYu2qPmay_HH4nfbGFOhtdwHY",
+        "threadId": "01a13f61-7f59-77ed-bd1e-c5c7c2a4d67f",
+        "threadRevision": 38
+      }
+    },
+    {
+      "kind": "query",
+      "key": "40d111eb-7268-4772-b2a8-c5f23abea066",
+      "phase": "accepted",
+      "dispatchAttempts": 1,
+      "request": {
+        "action": "crewon.project-generation-queries.v1.queryConceptGeneration",
+        "input": {
+          "expectedThreadRevision": 39,
+          "idempotencyKey": "40d111eb-7268-4772-b2a8-c5f23abea066",
+          "operationId": "3c6ab482-2a7f-b9b8-3cb7-f964ce8fd153",
+          "reference": {
+            "assetId": "01a143cb-306d-763f-9ae5-436695a837b4",
+            "assetRevision": 5,
+            "projectId": "01a13f43-094c-767a-9414-b5622b236255"
+          },
+          "threadId": "01a13f61-7f59-77ed-bd1e-c5c7c2a4d67f"
+        }
+      },
+      "receipt": {
+        "configurationRevision": 24,
+        "disposition": "committed",
+        "messageId": "plugin--fGl2-K-qLv0Ha82hpJLEVaq1UFuAJc1VfuzA7UoJGI",
+        "runId": "plugin-y4bY654zYkZSphUswzWhfrdwQf0IFCJtt1-4eCnA4jA",
+        "threadId": "01a13f61-7f59-77ed-bd1e-c5c7c2a4d67f",
+        "threadRevision": 40
+      }
+    },
+    {
+      "kind": "selection",
+      "key": "3aca5ff1-e12c-423c-ac3a-d9911ce9e090",
+      "phase": "accepted",
+      "dispatchAttempts": 1,
+      "request": {
+        "action": "crewon.project-generation-selections.v1.selectConceptImage",
+        "input": {
+          "expectedOperationRevision": 4,
+          "expectedSelectionRevision": 0,
+          "idempotencyKey": "3aca5ff1-e12c-423c-ac3a-d9911ce9e090",
+          "operationId": "3c6ab482-2a7f-b9b8-3cb7-f964ce8fd153",
+          "reference": {
+            "assetId": "01a143cb-306d-763f-9ae5-436695a837b4",
+            "assetRevision": 5,
+            "expectedAssetMetadataRevision": 5,
+            "expectedProjectRevision": 9,
+            "projectId": "01a13f43-094c-767a-9414-b5622b236255"
+          },
+          "resultIndex": 0
+        }
+      },
+      "receipt": {
+        "disposition": "committed",
+        "selection": {
+          "filename": "comfyui_00006_.png",
+          "operationId": "3c6ab482-2a7f-b9b8-3cb7-f964ce8fd153",
+          "operationRevision": 4,
+          "reference": {
+            "assetId": "01a143cb-306d-763f-9ae5-436695a837b4",
+            "assetRevision": 5,
+            "projectId": "01a13f43-094c-767a-9414-b5622b236255"
+          },
+          "resultIndex": 0,
+          "selectedAt": "2026-10-17T09:06:47.838Z",
+          "url": "https://uu564342-7921122e7ab9.westd.seetacloud.com:8443/api/comfy/view?filename=comfyui_00006_.png&subfolder=&type=output"
+        },
+        "selectionRevision": 1
+      }
+    }
+  ],
+  "nativeReferencePending": {
+    "request": {
+      "action": "crewon.project-assets.v2.saveReferenceCandidate",
+      "input": {
+        "assetId": "01a143b2-2c35-77a1-957d-9da82b524ebb",
+        "idempotencyKey": "f3f1bc0b-3d48-45dd-9422-24c0c54f3ec6",
+        "projectId": "01a13f43-094c-767a-9414-b5622b236255",
+        "request": {
+          "assetContentRevision": 1,
+          "conceptAssetId": "01a143cb-306d-763f-9ae5-436695a837b4",
+          "expectedAssetRevision": 2,
+          "selectionRevision": 1
+        }
+      }
+    },
+    "intentId": "asset-v2-5330572c2f6d05cc64a581f55e39eb8ec49a74e83d12e2d3830a4e603f92363b",
+    "phase": "pending",
+    "httpError": "project_asset_unavailable",
+    "httpStatus": 500,
+    "rootCause": "Native startup omitted assetReferences verifier when composing published asset save-reference actions",
+    "fixUnitReproducedBeforeAndPassedAfter": true,
+    "clientRetryNotYetVerified": true
+  },
+  "notEstablished": [
+    "asset reference candidate save/select",
+    "encrypted archival/provider reference upload",
+    "character images",
+    "motion video and Chinese voice",
+    "automatic in-product AI visual/audio review and repair",
+    "final commercial-quality video"
+  ],
+  "goalComplete": false
+}

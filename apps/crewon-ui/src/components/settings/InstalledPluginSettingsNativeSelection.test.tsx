@@ -179,6 +179,62 @@ describe("original plugin Settings Native selection and activation", () => {
     ).toHaveLength(4);
   });
 
+  it("accepts a current validated Native receipt after the shorter HTTP request deadline expires", async () => {
+    const deadline = new AbortController();
+    vi.spyOn(AbortSignal, "timeout")
+      .mockReturnValueOnce(new AbortController().signal)
+      .mockReturnValueOnce(deadline.signal);
+    const pending = settingsDeferred<DesktopPluginSelectionReply>();
+    const select = native(() => pending.promise);
+    await render();
+    await click("启用");
+    await act(async () => {
+      deadline.abort(
+        new DOMException("HTTP request timed out", "TimeoutError"),
+      );
+      fixture.selections = [settingsSelection(2, "enabled")];
+      pending.resolve(receipt(fixture.selections[0]!));
+      await settleSettings();
+    });
+    await settle();
+    expect(select).toHaveBeenCalledOnce();
+    expect(container.textContent).toContain("选择已保存");
+    expect(container.textContent).not.toContain("重试上次操作");
+    expect(container.textContent).toContain("已启用");
+    expect(button("停用").disabled).toBe(false);
+    expect(fixture.mutations).toHaveLength(0);
+  });
+
+  it("rereads current selection after a late unknown Native outcome with a fresh bounded read", async () => {
+    const deadline = new AbortController();
+    vi.spyOn(AbortSignal, "timeout")
+      .mockReturnValueOnce(new AbortController().signal)
+      .mockReturnValueOnce(deadline.signal);
+    const pending = settingsDeferred<DesktopPluginSelectionReply>();
+    native(() => pending.promise);
+    await render();
+    await click("启用");
+    await act(async () => {
+      deadline.abort(
+        new DOMException("HTTP request timed out", "TimeoutError"),
+      );
+      fixture.selections = [settingsSelection(2, "enabled")];
+      pending.resolve({
+        ok: false,
+        error: {
+          kind: "unknown",
+          code: "desktop_native_plugin_business_activation_failed",
+        },
+      });
+      await settleSettings();
+    });
+    await settle();
+    expect(container.textContent).toContain("暂时无法确认操作结果");
+    expect(container.textContent).toContain("已启用");
+    expect(button("重试上次操作").disabled).toBe(false);
+    expect(fixture.mutations).toHaveLength(0);
+  });
+
   it("keeps the exact original request and key when selection committed but Native activation failed, even after refresh", async () => {
     let selectionCommits = 0;
     const select = native(async (input) => {

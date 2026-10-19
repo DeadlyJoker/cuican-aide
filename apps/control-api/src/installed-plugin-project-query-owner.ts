@@ -1,3 +1,4 @@
+import { observePluginGenerationPhase as observe } from "./installed-plugin-invocation-diagnostics.ts";
 import { DesktopPluginTaskServiceBinding } from "./desktop-plugin-task-service-binding.ts";
 import {
   ApplicationError,
@@ -369,25 +370,31 @@ export class InstalledPluginProjectQueryOwner
       authority.assertActive();
     };
     active();
-    await authority.assertCurrent();
+    await observe("query.current", () => authority.assertCurrent());
     active();
-    const target = await generationInstalledPackage({
-      installations: this.#dependencies.installations,
-      scope,
-      pluginId: publication.target.pluginId,
-      packageDigest: publication.target.packageDigest,
-      assertActive: active,
-    });
-    const sourceCandidate = await generationCandidate({
-      installRoot: this.#dependencies.installRoot,
-      package: sourcePackage,
-      signal,
-    });
-    const targetCandidate = await generationCandidate({
-      installRoot: this.#dependencies.installRoot,
-      package: target.package,
-      signal,
-    });
+    const target = await observe("query.target-package", () =>
+      generationInstalledPackage({
+        installations: this.#dependencies.installations,
+        scope,
+        pluginId: publication.target.pluginId,
+        packageDigest: publication.target.packageDigest,
+        assertActive: active,
+      }),
+    );
+    const sourceCandidate = await observe("query.source-bytes", () =>
+      generationCandidate({
+        installRoot: this.#dependencies.installRoot,
+        package: sourcePackage,
+        signal,
+      }),
+    );
+    const targetCandidate = await observe("query.target-bytes", () =>
+      generationCandidate({
+        installRoot: this.#dependencies.installRoot,
+        package: target.package,
+        signal,
+      }),
+    );
     active();
     if (targetCandidate.descriptor.entrypoints.node === null)
       generationDenied("project_query_execution_entry_missing");
@@ -421,12 +428,14 @@ export class InstalledPluginProjectQueryOwner
         generationDenied("project_query_plugin_authority_changed");
       return decision.authorityEpoch;
     };
-    const targetEpoch = await policy({
-      pluginId: target.package.pluginId,
-      packageDigest: target.package.packageDigest,
-      selectionRevision: target.selection.revision,
-      contributionId: publication.target.contributionId,
-    });
+    const targetEpoch = await observe("query.target-policy", () =>
+      policy({
+        pluginId: target.package.pluginId,
+        packageDigest: target.package.packageDigest,
+        selectionRevision: target.selection.revision,
+        contributionId: publication.target.contributionId,
+      }),
+    );
     const executionPin = parsePluginTaskAdmissionPin({
       ...scope,
       ...actor,
@@ -472,17 +481,21 @@ export class InstalledPluginProjectQueryOwner
       ] as const) {
         if ((await policy(pin)) !== pin.authorityEpoch)
           generationDenied("project_query_plugin_authority_changed");
-        await generationCandidate({
-          installRoot: this.#dependencies.installRoot,
-          package: pkg,
-          signal,
-          expected: candidate,
-        });
+        await observe("query.transaction-bytes", () =>
+          generationCandidate({
+            installRoot: this.#dependencies.installRoot,
+            package: pkg,
+            signal,
+            expected: candidate,
+          }),
+        );
         active();
         if (
-          (await this.#dependencies.authorizePackage(
-            { actor, scope, candidate, purpose },
-            signal,
+          (await observe("query.transaction-access", () =>
+            this.#dependencies.authorizePackage(
+              { actor, scope, candidate, purpose },
+              signal,
+            ),
           )) !== "allow"
         )
           generationDenied("project_query_execution_package_denied");
@@ -490,7 +503,7 @@ export class InstalledPluginProjectQueryOwner
       }
     };
     const current = async () => {
-      await transactionCurrent();
+      await observe("query.transaction-current", transactionCurrent);
       await generationInstalledPackage({
         installations: this.#dependencies.installations,
         scope,
@@ -509,7 +522,7 @@ export class InstalledPluginProjectQueryOwner
         expectedPackage: target.package,
         assertActive: active,
       });
-      await authority.assertCurrent();
+      await observe("query.current", () => authority.assertCurrent());
       active();
     };
     const executionAuthority = Object.freeze({
@@ -518,7 +531,9 @@ export class InstalledPluginProjectQueryOwner
       assertActive: active,
     });
     await current();
-    const generation = await this.#getGeneration(actor, parsed.input.reference);
+    const generation = await observe("query.saved-generation", () =>
+      this.#getGeneration(actor, parsed.input.reference),
+    );
     active();
     if (generation === null)
       throw new ApplicationError(
@@ -548,22 +563,28 @@ export class InstalledPluginProjectQueryOwner
         executionPin: capturedPin,
         authority: capturedAuthority,
       }) =>
-        this.#submit({
-          actor,
-          command: capturedCommand,
-          reference: parsed.input.reference,
-          publication,
-          sourcePin,
-          executionPin: capturedPin,
-          authority: capturedAuthority,
-        }),
+        observe("query.task-commit", () =>
+          this.#submit({
+            actor,
+            command: capturedCommand,
+            reference: parsed.input.reference,
+            publication,
+            sourcePin,
+            executionPin: capturedPin,
+            authority: capturedAuthority,
+          }),
+        ),
     };
     if (this.#sharedBinding !== null && this.#sharedExecution !== null) {
-      await this.#sharedBinding.whenReady();
+      await observe("query.shared-ready", () =>
+        this.#sharedBinding!.whenReady(),
+      );
       await current();
-      return this.#sharedExecution.executeFromBorrower(
-        { borrow: (input) => this.#sharedBinding!.borrowProject(input) },
-        executionInput,
+      return observe("query.node-execute", () =>
+        this.#sharedExecution!.executeFromBorrower(
+          { borrow: (input) => this.#sharedBinding!.borrowProject(input) },
+          executionInput,
+        ),
       );
     }
     const bridge = new PluginProjectGenerationQueryExecutionBridge({
@@ -579,18 +600,20 @@ export class InstalledPluginProjectQueryOwner
     let output: PluginProjectGenerationQueryExecutionResult | undefined;
     let failure: unknown;
     try {
-      prepared = await host.prepare({
-        installRoot: this.#dependencies.installRoot,
-        expectedPluginId: executionPin.pluginId,
-        expectedPackageDigest: executionPin.packageDigest,
-        authorizeActivation: async (candidate) => {
-          if (!generationSame(candidate, targetCandidate))
-            generationDenied("project_query_plugin_bytes_changed");
-          await current();
-          return "allow" as const;
-        },
-      });
-      await current();
+      prepared = await observe("query.node-prepare", () =>
+        host.prepare({
+          installRoot: this.#dependencies.installRoot,
+          expectedPluginId: executionPin.pluginId,
+          expectedPackageDigest: executionPin.packageDigest,
+          authorizeActivation: async (candidate) => {
+            if (!generationSame(candidate, targetCandidate))
+              generationDenied("project_query_plugin_bytes_changed");
+            await current();
+            return "allow" as const;
+          },
+        }),
+      );
+      await observe("query.node-current", current);
       prepared.commit({
         authorizeCommit: (candidate) => {
           active();
@@ -602,7 +625,9 @@ export class InstalledPluginProjectQueryOwner
         },
       });
       committed = true;
-      output = await bridge.execute(host, executionInput);
+      output = await observe("query.node-execute", () =>
+        bridge.execute(host, executionInput),
+      );
     } catch (error) {
       failure = error;
     } finally {
@@ -617,7 +642,7 @@ export class InstalledPluginProjectQueryOwner
           cleanup.push(error);
         }
       try {
-        await host.close();
+        await observe("query.node-close", () => host.close());
       } catch (error) {
         cleanup.push(error);
       }

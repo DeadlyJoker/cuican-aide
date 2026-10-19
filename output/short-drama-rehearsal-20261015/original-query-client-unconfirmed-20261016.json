@@ -1,0 +1,37 @@
+{
+  "at": "2026-10-16T11:31:24.755932+00:00",
+  "preparationPassed": true,
+  "queryRequest": {
+    "action": "crewon.project-generation-queries.v1.queryConceptGeneration",
+    "input": {
+      "expectedThreadRevision": 25,
+      "idempotencyKey": "f6bd8839-f398-4f3c-bb7b-2d661654b5d0",
+      "operationId": "81932a4d-5f2e-d919-13a4-e8794aff833d",
+      "reference": {
+        "assetId": "01a143cb-306d-763f-9ae5-436695a837b4",
+        "assetRevision": 1,
+        "projectId": "01a13f43-094c-767a-9414-b5622b236255"
+      },
+      "threadId": "01a13f61-7f59-77ed-bd1e-c5c7c2a4d67f"
+    }
+  },
+  "queryIntent": {
+    "createdAt": "2026-10-16T11:21:43.684Z",
+    "updatedAt": "2026-10-16T11:26:18.540Z",
+    "phase": "dispatched",
+    "dispatchAttemptCount": 2,
+    "dispatchMayHaveOccurred": true
+  },
+  "newRunCountAfterPreparation": 0,
+  "capturedClientError": "plugin_task_request_capacity",
+  "clientErrorSite": "historical query context getThread read via installedPluginTaskRead",
+  "diagnosticRetryUsedSameIdempotencyKey": true,
+  "repeatGenerationSubmitted": false,
+  "rootCauseConfirmed": false,
+  "nextBuild": "query-stage diagnostics; no authority or timeout relaxation",
+  "sourceDiagnosticsTestsPassed": 13,
+  "queryOwnerAndHttpTestsPassed": 18,
+  "queryPostgresCasesSkipped": 17,
+  "controlTypecheckPassed": true,
+  "pauseOnCaughtExceptionsEnabled": false
+}

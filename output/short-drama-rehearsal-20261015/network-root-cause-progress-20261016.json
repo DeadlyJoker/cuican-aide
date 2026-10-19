@@ -1,0 +1,50 @@
+{
+  "schemaVersion": "crewon.acceptance.network-root-cause-progress.v1",
+  "recordedAt": "2026-10-15T17:01:21.991Z",
+  "previousGoalTurnClassification": "progress",
+  "thisTurnClassification": "progress",
+  "progress": "Instrumented TCP/TLS on both resolved addresses; separated handshake timeout from post-handshake close; counterordered comparison did not establish a stable TLS-group workaround; current client state revalidated read-only.",
+  "clientState": {
+    "recordedAt": "2026-10-15T17:01:21.967Z",
+    "projectId": "01a13f43-094c-767a-9414-b5622b236255",
+    "threadId": "01a13f61-7f59-77ed-bd1e-c5c7c2a4d67f",
+    "textArtifacts": 0,
+    "latestRun": {
+      "run_id": "plugin-7DebIFmDWoV0jmAkgi1mhBYp5eV0jJkKx6zyeqJcPLE",
+      "revision": 19,
+      "status": "canceled"
+    }
+  },
+  "sourceEvidence": {
+    "root-edge-timing-20261016.json": "sha256:3d4b6d012052b56028832d7ae14b6d013c6fd3ac53709ffe16f66574f2ba6b1b",
+    "tls-handshake-comparison-20261016.json": "sha256:5fbb99fa2cf90f36e64934d8913c8663d3537dd5bd61862c7a8b5c6dfc30876b",
+    "tls-counterordered-comparison-20261016.json": "sha256:e77d391a9027f181abafcb8cbe8ade81434ec78f339c5844728b3ab39d74c8bd",
+    "network-stage-analysis-20261016.json": "sha256:780ae0eb63b3a378aee4ed482ad772b24666ee246b68f71c4f16b7d4bee60e5f",
+    "network-environment-flags-20261016.json": "sha256:a37dbb87ef786376efab30228a9c28646f909efc66288a38bf861953e3df6cbf",
+    "gateway-public-title-20261016.json": "sha256:070385dbfd54df9829de043dea11be49301f07a58d67e1f6d4bdc4d6942646f0"
+  },
+  "outstanding": {
+    "modelPreHeaderConnection": "intermittent TLS completion; exact local/transit/edge responsibility unproven",
+    "modelPostHeaderStream": "partial SSE JSON remains unresolved without gateway send logs",
+    "clientUi": "Mac locked at native browser inspection; manual unlock requested",
+    "gatewayAccess": "current deployment and log access not verified; existing SSH alias/key-file path or log entrance requested",
+    "media": "video/audio service and cost scope question still unanswered"
+  },
+  "completionAudit": {
+    "fullLifecycle": "incomplete; text artifacts remain zero",
+    "agentDrivenVideo": "not implemented and not verified",
+    "fixes": "partial; no network or server fix claimed",
+    "realClientAcceptance": "incomplete",
+    "commercialVideo": "absent",
+    "proactiveAiReview": "controlled image adapter only; Native and real audiovisual review absent"
+  },
+  "changes": {
+    "productionService": false,
+    "networkSettings": false,
+    "tlsValidation": false,
+    "dnsPinning": false,
+    "liveClientBuild": false,
+    "liveModelOrMediaRequest": false
+  },
+  "goalStatus": "active"
+}

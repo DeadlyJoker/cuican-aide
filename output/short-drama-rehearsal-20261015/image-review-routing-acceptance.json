@@ -1,0 +1,84 @@
+{
+  "schemaVersion": "crewon.acceptance.image-review-routing.v1",
+  "recordedAt": "2026-10-15T19:27:03.250485+00:00",
+  "boundary": "Actual Factory/Registry/Worker, original atomic SQLite Turn/job, saved encrypted PNG, FFmpeg and local HTTP. Provider generation, model semantic judgment and PDP are named fixtures. Native config and client/UI are not enabled.",
+  "tests": {
+    "targeted": {
+      "passed": 20,
+      "failed": 0,
+      "skipped": 0
+    },
+    "runtimeWorker": {
+      "passed": 143,
+      "failed": 0,
+      "skipped": 1,
+      "skipReason": "CREWON_TEST_POSTGRES_URL absent"
+    }
+  },
+  "verified": [
+    "one host-pinned runtime handles two different admitted Runs through existing registry and Worker",
+    "actual bounded JPEG model input and original saved report cold restore",
+    "ordinary Kernel dispatch of an admitted review fails permanently before any model request",
+    "version/tenant/workspace/compaction drift fails before transport creation",
+    "closing configured owner aborts and joins actual in-flight HTTP review",
+    "missing schema is a read-only probe, not an implicit migration or grant"
+  ],
+  "checks": {
+    "currentRuntimeWorkerTypecheck": "exit 0 (session 69669 after final test hook)",
+    "allPackagesTypecheck": "passed",
+    "boundary": "passed",
+    "license": "passed",
+    "repositoryFormat": "passed",
+    "changedSourceFormat": "passed",
+    "gitDiffCheck": "passed"
+  },
+  "sourceSha256": {
+    "apps/runtime-worker/src/media-image-review-routing-kernel.ts": "sha256:756bdc55e7e4ea1e5c2de8fad67389f7dfaae986d4386b01b87e8844c92a1339",
+    "apps/runtime-worker/src/media-image-review-runtime-fence.ts": "sha256:0d2d94592a281aff49ecc4c873ea3d44ca54aafd7524eb4c46c9b6efb28ef480",
+    "apps/runtime-worker/src/media-image-review-routing.integration.test.ts": "sha256:8c980fe6e2cdfa5160d88acfedcfe8aad8ab637d0b46586109ae481c9e42be3a",
+    "apps/runtime-worker/src/media-image-review.test-support.ts": "sha256:7c76027f05af19082a92881fd7f8fc6ed229153f8fc256fc33030714d2608711",
+    "apps/runtime-worker/src/media-image-review-kernel.ts": "sha256:32e47170702e7af18a8760de33e0eb2ee89905a0eaee93f099845c20381ac563",
+    "apps/runtime-worker/src/configured-agent-version-runtime-factory.ts": "sha256:946c0a5a3d4b95a20f99e31f8b60c13176fac9c244aa70abe48cb566ba7bb604",
+    "apps/runtime-worker/src/runtime-worker.ts": "sha256:fece6e1d97ec8b9a0f61f4a7111d724628ff3469c3c0248c4cb48ee6a908fad6",
+    "packages/store/src/project-media-image-review-job-store.ts": "sha256:2d994c6266252ec033d59aa4e983a37f7f51bef5c7706d9e40ae7691ce0f8577",
+    "packages/store/src/project-media-image-review-job-schema.ts": "sha256:9b59e5af1382a4c2ecd5382f4796bf12977bcf6438b46193fa6c16800e6fe76f"
+  },
+  "logSha256": {
+    "image-review-routing-tests.log": "sha256:1f67810583fb3074e50b7b596ca648aa0b7b48a0cc39dd26bccaac95d7ac2d58",
+    "image-review-routing-worker-regression.log": "sha256:1659e4379f4fda4ebfbc5ae513c61fe750046aea26db9cb9cabcef2c293cabca",
+    "image-review-routing-typecheck.log": "sha256:f3a27ad51384300eda5209fe35f1990070f72b4e16e619caad82b5c36261bf6d",
+    "image-review-routing-packages-typecheck.log": "sha256:913bc8e9ffb35d846ca984558bd7e10e5b7725069a869b5351ac8a82165c4327",
+    "image-review-routing-boundary.log": "sha256:9ca051bf69b76010b6bdde6c73202e042b6c69e932667cbdacb0353047bf50a4",
+    "image-review-routing-license.log": "sha256:c2785a10ca782d38ead952c24071da8ae6aa42d8d4cf0664ba2672713b6cbe04",
+    "image-review-routing-repository-format.log": "sha256:afd0d265f84b3b6c0e01a95fba9476bb8eb9d3df85f728960450995b0da10c3e"
+  },
+  "liveClientState": {
+    "recordedAt": "2026-10-15T19:22:30.251750+00:00",
+    "readOnly": true,
+    "projectId": "01a13f43-094c-767a-9414-b5622b236255",
+    "foundationRevision": 3,
+    "parametersRevision": 2,
+    "confirmedProposal": {
+      "digest": "sha256:2ef11e6f3a3884ccd533eb17012fd996f291850f4e37e09d2cd580e846f30f24",
+      "revision": 2
+    },
+    "textArtifacts": 0,
+    "latestRun": {
+      "runId": "plugin-7DebIFmDWoV0jmAkgi1mhBYp5eV0jJkKx6zyeqJcPLE",
+      "revision": 19,
+      "status": "canceled"
+    },
+    "reviewJobSchemaInstalledInLiveProfile": false,
+    "newLiveModelOrMediaRequestsSubmitted": false,
+    "computerUse": "Mac locked; no UI operations performed"
+  },
+  "notEstablished": [
+    "Native approval/configuration and Control/workbench entry",
+    "interrupted review resume in actual client",
+    "real model visual/audio judgment and issue-driven repair",
+    "actual video/voice generation and timeline composition",
+    "saved complete script, final playable video and commercial usage rights",
+    "live upstream model-delivery repair"
+  ],
+  "goalStatus": "active"
+}

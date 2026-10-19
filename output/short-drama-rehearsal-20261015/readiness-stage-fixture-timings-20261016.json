@@ -1,0 +1,773 @@
+{
+  "fixtureOnly": true,
+  "records": [
+    {
+      "requestId": "req-readinesssqlite",
+      "pid": 1122,
+      "elapsedMs": 0.087,
+      "sequence": 1,
+      "phase": "route.invoke",
+      "status": "start"
+    },
+    {
+      "requestId": "req-readinesssqlite",
+      "pid": 1122,
+      "elapsedMs": 2.888,
+      "sequence": 2,
+      "phase": "readiness.invocation-current",
+      "status": "start"
+    },
+    {
+      "requestId": "req-readinesssqlite",
+      "pid": 1122,
+      "elapsedMs": 3.421,
+      "sequence": 3,
+      "phase": "readiness.invocation-current",
+      "status": "end"
+    },
+    {
+      "requestId": "req-readinesssqlite",
+      "pid": 1122,
+      "elapsedMs": 3.573,
+      "sequence": 4,
+      "phase": "readiness.target-package",
+      "status": "start"
+    },
+    {
+      "requestId": "req-readinesssqlite",
+      "pid": 1122,
+      "elapsedMs": 4.062,
+      "sequence": 5,
+      "phase": "readiness.target-package",
+      "status": "end"
+    },
+    {
+      "requestId": "req-readinesssqlite",
+      "pid": 1122,
+      "elapsedMs": 4.074,
+      "sequence": 6,
+      "phase": "readiness.source-bytes",
+      "status": "start"
+    },
+    {
+      "requestId": "req-readinesssqlite",
+      "pid": 1122,
+      "elapsedMs": 6.53,
+      "sequence": 7,
+      "phase": "readiness.source-bytes",
+      "status": "end"
+    },
+    {
+      "requestId": "req-readinesssqlite",
+      "pid": 1122,
+      "elapsedMs": 6.598,
+      "sequence": 8,
+      "phase": "readiness.target-bytes",
+      "status": "start"
+    },
+    {
+      "requestId": "req-readinesssqlite",
+      "pid": 1122,
+      "elapsedMs": 10.893,
+      "sequence": 9,
+      "phase": "readiness.target-bytes",
+      "status": "end"
+    },
+    {
+      "requestId": "req-readinesssqlite",
+      "pid": 1122,
+      "elapsedMs": 11.283,
+      "sequence": 10,
+      "phase": "readiness.target-policy",
+      "status": "start"
+    },
+    {
+      "requestId": "req-readinesssqlite",
+      "pid": 1122,
+      "elapsedMs": 11.678,
+      "sequence": 11,
+      "phase": "readiness.target-policy",
+      "status": "end"
+    },
+    {
+      "requestId": "req-readinesssqlite",
+      "pid": 1122,
+      "elapsedMs": 11.696,
+      "sequence": 12,
+      "phase": "readiness.current",
+      "status": "start"
+    },
+    {
+      "requestId": "req-readinesssqlite",
+      "pid": 1122,
+      "elapsedMs": 11.891,
+      "sequence": 13,
+      "phase": "readiness.identity",
+      "status": "start"
+    },
+    {
+      "requestId": "req-readinesssqlite",
+      "pid": 1122,
+      "elapsedMs": 11.922,
+      "sequence": 14,
+      "phase": "readiness.identity",
+      "status": "end"
+    },
+    {
+      "requestId": "req-readinesssqlite",
+      "pid": 1122,
+      "elapsedMs": 12.075,
+      "sequence": 15,
+      "phase": "readiness.profile",
+      "status": "start"
+    },
+    {
+      "requestId": "req-readinesssqlite",
+      "pid": 1122,
+      "elapsedMs": 12.087,
+      "sequence": 16,
+      "phase": "readiness.profile",
+      "status": "end"
+    },
+    {
+      "requestId": "req-readinesssqlite",
+      "pid": 1122,
+      "elapsedMs": 12.244,
+      "sequence": 17,
+      "phase": "readiness.policy",
+      "status": "start"
+    },
+    {
+      "requestId": "req-readinesssqlite",
+      "pid": 1122,
+      "elapsedMs": 12.495,
+      "sequence": 18,
+      "phase": "readiness.policy",
+      "status": "end"
+    },
+    {
+      "requestId": "req-readinesssqlite",
+      "pid": 1122,
+      "elapsedMs": 12.503,
+      "sequence": 19,
+      "phase": "readiness.bytes",
+      "status": "start"
+    },
+    {
+      "requestId": "req-readinesssqlite",
+      "pid": 1122,
+      "elapsedMs": 16.274,
+      "sequence": 20,
+      "phase": "readiness.bytes",
+      "status": "end"
+    },
+    {
+      "requestId": "req-readinesssqlite",
+      "pid": 1122,
+      "elapsedMs": 16.516,
+      "sequence": 21,
+      "phase": "readiness.access",
+      "status": "start"
+    },
+    {
+      "requestId": "req-readinesssqlite",
+      "pid": 1122,
+      "elapsedMs": 16.602,
+      "sequence": 22,
+      "phase": "readiness.access",
+      "status": "end"
+    },
+    {
+      "requestId": "req-readinesssqlite",
+      "pid": 1122,
+      "elapsedMs": 16.74,
+      "sequence": 23,
+      "phase": "readiness.policy",
+      "status": "start"
+    },
+    {
+      "requestId": "req-readinesssqlite",
+      "pid": 1122,
+      "elapsedMs": 17.162,
+      "sequence": 24,
+      "phase": "readiness.policy",
+      "status": "end"
+    },
+    {
+      "requestId": "req-readinesssqlite",
+      "pid": 1122,
+      "elapsedMs": 17.178,
+      "sequence": 25,
+      "phase": "readiness.bytes",
+      "status": "start"
+    },
+    {
+      "requestId": "req-readinesssqlite",
+      "pid": 1122,
+      "elapsedMs": 20.944,
+      "sequence": 26,
+      "phase": "readiness.bytes",
+      "status": "end"
+    },
+    {
+      "requestId": "req-readinesssqlite",
+      "pid": 1122,
+      "elapsedMs": 21.133,
+      "sequence": 27,
+      "phase": "readiness.access",
+      "status": "start"
+    },
+    {
+      "requestId": "req-readinesssqlite",
+      "pid": 1122,
+      "elapsedMs": 21.152,
+      "sequence": 28,
+      "phase": "readiness.access",
+      "status": "end"
+    },
+    {
+      "requestId": "req-readinesssqlite",
+      "pid": 1122,
+      "elapsedMs": 21.275,
+      "sequence": 29,
+      "phase": "readiness.source-selection",
+      "status": "start"
+    },
+    {
+      "requestId": "req-readinesssqlite",
+      "pid": 1122,
+      "elapsedMs": 21.864,
+      "sequence": 30,
+      "phase": "readiness.source-selection",
+      "status": "end"
+    },
+    {
+      "requestId": "req-readinesssqlite",
+      "pid": 1122,
+      "elapsedMs": 21.872,
+      "sequence": 31,
+      "phase": "readiness.target-selection",
+      "status": "start"
+    },
+    {
+      "requestId": "req-readinesssqlite",
+      "pid": 1122,
+      "elapsedMs": 22.327,
+      "sequence": 32,
+      "phase": "readiness.target-selection",
+      "status": "end"
+    },
+    {
+      "requestId": "req-readinesssqlite",
+      "pid": 1122,
+      "elapsedMs": 22.336,
+      "sequence": 33,
+      "phase": "readiness.invocation-current",
+      "status": "start"
+    },
+    {
+      "requestId": "req-readinesssqlite",
+      "pid": 1122,
+      "elapsedMs": 22.797,
+      "sequence": 34,
+      "phase": "readiness.invocation-current",
+      "status": "end"
+    },
+    {
+      "requestId": "req-readinesssqlite",
+      "pid": 1122,
+      "elapsedMs": 22.906,
+      "sequence": 35,
+      "phase": "readiness.current",
+      "status": "end"
+    },
+    {
+      "requestId": "req-readinesssqlite",
+      "pid": 1122,
+      "elapsedMs": 22.923,
+      "sequence": 36,
+      "phase": "readiness.saved-input",
+      "status": "start"
+    },
+    {
+      "requestId": "req-readinesssqlite",
+      "pid": 1122,
+      "elapsedMs": 23.563,
+      "sequence": 37,
+      "phase": "readiness.current",
+      "status": "start"
+    },
+    {
+      "requestId": "req-readinesssqlite",
+      "pid": 1122,
+      "elapsedMs": 23.677,
+      "sequence": 38,
+      "phase": "readiness.identity",
+      "status": "start"
+    },
+    {
+      "requestId": "req-readinesssqlite",
+      "pid": 1122,
+      "elapsedMs": 23.691,
+      "sequence": 39,
+      "phase": "readiness.identity",
+      "status": "end"
+    },
+    {
+      "requestId": "req-readinesssqlite",
+      "pid": 1122,
+      "elapsedMs": 23.818,
+      "sequence": 40,
+      "phase": "readiness.profile",
+      "status": "start"
+    },
+    {
+      "requestId": "req-readinesssqlite",
+      "pid": 1122,
+      "elapsedMs": 23.826,
+      "sequence": 41,
+      "phase": "readiness.profile",
+      "status": "end"
+    },
+    {
+      "requestId": "req-readinesssqlite",
+      "pid": 1122,
+      "elapsedMs": 23.946,
+      "sequence": 42,
+      "phase": "readiness.policy",
+      "status": "start"
+    },
+    {
+      "requestId": "req-readinesssqlite",
+      "pid": 1122,
+      "elapsedMs": 24.169,
+      "sequence": 43,
+      "phase": "readiness.policy",
+      "status": "end"
+    },
+    {
+      "requestId": "req-readinesssqlite",
+      "pid": 1122,
+      "elapsedMs": 24.176,
+      "sequence": 44,
+      "phase": "readiness.bytes",
+      "status": "start"
+    },
+    {
+      "requestId": "req-readinesssqlite",
+      "pid": 1122,
+      "elapsedMs": 27.6,
+      "sequence": 45,
+      "phase": "readiness.bytes",
+      "status": "end"
+    },
+    {
+      "requestId": "req-readinesssqlite",
+      "pid": 1122,
+      "elapsedMs": 27.828,
+      "sequence": 46,
+      "phase": "readiness.access",
+      "status": "start"
+    },
+    {
+      "requestId": "req-readinesssqlite",
+      "pid": 1122,
+      "elapsedMs": 27.849,
+      "sequence": 47,
+      "phase": "readiness.access",
+      "status": "end"
+    },
+    {
+      "requestId": "req-readinesssqlite",
+      "pid": 1122,
+      "elapsedMs": 27.979,
+      "sequence": 48,
+      "phase": "readiness.policy",
+      "status": "start"
+    },
+    {
+      "requestId": "req-readinesssqlite",
+      "pid": 1122,
+      "elapsedMs": 28.249,
+      "sequence": 49,
+      "phase": "readiness.policy",
+      "status": "end"
+    },
+    {
+      "requestId": "req-readinesssqlite",
+      "pid": 1122,
+      "elapsedMs": 28.255,
+      "sequence": 50,
+      "phase": "readiness.bytes",
+      "status": "start"
+    },
+    {
+      "requestId": "req-readinesssqlite",
+      "pid": 1122,
+      "elapsedMs": 32.235,
+      "sequence": 51,
+      "phase": "readiness.bytes",
+      "status": "end"
+    },
+    {
+      "requestId": "req-readinesssqlite",
+      "pid": 1122,
+      "elapsedMs": 32.517,
+      "sequence": 52,
+      "phase": "readiness.access",
+      "status": "start"
+    },
+    {
+      "requestId": "req-readinesssqlite",
+      "pid": 1122,
+      "elapsedMs": 32.54,
+      "sequence": 53,
+      "phase": "readiness.access",
+      "status": "end"
+    },
+    {
+      "requestId": "req-readinesssqlite",
+      "pid": 1122,
+      "elapsedMs": 32.673,
+      "sequence": 54,
+      "phase": "readiness.source-selection",
+      "status": "start"
+    },
+    {
+      "requestId": "req-readinesssqlite",
+      "pid": 1122,
+      "elapsedMs": 33.857,
+      "sequence": 55,
+      "phase": "readiness.source-selection",
+      "status": "end"
+    },
+    {
+      "requestId": "req-readinesssqlite",
+      "pid": 1122,
+      "elapsedMs": 33.874,
+      "sequence": 56,
+      "phase": "readiness.target-selection",
+      "status": "start"
+    },
+    {
+      "requestId": "req-readinesssqlite",
+      "pid": 1122,
+      "elapsedMs": 34.826,
+      "sequence": 57,
+      "phase": "readiness.target-selection",
+      "status": "end"
+    },
+    {
+      "requestId": "req-readinesssqlite",
+      "pid": 1122,
+      "elapsedMs": 34.838,
+      "sequence": 58,
+      "phase": "readiness.invocation-current",
+      "status": "start"
+    },
+    {
+      "requestId": "req-readinesssqlite",
+      "pid": 1122,
+      "elapsedMs": 35.383,
+      "sequence": 59,
+      "phase": "readiness.invocation-current",
+      "status": "end"
+    },
+    {
+      "requestId": "req-readinesssqlite",
+      "pid": 1122,
+      "elapsedMs": 35.997,
+      "sequence": 60,
+      "phase": "readiness.current",
+      "status": "end"
+    },
+    {
+      "requestId": "req-readinesssqlite",
+      "pid": 1122,
+      "elapsedMs": 36.955,
+      "sequence": 61,
+      "phase": "readiness.current",
+      "status": "start"
+    },
+    {
+      "requestId": "req-readinesssqlite",
+      "pid": 1122,
+      "elapsedMs": 37.103,
+      "sequence": 62,
+      "phase": "readiness.identity",
+      "status": "start"
+    },
+    {
+      "requestId": "req-readinesssqlite",
+      "pid": 1122,
+      "elapsedMs": 37.118,
+      "sequence": 63,
+      "phase": "readiness.identity",
+      "status": "end"
+    },
+    {
+      "requestId": "req-readinesssqlite",
+      "pid": 1122,
+      "elapsedMs": 37.26,
+      "sequence": 64,
+      "phase": "readiness.profile",
+      "status": "start"
+    },
+    {
+      "requestId": "req-readinesssqlite",
+      "pid": 1122,
+      "elapsedMs": 37.269,
+      "sequence": 65,
+      "phase": "readiness.profile",
+      "status": "end"
+    },
+    {
+      "requestId": "req-readinesssqlite",
+      "pid": 1122,
+      "elapsedMs": 37.414,
+      "sequence": 66,
+      "phase": "readiness.policy",
+      "status": "start"
+    },
+    {
+      "requestId": "req-readinesssqlite",
+      "pid": 1122,
+      "elapsedMs": 37.868,
+      "sequence": 67,
+      "phase": "readiness.policy",
+      "status": "end"
+    },
+    {
+      "requestId": "req-readinesssqlite",
+      "pid": 1122,
+      "elapsedMs": 37.881,
+      "sequence": 68,
+      "phase": "readiness.bytes",
+      "status": "start"
+    },
+    {
+      "requestId": "req-readinesssqlite",
+      "pid": 1122,
+      "elapsedMs": 44.557,
+      "sequence": 69,
+      "phase": "readiness.bytes",
+      "status": "end"
+    },
+    {
+      "requestId": "req-readinesssqlite",
+      "pid": 1122,
+      "elapsedMs": 45.097,
+      "sequence": 70,
+      "phase": "readiness.access",
+      "status": "start"
+    },
+    {
+      "requestId": "req-readinesssqlite",
+      "pid": 1122,
+      "elapsedMs": 45.153,
+      "sequence": 71,
+      "phase": "readiness.access",
+      "status": "end"
+    },
+    {
+      "requestId": "req-readinesssqlite",
+      "pid": 1122,
+      "elapsedMs": 45.48,
+      "sequence": 72,
+      "phase": "readiness.policy",
+      "status": "start"
+    },
+    {
+      "requestId": "req-readinesssqlite",
+      "pid": 1122,
+      "elapsedMs": 46.198,
+      "sequence": 73,
+      "phase": "readiness.policy",
+      "status": "end"
+    },
+    {
+      "requestId": "req-readinesssqlite",
+      "pid": 1122,
+      "elapsedMs": 46.215,
+      "sequence": 74,
+      "phase": "readiness.bytes",
+      "status": "start"
+    },
+    {
+      "requestId": "req-readinesssqlite",
+      "pid": 1122,
+      "elapsedMs": 49.589,
+      "sequence": 75,
+      "phase": "readiness.bytes",
+      "status": "end"
+    },
+    {
+      "requestId": "req-readinesssqlite",
+      "pid": 1122,
+      "elapsedMs": 49.823,
+      "sequence": 76,
+      "phase": "readiness.access",
+      "status": "start"
+    },
+    {
+      "requestId": "req-readinesssqlite",
+      "pid": 1122,
+      "elapsedMs": 49.848,
+      "sequence": 77,
+      "phase": "readiness.access",
+      "status": "end"
+    },
+    {
+      "requestId": "req-readinesssqlite",
+      "pid": 1122,
+      "elapsedMs": 49.972,
+      "sequence": 78,
+      "phase": "readiness.source-selection",
+      "status": "start"
+    },
+    {
+      "requestId": "req-readinesssqlite",
+      "pid": 1122,
+      "elapsedMs": 50.597,
+      "sequence": 79,
+      "phase": "readiness.source-selection",
+      "status": "end"
+    },
+    {
+      "requestId": "req-readinesssqlite",
+      "pid": 1122,
+      "elapsedMs": 50.606,
+      "sequence": 80,
+      "phase": "readiness.target-selection",
+      "status": "start"
+    },
+    {
+      "requestId": "req-readinesssqlite",
+      "pid": 1122,
+      "elapsedMs": 51.445,
+      "sequence": 81,
+      "phase": "readiness.target-selection",
+      "status": "end"
+    },
+    {
+      "requestId": "req-readinesssqlite",
+      "pid": 1122,
+      "elapsedMs": 51.462,
+      "sequence": 82,
+      "phase": "readiness.invocation-current",
+      "status": "start"
+    },
+    {
+      "requestId": "req-readinesssqlite",
+      "pid": 1122,
+      "elapsedMs": 51.924,
+      "sequence": 83,
+      "phase": "readiness.invocation-current",
+      "status": "end"
+    },
+    {
+      "requestId": "req-readinesssqlite",
+      "pid": 1122,
+      "elapsedMs": 52.053,
+      "sequence": 84,
+      "phase": "readiness.current",
+      "status": "end"
+    },
+    {
+      "requestId": "req-readinesssqlite",
+      "pid": 1122,
+      "elapsedMs": 53.895,
+      "sequence": 85,
+      "phase": "readiness.current",
+      "status": "start"
+    },
+    {
+      "requestId": "req-readinesssqlite",
+      "pid": 1122,
+      "elapsedMs": 54.017,
+      "sequence": 86,
+      "phase": "readiness.identity",
+      "status": "start"
+    },
+    {
+      "requestId": "req-readinesssqlite",
+      "pid": 1122,
+      "elapsedMs": 54.029,
+      "sequence": 87,
+      "phase": "readiness.identity",
+      "status": "end"
+    },
+    {
+      "requestId": "req-readinesssqlite",
+      "pid": 1122,
+      "elapsedMs": 54.161,
+      "sequence": 88,
+      "phase": "readiness.profile",
+      "status": "start"
+    },
+    {
+      "requestId": "req-readinesssqlite",
+      "pid": 1122,
+      "elapsedMs": 54.169,
+      "sequence": 89,
+      "phase": "readiness.profile",
+      "status": "end"
+    },
+    {
+      "requestId": "req-readinesssqlite",
+      "pid": 1122,
+      "elapsedMs": 54.292,
+      "sequence": 90,
+      "phase": "readiness.policy",
+      "status": "start"
+    },
+    {
+      "requestId": "req-readinesssqlite",
+      "pid": 1122,
+      "elapsedMs": 54.517,
+      "sequence": 91,
+      "phase": "readiness.policy",
+      "status": "end"
+    },
+    {
+      "requestId": "req-readinesssqlite",
+      "pid": 1122,
+      "elapsedMs": 54.523,
+      "sequence": 92,
+      "phase": "readiness.bytes",
+      "status": "start"
+    },
+    {
+      "requestId": "req-readinesssqlite",
+      "pid": 1122,
+      "elapsedMs": 58.043,
+      "sequence": 93,
+      "phase": "readiness.bytes",
+      "status": "end"
+    },
+    {
+      "requestId": "req-readinesssqlite",
+      "pid": 1122,
+      "elapsedMs": 58.241,
+      "sequence": 94,
+      "phase": "readiness.access",
+      "status": "start"
+    },
+    {
+      "requestId": "req-readinesssqlite",
+      "pid": 1122,
+      "elapsedMs": 58.257,
+      "sequence": 95,
+      "phase": "readiness.access",
+      "status": "end"
+    },
+    {
+      "requestId": "req-readinesssqlite",
+      "pid": 1122,
+      "elapsedMs": 58.372,
+      "sequence": 96,
+      "phase": "readiness.policy",
+      "status": "start"
+    }
+  ]
+}

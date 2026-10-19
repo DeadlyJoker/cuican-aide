@@ -52,7 +52,8 @@ export const DESKTOP_PLUGIN_BOOTSTRAP_SCHEMA_V3 =
   "crewon.desktop-plugin-bootstrap.v3";
 const PROFILE_FILE = "plugin-profile.json";
 const PROFILE_SCHEMA = "crewon.desktop-plugin-profile.v1";
-const MAX_BYTES = 128 * 1024;
+import { DESKTOP_PLUGIN_APPROVAL_MAX_BYTES } from "@crewon/contracts/plugins";
+const MAX_BYTES = DESKTOP_PLUGIN_APPROVAL_MAX_BYTES;
 
 export type DesktopPluginApprovalSource = Readonly<{
   sourceId: string;

@@ -113,11 +113,12 @@ export class ControlProjectConversationTurn {
           if (
             !original.unknown &&
             error instanceof ControlApiClientError &&
-            error.status === 409 &&
-            [
-              "project_conversation_revision_conflict",
-              "thread_revision_conflict",
-            ].includes(error.code)
+            ((error.status === 400 || error.status === 422) ||
+              (error.status === 409 &&
+                [
+                  "project_conversation_revision_conflict",
+                  "thread_revision_conflict",
+                ].includes(error.code)))
           )
             this.#pending.delete(input.threadId);
           else original.unknown = true;

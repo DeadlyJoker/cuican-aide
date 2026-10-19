@@ -687,48 +687,50 @@ export function AgentPlatformAuthGate({ children }: { children: ReactNode }) {
       });
   };
   return (
-    <AgentPlatformAccountContext.Provider
-      value={{
-        needsPassword,
-        providerLabel: wecomLinked
-          ? "企业微信已绑定"
-          : user.role === "admin"
-            ? "管理员"
-            : "用户",
-        user,
-        onLogout: logout,
-        onSetPassword: () => setPasswordDialogOpen(true),
-      }}
-    >
-      {children}
-      <aside className="crewon-session-pill" aria-label="当前企业账号">
-        <span>{user.display_name || user.nickname || user.username}</span>
-        <small>{wecomLinked ? "企业微信已绑定" : user.role}</small>
-        {needsPassword ? (
-          <button
-            className="security"
-            type="button"
-            onClick={() => setPasswordDialogOpen(true)}
-          >
-            设置密码
+    <DesktopLocalManagementAccessProvider access={localManagementAccess}>
+      <AgentPlatformAccountContext.Provider
+        value={{
+          needsPassword,
+          providerLabel: wecomLinked
+            ? "企业微信已绑定"
+            : user.role === "admin"
+              ? "管理员"
+              : "用户",
+          user,
+          onLogout: logout,
+          onSetPassword: () => setPasswordDialogOpen(true),
+        }}
+      >
+        {children}
+        <aside className="crewon-session-pill" aria-label="当前企业账号">
+          <span>{user.display_name || user.nickname || user.username}</span>
+          <small>{wecomLinked ? "企业微信已绑定" : user.role}</small>
+          {needsPassword ? (
+            <button
+              className="security"
+              type="button"
+              onClick={() => setPasswordDialogOpen(true)}
+            >
+              设置密码
+            </button>
+          ) : null}
+          <button type="button" onClick={logout}>
+            退出
           </button>
+        </aside>
+        {passwordDialogOpen ? (
+          <SetPasswordDialog
+            busy={busy}
+            error={passwordError}
+            onClose={() => {
+              setPasswordDialogOpen(false);
+              setPasswordError(null);
+            }}
+            onSubmit={(password) => void saveInitialPassword(password)}
+          />
         ) : null}
-        <button type="button" onClick={logout}>
-          退出
-        </button>
-      </aside>
-      {passwordDialogOpen ? (
-        <SetPasswordDialog
-          busy={busy}
-          error={passwordError}
-          onClose={() => {
-            setPasswordDialogOpen(false);
-            setPasswordError(null);
-          }}
-          onSubmit={(password) => void saveInitialPassword(password)}
-        />
-      ) : null}
-    </AgentPlatformAccountContext.Provider>
+      </AgentPlatformAccountContext.Provider>
+    </DesktopLocalManagementAccessProvider>
   );
 }
 

@@ -1,0 +1,51 @@
+{
+  "recordedAt": "2026-10-15T16:44:14.573Z",
+  "scope": "Unauthenticated HEAD / only, individually pinned public DNS results; HTTPS SNI and certificate validation unchanged; no credentials, no model request, no network/profile configuration change",
+  "host": "api.aicuican.com",
+  "results": [
+    {
+      "address": "104.21.29.91",
+      "sample": 1,
+      "startedAt": "2026-10-15T16:44:00.545Z",
+      "tcpMs": 320,
+      "tlsMs": null,
+      "headersMs": null,
+      "status": null,
+      "error": "DIAGNOSTIC_DEADLINE",
+      "totalMs": 7025
+    },
+    {
+      "address": "104.21.29.91",
+      "sample": 2,
+      "startedAt": "2026-10-15T16:44:07.570Z",
+      "tcpMs": 301,
+      "tlsMs": null,
+      "headersMs": null,
+      "status": null,
+      "error": "DIAGNOSTIC_DEADLINE",
+      "totalMs": 7003
+    },
+    {
+      "address": "172.67.148.182",
+      "sample": 1,
+      "startedAt": "2026-10-15T16:44:00.562Z",
+      "tcpMs": 292,
+      "tlsMs": null,
+      "headersMs": null,
+      "status": null,
+      "error": "DIAGNOSTIC_DEADLINE",
+      "totalMs": 7006
+    },
+    {
+      "address": "172.67.148.182",
+      "sample": 2,
+      "startedAt": "2026-10-15T16:44:07.568Z",
+      "tcpMs": 295,
+      "tlsMs": null,
+      "headersMs": null,
+      "status": null,
+      "error": "DIAGNOSTIC_DEADLINE",
+      "totalMs": 7004
+    }
+  ]
+}

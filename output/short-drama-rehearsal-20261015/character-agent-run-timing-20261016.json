@@ -1,0 +1,2982 @@
+{
+  "runId": "plugin-rZfhgYn329RJuFT6nYzwh-da2HY9CWxfaTuNi6U2iZ4",
+  "state": {
+    "agentVersionId": "native-plugin-agent-c0658ff3740670cebf0bcf74b50409056d11775c34939d91313e2de89d994484",
+    "authorityId": "standalone-authority",
+    "cancelRequested": false,
+    "collaborationMode": "default",
+    "createdAt": "2026-10-16T06:49:32.306Z",
+    "createdByActorId": "standalone-actor",
+    "failure": null,
+    "goalAccounting": null,
+    "goalBinding": null,
+    "lastSequence": 295,
+    "origin": null,
+    "outputRef": "message:01a14382-6993-7239-9fef-bfce2db57522",
+    "policySnapshotId": "native-plugin-policy-c0658ff3740670cebf0bcf74b50409056d11775c34939d91313e2de89d994484",
+    "reconciliationReceiptId": null,
+    "revision": 295,
+    "runId": "plugin-rZfhgYn329RJuFT6nYzwh-da2HY9CWxfaTuNi6U2iZ4",
+    "runtimeGeneration": "native-plugin-runtime-c0658ff3740670cebf0bcf74b50409056d11775c34939d91313e2de89d994484",
+    "spaceId": "standalone-space",
+    "status": "completed",
+    "suspensionReasonCode": null,
+    "tenantId": "standalone-tenant",
+    "terminalAt": "2026-10-16T06:59:42.611Z",
+    "threadId": "01a13f61-7f59-77ed-bd1e-c5c7c2a4d67f",
+    "updatedAt": "2026-10-16T06:59:42.611Z",
+    "usage": {
+      "cachedInputTokens": 272128,
+      "inputTokens": 278868,
+      "outputTokens": 924,
+      "totalTokens": 279792
+    },
+    "waitingApproval": null,
+    "workspaceBindingId": null
+  },
+  "observations": [
+    {
+      "attemptId": "01a14379-3482-73f0-ad24-1834f646511c",
+      "goalAttribution": null,
+      "observation": {
+        "adapterName": "direct-responses",
+        "adapterVersion": "1",
+        "agentVersionId": "native-plugin-agent-c0658ff3740670cebf0bcf74b50409056d11775c34939d91313e2de89d994484",
+        "callId": "76b6f77d-222b-4b52-b4dd-8deed0280725",
+        "finishedAt": "2026-10-16T06:49:49.073Z",
+        "firstOutputLatencyMs": null,
+        "httpDiagnostics": {
+          "read": {
+            "end": "releasedBeforeEof"
+          },
+          "response": {
+            "cfRay": "a4b51ffc2d3ac4e1-LAX",
+            "contentType": "text/event-stream",
+            "oneApiRequestId": "202610160649415816147208268d9d6iQyaweKw",
+            "server": "cloudflare",
+            "status": 200
+          },
+          "stream": {
+            "byteCount": 110694,
+            "chunkCount": 58,
+            "commentFrameCount": 0,
+            "completedItemCount": 1,
+            "dataFrameCount": 8,
+            "frameCount": 8,
+            "lastEventType": "response.completed",
+            "pendingFrameBytes": 0,
+            "pendingJsonState": "empty",
+            "reasoningDeltaCount": 0,
+            "terminalEventCount": 1,
+            "textDeltaCount": 0,
+            "toolArgumentDeltaCount": 1,
+            "unknownEventCount": 1
+          },
+          "termination": {
+            "reason": "protocolTerminal"
+          }
+        },
+        "httpTiming": {
+          "admittedMs": 3,
+          "dispatchedMs": 3,
+          "finishedMs": 9855,
+          "firstByteMs": 7007,
+          "firstCompletedItemMs": 8408,
+          "firstSemanticMs": 8214,
+          "headersMs": 7004,
+          "lastByteMs": 9629,
+          "lastSemanticMs": 9641,
+          "readClosedMs": 9642,
+          "streamEndMs": 9855,
+          "terminalMs": 9855
+        },
+        "modelId": "gpt-6-astra",
+        "operation": "generate",
+        "outcome": "completed",
+        "providerResponseId": "resp_0800e14ee48a8841016ad1c90915008191bbed62f113619eef",
+        "purpose": "agent",
+        "schemaVersion": "crewon.model-call-observation.v0",
+        "startedAt": "2026-10-16T06:49:39.218Z",
+        "transport": "http",
+        "usageEventObserved": true
+      },
+      "runId": "plugin-rZfhgYn329RJuFT6nYzwh-da2HY9CWxfaTuNi6U2iZ4",
+      "stepId": "plugin-64sgWJWMVABwTYyK0kWKCBSNLtv7LNwfEOHSjic_ST8",
+      "tenantId": "standalone-tenant"
+    },
+    {
+      "attemptId": "01a14379-685e-717c-bfbe-e64b1cf13db3",
+      "goalAttribution": null,
+      "observation": {
+        "adapterName": "direct-responses",
+        "adapterVersion": "1",
+        "agentVersionId": "native-plugin-agent-c0658ff3740670cebf0bcf74b50409056d11775c34939d91313e2de89d994484",
+        "callId": "4c50357d-7097-4bc3-996f-0138d1419151",
+        "finishedAt": "2026-10-16T06:50:16.265Z",
+        "firstOutputLatencyMs": null,
+        "httpDiagnostics": {
+          "read": {
+            "end": "releasedBeforeEof"
+          },
+          "response": {
+            "cfRay": "a4b5204fceb15e03-LAX",
+            "contentType": "text/event-stream",
+            "oneApiRequestId": "202610160649552912922308268d9d6cknuhEKc",
+            "server": "cloudflare",
+            "status": 200
+          },
+          "stream": {
+            "byteCount": 119352,
+            "chunkCount": 66,
+            "commentFrameCount": 0,
+            "completedItemCount": 1,
+            "dataFrameCount": 40,
+            "frameCount": 40,
+            "lastEventType": "response.completed",
+            "pendingFrameBytes": 0,
+            "pendingJsonState": "empty",
+            "reasoningDeltaCount": 0,
+            "terminalEventCount": 1,
+            "textDeltaCount": 0,
+            "toolArgumentDeltaCount": 33,
+            "unknownEventCount": 1
+          },
+          "termination": {
+            "reason": "protocolTerminal"
+          }
+        },
+        "httpTiming": {
+          "admittedMs": 1,
+          "dispatchedMs": 1,
+          "finishedMs": 23790,
+          "firstByteMs": 4196,
+          "firstCompletedItemMs": 20822,
+          "firstSemanticMs": 20820,
+          "headersMs": 4193,
+          "lastByteMs": 23780,
+          "lastSemanticMs": 23784,
+          "readClosedMs": 23784,
+          "streamEndMs": 23790,
+          "terminalMs": 23790
+        },
+        "modelId": "gpt-6-astra",
+        "operation": "generate",
+        "outcome": "completed",
+        "providerResponseId": "resp_0098ae35c7bb460a016ad1c913fc348191a87ec17efbc3140b",
+        "purpose": "agent",
+        "schemaVersion": "crewon.model-call-observation.v0",
+        "startedAt": "2026-10-16T06:49:52.484Z",
+        "transport": "http",
+        "usageEventObserved": true
+      },
+      "runId": "plugin-rZfhgYn329RJuFT6nYzwh-da2HY9CWxfaTuNi6U2iZ4",
+      "stepId": "model:plugin-64sgWJWMVABwTYyK0kWKCBSNLtv7LNwfEOHSjic_ST8:2",
+      "tenantId": "standalone-tenant"
+    },
+    {
+      "attemptId": "01a14379-d578-772a-a39b-fa836e897e69",
+      "goalAttribution": null,
+      "observation": {
+        "adapterName": "direct-responses",
+        "adapterVersion": "1",
+        "agentVersionId": "native-plugin-agent-c0658ff3740670cebf0bcf74b50409056d11775c34939d91313e2de89d994484",
+        "callId": "93356a0f-06af-4c48-880c-b26336ea9ddc",
+        "finishedAt": "2026-10-16T06:50:40.363Z",
+        "firstOutputLatencyMs": null,
+        "httpDiagnostics": {
+          "read": {
+            "end": "releasedBeforeEof"
+          },
+          "response": {
+            "cfRay": "a4b52118ca11090d-LAX",
+            "contentType": "text/event-stream",
+            "oneApiRequestId": "202610160650274642963658268d9d6L7N43bPW",
+            "server": "cloudflare",
+            "status": 200
+          },
+          "stream": {
+            "byteCount": 128025,
+            "chunkCount": 72,
+            "commentFrameCount": 0,
+            "completedItemCount": 1,
+            "dataFrameCount": 72,
+            "frameCount": 72,
+            "lastEventType": "response.completed",
+            "pendingFrameBytes": 0,
+            "pendingJsonState": "empty",
+            "reasoningDeltaCount": 0,
+            "terminalEventCount": 1,
+            "textDeltaCount": 0,
+            "toolArgumentDeltaCount": 65,
+            "unknownEventCount": 1
+          },
+          "termination": {
+            "reason": "protocolTerminal"
+          }
+        },
+        "httpTiming": {
+          "admittedMs": 1,
+          "dispatchedMs": 1,
+          "finishedMs": 19951,
+          "firstByteMs": 9492,
+          "firstCompletedItemMs": 19819,
+          "firstSemanticMs": 12015,
+          "headersMs": 9488,
+          "lastByteMs": 19928,
+          "lastSemanticMs": 19932,
+          "readClosedMs": 19932,
+          "streamEndMs": 19951,
+          "terminalMs": 19950
+        },
+        "modelId": "gpt-6-astra",
+        "operation": "generate",
+        "outcome": "completed",
+        "providerResponseId": "resp_009cf4d21acb219e016ad1c93537c48191a52168af3b800bb5",
+        "purpose": "agent",
+        "schemaVersion": "crewon.model-call-observation.v0",
+        "startedAt": "2026-10-16T06:50:20.419Z",
+        "transport": "http",
+        "usageEventObserved": true
+      },
+      "runId": "plugin-rZfhgYn329RJuFT6nYzwh-da2HY9CWxfaTuNi6U2iZ4",
+      "stepId": "model:plugin-64sgWJWMVABwTYyK0kWKCBSNLtv7LNwfEOHSjic_ST8:3",
+      "tenantId": "standalone-tenant"
+    },
+    {
+      "attemptId": "01a1437a-313c-77be-b8c4-e407cf77f35a",
+      "goalAttribution": null,
+      "observation": {
+        "adapterName": "direct-responses",
+        "adapterVersion": "1",
+        "agentVersionId": "native-plugin-agent-c0658ff3740670cebf0bcf74b50409056d11775c34939d91313e2de89d994484",
+        "callId": "f70d00f9-4917-4a57-acd3-37de62ae202a",
+        "finishedAt": "2026-10-16T06:50:54.366Z",
+        "firstOutputLatencyMs": null,
+        "httpDiagnostics": {
+          "termination": {
+            "code": "responses_transport_unavailable",
+            "networkCode": "UND_ERR_CONNECT_TIMEOUT",
+            "reason": "transportError"
+          }
+        },
+        "httpTiming": {
+          "admittedMs": 1,
+          "dispatchedMs": 1,
+          "finishedMs": 10452
+        },
+        "modelId": "gpt-6-astra",
+        "operation": "generate",
+        "outcome": "failed",
+        "providerResponseId": null,
+        "purpose": "agent",
+        "schemaVersion": "crewon.model-call-observation.v0",
+        "startedAt": "2026-10-16T06:50:43.916Z",
+        "transport": "http",
+        "usageEventObserved": false
+      },
+      "runId": "plugin-rZfhgYn329RJuFT6nYzwh-da2HY9CWxfaTuNi6U2iZ4",
+      "stepId": "model:plugin-64sgWJWMVABwTYyK0kWKCBSNLtv7LNwfEOHSjic_ST8:4",
+      "tenantId": "standalone-tenant"
+    },
+    {
+      "attemptId": "01a1437a-313c-77be-b8c4-e407cf77f35a",
+      "goalAttribution": null,
+      "observation": {
+        "adapterName": "direct-responses",
+        "adapterVersion": "1",
+        "agentVersionId": "native-plugin-agent-c0658ff3740670cebf0bcf74b50409056d11775c34939d91313e2de89d994484",
+        "callId": "be4b215b-1cb3-4340-970f-6e25a156b155",
+        "finishedAt": "2026-10-16T06:51:05.090Z",
+        "firstOutputLatencyMs": null,
+        "httpDiagnostics": {
+          "termination": {
+            "code": "responses_transport_unavailable",
+            "networkCode": "UND_ERR_CONNECT_TIMEOUT",
+            "reason": "transportError"
+          }
+        },
+        "httpTiming": {
+          "admittedMs": 2,
+          "dispatchedMs": 2,
+          "finishedMs": 10504
+        },
+        "modelId": "gpt-6-astra",
+        "operation": "generate",
+        "outcome": "failed",
+        "providerResponseId": null,
+        "purpose": "agent",
+        "schemaVersion": "crewon.model-call-observation.v0",
+        "startedAt": "2026-10-16T06:50:54.587Z",
+        "transport": "http",
+        "usageEventObserved": false
+      },
+      "runId": "plugin-rZfhgYn329RJuFT6nYzwh-da2HY9CWxfaTuNi6U2iZ4",
+      "stepId": "model:plugin-64sgWJWMVABwTYyK0kWKCBSNLtv7LNwfEOHSjic_ST8:4",
+      "tenantId": "standalone-tenant"
+    },
+    {
+      "attemptId": "01a1437a-313c-77be-b8c4-e407cf77f35a",
+      "goalAttribution": null,
+      "observation": {
+        "adapterName": "direct-responses",
+        "adapterVersion": "1",
+        "agentVersionId": "native-plugin-agent-c0658ff3740670cebf0bcf74b50409056d11775c34939d91313e2de89d994484",
+        "callId": "1a7fac44-1ab2-4479-8b93-62d58e1fb8f0",
+        "finishedAt": "2026-10-16T06:51:17.606Z",
+        "firstOutputLatencyMs": null,
+        "httpDiagnostics": {
+          "read": {
+            "end": "releasedBeforeEof"
+          },
+          "response": {
+            "cfRay": "a4b5221cf9251ee0-LAX",
+            "contentType": "text/event-stream",
+            "oneApiRequestId": "202610160651096155519418268d9d6ZtIb48RH",
+            "server": "cloudflare",
+            "status": 200
+          },
+          "stream": {
+            "byteCount": 128650,
+            "chunkCount": 77,
+            "commentFrameCount": 0,
+            "completedItemCount": 1,
+            "dataFrameCount": 73,
+            "frameCount": 73,
+            "lastEventType": "response.completed",
+            "pendingFrameBytes": 0,
+            "pendingJsonState": "empty",
+            "reasoningDeltaCount": 0,
+            "terminalEventCount": 1,
+            "textDeltaCount": 0,
+            "toolArgumentDeltaCount": 66,
+            "unknownEventCount": 1
+          },
+          "termination": {
+            "reason": "protocolTerminal"
+          }
+        },
+        "httpTiming": {
+          "admittedMs": 2,
+          "dispatchedMs": 2,
+          "finishedMs": 12104,
+          "firstByteMs": 6895,
+          "firstCompletedItemMs": 12086,
+          "firstSemanticMs": 12060,
+          "headersMs": 6894,
+          "lastByteMs": 12097,
+          "lastSemanticMs": 12099,
+          "readClosedMs": 12099,
+          "streamEndMs": 12104,
+          "terminalMs": 12104
+        },
+        "modelId": "gpt-6-astra",
+        "operation": "generate",
+        "outcome": "completed",
+        "providerResponseId": "resp_09c5dfc853e9e72e016ad1c95fbddc8191a5f13996f35a7430",
+        "purpose": "agent",
+        "schemaVersion": "crewon.model-call-observation.v0",
+        "startedAt": "2026-10-16T06:51:05.502Z",
+        "transport": "http",
+        "usageEventObserved": true
+      },
+      "runId": "plugin-rZfhgYn329RJuFT6nYzwh-da2HY9CWxfaTuNi6U2iZ4",
+      "stepId": "model:plugin-64sgWJWMVABwTYyK0kWKCBSNLtv7LNwfEOHSjic_ST8:4",
+      "tenantId": "standalone-tenant"
+    },
+    {
+      "attemptId": "01a1437a-c796-70a9-a3d5-d49d6876680a",
+      "goalAttribution": null,
+      "observation": {
+        "adapterName": "direct-responses",
+        "adapterVersion": "1",
+        "agentVersionId": "native-plugin-agent-c0658ff3740670cebf0bcf74b50409056d11775c34939d91313e2de89d994484",
+        "callId": "82801e30-842a-4422-a152-0030215c3606",
+        "finishedAt": "2026-10-16T06:52:07.990Z",
+        "firstOutputLatencyMs": null,
+        "httpDiagnostics": {
+          "read": {
+            "end": "releasedBeforeEof"
+          },
+          "response": {
+            "cfRay": "a4b5228caa9f0d77-LAX",
+            "contentType": "text/event-stream",
+            "oneApiRequestId": "202610160651266640765938268d9d6PEWwVEn5",
+            "server": "cloudflare",
+            "status": 200
+          },
+          "stream": {
+            "byteCount": 129021,
+            "chunkCount": 73,
+            "commentFrameCount": 0,
+            "completedItemCount": 1,
+            "dataFrameCount": 73,
+            "frameCount": 73,
+            "lastEventType": "response.completed",
+            "pendingFrameBytes": 0,
+            "pendingJsonState": "empty",
+            "reasoningDeltaCount": 0,
+            "terminalEventCount": 1,
+            "textDeltaCount": 0,
+            "toolArgumentDeltaCount": 66,
+            "unknownEventCount": 1
+          },
+          "termination": {
+            "reason": "protocolTerminal"
+          }
+        },
+        "httpTiming": {
+          "admittedMs": 3,
+          "dispatchedMs": 3,
+          "finishedMs": 45591,
+          "firstByteMs": 5622,
+          "firstCompletedItemMs": 10975,
+          "firstSemanticMs": 10847,
+          "headersMs": 5621,
+          "lastByteMs": 45579,
+          "lastSemanticMs": 45583,
+          "readClosedMs": 45583,
+          "streamEndMs": 45591,
+          "terminalMs": 45591
+        },
+        "modelId": "gpt-6-astra",
+        "operation": "generate",
+        "outcome": "completed",
+        "providerResponseId": "resp_09067852ffd02e6d016ad1c96f40f48191bdc17e5bff431cb4",
+        "purpose": "agent",
+        "schemaVersion": "crewon.model-call-observation.v0",
+        "startedAt": "2026-10-16T06:51:22.399Z",
+        "transport": "http",
+        "usageEventObserved": true
+      },
+      "runId": "plugin-rZfhgYn329RJuFT6nYzwh-da2HY9CWxfaTuNi6U2iZ4",
+      "stepId": "model:plugin-64sgWJWMVABwTYyK0kWKCBSNLtv7LNwfEOHSjic_ST8:5",
+      "tenantId": "standalone-tenant"
+    },
+    {
+      "attemptId": "01a1437b-891e-759b-8b52-070e98ce3fc8",
+      "goalAttribution": null,
+      "observation": {
+        "adapterName": "direct-responses",
+        "adapterVersion": "1",
+        "agentVersionId": "native-plugin-agent-c0658ff3740670cebf0bcf74b50409056d11775c34939d91313e2de89d994484",
+        "callId": "50f53659-05ce-4f41-93df-52673d2c22ff",
+        "finishedAt": "2026-10-16T06:52:23.672Z",
+        "firstOutputLatencyMs": null,
+        "httpDiagnostics": {
+          "read": {
+            "end": "releasedBeforeEof"
+          },
+          "response": {
+            "cfRay": "a4b523b76b286ca9-LAX",
+            "contentType": "text/event-stream",
+            "oneApiRequestId": "202610160652146862400168268d9d6Trxb2SI4",
+            "server": "cloudflare",
+            "status": 200
+          },
+          "stream": {
+            "byteCount": 129389,
+            "chunkCount": 69,
+            "commentFrameCount": 0,
+            "completedItemCount": 1,
+            "dataFrameCount": 73,
+            "frameCount": 73,
+            "lastEventType": "response.completed",
+            "pendingFrameBytes": 0,
+            "pendingJsonState": "empty",
+            "reasoningDeltaCount": 0,
+            "terminalEventCount": 1,
+            "textDeltaCount": 0,
+            "toolArgumentDeltaCount": 66,
+            "unknownEventCount": 1
+          },
+          "termination": {
+            "reason": "protocolTerminal"
+          }
+        },
+        "httpTiming": {
+          "admittedMs": 1,
+          "dispatchedMs": 1,
+          "finishedMs": 11730,
+          "firstByteMs": 7189,
+          "firstCompletedItemMs": 11381,
+          "firstSemanticMs": 9481,
+          "headersMs": 7149,
+          "lastByteMs": 11699,
+          "lastSemanticMs": 11707,
+          "readClosedMs": 11707,
+          "streamEndMs": 11730,
+          "terminalMs": 11730
+        },
+        "modelId": "gpt-6-astra",
+        "operation": "generate",
+        "outcome": "completed",
+        "providerResponseId": "resp_0a10bb7623c353f3016ad1c9a0f21481918a74b41564b534e1",
+        "purpose": "agent",
+        "schemaVersion": "crewon.model-call-observation.v0",
+        "startedAt": "2026-10-16T06:52:11.942Z",
+        "transport": "http",
+        "usageEventObserved": true
+      },
+      "runId": "plugin-rZfhgYn329RJuFT6nYzwh-da2HY9CWxfaTuNi6U2iZ4",
+      "stepId": "model:plugin-64sgWJWMVABwTYyK0kWKCBSNLtv7LNwfEOHSjic_ST8:6",
+      "tenantId": "standalone-tenant"
+    },
+    {
+      "attemptId": "01a1437d-4a0b-7239-aca0-00ac23882491",
+      "goalAttribution": null,
+      "observation": {
+        "adapterName": "direct-responses",
+        "adapterVersion": "1",
+        "agentVersionId": "native-plugin-agent-c0658ff3740670cebf0bcf74b50409056d11775c34939d91313e2de89d994484",
+        "callId": "f5ea1efc-3569-46d8-8b61-23991d4eb0da",
+        "finishedAt": "2026-10-16T06:56:14.174Z",
+        "firstOutputLatencyMs": null,
+        "httpDiagnostics": {
+          "read": {
+            "end": "releasedBeforeEof"
+          },
+          "response": {
+            "cfRay": "a4b526b008ebb589-LAX",
+            "contentType": "text/event-stream",
+            "oneApiRequestId": "202610160654225706663028268d9d6tyVdRz0o",
+            "server": "cloudflare",
+            "status": 200
+          },
+          "stream": {
+            "byteCount": 177971,
+            "chunkCount": 117,
+            "commentFrameCount": 0,
+            "completedItemCount": 1,
+            "dataFrameCount": 350,
+            "frameCount": 350,
+            "lastEventType": "unknown",
+            "pendingFrameBytes": 24557,
+            "pendingJsonState": "not-complete-json",
+            "reasoningDeltaCount": 0,
+            "terminalEventCount": 0,
+            "textDeltaCount": 0,
+            "toolArgumentDeltaCount": 344,
+            "unknownEventCount": 1
+          },
+          "termination": {
+            "code": "responses_idle_timeout",
+            "reason": "idleTimeout"
+          }
+        },
+        "httpTiming": {
+          "admittedMs": 2,
+          "dispatchedMs": 2,
+          "finishedMs": 127298,
+          "firstByteMs": 18363,
+          "firstCompletedItemMs": 50536,
+          "firstSemanticMs": 22437,
+          "headersMs": 18356,
+          "lastByteMs": 67255,
+          "lastSemanticMs": 50536,
+          "readClosedMs": 127295
+        },
+        "modelId": "gpt-6-astra",
+        "operation": "generate",
+        "outcome": "failed",
+        "providerResponseId": "resp_01cd69a1ecfae98e016ad1ca20921c8191baccb906a122a98d",
+        "purpose": "agent",
+        "schemaVersion": "crewon.model-call-observation.v0",
+        "startedAt": "2026-10-16T06:54:06.875Z",
+        "transport": "http",
+        "usageEventObserved": false
+      },
+      "runId": "plugin-rZfhgYn329RJuFT6nYzwh-da2HY9CWxfaTuNi6U2iZ4",
+      "stepId": "model:plugin-64sgWJWMVABwTYyK0kWKCBSNLtv7LNwfEOHSjic_ST8:7",
+      "tenantId": "standalone-tenant"
+    },
+    {
+      "attemptId": "01a1437f-7a06-77a1-b0ca-303c8479bcb9",
+      "goalAttribution": null,
+      "observation": {
+        "adapterName": "direct-responses",
+        "adapterVersion": "1",
+        "agentVersionId": "native-plugin-agent-c0658ff3740670cebf0bcf74b50409056d11775c34939d91313e2de89d994484",
+        "callId": "27a278c6-0681-4ca8-8d50-cbaf5c6dd9cf",
+        "finishedAt": "2026-10-16T06:57:14.800Z",
+        "firstOutputLatencyMs": null,
+        "httpDiagnostics": {
+          "read": {
+            "end": "releasedBeforeEof"
+          },
+          "response": {
+            "cfRay": "a4b52a0d6daedb92-LAX",
+            "contentType": "text/event-stream",
+            "oneApiRequestId": "202610160656339241652948268d9d62sTlAsP1",
+            "server": "cloudflare",
+            "status": 200
+          },
+          "stream": {
+            "byteCount": 206326,
+            "chunkCount": 135,
+            "commentFrameCount": 0,
+            "completedItemCount": 1,
+            "dataFrameCount": 361,
+            "frameCount": 361,
+            "lastEventType": "response.completed",
+            "pendingFrameBytes": 0,
+            "pendingJsonState": "empty",
+            "reasoningDeltaCount": 0,
+            "terminalEventCount": 1,
+            "textDeltaCount": 0,
+            "toolArgumentDeltaCount": 354,
+            "unknownEventCount": 1
+          },
+          "termination": {
+            "reason": "protocolTerminal"
+          }
+        },
+        "httpTiming": {
+          "admittedMs": 3,
+          "dispatchedMs": 3,
+          "finishedMs": 44542,
+          "firstByteMs": 7789,
+          "firstCompletedItemMs": 23736,
+          "firstSemanticMs": 10070,
+          "headersMs": 7788,
+          "lastByteMs": 44484,
+          "lastSemanticMs": 44511,
+          "readClosedMs": 44513,
+          "streamEndMs": 44542,
+          "terminalMs": 44542
+        },
+        "modelId": "gpt-6-astra",
+        "operation": "generate",
+        "outcome": "completed",
+        "providerResponseId": "resp_08155a51718af86f016ad1caa571f081919afd079021eec13b",
+        "purpose": "agent",
+        "schemaVersion": "crewon.model-call-observation.v0",
+        "startedAt": "2026-10-16T06:56:30.257Z",
+        "transport": "http",
+        "usageEventObserved": true
+      },
+      "runId": "plugin-rZfhgYn329RJuFT6nYzwh-da2HY9CWxfaTuNi6U2iZ4",
+      "stepId": "model:plugin-64sgWJWMVABwTYyK0kWKCBSNLtv7LNwfEOHSjic_ST8:8",
+      "tenantId": "standalone-tenant"
+    },
+    {
+      "attemptId": "01a14380-5223-768f-b4fa-55e3d38ad927",
+      "goalAttribution": null,
+      "observation": {
+        "adapterName": "direct-responses",
+        "adapterVersion": "1",
+        "agentVersionId": "native-plugin-agent-c0658ff3740670cebf0bcf74b50409056d11775c34939d91313e2de89d994484",
+        "callId": "bc21a7a1-ac83-4449-ac12-8af0623e2efd",
+        "finishedAt": "2026-10-16T06:58:48.440Z",
+        "firstOutputLatencyMs": 16710,
+        "httpDiagnostics": {
+          "read": {
+            "end": "releasedBeforeEof"
+          },
+          "response": {
+            "cfRay": "a4b52b6d5e2e58fe-LAX",
+            "contentType": "text/event-stream",
+            "oneApiRequestId": "202610160657316820095668268d9d6DqyF9fvq",
+            "server": "cloudflare",
+            "status": 200
+          },
+          "stream": {
+            "byteCount": 96369,
+            "chunkCount": 65,
+            "commentFrameCount": 0,
+            "completedItemCount": 0,
+            "dataFrameCount": 122,
+            "frameCount": 122,
+            "lastEventType": "response.output_text.delta",
+            "pendingFrameBytes": 0,
+            "pendingJsonState": "empty",
+            "reasoningDeltaCount": 0,
+            "terminalEventCount": 0,
+            "textDeltaCount": 118,
+            "toolArgumentDeltaCount": 0,
+            "unknownEventCount": 0
+          },
+          "termination": {
+            "code": "responses_idle_timeout",
+            "reason": "idleTimeout"
+          }
+        },
+        "httpTiming": {
+          "admittedMs": 3,
+          "dispatchedMs": 3,
+          "finishedMs": 82872,
+          "firstByteMs": 9016,
+          "firstSemanticMs": 16710,
+          "headersMs": 9015,
+          "lastByteMs": 22858,
+          "lastSemanticMs": 22868,
+          "readClosedMs": 82870
+        },
+        "modelId": "gpt-6-astra",
+        "operation": "generate",
+        "outcome": "failed",
+        "providerResponseId": "resp_017bc7248e0ddefd016ad1caddbd688191bbb8ee736a9c3fe6",
+        "purpose": "agent",
+        "schemaVersion": "crewon.model-call-observation.v0",
+        "startedAt": "2026-10-16T06:57:25.567Z",
+        "transport": "http",
+        "usageEventObserved": false
+      },
+      "runId": "plugin-rZfhgYn329RJuFT6nYzwh-da2HY9CWxfaTuNi6U2iZ4",
+      "stepId": "model:plugin-64sgWJWMVABwTYyK0kWKCBSNLtv7LNwfEOHSjic_ST8:9",
+      "tenantId": "standalone-tenant"
+    },
+    {
+      "attemptId": "01a14380-5223-768f-b4fa-55e3d38ad927",
+      "goalAttribution": null,
+      "observation": {
+        "adapterName": "direct-responses",
+        "adapterVersion": "1",
+        "agentVersionId": "native-plugin-agent-c0658ff3740670cebf0bcf74b50409056d11775c34939d91313e2de89d994484",
+        "callId": "16130b2f-d2f6-4695-b185-626fe00375d5",
+        "finishedAt": "2026-10-16T06:58:58.980Z",
+        "firstOutputLatencyMs": null,
+        "httpDiagnostics": {
+          "termination": {
+            "code": "responses_transport_unavailable",
+            "networkCode": "UND_ERR_CONNECT_TIMEOUT",
+            "reason": "transportError"
+          }
+        },
+        "httpTiming": {
+          "admittedMs": 4,
+          "dispatchedMs": 4,
+          "finishedMs": 10328
+        },
+        "modelId": "gpt-6-astra",
+        "operation": "generate",
+        "outcome": "failed",
+        "providerResponseId": null,
+        "purpose": "agent",
+        "schemaVersion": "crewon.model-call-observation.v0",
+        "startedAt": "2026-10-16T06:58:48.652Z",
+        "transport": "http",
+        "usageEventObserved": false
+      },
+      "runId": "plugin-rZfhgYn329RJuFT6nYzwh-da2HY9CWxfaTuNi6U2iZ4",
+      "stepId": "model:plugin-64sgWJWMVABwTYyK0kWKCBSNLtv7LNwfEOHSjic_ST8:9",
+      "tenantId": "standalone-tenant"
+    },
+    {
+      "attemptId": "01a14380-5223-768f-b4fa-55e3d38ad927",
+      "goalAttribution": null,
+      "observation": {
+        "adapterName": "direct-responses",
+        "adapterVersion": "1",
+        "agentVersionId": "native-plugin-agent-c0658ff3740670cebf0bcf74b50409056d11775c34939d91313e2de89d994484",
+        "callId": "fe44e4eb-9ce7-4def-9056-a284e3a15ab9",
+        "finishedAt": "2026-10-16T06:59:09.889Z",
+        "firstOutputLatencyMs": null,
+        "httpDiagnostics": {
+          "termination": {
+            "code": "responses_transport_unavailable",
+            "networkCode": "UND_ERR_CONNECT_TIMEOUT",
+            "reason": "transportError"
+          }
+        },
+        "httpTiming": {
+          "admittedMs": 2,
+          "dispatchedMs": 2,
+          "finishedMs": 10509
+        },
+        "modelId": "gpt-6-astra",
+        "operation": "generate",
+        "outcome": "failed",
+        "providerResponseId": null,
+        "purpose": "agent",
+        "schemaVersion": "crewon.model-call-observation.v0",
+        "startedAt": "2026-10-16T06:58:59.380Z",
+        "transport": "http",
+        "usageEventObserved": false
+      },
+      "runId": "plugin-rZfhgYn329RJuFT6nYzwh-da2HY9CWxfaTuNi6U2iZ4",
+      "stepId": "model:plugin-64sgWJWMVABwTYyK0kWKCBSNLtv7LNwfEOHSjic_ST8:9",
+      "tenantId": "standalone-tenant"
+    },
+    {
+      "attemptId": "01a14380-5223-768f-b4fa-55e3d38ad927",
+      "goalAttribution": null,
+      "observation": {
+        "adapterName": "direct-responses",
+        "adapterVersion": "1",
+        "agentVersionId": "native-plugin-agent-c0658ff3740670cebf0bcf74b50409056d11775c34939d91313e2de89d994484",
+        "callId": "b34511b7-3c67-4958-9111-99d83fb83e7b",
+        "finishedAt": "2026-10-16T06:59:42.601Z",
+        "firstOutputLatencyMs": 14004,
+        "httpDiagnostics": {
+          "read": {
+            "end": "releasedBeforeEof"
+          },
+          "response": {
+            "cfRay": "a4b52dfa8c9afe59-LAX",
+            "contentType": "text/event-stream",
+            "oneApiRequestId": "20261016065916376767608268d9d6jv00V9Dm",
+            "server": "cloudflare",
+            "status": 200
+          },
+          "stream": {
+            "byteCount": 151123,
+            "chunkCount": 86,
+            "commentFrameCount": 0,
+            "completedItemCount": 1,
+            "dataFrameCount": 135,
+            "frameCount": 135,
+            "lastEventType": "response.completed",
+            "pendingFrameBytes": 0,
+            "pendingJsonState": "empty",
+            "reasoningDeltaCount": 0,
+            "terminalEventCount": 1,
+            "textDeltaCount": 126,
+            "toolArgumentDeltaCount": 0,
+            "unknownEventCount": 1
+          },
+          "termination": {
+            "reason": "protocolTerminal"
+          }
+        },
+        "httpTiming": {
+          "admittedMs": 2,
+          "dispatchedMs": 2,
+          "finishedMs": 31876,
+          "firstByteMs": 8359,
+          "firstCompletedItemMs": 16480,
+          "firstSemanticMs": 14004,
+          "headersMs": 8358,
+          "lastByteMs": 31865,
+          "lastSemanticMs": 31867,
+          "readClosedMs": 31868,
+          "streamEndMs": 31876,
+          "terminalMs": 31876
+        },
+        "modelId": "gpt-6-astra",
+        "operation": "generate",
+        "outcome": "completed",
+        "providerResponseId": "resp_0a75f09bfd78724e016ad1cb463ec48191982cbf281590bf78",
+        "purpose": "agent",
+        "schemaVersion": "crewon.model-call-observation.v0",
+        "startedAt": "2026-10-16T06:59:10.725Z",
+        "transport": "http",
+        "usageEventObserved": true
+      },
+      "runId": "plugin-rZfhgYn329RJuFT6nYzwh-da2HY9CWxfaTuNi6U2iZ4",
+      "stepId": "model:plugin-64sgWJWMVABwTYyK0kWKCBSNLtv7LNwfEOHSjic_ST8:9",
+      "tenantId": "standalone-tenant"
+    }
+  ],
+  "eventTimeline": [
+    {
+      "at": "2026-10-16T06:49:32.306Z",
+      "type": "run.created",
+      "data": {}
+    },
+    {
+      "at": "2026-10-16T06:49:39.168Z",
+      "type": "run.started",
+      "data": {}
+    },
+    {
+      "at": "2026-10-16T06:49:39.212Z",
+      "type": "segment.started",
+      "data": {
+        "segmentId": "segment:01a14379-3482-73f0-ad24-1834f646511c"
+      }
+    },
+    {
+      "at": "2026-10-16T06:49:49.082Z",
+      "type": "usage.recorded",
+      "data": {
+        "segmentId": "segment:01a14379-3482-73f0-ad24-1834f646511c"
+      }
+    },
+    {
+      "at": "2026-10-16T06:49:49.092Z",
+      "type": "tool.requested",
+      "data": {
+        "callId": "call_ccd266ea84044c3fa1a920de624b5a4e",
+        "name": "crewon_short_drama__asset_context_read",
+        "segmentId": "segment:01a14379-3482-73f0-ad24-1834f646511c"
+      }
+    },
+    {
+      "at": "2026-10-16T06:49:49.128Z",
+      "type": "segment.completed",
+      "data": {
+        "segmentId": "segment:01a14379-3482-73f0-ad24-1834f646511c"
+      }
+    },
+    {
+      "at": "2026-10-16T06:49:50.912Z",
+      "type": "tool.completed",
+      "data": {
+        "callId": "call_ccd266ea84044c3fa1a920de624b5a4e",
+        "isError": false,
+        "name": "crewon_short_drama__asset_context_read",
+        "segmentId": "segment:01a14379-3482-73f0-ad24-1834f646511c"
+      }
+    },
+    {
+      "at": "2026-10-16T06:49:52.482Z",
+      "type": "segment.started",
+      "data": {
+        "segmentId": "segment:01a14379-685e-717c-bfbe-e64b1cf13db3"
+      }
+    },
+    {
+      "at": "2026-10-16T06:50:16.269Z",
+      "type": "usage.recorded",
+      "data": {
+        "segmentId": "segment:01a14379-685e-717c-bfbe-e64b1cf13db3"
+      }
+    },
+    {
+      "at": "2026-10-16T06:50:16.275Z",
+      "type": "tool.requested",
+      "data": {
+        "callId": "call_b7c9e45b1827478a860e208928e10c3b",
+        "name": "crewon_short_drama__asset_list",
+        "segmentId": "segment:01a14379-685e-717c-bfbe-e64b1cf13db3"
+      }
+    },
+    {
+      "at": "2026-10-16T06:50:16.281Z",
+      "type": "segment.completed",
+      "data": {
+        "segmentId": "segment:01a14379-685e-717c-bfbe-e64b1cf13db3"
+      }
+    },
+    {
+      "at": "2026-10-16T06:50:18.642Z",
+      "type": "tool.completed",
+      "data": {
+        "callId": "call_b7c9e45b1827478a860e208928e10c3b",
+        "isError": false,
+        "name": "crewon_short_drama__asset_list",
+        "segmentId": "segment:01a14379-685e-717c-bfbe-e64b1cf13db3"
+      }
+    },
+    {
+      "at": "2026-10-16T06:50:20.416Z",
+      "type": "segment.started",
+      "data": {
+        "segmentId": "segment:01a14379-d578-772a-a39b-fa836e897e69"
+      }
+    },
+    {
+      "at": "2026-10-16T06:50:40.368Z",
+      "type": "usage.recorded",
+      "data": {
+        "segmentId": "segment:01a14379-d578-772a-a39b-fa836e897e69"
+      }
+    },
+    {
+      "at": "2026-10-16T06:50:40.374Z",
+      "type": "tool.requested",
+      "data": {
+        "callId": "call_78c9eb7b25ef42ffa8cc8c5726fc5a5f",
+        "name": "crewon_short_drama__content_read",
+        "segmentId": "segment:01a14379-d578-772a-a39b-fa836e897e69"
+      }
+    },
+    {
+      "at": "2026-10-16T06:50:40.381Z",
+      "type": "segment.completed",
+      "data": {
+        "segmentId": "segment:01a14379-d578-772a-a39b-fa836e897e69"
+      }
+    },
+    {
+      "at": "2026-10-16T06:50:41.834Z",
+      "type": "tool.completed",
+      "data": {
+        "callId": "call_78c9eb7b25ef42ffa8cc8c5726fc5a5f",
+        "isError": false,
+        "name": "crewon_short_drama__content_read",
+        "segmentId": "segment:01a14379-d578-772a-a39b-fa836e897e69"
+      }
+    },
+    {
+      "at": "2026-10-16T06:50:43.910Z",
+      "type": "segment.started",
+      "data": {
+        "segmentId": "segment:01a1437a-313c-77be-b8c4-e407cf77f35a"
+      }
+    },
+    {
+      "at": "2026-10-16T06:50:54.371Z",
+      "type": "model.sampling.retry",
+      "data": {
+        "code": "responses_transport_unavailable",
+        "segmentId": "segment:01a1437a-313c-77be-b8c4-e407cf77f35a"
+      }
+    },
+    {
+      "at": "2026-10-16T06:51:05.092Z",
+      "type": "model.sampling.retry",
+      "data": {
+        "code": "responses_transport_unavailable",
+        "segmentId": "segment:01a1437a-313c-77be-b8c4-e407cf77f35a"
+      }
+    },
+    {
+      "at": "2026-10-16T06:51:17.610Z",
+      "type": "usage.recorded",
+      "data": {
+        "segmentId": "segment:01a1437a-313c-77be-b8c4-e407cf77f35a"
+      }
+    },
+    {
+      "at": "2026-10-16T06:51:17.612Z",
+      "type": "tool.requested",
+      "data": {
+        "callId": "call_64fb83996dcb4d7db030177d75723e37",
+        "name": "crewon_short_drama__content_read",
+        "segmentId": "segment:01a1437a-313c-77be-b8c4-e407cf77f35a"
+      }
+    },
+    {
+      "at": "2026-10-16T06:51:17.614Z",
+      "type": "segment.completed",
+      "data": {
+        "segmentId": "segment:01a1437a-313c-77be-b8c4-e407cf77f35a"
+      }
+    },
+    {
+      "at": "2026-10-16T06:51:19.496Z",
+      "type": "tool.completed",
+      "data": {
+        "callId": "call_64fb83996dcb4d7db030177d75723e37",
+        "isError": false,
+        "name": "crewon_short_drama__content_read",
+        "segmentId": "segment:01a1437a-313c-77be-b8c4-e407cf77f35a"
+      }
+    },
+    {
+      "at": "2026-10-16T06:51:22.396Z",
+      "type": "segment.started",
+      "data": {
+        "segmentId": "segment:01a1437a-c796-70a9-a3d5-d49d6876680a"
+      }
+    },
+    {
+      "at": "2026-10-16T06:52:07.995Z",
+      "type": "usage.recorded",
+      "data": {
+        "segmentId": "segment:01a1437a-c796-70a9-a3d5-d49d6876680a"
+      }
+    },
+    {
+      "at": "2026-10-16T06:52:07.999Z",
+      "type": "tool.requested",
+      "data": {
+        "callId": "call_5ccf22bc91b245ab9ca69a51d98a43fb",
+        "name": "crewon_short_drama__content_read",
+        "segmentId": "segment:01a1437a-c796-70a9-a3d5-d49d6876680a"
+      }
+    },
+    {
+      "at": "2026-10-16T06:52:08.005Z",
+      "type": "segment.completed",
+      "data": {
+        "segmentId": "segment:01a1437a-c796-70a9-a3d5-d49d6876680a"
+      }
+    },
+    {
+      "at": "2026-10-16T06:52:09.904Z",
+      "type": "tool.completed",
+      "data": {
+        "callId": "call_5ccf22bc91b245ab9ca69a51d98a43fb",
+        "isError": false,
+        "name": "crewon_short_drama__content_read",
+        "segmentId": "segment:01a1437a-c796-70a9-a3d5-d49d6876680a"
+      }
+    },
+    {
+      "at": "2026-10-16T06:52:11.940Z",
+      "type": "segment.started",
+      "data": {
+        "segmentId": "segment:01a1437b-891e-759b-8b52-070e98ce3fc8"
+      }
+    },
+    {
+      "at": "2026-10-16T06:52:23.681Z",
+      "type": "usage.recorded",
+      "data": {
+        "segmentId": "segment:01a1437b-891e-759b-8b52-070e98ce3fc8"
+      }
+    },
+    {
+      "at": "2026-10-16T06:52:23.696Z",
+      "type": "tool.requested",
+      "data": {
+        "callId": "call_1fab867c60e3408c8cfd8d0c73651035",
+        "name": "crewon_short_drama__content_read",
+        "segmentId": "segment:01a1437b-891e-759b-8b52-070e98ce3fc8"
+      }
+    },
+    {
+      "at": "2026-10-16T06:52:23.716Z",
+      "type": "segment.completed",
+      "data": {
+        "segmentId": "segment:01a1437b-891e-759b-8b52-070e98ce3fc8"
+      }
+    },
+    {
+      "at": "2026-10-16T06:52:33.319Z",
+      "type": "tool.completed",
+      "data": {
+        "callId": "call_1fab867c60e3408c8cfd8d0c73651035",
+        "isError": false,
+        "name": "crewon_short_drama__content_read",
+        "segmentId": "segment:01a1437b-891e-759b-8b52-070e98ce3fc8"
+      }
+    },
+    {
+      "at": "2026-10-16T06:54:06.869Z",
+      "type": "segment.started",
+      "data": {
+        "segmentId": "segment:01a1437d-4a0b-7239-aca0-00ac23882491"
+      }
+    },
+    {
+      "at": "2026-10-16T06:56:14.194Z",
+      "type": "tool.requested",
+      "data": {
+        "callId": "call_b90615a8227a496e974766fa87a77cf7",
+        "name": "crewon_short_drama__asset_save",
+        "segmentId": "segment:01a1437d-4a0b-7239-aca0-00ac23882491"
+      }
+    },
+    {
+      "at": "2026-10-16T06:56:14.219Z",
+      "type": "segment.completed",
+      "data": {
+        "segmentId": "segment:01a1437d-4a0b-7239-aca0-00ac23882491"
+      }
+    },
+    {
+      "at": "2026-10-16T06:56:27.504Z",
+      "type": "tool.completed",
+      "data": {
+        "callId": "call_b90615a8227a496e974766fa87a77cf7",
+        "isError": false,
+        "name": "crewon_short_drama__asset_save",
+        "segmentId": "segment:01a1437d-4a0b-7239-aca0-00ac23882491"
+      }
+    },
+    {
+      "at": "2026-10-16T06:56:30.253Z",
+      "type": "segment.started",
+      "data": {
+        "segmentId": "segment:01a1437f-7a06-77a1-b0ca-303c8479bcb9"
+      }
+    },
+    {
+      "at": "2026-10-16T06:57:14.806Z",
+      "type": "usage.recorded",
+      "data": {
+        "segmentId": "segment:01a1437f-7a06-77a1-b0ca-303c8479bcb9"
+      }
+    },
+    {
+      "at": "2026-10-16T06:57:14.813Z",
+      "type": "tool.requested",
+      "data": {
+        "callId": "call_c31a7dff5f2f4fef9087ed0e146533ad",
+        "name": "crewon_short_drama__asset_save",
+        "segmentId": "segment:01a1437f-7a06-77a1-b0ca-303c8479bcb9"
+      }
+    },
+    {
+      "at": "2026-10-16T06:57:14.891Z",
+      "type": "segment.completed",
+      "data": {
+        "segmentId": "segment:01a1437f-7a06-77a1-b0ca-303c8479bcb9"
+      }
+    },
+    {
+      "at": "2026-10-16T06:57:23.829Z",
+      "type": "tool.completed",
+      "data": {
+        "callId": "call_c31a7dff5f2f4fef9087ed0e146533ad",
+        "isError": false,
+        "name": "crewon_short_drama__asset_save",
+        "segmentId": "segment:01a1437f-7a06-77a1-b0ca-303c8479bcb9"
+      }
+    },
+    {
+      "at": "2026-10-16T06:57:25.556Z",
+      "type": "segment.started",
+      "data": {
+        "segmentId": "segment:01a14380-5223-768f-b4fa-55e3d38ad927"
+      }
+    },
+    {
+      "at": "2026-10-16T06:57:42.280Z",
+      "type": "model.output.delta",
+      "data": {
+        "segmentId": "segment:01a14380-5223-768f-b4fa-55e3d38ad927"
+      }
+    },
+    {
+      "at": "2026-10-16T06:57:42.894Z",
+      "type": "model.output.delta",
+      "data": {
+        "segmentId": "segment:01a14380-5223-768f-b4fa-55e3d38ad927"
+      }
+    },
+    {
+      "at": "2026-10-16T06:57:42.898Z",
+      "type": "model.output.delta",
+      "data": {
+        "segmentId": "segment:01a14380-5223-768f-b4fa-55e3d38ad927"
+      }
+    },
+    {
+      "at": "2026-10-16T06:57:42.898Z",
+      "type": "model.output.delta",
+      "data": {
+        "segmentId": "segment:01a14380-5223-768f-b4fa-55e3d38ad927"
+      }
+    },
+    {
+      "at": "2026-10-16T06:57:42.906Z",
+      "type": "model.output.delta",
+      "data": {
+        "segmentId": "segment:01a14380-5223-768f-b4fa-55e3d38ad927"
+      }
+    },
+    {
+      "at": "2026-10-16T06:57:42.906Z",
+      "type": "model.output.delta",
+      "data": {
+        "segmentId": "segment:01a14380-5223-768f-b4fa-55e3d38ad927"
+      }
+    },
+    {
+      "at": "2026-10-16T06:57:42.910Z",
+      "type": "model.output.delta",
+      "data": {
+        "segmentId": "segment:01a14380-5223-768f-b4fa-55e3d38ad927"
+      }
+    },
+    {
+      "at": "2026-10-16T06:57:42.910Z",
+      "type": "model.output.delta",
+      "data": {
+        "segmentId": "segment:01a14380-5223-768f-b4fa-55e3d38ad927"
+      }
+    },
+    {
+      "at": "2026-10-16T06:57:43.200Z",
+      "type": "model.output.delta",
+      "data": {
+        "segmentId": "segment:01a14380-5223-768f-b4fa-55e3d38ad927"
+      }
+    },
+    {
+      "at": "2026-10-16T06:57:43.204Z",
+      "type": "model.output.delta",
+      "data": {
+        "segmentId": "segment:01a14380-5223-768f-b4fa-55e3d38ad927"
+      }
+    },
+    {
+      "at": "2026-10-16T06:57:43.204Z",
+      "type": "model.output.delta",
+      "data": {
+        "segmentId": "segment:01a14380-5223-768f-b4fa-55e3d38ad927"
+      }
+    },
+    {
+      "at": "2026-10-16T06:57:43.210Z",
+      "type": "model.output.delta",
+      "data": {
+        "segmentId": "segment:01a14380-5223-768f-b4fa-55e3d38ad927"
+      }
+    },
+    {
+      "at": "2026-10-16T06:57:43.215Z",
+      "type": "model.output.delta",
+      "data": {
+        "segmentId": "segment:01a14380-5223-768f-b4fa-55e3d38ad927"
+      }
+    },
+    {
+      "at": "2026-10-16T06:57:43.218Z",
+      "type": "model.output.delta",
+      "data": {
+        "segmentId": "segment:01a14380-5223-768f-b4fa-55e3d38ad927"
+      }
+    },
+    {
+      "at": "2026-10-16T06:57:43.218Z",
+      "type": "model.output.delta",
+      "data": {
+        "segmentId": "segment:01a14380-5223-768f-b4fa-55e3d38ad927"
+      }
+    },
+    {
+      "at": "2026-10-16T06:57:43.221Z",
+      "type": "model.output.delta",
+      "data": {
+        "segmentId": "segment:01a14380-5223-768f-b4fa-55e3d38ad927"
+      }
+    },
+    {
+      "at": "2026-10-16T06:57:43.222Z",
+      "type": "model.output.delta",
+      "data": {
+        "segmentId": "segment:01a14380-5223-768f-b4fa-55e3d38ad927"
+      }
+    },
+    {
+      "at": "2026-10-16T06:57:43.224Z",
+      "type": "model.output.delta",
+      "data": {
+        "segmentId": "segment:01a14380-5223-768f-b4fa-55e3d38ad927"
+      }
+    },
+    {
+      "at": "2026-10-16T06:57:43.224Z",
+      "type": "model.output.delta",
+      "data": {
+        "segmentId": "segment:01a14380-5223-768f-b4fa-55e3d38ad927"
+      }
+    },
+    {
+      "at": "2026-10-16T06:57:43.225Z",
+      "type": "model.output.delta",
+      "data": {
+        "segmentId": "segment:01a14380-5223-768f-b4fa-55e3d38ad927"
+      }
+    },
+    {
+      "at": "2026-10-16T06:57:43.225Z",
+      "type": "model.output.delta",
+      "data": {
+        "segmentId": "segment:01a14380-5223-768f-b4fa-55e3d38ad927"
+      }
+    },
+    {
+      "at": "2026-10-16T06:57:43.227Z",
+      "type": "model.output.delta",
+      "data": {
+        "segmentId": "segment:01a14380-5223-768f-b4fa-55e3d38ad927"
+      }
+    },
+    {
+      "at": "2026-10-16T06:57:43.227Z",
+      "type": "model.output.delta",
+      "data": {
+        "segmentId": "segment:01a14380-5223-768f-b4fa-55e3d38ad927"
+      }
+    },
+    {
+      "at": "2026-10-16T06:57:43.251Z",
+      "type": "model.output.delta",
+      "data": {
+        "segmentId": "segment:01a14380-5223-768f-b4fa-55e3d38ad927"
+      }
+    },
+    {
+      "at": "2026-10-16T06:57:44.115Z",
+      "type": "model.output.delta",
+      "data": {
+        "segmentId": "segment:01a14380-5223-768f-b4fa-55e3d38ad927"
+      }
+    },
+    {
+      "at": "2026-10-16T06:57:44.116Z",
+      "type": "model.output.delta",
+      "data": {
+        "segmentId": "segment:01a14380-5223-768f-b4fa-55e3d38ad927"
+      }
+    },
+    {
+      "at": "2026-10-16T06:57:44.116Z",
+      "type": "model.output.delta",
+      "data": {
+        "segmentId": "segment:01a14380-5223-768f-b4fa-55e3d38ad927"
+      }
+    },
+    {
+      "at": "2026-10-16T06:57:44.118Z",
+      "type": "model.output.delta",
+      "data": {
+        "segmentId": "segment:01a14380-5223-768f-b4fa-55e3d38ad927"
+      }
+    },
+    {
+      "at": "2026-10-16T06:57:44.118Z",
+      "type": "model.output.delta",
+      "data": {
+        "segmentId": "segment:01a14380-5223-768f-b4fa-55e3d38ad927"
+      }
+    },
+    {
+      "at": "2026-10-16T06:57:44.119Z",
+      "type": "model.output.delta",
+      "data": {
+        "segmentId": "segment:01a14380-5223-768f-b4fa-55e3d38ad927"
+      }
+    },
+    {
+      "at": "2026-10-16T06:57:44.119Z",
+      "type": "model.output.delta",
+      "data": {
+        "segmentId": "segment:01a14380-5223-768f-b4fa-55e3d38ad927"
+      }
+    },
+    {
+      "at": "2026-10-16T06:57:44.121Z",
+      "type": "model.output.delta",
+      "data": {
+        "segmentId": "segment:01a14380-5223-768f-b4fa-55e3d38ad927"
+      }
+    },
+    {
+      "at": "2026-10-16T06:57:44.122Z",
+      "type": "model.output.delta",
+      "data": {
+        "segmentId": "segment:01a14380-5223-768f-b4fa-55e3d38ad927"
+      }
+    },
+    {
+      "at": "2026-10-16T06:57:44.122Z",
+      "type": "model.output.delta",
+      "data": {
+        "segmentId": "segment:01a14380-5223-768f-b4fa-55e3d38ad927"
+      }
+    },
+    {
+      "at": "2026-10-16T06:57:44.122Z",
+      "type": "model.output.delta",
+      "data": {
+        "segmentId": "segment:01a14380-5223-768f-b4fa-55e3d38ad927"
+      }
+    },
+    {
+      "at": "2026-10-16T06:57:44.123Z",
+      "type": "model.output.delta",
+      "data": {
+        "segmentId": "segment:01a14380-5223-768f-b4fa-55e3d38ad927"
+      }
+    },
+    {
+      "at": "2026-10-16T06:57:44.123Z",
+      "type": "model.output.delta",
+      "data": {
+        "segmentId": "segment:01a14380-5223-768f-b4fa-55e3d38ad927"
+      }
+    },
+    {
+      "at": "2026-10-16T06:57:44.124Z",
+      "type": "model.output.delta",
+      "data": {
+        "segmentId": "segment:01a14380-5223-768f-b4fa-55e3d38ad927"
+      }
+    },
+    {
+      "at": "2026-10-16T06:57:44.124Z",
+      "type": "model.output.delta",
+      "data": {
+        "segmentId": "segment:01a14380-5223-768f-b4fa-55e3d38ad927"
+      }
+    },
+    {
+      "at": "2026-10-16T06:57:44.124Z",
+      "type": "model.output.delta",
+      "data": {
+        "segmentId": "segment:01a14380-5223-768f-b4fa-55e3d38ad927"
+      }
+    },
+    {
+      "at": "2026-10-16T06:57:44.125Z",
+      "type": "model.output.delta",
+      "data": {
+        "segmentId": "segment:01a14380-5223-768f-b4fa-55e3d38ad927"
+      }
+    },
+    {
+      "at": "2026-10-16T06:57:44.137Z",
+      "type": "model.output.delta",
+      "data": {
+        "segmentId": "segment:01a14380-5223-768f-b4fa-55e3d38ad927"
+      }
+    },
+    {
+      "at": "2026-10-16T06:57:44.137Z",
+      "type": "model.output.delta",
+      "data": {
+        "segmentId": "segment:01a14380-5223-768f-b4fa-55e3d38ad927"
+      }
+    },
+    {
+      "at": "2026-10-16T06:57:44.140Z",
+      "type": "model.output.delta",
+      "data": {
+        "segmentId": "segment:01a14380-5223-768f-b4fa-55e3d38ad927"
+      }
+    },
+    {
+      "at": "2026-10-16T06:57:44.140Z",
+      "type": "model.output.delta",
+      "data": {
+        "segmentId": "segment:01a14380-5223-768f-b4fa-55e3d38ad927"
+      }
+    },
+    {
+      "at": "2026-10-16T06:57:44.146Z",
+      "type": "model.output.delta",
+      "data": {
+        "segmentId": "segment:01a14380-5223-768f-b4fa-55e3d38ad927"
+      }
+    },
+    {
+      "at": "2026-10-16T06:57:44.146Z",
+      "type": "model.output.delta",
+      "data": {
+        "segmentId": "segment:01a14380-5223-768f-b4fa-55e3d38ad927"
+      }
+    },
+    {
+      "at": "2026-10-16T06:57:44.147Z",
+      "type": "model.output.delta",
+      "data": {
+        "segmentId": "segment:01a14380-5223-768f-b4fa-55e3d38ad927"
+      }
+    },
+    {
+      "at": "2026-10-16T06:57:44.148Z",
+      "type": "model.output.delta",
+      "data": {
+        "segmentId": "segment:01a14380-5223-768f-b4fa-55e3d38ad927"
+      }
+    },
+    {
+      "at": "2026-10-16T06:57:44.149Z",
+      "type": "model.output.delta",
+      "data": {
+        "segmentId": "segment:01a14380-5223-768f-b4fa-55e3d38ad927"
+      }
+    },
+    {
+      "at": "2026-10-16T06:57:44.149Z",
+      "type": "model.output.delta",
+      "data": {
+        "segmentId": "segment:01a14380-5223-768f-b4fa-55e3d38ad927"
+      }
+    },
+    {
+      "at": "2026-10-16T06:57:44.150Z",
+      "type": "model.output.delta",
+      "data": {
+        "segmentId": "segment:01a14380-5223-768f-b4fa-55e3d38ad927"
+      }
+    },
+    {
+      "at": "2026-10-16T06:57:44.150Z",
+      "type": "model.output.delta",
+      "data": {
+        "segmentId": "segment:01a14380-5223-768f-b4fa-55e3d38ad927"
+      }
+    },
+    {
+      "at": "2026-10-16T06:57:44.151Z",
+      "type": "model.output.delta",
+      "data": {
+        "segmentId": "segment:01a14380-5223-768f-b4fa-55e3d38ad927"
+      }
+    },
+    {
+      "at": "2026-10-16T06:57:44.151Z",
+      "type": "model.output.delta",
+      "data": {
+        "segmentId": "segment:01a14380-5223-768f-b4fa-55e3d38ad927"
+      }
+    },
+    {
+      "at": "2026-10-16T06:57:44.152Z",
+      "type": "model.output.delta",
+      "data": {
+        "segmentId": "segment:01a14380-5223-768f-b4fa-55e3d38ad927"
+      }
+    },
+    {
+      "at": "2026-10-16T06:57:46.130Z",
+      "type": "model.output.delta",
+      "data": {
+        "segmentId": "segment:01a14380-5223-768f-b4fa-55e3d38ad927"
+      }
+    },
+    {
+      "at": "2026-10-16T06:57:46.134Z",
+      "type": "model.output.delta",
+      "data": {
+        "segmentId": "segment:01a14380-5223-768f-b4fa-55e3d38ad927"
+      }
+    },
+    {
+      "at": "2026-10-16T06:57:46.134Z",
+      "type": "model.output.delta",
+      "data": {
+        "segmentId": "segment:01a14380-5223-768f-b4fa-55e3d38ad927"
+      }
+    },
+    {
+      "at": "2026-10-16T06:57:46.140Z",
+      "type": "model.output.delta",
+      "data": {
+        "segmentId": "segment:01a14380-5223-768f-b4fa-55e3d38ad927"
+      }
+    },
+    {
+      "at": "2026-10-16T06:57:46.140Z",
+      "type": "model.output.delta",
+      "data": {
+        "segmentId": "segment:01a14380-5223-768f-b4fa-55e3d38ad927"
+      }
+    },
+    {
+      "at": "2026-10-16T06:57:46.143Z",
+      "type": "model.output.delta",
+      "data": {
+        "segmentId": "segment:01a14380-5223-768f-b4fa-55e3d38ad927"
+      }
+    },
+    {
+      "at": "2026-10-16T06:57:46.143Z",
+      "type": "model.output.delta",
+      "data": {
+        "segmentId": "segment:01a14380-5223-768f-b4fa-55e3d38ad927"
+      }
+    },
+    {
+      "at": "2026-10-16T06:57:46.146Z",
+      "type": "model.output.delta",
+      "data": {
+        "segmentId": "segment:01a14380-5223-768f-b4fa-55e3d38ad927"
+      }
+    },
+    {
+      "at": "2026-10-16T06:57:46.149Z",
+      "type": "model.output.delta",
+      "data": {
+        "segmentId": "segment:01a14380-5223-768f-b4fa-55e3d38ad927"
+      }
+    },
+    {
+      "at": "2026-10-16T06:57:46.152Z",
+      "type": "model.output.delta",
+      "data": {
+        "segmentId": "segment:01a14380-5223-768f-b4fa-55e3d38ad927"
+      }
+    },
+    {
+      "at": "2026-10-16T06:57:46.156Z",
+      "type": "model.output.delta",
+      "data": {
+        "segmentId": "segment:01a14380-5223-768f-b4fa-55e3d38ad927"
+      }
+    },
+    {
+      "at": "2026-10-16T06:57:46.156Z",
+      "type": "model.output.delta",
+      "data": {
+        "segmentId": "segment:01a14380-5223-768f-b4fa-55e3d38ad927"
+      }
+    },
+    {
+      "at": "2026-10-16T06:57:46.159Z",
+      "type": "model.output.delta",
+      "data": {
+        "segmentId": "segment:01a14380-5223-768f-b4fa-55e3d38ad927"
+      }
+    },
+    {
+      "at": "2026-10-16T06:57:46.159Z",
+      "type": "model.output.delta",
+      "data": {
+        "segmentId": "segment:01a14380-5223-768f-b4fa-55e3d38ad927"
+      }
+    },
+    {
+      "at": "2026-10-16T06:57:46.163Z",
+      "type": "model.output.delta",
+      "data": {
+        "segmentId": "segment:01a14380-5223-768f-b4fa-55e3d38ad927"
+      }
+    },
+    {
+      "at": "2026-10-16T06:57:46.166Z",
+      "type": "model.output.delta",
+      "data": {
+        "segmentId": "segment:01a14380-5223-768f-b4fa-55e3d38ad927"
+      }
+    },
+    {
+      "at": "2026-10-16T06:57:46.166Z",
+      "type": "model.output.delta",
+      "data": {
+        "segmentId": "segment:01a14380-5223-768f-b4fa-55e3d38ad927"
+      }
+    },
+    {
+      "at": "2026-10-16T06:57:46.176Z",
+      "type": "model.output.delta",
+      "data": {
+        "segmentId": "segment:01a14380-5223-768f-b4fa-55e3d38ad927"
+      }
+    },
+    {
+      "at": "2026-10-16T06:57:46.176Z",
+      "type": "model.output.delta",
+      "data": {
+        "segmentId": "segment:01a14380-5223-768f-b4fa-55e3d38ad927"
+      }
+    },
+    {
+      "at": "2026-10-16T06:57:46.180Z",
+      "type": "model.output.delta",
+      "data": {
+        "segmentId": "segment:01a14380-5223-768f-b4fa-55e3d38ad927"
+      }
+    },
+    {
+      "at": "2026-10-16T06:57:46.180Z",
+      "type": "model.output.delta",
+      "data": {
+        "segmentId": "segment:01a14380-5223-768f-b4fa-55e3d38ad927"
+      }
+    },
+    {
+      "at": "2026-10-16T06:57:46.182Z",
+      "type": "model.output.delta",
+      "data": {
+        "segmentId": "segment:01a14380-5223-768f-b4fa-55e3d38ad927"
+      }
+    },
+    {
+      "at": "2026-10-16T06:57:46.184Z",
+      "type": "model.output.delta",
+      "data": {
+        "segmentId": "segment:01a14380-5223-768f-b4fa-55e3d38ad927"
+      }
+    },
+    {
+      "at": "2026-10-16T06:57:46.196Z",
+      "type": "model.output.delta",
+      "data": {
+        "segmentId": "segment:01a14380-5223-768f-b4fa-55e3d38ad927"
+      }
+    },
+    {
+      "at": "2026-10-16T06:57:46.198Z",
+      "type": "model.output.delta",
+      "data": {
+        "segmentId": "segment:01a14380-5223-768f-b4fa-55e3d38ad927"
+      }
+    },
+    {
+      "at": "2026-10-16T06:57:46.198Z",
+      "type": "model.output.delta",
+      "data": {
+        "segmentId": "segment:01a14380-5223-768f-b4fa-55e3d38ad927"
+      }
+    },
+    {
+      "at": "2026-10-16T06:57:46.200Z",
+      "type": "model.output.delta",
+      "data": {
+        "segmentId": "segment:01a14380-5223-768f-b4fa-55e3d38ad927"
+      }
+    },
+    {
+      "at": "2026-10-16T06:57:46.200Z",
+      "type": "model.output.delta",
+      "data": {
+        "segmentId": "segment:01a14380-5223-768f-b4fa-55e3d38ad927"
+      }
+    },
+    {
+      "at": "2026-10-16T06:57:46.202Z",
+      "type": "model.output.delta",
+      "data": {
+        "segmentId": "segment:01a14380-5223-768f-b4fa-55e3d38ad927"
+      }
+    },
+    {
+      "at": "2026-10-16T06:57:46.202Z",
+      "type": "model.output.delta",
+      "data": {
+        "segmentId": "segment:01a14380-5223-768f-b4fa-55e3d38ad927"
+      }
+    },
+    {
+      "at": "2026-10-16T06:57:46.711Z",
+      "type": "model.output.delta",
+      "data": {
+        "segmentId": "segment:01a14380-5223-768f-b4fa-55e3d38ad927"
+      }
+    },
+    {
+      "at": "2026-10-16T06:57:46.714Z",
+      "type": "model.output.delta",
+      "data": {
+        "segmentId": "segment:01a14380-5223-768f-b4fa-55e3d38ad927"
+      }
+    },
+    {
+      "at": "2026-10-16T06:57:46.714Z",
+      "type": "model.output.delta",
+      "data": {
+        "segmentId": "segment:01a14380-5223-768f-b4fa-55e3d38ad927"
+      }
+    },
+    {
+      "at": "2026-10-16T06:57:46.719Z",
+      "type": "model.output.delta",
+      "data": {
+        "segmentId": "segment:01a14380-5223-768f-b4fa-55e3d38ad927"
+      }
+    },
+    {
+      "at": "2026-10-16T06:57:46.719Z",
+      "type": "model.output.delta",
+      "data": {
+        "segmentId": "segment:01a14380-5223-768f-b4fa-55e3d38ad927"
+      }
+    },
+    {
+      "at": "2026-10-16T06:57:46.724Z",
+      "type": "model.output.delta",
+      "data": {
+        "segmentId": "segment:01a14380-5223-768f-b4fa-55e3d38ad927"
+      }
+    },
+    {
+      "at": "2026-10-16T06:57:46.724Z",
+      "type": "model.output.delta",
+      "data": {
+        "segmentId": "segment:01a14380-5223-768f-b4fa-55e3d38ad927"
+      }
+    },
+    {
+      "at": "2026-10-16T06:57:46.726Z",
+      "type": "model.output.delta",
+      "data": {
+        "segmentId": "segment:01a14380-5223-768f-b4fa-55e3d38ad927"
+      }
+    },
+    {
+      "at": "2026-10-16T06:57:47.187Z",
+      "type": "model.output.delta",
+      "data": {
+        "segmentId": "segment:01a14380-5223-768f-b4fa-55e3d38ad927"
+      }
+    },
+    {
+      "at": "2026-10-16T06:57:47.189Z",
+      "type": "model.output.delta",
+      "data": {
+        "segmentId": "segment:01a14380-5223-768f-b4fa-55e3d38ad927"
+      }
+    },
+    {
+      "at": "2026-10-16T06:57:47.191Z",
+      "type": "model.output.delta",
+      "data": {
+        "segmentId": "segment:01a14380-5223-768f-b4fa-55e3d38ad927"
+      }
+    },
+    {
+      "at": "2026-10-16T06:57:47.197Z",
+      "type": "model.output.delta",
+      "data": {
+        "segmentId": "segment:01a14380-5223-768f-b4fa-55e3d38ad927"
+      }
+    },
+    {
+      "at": "2026-10-16T06:57:47.197Z",
+      "type": "model.output.delta",
+      "data": {
+        "segmentId": "segment:01a14380-5223-768f-b4fa-55e3d38ad927"
+      }
+    },
+    {
+      "at": "2026-10-16T06:57:47.199Z",
+      "type": "model.output.delta",
+      "data": {
+        "segmentId": "segment:01a14380-5223-768f-b4fa-55e3d38ad927"
+      }
+    },
+    {
+      "at": "2026-10-16T06:57:47.202Z",
+      "type": "model.output.delta",
+      "data": {
+        "segmentId": "segment:01a14380-5223-768f-b4fa-55e3d38ad927"
+      }
+    },
+    {
+      "at": "2026-10-16T06:57:47.204Z",
+      "type": "model.output.delta",
+      "data": {
+        "segmentId": "segment:01a14380-5223-768f-b4fa-55e3d38ad927"
+      }
+    },
+    {
+      "at": "2026-10-16T06:57:47.206Z",
+      "type": "model.output.delta",
+      "data": {
+        "segmentId": "segment:01a14380-5223-768f-b4fa-55e3d38ad927"
+      }
+    },
+    {
+      "at": "2026-10-16T06:57:47.207Z",
+      "type": "model.output.delta",
+      "data": {
+        "segmentId": "segment:01a14380-5223-768f-b4fa-55e3d38ad927"
+      }
+    },
+    {
+      "at": "2026-10-16T06:57:47.207Z",
+      "type": "model.output.delta",
+      "data": {
+        "segmentId": "segment:01a14380-5223-768f-b4fa-55e3d38ad927"
+      }
+    },
+    {
+      "at": "2026-10-16T06:57:47.208Z",
+      "type": "model.output.delta",
+      "data": {
+        "segmentId": "segment:01a14380-5223-768f-b4fa-55e3d38ad927"
+      }
+    },
+    {
+      "at": "2026-10-16T06:57:47.208Z",
+      "type": "model.output.delta",
+      "data": {
+        "segmentId": "segment:01a14380-5223-768f-b4fa-55e3d38ad927"
+      }
+    },
+    {
+      "at": "2026-10-16T06:57:47.210Z",
+      "type": "model.output.delta",
+      "data": {
+        "segmentId": "segment:01a14380-5223-768f-b4fa-55e3d38ad927"
+      }
+    },
+    {
+      "at": "2026-10-16T06:57:47.210Z",
+      "type": "model.output.delta",
+      "data": {
+        "segmentId": "segment:01a14380-5223-768f-b4fa-55e3d38ad927"
+      }
+    },
+    {
+      "at": "2026-10-16T06:57:47.211Z",
+      "type": "model.output.delta",
+      "data": {
+        "segmentId": "segment:01a14380-5223-768f-b4fa-55e3d38ad927"
+      }
+    },
+    {
+      "at": "2026-10-16T06:57:48.427Z",
+      "type": "model.output.delta",
+      "data": {
+        "segmentId": "segment:01a14380-5223-768f-b4fa-55e3d38ad927"
+      }
+    },
+    {
+      "at": "2026-10-16T06:57:48.431Z",
+      "type": "model.output.delta",
+      "data": {
+        "segmentId": "segment:01a14380-5223-768f-b4fa-55e3d38ad927"
+      }
+    },
+    {
+      "at": "2026-10-16T06:57:48.431Z",
+      "type": "model.output.delta",
+      "data": {
+        "segmentId": "segment:01a14380-5223-768f-b4fa-55e3d38ad927"
+      }
+    },
+    {
+      "at": "2026-10-16T06:57:48.434Z",
+      "type": "model.output.delta",
+      "data": {
+        "segmentId": "segment:01a14380-5223-768f-b4fa-55e3d38ad927"
+      }
+    },
+    {
+      "at": "2026-10-16T06:57:48.434Z",
+      "type": "model.output.delta",
+      "data": {
+        "segmentId": "segment:01a14380-5223-768f-b4fa-55e3d38ad927"
+      }
+    },
+    {
+      "at": "2026-10-16T06:57:48.436Z",
+      "type": "model.output.delta",
+      "data": {
+        "segmentId": "segment:01a14380-5223-768f-b4fa-55e3d38ad927"
+      }
+    },
+    {
+      "at": "2026-10-16T06:57:48.436Z",
+      "type": "model.output.delta",
+      "data": {
+        "segmentId": "segment:01a14380-5223-768f-b4fa-55e3d38ad927"
+      }
+    },
+    {
+      "at": "2026-10-16T06:57:48.438Z",
+      "type": "model.output.delta",
+      "data": {
+        "segmentId": "segment:01a14380-5223-768f-b4fa-55e3d38ad927"
+      }
+    },
+    {
+      "at": "2026-10-16T06:58:48.448Z",
+      "type": "model.sampling.retry",
+      "data": {
+        "code": "responses_idle_timeout",
+        "segmentId": "segment:01a14380-5223-768f-b4fa-55e3d38ad927"
+      }
+    },
+    {
+      "at": "2026-10-16T06:58:58.984Z",
+      "type": "model.sampling.retry",
+      "data": {
+        "code": "responses_transport_unavailable",
+        "segmentId": "segment:01a14380-5223-768f-b4fa-55e3d38ad927"
+      }
+    },
+    {
+      "at": "2026-10-16T06:59:09.896Z",
+      "type": "model.sampling.retry",
+      "data": {
+        "code": "responses_transport_unavailable",
+        "segmentId": "segment:01a14380-5223-768f-b4fa-55e3d38ad927"
+      }
+    },
+    {
+      "at": "2026-10-16T06:59:24.730Z",
+      "type": "model.output.delta",
+      "data": {
+        "segmentId": "segment:01a14380-5223-768f-b4fa-55e3d38ad927"
+      }
+    },
+    {
+      "at": "2026-10-16T06:59:24.735Z",
+      "type": "model.output.delta",
+      "data": {
+        "segmentId": "segment:01a14380-5223-768f-b4fa-55e3d38ad927"
+      }
+    },
+    {
+      "at": "2026-10-16T06:59:24.735Z",
+      "type": "model.output.delta",
+      "data": {
+        "segmentId": "segment:01a14380-5223-768f-b4fa-55e3d38ad927"
+      }
+    },
+    {
+      "at": "2026-10-16T06:59:24.737Z",
+      "type": "model.output.delta",
+      "data": {
+        "segmentId": "segment:01a14380-5223-768f-b4fa-55e3d38ad927"
+      }
+    },
+    {
+      "at": "2026-10-16T06:59:24.737Z",
+      "type": "model.output.delta",
+      "data": {
+        "segmentId": "segment:01a14380-5223-768f-b4fa-55e3d38ad927"
+      }
+    },
+    {
+      "at": "2026-10-16T06:59:24.738Z",
+      "type": "model.output.delta",
+      "data": {
+        "segmentId": "segment:01a14380-5223-768f-b4fa-55e3d38ad927"
+      }
+    },
+    {
+      "at": "2026-10-16T06:59:24.739Z",
+      "type": "model.output.delta",
+      "data": {
+        "segmentId": "segment:01a14380-5223-768f-b4fa-55e3d38ad927"
+      }
+    },
+    {
+      "at": "2026-10-16T06:59:24.740Z",
+      "type": "model.output.delta",
+      "data": {
+        "segmentId": "segment:01a14380-5223-768f-b4fa-55e3d38ad927"
+      }
+    },
+    {
+      "at": "2026-10-16T06:59:24.740Z",
+      "type": "model.output.delta",
+      "data": {
+        "segmentId": "segment:01a14380-5223-768f-b4fa-55e3d38ad927"
+      }
+    },
+    {
+      "at": "2026-10-16T06:59:24.742Z",
+      "type": "model.output.delta",
+      "data": {
+        "segmentId": "segment:01a14380-5223-768f-b4fa-55e3d38ad927"
+      }
+    },
+    {
+      "at": "2026-10-16T06:59:24.742Z",
+      "type": "model.output.delta",
+      "data": {
+        "segmentId": "segment:01a14380-5223-768f-b4fa-55e3d38ad927"
+      }
+    },
+    {
+      "at": "2026-10-16T06:59:24.744Z",
+      "type": "model.output.delta",
+      "data": {
+        "segmentId": "segment:01a14380-5223-768f-b4fa-55e3d38ad927"
+      }
+    },
+    {
+      "at": "2026-10-16T06:59:24.744Z",
+      "type": "model.output.delta",
+      "data": {
+        "segmentId": "segment:01a14380-5223-768f-b4fa-55e3d38ad927"
+      }
+    },
+    {
+      "at": "2026-10-16T06:59:24.745Z",
+      "type": "model.output.delta",
+      "data": {
+        "segmentId": "segment:01a14380-5223-768f-b4fa-55e3d38ad927"
+      }
+    },
+    {
+      "at": "2026-10-16T06:59:24.747Z",
+      "type": "model.output.delta",
+      "data": {
+        "segmentId": "segment:01a14380-5223-768f-b4fa-55e3d38ad927"
+      }
+    },
+    {
+      "at": "2026-10-16T06:59:24.748Z",
+      "type": "model.output.delta",
+      "data": {
+        "segmentId": "segment:01a14380-5223-768f-b4fa-55e3d38ad927"
+      }
+    },
+    {
+      "at": "2026-10-16T06:59:24.748Z",
+      "type": "model.output.delta",
+      "data": {
+        "segmentId": "segment:01a14380-5223-768f-b4fa-55e3d38ad927"
+      }
+    },
+    {
+      "at": "2026-10-16T06:59:24.749Z",
+      "type": "model.output.delta",
+      "data": {
+        "segmentId": "segment:01a14380-5223-768f-b4fa-55e3d38ad927"
+      }
+    },
+    {
+      "at": "2026-10-16T06:59:24.749Z",
+      "type": "model.output.delta",
+      "data": {
+        "segmentId": "segment:01a14380-5223-768f-b4fa-55e3d38ad927"
+      }
+    },
+    {
+      "at": "2026-10-16T06:59:24.751Z",
+      "type": "model.output.delta",
+      "data": {
+        "segmentId": "segment:01a14380-5223-768f-b4fa-55e3d38ad927"
+      }
+    },
+    {
+      "at": "2026-10-16T06:59:24.751Z",
+      "type": "model.output.delta",
+      "data": {
+        "segmentId": "segment:01a14380-5223-768f-b4fa-55e3d38ad927"
+      }
+    },
+    {
+      "at": "2026-10-16T06:59:24.753Z",
+      "type": "model.output.delta",
+      "data": {
+        "segmentId": "segment:01a14380-5223-768f-b4fa-55e3d38ad927"
+      }
+    },
+    {
+      "at": "2026-10-16T06:59:24.755Z",
+      "type": "model.output.delta",
+      "data": {
+        "segmentId": "segment:01a14380-5223-768f-b4fa-55e3d38ad927"
+      }
+    },
+    {
+      "at": "2026-10-16T06:59:24.756Z",
+      "type": "model.output.delta",
+      "data": {
+        "segmentId": "segment:01a14380-5223-768f-b4fa-55e3d38ad927"
+      }
+    },
+    {
+      "at": "2026-10-16T06:59:24.756Z",
+      "type": "model.output.delta",
+      "data": {
+        "segmentId": "segment:01a14380-5223-768f-b4fa-55e3d38ad927"
+      }
+    },
+    {
+      "at": "2026-10-16T06:59:24.757Z",
+      "type": "model.output.delta",
+      "data": {
+        "segmentId": "segment:01a14380-5223-768f-b4fa-55e3d38ad927"
+      }
+    },
+    {
+      "at": "2026-10-16T06:59:24.757Z",
+      "type": "model.output.delta",
+      "data": {
+        "segmentId": "segment:01a14380-5223-768f-b4fa-55e3d38ad927"
+      }
+    },
+    {
+      "at": "2026-10-16T06:59:24.759Z",
+      "type": "model.output.delta",
+      "data": {
+        "segmentId": "segment:01a14380-5223-768f-b4fa-55e3d38ad927"
+      }
+    },
+    {
+      "at": "2026-10-16T06:59:24.759Z",
+      "type": "model.output.delta",
+      "data": {
+        "segmentId": "segment:01a14380-5223-768f-b4fa-55e3d38ad927"
+      }
+    },
+    {
+      "at": "2026-10-16T06:59:24.761Z",
+      "type": "model.output.delta",
+      "data": {
+        "segmentId": "segment:01a14380-5223-768f-b4fa-55e3d38ad927"
+      }
+    },
+    {
+      "at": "2026-10-16T06:59:24.762Z",
+      "type": "model.output.delta",
+      "data": {
+        "segmentId": "segment:01a14380-5223-768f-b4fa-55e3d38ad927"
+      }
+    },
+    {
+      "at": "2026-10-16T06:59:24.763Z",
+      "type": "model.output.delta",
+      "data": {
+        "segmentId": "segment:01a14380-5223-768f-b4fa-55e3d38ad927"
+      }
+    },
+    {
+      "at": "2026-10-16T06:59:24.763Z",
+      "type": "model.output.delta",
+      "data": {
+        "segmentId": "segment:01a14380-5223-768f-b4fa-55e3d38ad927"
+      }
+    },
+    {
+      "at": "2026-10-16T06:59:24.765Z",
+      "type": "model.output.delta",
+      "data": {
+        "segmentId": "segment:01a14380-5223-768f-b4fa-55e3d38ad927"
+      }
+    },
+    {
+      "at": "2026-10-16T06:59:24.765Z",
+      "type": "model.output.delta",
+      "data": {
+        "segmentId": "segment:01a14380-5223-768f-b4fa-55e3d38ad927"
+      }
+    },
+    {
+      "at": "2026-10-16T06:59:24.774Z",
+      "type": "model.output.delta",
+      "data": {
+        "segmentId": "segment:01a14380-5223-768f-b4fa-55e3d38ad927"
+      }
+    },
+    {
+      "at": "2026-10-16T06:59:24.775Z",
+      "type": "model.output.delta",
+      "data": {
+        "segmentId": "segment:01a14380-5223-768f-b4fa-55e3d38ad927"
+      }
+    },
+    {
+      "at": "2026-10-16T06:59:24.777Z",
+      "type": "model.output.delta",
+      "data": {
+        "segmentId": "segment:01a14380-5223-768f-b4fa-55e3d38ad927"
+      }
+    },
+    {
+      "at": "2026-10-16T06:59:24.779Z",
+      "type": "model.output.delta",
+      "data": {
+        "segmentId": "segment:01a14380-5223-768f-b4fa-55e3d38ad927"
+      }
+    },
+    {
+      "at": "2026-10-16T06:59:24.779Z",
+      "type": "model.output.delta",
+      "data": {
+        "segmentId": "segment:01a14380-5223-768f-b4fa-55e3d38ad927"
+      }
+    },
+    {
+      "at": "2026-10-16T06:59:24.781Z",
+      "type": "model.output.delta",
+      "data": {
+        "segmentId": "segment:01a14380-5223-768f-b4fa-55e3d38ad927"
+      }
+    },
+    {
+      "at": "2026-10-16T06:59:24.781Z",
+      "type": "model.output.delta",
+      "data": {
+        "segmentId": "segment:01a14380-5223-768f-b4fa-55e3d38ad927"
+      }
+    },
+    {
+      "at": "2026-10-16T06:59:24.782Z",
+      "type": "model.output.delta",
+      "data": {
+        "segmentId": "segment:01a14380-5223-768f-b4fa-55e3d38ad927"
+      }
+    },
+    {
+      "at": "2026-10-16T06:59:24.782Z",
+      "type": "model.output.delta",
+      "data": {
+        "segmentId": "segment:01a14380-5223-768f-b4fa-55e3d38ad927"
+      }
+    },
+    {
+      "at": "2026-10-16T06:59:24.784Z",
+      "type": "model.output.delta",
+      "data": {
+        "segmentId": "segment:01a14380-5223-768f-b4fa-55e3d38ad927"
+      }
+    },
+    {
+      "at": "2026-10-16T06:59:24.784Z",
+      "type": "model.output.delta",
+      "data": {
+        "segmentId": "segment:01a14380-5223-768f-b4fa-55e3d38ad927"
+      }
+    },
+    {
+      "at": "2026-10-16T06:59:24.785Z",
+      "type": "model.output.delta",
+      "data": {
+        "segmentId": "segment:01a14380-5223-768f-b4fa-55e3d38ad927"
+      }
+    },
+    {
+      "at": "2026-10-16T06:59:24.787Z",
+      "type": "model.output.delta",
+      "data": {
+        "segmentId": "segment:01a14380-5223-768f-b4fa-55e3d38ad927"
+      }
+    },
+    {
+      "at": "2026-10-16T06:59:24.788Z",
+      "type": "model.output.delta",
+      "data": {
+        "segmentId": "segment:01a14380-5223-768f-b4fa-55e3d38ad927"
+      }
+    },
+    {
+      "at": "2026-10-16T06:59:24.790Z",
+      "type": "model.output.delta",
+      "data": {
+        "segmentId": "segment:01a14380-5223-768f-b4fa-55e3d38ad927"
+      }
+    },
+    {
+      "at": "2026-10-16T06:59:24.791Z",
+      "type": "model.output.delta",
+      "data": {
+        "segmentId": "segment:01a14380-5223-768f-b4fa-55e3d38ad927"
+      }
+    },
+    {
+      "at": "2026-10-16T06:59:24.791Z",
+      "type": "model.output.delta",
+      "data": {
+        "segmentId": "segment:01a14380-5223-768f-b4fa-55e3d38ad927"
+      }
+    },
+    {
+      "at": "2026-10-16T06:59:24.792Z",
+      "type": "model.output.delta",
+      "data": {
+        "segmentId": "segment:01a14380-5223-768f-b4fa-55e3d38ad927"
+      }
+    },
+    {
+      "at": "2026-10-16T06:59:24.794Z",
+      "type": "model.output.delta",
+      "data": {
+        "segmentId": "segment:01a14380-5223-768f-b4fa-55e3d38ad927"
+      }
+    },
+    {
+      "at": "2026-10-16T06:59:24.796Z",
+      "type": "model.output.delta",
+      "data": {
+        "segmentId": "segment:01a14380-5223-768f-b4fa-55e3d38ad927"
+      }
+    },
+    {
+      "at": "2026-10-16T06:59:24.797Z",
+      "type": "model.output.delta",
+      "data": {
+        "segmentId": "segment:01a14380-5223-768f-b4fa-55e3d38ad927"
+      }
+    },
+    {
+      "at": "2026-10-16T06:59:24.799Z",
+      "type": "model.output.delta",
+      "data": {
+        "segmentId": "segment:01a14380-5223-768f-b4fa-55e3d38ad927"
+      }
+    },
+    {
+      "at": "2026-10-16T06:59:24.799Z",
+      "type": "model.output.delta",
+      "data": {
+        "segmentId": "segment:01a14380-5223-768f-b4fa-55e3d38ad927"
+      }
+    },
+    {
+      "at": "2026-10-16T06:59:24.804Z",
+      "type": "model.output.delta",
+      "data": {
+        "segmentId": "segment:01a14380-5223-768f-b4fa-55e3d38ad927"
+      }
+    },
+    {
+      "at": "2026-10-16T06:59:24.804Z",
+      "type": "model.output.delta",
+      "data": {
+        "segmentId": "segment:01a14380-5223-768f-b4fa-55e3d38ad927"
+      }
+    },
+    {
+      "at": "2026-10-16T06:59:24.806Z",
+      "type": "model.output.delta",
+      "data": {
+        "segmentId": "segment:01a14380-5223-768f-b4fa-55e3d38ad927"
+      }
+    },
+    {
+      "at": "2026-10-16T06:59:24.807Z",
+      "type": "model.output.delta",
+      "data": {
+        "segmentId": "segment:01a14380-5223-768f-b4fa-55e3d38ad927"
+      }
+    },
+    {
+      "at": "2026-10-16T06:59:24.807Z",
+      "type": "model.output.delta",
+      "data": {
+        "segmentId": "segment:01a14380-5223-768f-b4fa-55e3d38ad927"
+      }
+    },
+    {
+      "at": "2026-10-16T06:59:24.811Z",
+      "type": "model.output.delta",
+      "data": {
+        "segmentId": "segment:01a14380-5223-768f-b4fa-55e3d38ad927"
+      }
+    },
+    {
+      "at": "2026-10-16T06:59:24.813Z",
+      "type": "model.output.delta",
+      "data": {
+        "segmentId": "segment:01a14380-5223-768f-b4fa-55e3d38ad927"
+      }
+    },
+    {
+      "at": "2026-10-16T06:59:24.813Z",
+      "type": "model.output.delta",
+      "data": {
+        "segmentId": "segment:01a14380-5223-768f-b4fa-55e3d38ad927"
+      }
+    },
+    {
+      "at": "2026-10-16T06:59:24.814Z",
+      "type": "model.output.delta",
+      "data": {
+        "segmentId": "segment:01a14380-5223-768f-b4fa-55e3d38ad927"
+      }
+    },
+    {
+      "at": "2026-10-16T06:59:24.814Z",
+      "type": "model.output.delta",
+      "data": {
+        "segmentId": "segment:01a14380-5223-768f-b4fa-55e3d38ad927"
+      }
+    },
+    {
+      "at": "2026-10-16T06:59:24.814Z",
+      "type": "model.output.delta",
+      "data": {
+        "segmentId": "segment:01a14380-5223-768f-b4fa-55e3d38ad927"
+      }
+    },
+    {
+      "at": "2026-10-16T06:59:24.815Z",
+      "type": "model.output.delta",
+      "data": {
+        "segmentId": "segment:01a14380-5223-768f-b4fa-55e3d38ad927"
+      }
+    },
+    {
+      "at": "2026-10-16T06:59:24.816Z",
+      "type": "model.output.delta",
+      "data": {
+        "segmentId": "segment:01a14380-5223-768f-b4fa-55e3d38ad927"
+      }
+    },
+    {
+      "at": "2026-10-16T06:59:26.520Z",
+      "type": "model.output.delta",
+      "data": {
+        "segmentId": "segment:01a14380-5223-768f-b4fa-55e3d38ad927"
+      }
+    },
+    {
+      "at": "2026-10-16T06:59:26.523Z",
+      "type": "model.output.delta",
+      "data": {
+        "segmentId": "segment:01a14380-5223-768f-b4fa-55e3d38ad927"
+      }
+    },
+    {
+      "at": "2026-10-16T06:59:26.523Z",
+      "type": "model.output.delta",
+      "data": {
+        "segmentId": "segment:01a14380-5223-768f-b4fa-55e3d38ad927"
+      }
+    },
+    {
+      "at": "2026-10-16T06:59:26.525Z",
+      "type": "model.output.delta",
+      "data": {
+        "segmentId": "segment:01a14380-5223-768f-b4fa-55e3d38ad927"
+      }
+    },
+    {
+      "at": "2026-10-16T06:59:26.525Z",
+      "type": "model.output.delta",
+      "data": {
+        "segmentId": "segment:01a14380-5223-768f-b4fa-55e3d38ad927"
+      }
+    },
+    {
+      "at": "2026-10-16T06:59:26.527Z",
+      "type": "model.output.delta",
+      "data": {
+        "segmentId": "segment:01a14380-5223-768f-b4fa-55e3d38ad927"
+      }
+    },
+    {
+      "at": "2026-10-16T06:59:26.527Z",
+      "type": "model.output.delta",
+      "data": {
+        "segmentId": "segment:01a14380-5223-768f-b4fa-55e3d38ad927"
+      }
+    },
+    {
+      "at": "2026-10-16T06:59:26.529Z",
+      "type": "model.output.delta",
+      "data": {
+        "segmentId": "segment:01a14380-5223-768f-b4fa-55e3d38ad927"
+      }
+    },
+    {
+      "at": "2026-10-16T06:59:26.529Z",
+      "type": "model.output.delta",
+      "data": {
+        "segmentId": "segment:01a14380-5223-768f-b4fa-55e3d38ad927"
+      }
+    },
+    {
+      "at": "2026-10-16T06:59:26.532Z",
+      "type": "model.output.delta",
+      "data": {
+        "segmentId": "segment:01a14380-5223-768f-b4fa-55e3d38ad927"
+      }
+    },
+    {
+      "at": "2026-10-16T06:59:26.539Z",
+      "type": "model.output.delta",
+      "data": {
+        "segmentId": "segment:01a14380-5223-768f-b4fa-55e3d38ad927"
+      }
+    },
+    {
+      "at": "2026-10-16T06:59:26.540Z",
+      "type": "model.output.delta",
+      "data": {
+        "segmentId": "segment:01a14380-5223-768f-b4fa-55e3d38ad927"
+      }
+    },
+    {
+      "at": "2026-10-16T06:59:26.540Z",
+      "type": "model.output.delta",
+      "data": {
+        "segmentId": "segment:01a14380-5223-768f-b4fa-55e3d38ad927"
+      }
+    },
+    {
+      "at": "2026-10-16T06:59:26.542Z",
+      "type": "model.output.delta",
+      "data": {
+        "segmentId": "segment:01a14380-5223-768f-b4fa-55e3d38ad927"
+      }
+    },
+    {
+      "at": "2026-10-16T06:59:26.542Z",
+      "type": "model.output.delta",
+      "data": {
+        "segmentId": "segment:01a14380-5223-768f-b4fa-55e3d38ad927"
+      }
+    },
+    {
+      "at": "2026-10-16T06:59:26.549Z",
+      "type": "model.output.delta",
+      "data": {
+        "segmentId": "segment:01a14380-5223-768f-b4fa-55e3d38ad927"
+      }
+    },
+    {
+      "at": "2026-10-16T06:59:26.549Z",
+      "type": "model.output.delta",
+      "data": {
+        "segmentId": "segment:01a14380-5223-768f-b4fa-55e3d38ad927"
+      }
+    },
+    {
+      "at": "2026-10-16T06:59:26.553Z",
+      "type": "model.output.delta",
+      "data": {
+        "segmentId": "segment:01a14380-5223-768f-b4fa-55e3d38ad927"
+      }
+    },
+    {
+      "at": "2026-10-16T06:59:26.554Z",
+      "type": "model.output.delta",
+      "data": {
+        "segmentId": "segment:01a14380-5223-768f-b4fa-55e3d38ad927"
+      }
+    },
+    {
+      "at": "2026-10-16T06:59:26.554Z",
+      "type": "model.output.delta",
+      "data": {
+        "segmentId": "segment:01a14380-5223-768f-b4fa-55e3d38ad927"
+      }
+    },
+    {
+      "at": "2026-10-16T06:59:26.555Z",
+      "type": "model.output.delta",
+      "data": {
+        "segmentId": "segment:01a14380-5223-768f-b4fa-55e3d38ad927"
+      }
+    },
+    {
+      "at": "2026-10-16T06:59:26.555Z",
+      "type": "model.output.delta",
+      "data": {
+        "segmentId": "segment:01a14380-5223-768f-b4fa-55e3d38ad927"
+      }
+    },
+    {
+      "at": "2026-10-16T06:59:26.555Z",
+      "type": "model.output.delta",
+      "data": {
+        "segmentId": "segment:01a14380-5223-768f-b4fa-55e3d38ad927"
+      }
+    },
+    {
+      "at": "2026-10-16T06:59:26.556Z",
+      "type": "model.output.delta",
+      "data": {
+        "segmentId": "segment:01a14380-5223-768f-b4fa-55e3d38ad927"
+      }
+    },
+    {
+      "at": "2026-10-16T06:59:26.556Z",
+      "type": "model.output.delta",
+      "data": {
+        "segmentId": "segment:01a14380-5223-768f-b4fa-55e3d38ad927"
+      }
+    },
+    {
+      "at": "2026-10-16T06:59:26.556Z",
+      "type": "model.output.delta",
+      "data": {
+        "segmentId": "segment:01a14380-5223-768f-b4fa-55e3d38ad927"
+      }
+    },
+    {
+      "at": "2026-10-16T06:59:26.556Z",
+      "type": "model.output.delta",
+      "data": {
+        "segmentId": "segment:01a14380-5223-768f-b4fa-55e3d38ad927"
+      }
+    },
+    {
+      "at": "2026-10-16T06:59:26.557Z",
+      "type": "model.output.delta",
+      "data": {
+        "segmentId": "segment:01a14380-5223-768f-b4fa-55e3d38ad927"
+      }
+    },
+    {
+      "at": "2026-10-16T06:59:26.557Z",
+      "type": "model.output.delta",
+      "data": {
+        "segmentId": "segment:01a14380-5223-768f-b4fa-55e3d38ad927"
+      }
+    },
+    {
+      "at": "2026-10-16T06:59:26.557Z",
+      "type": "model.output.delta",
+      "data": {
+        "segmentId": "segment:01a14380-5223-768f-b4fa-55e3d38ad927"
+      }
+    },
+    {
+      "at": "2026-10-16T06:59:26.558Z",
+      "type": "model.output.delta",
+      "data": {
+        "segmentId": "segment:01a14380-5223-768f-b4fa-55e3d38ad927"
+      }
+    },
+    {
+      "at": "2026-10-16T06:59:26.559Z",
+      "type": "model.output.delta",
+      "data": {
+        "segmentId": "segment:01a14380-5223-768f-b4fa-55e3d38ad927"
+      }
+    },
+    {
+      "at": "2026-10-16T06:59:26.559Z",
+      "type": "model.output.delta",
+      "data": {
+        "segmentId": "segment:01a14380-5223-768f-b4fa-55e3d38ad927"
+      }
+    },
+    {
+      "at": "2026-10-16T06:59:26.560Z",
+      "type": "model.output.delta",
+      "data": {
+        "segmentId": "segment:01a14380-5223-768f-b4fa-55e3d38ad927"
+      }
+    },
+    {
+      "at": "2026-10-16T06:59:26.560Z",
+      "type": "model.output.delta",
+      "data": {
+        "segmentId": "segment:01a14380-5223-768f-b4fa-55e3d38ad927"
+      }
+    },
+    {
+      "at": "2026-10-16T06:59:26.561Z",
+      "type": "model.output.delta",
+      "data": {
+        "segmentId": "segment:01a14380-5223-768f-b4fa-55e3d38ad927"
+      }
+    },
+    {
+      "at": "2026-10-16T06:59:26.561Z",
+      "type": "model.output.delta",
+      "data": {
+        "segmentId": "segment:01a14380-5223-768f-b4fa-55e3d38ad927"
+      }
+    },
+    {
+      "at": "2026-10-16T06:59:26.562Z",
+      "type": "model.output.delta",
+      "data": {
+        "segmentId": "segment:01a14380-5223-768f-b4fa-55e3d38ad927"
+      }
+    },
+    {
+      "at": "2026-10-16T06:59:26.563Z",
+      "type": "model.output.delta",
+      "data": {
+        "segmentId": "segment:01a14380-5223-768f-b4fa-55e3d38ad927"
+      }
+    },
+    {
+      "at": "2026-10-16T06:59:26.564Z",
+      "type": "model.output.delta",
+      "data": {
+        "segmentId": "segment:01a14380-5223-768f-b4fa-55e3d38ad927"
+      }
+    },
+    {
+      "at": "2026-10-16T06:59:26.564Z",
+      "type": "model.output.delta",
+      "data": {
+        "segmentId": "segment:01a14380-5223-768f-b4fa-55e3d38ad927"
+      }
+    },
+    {
+      "at": "2026-10-16T06:59:26.564Z",
+      "type": "model.output.delta",
+      "data": {
+        "segmentId": "segment:01a14380-5223-768f-b4fa-55e3d38ad927"
+      }
+    },
+    {
+      "at": "2026-10-16T06:59:26.564Z",
+      "type": "model.output.delta",
+      "data": {
+        "segmentId": "segment:01a14380-5223-768f-b4fa-55e3d38ad927"
+      }
+    },
+    {
+      "at": "2026-10-16T06:59:26.565Z",
+      "type": "model.output.delta",
+      "data": {
+        "segmentId": "segment:01a14380-5223-768f-b4fa-55e3d38ad927"
+      }
+    },
+    {
+      "at": "2026-10-16T06:59:26.566Z",
+      "type": "model.output.delta",
+      "data": {
+        "segmentId": "segment:01a14380-5223-768f-b4fa-55e3d38ad927"
+      }
+    },
+    {
+      "at": "2026-10-16T06:59:26.566Z",
+      "type": "model.output.delta",
+      "data": {
+        "segmentId": "segment:01a14380-5223-768f-b4fa-55e3d38ad927"
+      }
+    },
+    {
+      "at": "2026-10-16T06:59:26.567Z",
+      "type": "model.output.delta",
+      "data": {
+        "segmentId": "segment:01a14380-5223-768f-b4fa-55e3d38ad927"
+      }
+    },
+    {
+      "at": "2026-10-16T06:59:26.568Z",
+      "type": "model.output.delta",
+      "data": {
+        "segmentId": "segment:01a14380-5223-768f-b4fa-55e3d38ad927"
+      }
+    },
+    {
+      "at": "2026-10-16T06:59:26.568Z",
+      "type": "model.output.delta",
+      "data": {
+        "segmentId": "segment:01a14380-5223-768f-b4fa-55e3d38ad927"
+      }
+    },
+    {
+      "at": "2026-10-16T06:59:26.569Z",
+      "type": "model.output.delta",
+      "data": {
+        "segmentId": "segment:01a14380-5223-768f-b4fa-55e3d38ad927"
+      }
+    },
+    {
+      "at": "2026-10-16T06:59:26.570Z",
+      "type": "model.output.delta",
+      "data": {
+        "segmentId": "segment:01a14380-5223-768f-b4fa-55e3d38ad927"
+      }
+    },
+    {
+      "at": "2026-10-16T06:59:26.571Z",
+      "type": "model.output.delta",
+      "data": {
+        "segmentId": "segment:01a14380-5223-768f-b4fa-55e3d38ad927"
+      }
+    },
+    {
+      "at": "2026-10-16T06:59:26.571Z",
+      "type": "model.output.delta",
+      "data": {
+        "segmentId": "segment:01a14380-5223-768f-b4fa-55e3d38ad927"
+      }
+    },
+    {
+      "at": "2026-10-16T06:59:26.572Z",
+      "type": "model.output.delta",
+      "data": {
+        "segmentId": "segment:01a14380-5223-768f-b4fa-55e3d38ad927"
+      }
+    },
+    {
+      "at": "2026-10-16T06:59:26.572Z",
+      "type": "model.output.delta",
+      "data": {
+        "segmentId": "segment:01a14380-5223-768f-b4fa-55e3d38ad927"
+      }
+    },
+    {
+      "at": "2026-10-16T06:59:42.606Z",
+      "type": "usage.recorded",
+      "data": {
+        "segmentId": "segment:01a14380-5223-768f-b4fa-55e3d38ad927"
+      }
+    },
+    {
+      "at": "2026-10-16T06:59:42.611Z",
+      "type": "segment.completed",
+      "data": {
+        "segmentId": "segment:01a14380-5223-768f-b4fa-55e3d38ad927"
+      }
+    },
+    {
+      "at": "2026-10-16T06:59:42.611Z",
+      "type": "message.completed",
+      "data": {}
+    },
+    {
+      "at": "2026-10-16T06:59:42.611Z",
+      "type": "run.completed",
+      "data": {}
+    }
+  ],
+  "unattributedGap": {
+    "from": "2026-10-16T06:52:33.319Z",
+    "to": "2026-10-16T06:54:06.859Z",
+    "milliseconds": 93540,
+    "queueEpochFrom": 6,
+    "queueEpochTo": 10,
+    "cause": "not yet established; not counted as model HTTP or tool execution"
+  }
+}

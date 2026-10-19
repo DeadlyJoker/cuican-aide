@@ -5,6 +5,7 @@ import { join } from "node:path";
 
 import { afterEach, describe, expect, it, vi } from "vitest";
 import { desktopPluginManagementFixture } from "./desktopPluginManagementRuntime.test-support.ts";
+import { DesktopPluginBootstrapOwner } from "./desktopPluginManagementRuntime.ts";
 import { desktopFinancialEnvironmentFixture } from "./desktopPluginCreditSettlementEnvironment.test-support.ts";
 
 import {
@@ -20,6 +21,185 @@ import {
 } from "./runtimeSupervisor.ts";
 
 afterEach(() => vi.unstubAllEnvs());
+
+it("stop closes a late recovery bootstrap before it can publish a management child", async () => {
+  const f = desktopPluginManagementFixture({
+    provider: "configured",
+    approval: "present",
+  });
+  const worker = join(f.directory, "worker.mjs");
+  writeFileSync(
+    worker,
+    readFileSync(worker, "utf8").replace(
+      "process.stdin.resume();setInterval(()=>{},1000);",
+      "process.exit(19);",
+    ),
+  );
+  let release!: () => void;
+  const pending = new Promise<void>((resolve) => {
+    release = resolve;
+  });
+  let preparations = 0,
+    recoveryEntered = false;
+  const original = DesktopPluginBootstrapOwner.prototype.prepared;
+  const preparation = vi
+    .spyOn(DesktopPluginBootstrapOwner.prototype, "prepared")
+    .mockImplementation(async function (this: DesktopPluginBootstrapOwner) {
+      if (++preparations === 2) {
+        recoveryEntered = true;
+        await pending;
+      }
+      return original.call(this);
+    });
+  try {
+    const starting = f.owner.start().then(
+      () => null,
+      (error) => error,
+    );
+    await vi.waitFor(() => expect(recoveryEntered).toBe(true));
+    await f.owner.stop();
+    release();
+    expect(await starting).toBeInstanceOf(Error);
+    expect(f.records().filter((row) => row.kind === "control")).toHaveLength(1);
+    expect(f.owner.localManagementAccess()).toBeNull();
+    expect(f.bootstrapFiles()).toHaveLength(0);
+    for (const child of f.records())
+      expect(() => process.kill(child.pid, 0)).toThrow();
+  } finally {
+    release();
+    preparation.mockRestore();
+    await f.close();
+  }
+});
+
+it("external stop during failed startup cleanup forbids a late management recovery", async () => {
+  const f = desktopPluginManagementFixture({
+    provider: "configured",
+    approval: "present",
+  });
+  const worker = join(f.directory, "worker.mjs");
+  writeFileSync(
+    worker,
+    readFileSync(worker, "utf8").replace(
+      "process.stdin.resume();setInterval(()=>{},1000);",
+      "process.exit(19);",
+    ),
+  );
+  let release!: () => void;
+  const pending = new Promise<void>((resolve) => {
+    release = resolve;
+  });
+  let cleanupStarted = false;
+  const off = f.owner.onSessionInvalidated(() => {
+    cleanupStarted = true;
+    return pending;
+  });
+  try {
+    const starting = f.owner.start().then(
+      () => null,
+      (error) => error,
+    );
+    await vi.waitFor(() => expect(cleanupStarted).toBe(true));
+    const stopping = f.owner.stop();
+    release();
+    await stopping;
+    expect(await starting).toBeInstanceOf(Error);
+    expect(f.records().filter((row) => row.kind === "control")).toHaveLength(1);
+    expect(() => f.owner.session()).toThrow("control_runtime_unavailable");
+    expect(f.bootstrapFiles()).toHaveLength(0);
+    for (const child of f.records())
+      expect(() => process.kill(child.pid, 0)).toThrow();
+  } finally {
+    release();
+    off();
+    await f.close();
+  }
+});
+
+it("settles a crashed Worker before a fresh management-only Control and never replays startup", async () => {
+  const f = desktopPluginManagementFixture({
+    provider: "configured",
+    approval: "present",
+  });
+  const worker = join(f.directory, "worker.mjs");
+  writeFileSync(
+    worker,
+    readFileSync(worker, "utf8").replace(
+      "process.stdin.resume();setInterval(()=>{},1000);",
+      "process.exit(19);",
+    ),
+  );
+  try {
+    await f.owner.start();
+    const records = f.records();
+    const workers = records.filter((row) => row.kind === "worker");
+    const controls = records.filter((row) => row.kind === "control");
+    expect(workers).toHaveLength(1);
+    expect(controls).toHaveLength(2);
+    expect(() => process.kill(workers[0]!.pid, 0)).toThrow();
+    expect(() => process.kill(controls[0]!.pid, 0)).toThrow();
+    expect(controls[1]!.modelId).toBeNull();
+    expect(controls[1]!.modelApiKey).toBeNull();
+    expect(controls[1]!.bootstrapPath).not.toBe(workers[0]!.bootstrapPath);
+    expect(f.owner.localManagementAccess()).not.toBeNull();
+    const session = f.owner.session();
+    expect((await fetch(`${session.baseUrl}api/v1/health/live`)).status).toBe(
+      200,
+    );
+    expect((await fetch(`${session.baseUrl}api/v1/health/ready`)).status).toBe(
+      503,
+    );
+    expect(
+      (
+        await fetch(`${session.baseUrl}api/v1/plugins/execute`, {
+          method: "POST",
+        })
+      ).status,
+    ).toBe(404);
+    await f.owner.start();
+    expect(f.records()).toHaveLength(records.length);
+    expect(f.logs.join("")).toContain("Runtime unavailable");
+    process.kill(controls[1]!.pid, "SIGTERM");
+    await vi.waitFor(() =>
+      expect(() => f.owner.session()).toThrow("control_runtime_unavailable"),
+    );
+    await f.owner.stop();
+    expect(f.records()).toHaveLength(records.length);
+    expect(f.owner.localManagementAccess()).toBeNull();
+    expect(f.bootstrapFiles()).toHaveLength(0);
+    expect(() => process.kill(controls[1]!.pid, 0)).toThrow();
+  } finally {
+    await f.close();
+  }
+});
+
+it("does not publish management recovery when physical cleanup rejects", async () => {
+  const f = desktopPluginManagementFixture({
+    provider: "configured",
+    approval: "present",
+  });
+  const worker = join(f.directory, "worker.mjs");
+  writeFileSync(
+    worker,
+    readFileSync(worker, "utf8").replace(
+      "process.stdin.resume();setInterval(()=>{},1000);",
+      "process.exit(19);",
+    ),
+  );
+  const off = f.owner.onSessionInvalidated(() =>
+    Promise.reject(new Error("named_physical_cleanup_unsettled")),
+  );
+  try {
+    await expect(f.owner.start()).rejects.toThrow(
+      "native_session_cleanup_failed",
+    );
+    expect(f.records().filter((row) => row.kind === "control")).toHaveLength(1);
+    expect(() => f.owner.session()).toThrow("control_runtime_unavailable");
+  } finally {
+    off();
+    await f.close();
+  }
+});
 
 it.each(["configured", "absent"] as const)(
   "isolates declared financial environment at actual Native child spawn with provider %s",

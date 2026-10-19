@@ -8,6 +8,7 @@ import {
   dispatchPluginUiIntent,
   parsePluginUiIntentRecord,
   refusePluginUiIntentFirstDispatch,
+  refusePluginUiIntentUnadmittedQuery,
 } from "./plugin-ui-intent.ts";
 import { extensionCanonicalJson } from "./extension-configuration.ts";
 import { parsePluginTaskAdmissionPin } from "./plugin-task-admission.ts";
@@ -55,6 +56,57 @@ const fresh = () =>
     { account, sourcePin: pin, requestJson, sequence: 1, at },
     digester,
   );
+test("verified query non-admission uses an exact dispatch CAS without rewriting old requests or accepted facts", () => {
+  const sourcePin = {
+    ...pin,
+    action: "crewon.project-generation-queries.v1.queryConceptGeneration",
+  };
+  const original = createPluginUiIntent(
+    {
+      account,
+      sourcePin,
+      requestJson: extensionCanonicalJson({
+        action: sourcePin.action,
+        input: { idempotencyKey: "query-key" },
+      }),
+      sequence: 1,
+      at,
+    },
+    digester,
+  );
+  const once = dispatchPluginUiIntent(original, at, digester),
+    twice = dispatchPluginUiIntent(once, at, digester);
+  assert.deepEqual(
+    refusePluginUiIntentUnadmittedQuery(twice, 1, at, digester),
+    twice,
+  );
+  const refused = refusePluginUiIntentUnadmittedQuery(twice, 2, at, digester);
+  assert.equal(refused.phase, "refused");
+  assert.equal(refused.dispatchAttemptCount, 2);
+  assert.equal(refused.requestJson, original.requestJson);
+  assert.deepEqual(parsePluginUiIntentRecord(refused, digester), refused);
+  const accepted = acceptPluginUiIntent(
+    twice,
+    "{}",
+    digester.sha256("receipt"),
+    at,
+    digester,
+  );
+  assert.deepEqual(
+    refusePluginUiIntentUnadmittedQuery(accepted, 2, at, digester),
+    accepted,
+  );
+  assert.throws(
+    () =>
+      refusePluginUiIntentUnadmittedQuery(
+        dispatchPluginUiIntent(fresh(), at, digester),
+        1,
+        at,
+        digester,
+      ),
+    /refusal_unsupported/,
+  );
+});
 test("only an exact media no-admission reason can refuse its first dispatch; concurrent and accepted states are preserved", () => {
   const mediaPin = {
     ...pin,

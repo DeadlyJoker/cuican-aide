@@ -24,8 +24,24 @@ export type ComfyUiResultIdentity = Readonly<{
 
 /** Original provider result decoder, shared by the unchanged v0 projection and explicit selection adapter. */
 export function decodeComfyUiImages(
-  input: Readonly<{ resultJson: string | null; baseUrl: unknown }>,
+  input: Readonly<{
+    resultJson: string | null;
+    baseUrl: unknown;
+    serviceProtocol?: unknown;
+  }>,
 ): readonly VerifiedComfyUiImage[] {
+  if (
+    input.serviceProtocol !== undefined &&
+    input.serviceProtocol !== "native" &&
+    input.serviceProtocol !== "workflow-panel-v1" &&
+    input.serviceProtocol !== "workflow-api-v1"
+  )
+    invalid();
+  const viewPath =
+    input.serviceProtocol === "workflow-panel-v1" ||
+    input.serviceProtocol === "workflow-api-v1"
+      ? "/api/comfy/view"
+      : "/view";
   if (input.resultJson === null || Buffer.byteLength(input.resultJson) > 16_384)
     invalid();
   const result = record(JSON.parse(input.resultJson), ["images"]);
@@ -51,7 +67,7 @@ export function decodeComfyUiImages(
     )
       invalid();
     const expected = new URL(
-      `/view?${new URLSearchParams({ filename: image.filename as string, subfolder: image.subfolder as string, type: "output" })}`,
+      `${viewPath}?${new URLSearchParams({ filename: image.filename as string, subfolder: image.subfolder as string, type: "output" })}`,
       baseUrl,
     ).href;
     if (image.url !== expected || Buffer.byteLength(expected) > 2048) invalid();
@@ -157,6 +173,7 @@ export function createComfyUiProjectGenerationImageResultVerifier(
       const images = decodeComfyUiImages({
         resultJson: operation.resultJson,
         baseUrl: configuration.parameters.baseUrl,
+        serviceProtocol: configuration.parameters.serviceProtocol,
       });
       const image = images[resultIndex];
       if (image === undefined) unavailable();

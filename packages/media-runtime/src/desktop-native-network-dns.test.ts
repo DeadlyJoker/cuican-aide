@@ -172,12 +172,26 @@ test("system errors and malformed answers fail closed without a public query", a
   }
 });
 
-test("only ENODATA is an optional family; all failed or malformed public answers are denied", async () => {
+test("an absent or timed out family permits only fresh answers from the other family", async () => {
   const ipv4Only = fixture(async () => fake, { ipv6: noData });
   assert.deepEqual(await ipv4Only.dns.resolveAll(host), [public4]);
   const ipv6Only = fixture(async () => fake, { ipv4: noData });
   assert.deepEqual(await ipv6Only.dns.resolveAll(host), [public6]);
-  for (const code of ["ESERVFAIL", "ENOTFOUND", "ETIMEOUT", "ECANCELLED"]) {
+  const timeout = Object.assign(new Error("queryAaaa ETIMEOUT"), {
+    code: "ETIMEOUT",
+  });
+  for (const options of [{ ipv6: timeout }, { ipv4: timeout }]) {
+    const { dns, calls } = fixture(async () => fake, options);
+    assert.deepEqual(await dns.resolveAll(host), [
+      options.ipv6 ? public4 : public6,
+    ]);
+    assert.equal(calls.cancel, 1);
+    assert.equal(calls.current, 4);
+  }
+});
+
+test("authoritative failures, cancellation and malformed public answers are denied", async () => {
+  for (const code of ["ESERVFAIL", "ENOTFOUND", "ECANCELLED"]) {
     const fault = Object.assign(new Error(code), { code });
     const { dns, calls } = fixture(async () => fake, { ipv6: fault });
     await assert.rejects(dns.resolveAll(host), (error) => error === fault);
@@ -187,6 +201,14 @@ test("only ENODATA is an optional family; all failed or malformed public answers
   }
   for (const options of [
     { ipv4: noData, ipv6: noData },
+    {
+      ipv4: Object.assign(new Error("timeout"), { code: "ETIMEOUT" }),
+      ipv6: noData,
+    },
+    {
+      ipv4: Object.assign(new Error("timeout"), { code: "ETIMEOUT" }),
+      ipv6: Object.assign(new Error("timeout"), { code: "ETIMEOUT" }),
+    },
     { ipv4: [], ipv6: [] },
     { ipv4: ["198.18.12.7", "198.18.12.7"], ipv6: noData },
     { ipv4: [public6.address], ipv6: noData },
@@ -201,13 +223,16 @@ test("only ENODATA is an optional family; all failed or malformed public answers
   }
 });
 
-test("fallback answers still pass through the unchanged production policy as a complete set", async () => {
+test("fallback answers including a single timed out family retain the unchanged production policy", async () => {
   for (const ipv4 of [
     [private4.address],
     [public4.address, private4.address],
     [fake[0].address],
   ]) {
-    const { dns } = fixture(async () => fake, { ipv4, ipv6: noData });
+    const { dns } = fixture(async () => fake, {
+      ipv4,
+      ipv6: Object.assign(new Error("timeout"), { code: "ETIMEOUT" }),
+    });
     assert.equal((await dns.resolveAll(host)).length, ipv4.length);
     const resolver = new NetworkEgressResolver({
       dns,

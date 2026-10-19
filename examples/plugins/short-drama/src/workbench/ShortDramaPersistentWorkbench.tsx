@@ -3,6 +3,7 @@ import { ProjectTextRecoveryActions } from "./ProjectTextRecoveryActions";
 import { ConceptRecoveryActions } from "./ConceptRecoveryActions";
 import { ProjectOperations } from "./ProjectOperations";
 import { ProjectRecoveryRecords } from "./ProjectRecoveryRecords";
+import type { OtherProjectRecovery } from "./ProjectRecoveryProjection";
 import { ProjectDirectoryStatus } from "./ProjectDirectoryStatus";
 import type { ProjectMediaOutputController } from "./ProjectMediaOutputController";
 import { ProjectMediaOutputWorkbench } from "./ProjectMediaOutputWorkbench";
@@ -12,6 +13,7 @@ import type { ProjectMediaGenerationController } from "./ProjectMediaGenerationC
 import { LegacyProjectDialog } from "./LegacyProjectDialog";
 import { ProjectFoundationController } from "./ProjectFoundationController";
 import { ProjectFoundationWorkbench } from "./ProjectFoundationWorkbench";
+import { ProjectBriefRevisionEditor } from "./ProjectBriefRevisionEditor";
 import {
   ProjectFoundationCreateDialog,
   emptyCreationDraft,
@@ -26,11 +28,18 @@ import {
 import { ProjectMediaInputController } from "./ProjectMediaInputController";
 import { ProjectMediaInputWorkbench } from "./ProjectMediaInputWorkbench";
 import { useEffect, useRef, useState, useSyncExternalStore } from "react";
-import { ChevronRight, Clock3, FolderOpen, Layers3, Plus } from "lucide-react";
+import {
+  ChevronRight,
+  Clock3,
+  Film,
+  FolderOpen,
+  Layers3,
+  MessageSquareText,
+  Plus,
+  Search,
+} from "lucide-react";
 import {
   CreativeProjectController,
-  briefBytes,
-  validBrief,
   type ProjectSnapshot,
 } from "./creative-project-controller";
 import { ConceptWorkbench } from "./ConceptWorkbench";
@@ -50,6 +59,7 @@ import { ProjectPlanningDraftReview } from "./ProjectPlanningDraftReview";
 import type { ProjectPlanningProposal } from "../project-planning-service";
 import { ProjectAssetController } from "./ProjectAssetController";
 import { ProjectAssetWorkbench } from "./ProjectAssetWorkbench";
+import { useProjectAssetInvalidation } from "./useProjectAssetInvalidation";
 const emptySubscribe = () => () => undefined;
 const noAssetSnapshot = () => null;
 
@@ -131,7 +141,15 @@ export function ShortDramaPersistentWorkbench({
   hostSurface = "workbench",
   hostPageContext = null,
   onOpenHostPage,
+  otherProjectRecovery = [],
+  foundationChangeRevision = 0,
+  textChangeRevision = 0,
+  assetChangeRevision = 0,
 }: {
+  otherProjectRecovery?: readonly OtherProjectRecovery[];
+  foundationChangeRevision?: number;
+  textChangeRevision?: number;
+  assetChangeRevision?: number;
   hostSurface?: "workbench" | "sidebar";
   hostPageContext?: Readonly<{
     projectId?: string;
@@ -193,7 +211,7 @@ export function ShortDramaPersistentWorkbench({
     association?.getSnapshot ?? noAssetSnapshot,
     association?.getSnapshot ?? noAssetSnapshot,
   );
-  useSyncExternalStore(
+  const assetSnapshot = useSyncExternalStore(
     assets?.subscribe ?? emptySubscribe,
     assets?.getSnapshot ?? noAssetSnapshot,
     assets?.getSnapshot ?? noAssetSnapshot,
@@ -248,11 +266,22 @@ export function ShortDramaPersistentWorkbench({
     proposal: ProjectPlanningProposal;
   }> | null>(null);
   const [showProject, setShowProject] = useState(false);
-  const details = showProject ? snapshot.details : null;
+  const details =
+    showProject &&
+    (!hostPageContext?.projectId ||
+      snapshot.details?.project.projectId === hostPageContext.projectId)
+      ? snapshot.details
+      : null;
   const origin =
     foundationSnapshot?.foundation?.projectId === details?.project.projectId
       ? (foundationSnapshot?.foundation?.origin ?? null)
       : null;
+  useProjectAssetInvalidation(
+    assets,
+    assetSnapshot,
+    details?.project.projectId ?? null,
+    assetChangeRevision,
+  );
   const foundation = foundationSnapshot?.foundation;
   const downstreamBlocked =
     origin === "novel" && !foundation?.confirmedProposal;
@@ -373,6 +402,41 @@ export function ShortDramaPersistentWorkbench({
     details,
   ]);
   useEffect(() => {
+    const projectId = hostPageContext?.projectId;
+    if (
+      foundationChangeRevision > 0 &&
+      projectId &&
+      details?.project.projectId === projectId
+    )
+      foundations?.invalidate(projectId);
+  }, [
+    foundations,
+    foundationChangeRevision,
+    hostPageContext?.projectId,
+    details?.project.projectId,
+  ]);
+  useEffect(() => {
+    const projectId = hostPageContext?.projectId;
+    if (
+      textChangeRevision > 0 &&
+      projectId &&
+      details?.project.projectId === projectId
+    ) {
+      if (hostPageContext?.stage === "outline") {
+        texts.invalidate(projectId);
+        outlines?.invalidate(projectId);
+      } else if (hostPageContext?.stage === "script")
+        texts.invalidate(projectId);
+    }
+  }, [
+    texts,
+    outlines,
+    textChangeRevision,
+    hostPageContext?.projectId,
+    hostPageContext?.stage,
+    details?.project.projectId,
+  ]);
+  useEffect(() => {
     mediaOutputs?.setSource(
       details?.project.projectId ?? null,
       generationReceipt,
@@ -383,14 +447,18 @@ export function ShortDramaPersistentWorkbench({
       void foundations?.readOrigins(snapshot.projects);
   }, [foundations, foundationSnapshot?.available, snapshot.projects]);
   useEffect(() => {
-    if (origin === "creative" && page === "outline") setPage("script");
-  }, [origin, page]);
-  useEffect(() => {
     setPage("overview");
   }, [details?.project.projectId]);
   useEffect(() => {
-    if (textSnapshot.recovery.intent) setPage(textSnapshot.target.kind);
-  }, [textSnapshot.recovery.intent?.intentId, textSnapshot.target.kind]);
+    // Background recovery restores content, not the host's selected stage.
+    // The recovery action below explicitly navigates to its result on request.
+    if (!onOpenHostPage && textSnapshot.recovery.intent)
+      setPage(textSnapshot.target.kind);
+  }, [
+    onOpenHostPage,
+    textSnapshot.recovery.intent?.intentId,
+    textSnapshot.target.kind,
+  ]);
 
   useEffect(() => {
     if (snapshot.notice === "项目已保存") {
@@ -418,7 +486,12 @@ export function ShortDramaPersistentWorkbench({
       !snapshot.opening
     )
       void controller.openProject(projectId);
-  }, [controller, hostPageContext?.projectId, snapshot.phase]);
+  }, [
+    controller,
+    hostPageContext?.projectId,
+    snapshot.phase,
+    snapshot.conceptLocked,
+  ]);
   useEffect(() => {
     if (
       hostPageContext?.stage &&
@@ -453,6 +526,26 @@ export function ShortDramaPersistentWorkbench({
         className="drama-workbench drama-host-sidebar"
         aria-label="短剧项目导航"
       >
+        <div className="drama-sidebar-brand">
+          <span className="drama-sidebar-brand-icon" aria-hidden="true">
+            <Film size={17} />
+          </span>
+          <span className="drama-sidebar-brand-copy">
+            <strong>AI 短剧</strong>
+            <small>项目与创作会话</small>
+          </span>
+          <button
+            type="button"
+            className="drama-sidebar-icon-button"
+            aria-label="搜索短剧项目"
+            title="搜索短剧项目"
+            onClick={() =>
+              onOpenHostPage?.({ key: "home", title: "我的项目", context: {} })
+            }
+          >
+            <Search size={16} />
+          </button>
+        </div>
         <div className="drama-sidebar-heading">
           <strong>项目</strong>
           <button
@@ -468,17 +561,19 @@ export function ShortDramaPersistentWorkbench({
             }
           >
             <Plus size={16} />
-            新建项目
           </button>
         </div>
         <button
-          className="drama-sidebar-item"
+          className="drama-sidebar-item drama-sidebar-home"
           onClick={() =>
             onOpenHostPage?.({ key: "home", title: "我的项目", context: {} })
           }
         >
           <FolderOpen size={16} />
-          我的项目
+          <span>
+            <strong>我的项目</strong>
+            <small>查看全部进行中的创作</small>
+          </span>
         </button>
         <div className="drama-sidebar-projects">
           <ProjectDirectoryStatus
@@ -502,9 +597,14 @@ export function ShortDramaPersistentWorkbench({
             </button>
           </div>
           {snapshot.projects.map((project) => (
-            <div key={project.projectId}>
+            <div className="drama-sidebar-project-row" key={project.projectId}>
               <button
-                className="drama-sidebar-item"
+                className={
+                  "drama-sidebar-item drama-sidebar-project" +
+                  (hostPageContext?.projectId === project.projectId
+                    ? " active"
+                    : "")
+                }
                 onClick={() =>
                   onOpenHostPage?.({
                     key: `project:${project.projectId}`,
@@ -519,11 +619,25 @@ export function ShortDramaPersistentWorkbench({
                 <Layers3 size={16} />
                 <span>{project.title}</span>
               </button>
+              <small className="drama-sidebar-project-meta">
+                需求 v{project.latestBriefRevision} ·{" "}
+                {new Date(project.updatedAt).toLocaleDateString("zh-CN")}
+              </small>
               {hostPageContext?.projectId === project.projectId && (
-                <ProjectConversationActions
-                  controller={conversations}
-                  presentation="automatic"
-                />
+                <div className="drama-sidebar-project-details">
+                  <div className="drama-sidebar-current-label">
+                    <MessageSquareText size={13} />
+                    <span>当前项目会话</span>
+                  </div>
+                  <ProjectConversationActions
+                    controller={conversations}
+                    presentation="automatic"
+                  />
+                  <div className="drama-sidebar-current-label drama-sidebar-stage-label">
+                    <Clock3 size={13} />
+                    <span>从右侧项目页继续分阶段制作</span>
+                  </div>
+                </div>
               )}
             </div>
           ))}
@@ -598,6 +712,32 @@ export function ShortDramaPersistentWorkbench({
             <p className="detail-note" role="status">
               正在读取项目…
             </p>
+          ) : !details &&
+            hostPageContext?.projectId &&
+            snapshot.details &&
+            controller.concepts.localMutationPending ? (
+            <section className="detail-panel" aria-label="原项目保存尚未确认">
+              <p className="detail-note" role="status">
+                原项目的保存结果尚未确认。确认后继续读取所选项目。
+              </p>
+              <button
+                type="button"
+                className="button secondary"
+                onClick={() => {
+                  const project = snapshot.details!.project;
+                  void onOpenHostPage?.({
+                    key: `project:${project.projectId}`,
+                    title: project.title,
+                    context: {
+                      projectId: project.projectId,
+                      stage: "overview",
+                    },
+                  });
+                }}
+              >
+                返回原项目查看保存结果
+              </button>
+            </section>
           ) : !details ? (
             <ShortDramaProjectHome
               integrated={Boolean(onOpenHostPage)}
@@ -672,6 +812,17 @@ export function ShortDramaPersistentWorkbench({
                       assets={assets}
                       texts={texts}
                       textSnapshot={textSnapshot}
+                      otherProjects={otherProjectRecovery}
+                      onOpenProject={(projectId) => {
+                        const project = snapshot.projects.find(
+                          (project) => project.projectId === projectId,
+                        );
+                        void onOpenHostPage({
+                          key: `project:${projectId}`,
+                          title: project?.title ?? "待处理项目",
+                          context: { projectId, stage: "overview" },
+                        });
+                      }}
                       onRestoreAsset={() =>
                         selectProjectPage(
                           assets?.getSnapshot().draft?.kind === "scene" ||
@@ -679,6 +830,9 @@ export function ShortDramaPersistentWorkbench({
                             ? "art"
                             : "characters",
                         )
+                      }
+                      onRestoreText={() =>
+                        selectProjectPage(texts.getSnapshot().target.kind)
                       }
                     />
                   </ProjectOperations>
@@ -756,10 +910,38 @@ export function ShortDramaPersistentWorkbench({
                       controller={foundations}
                       details={details}
                       sourcePage={page === "source"}
+                      briefEditor={
+                        <>
+                          <button
+                            type="button"
+                            className="text-button"
+                            onClick={() => {
+                              setDialog("history");
+                              void controller.loadBriefs();
+                            }}
+                          >
+                            v{details.brief.briefRevision} · 查看历史
+                          </button>
+                          <ProjectBriefRevisionEditor
+                            controller={controller}
+                            snapshot={snapshot}
+                            details={details}
+                            blocked={locked}
+                          />
+                        </>
+                      }
                       onContinue={() =>
                         selectProjectPage(
                           origin === "novel" ? "outline" : "script",
                         )
+                      }
+                    />
+                  ) : page === "concepts" ? (
+                    <ConceptWorkbench
+                      controller={controller.concepts}
+                      details={details}
+                      blocked={
+                        downstreamBlocked || projectLocked || snapshot.opening
                       }
                     />
                   ) : page === "references" && mediaInputs ? (
@@ -823,7 +1005,9 @@ export function ShortDramaPersistentWorkbench({
                       images={controller.concepts.images}
                       concepts={controller.concepts}
                       details={details}
-                      onOpenConcept={() => selectProjectPage("overview")}
+                      onOpenConcept={() =>
+                        selectProjectPage(origin ? "concepts" : "overview")
+                      }
                       blocked={
                         downstreamBlocked ||
                         projectLocked ||
@@ -891,48 +1075,12 @@ export function ShortDramaPersistentWorkbench({
                         <p className="drama-readable-text">
                           {details.brief.text}
                         </p>
-                        <details className="drama-secondary-disclosure">
-                          <summary>修改创作需求</summary>
-                          <label
-                            className="visually-hidden"
-                            htmlFor="creative-brief"
-                          >
-                            创作需求
-                          </label>
-                          <textarea
-                            id="creative-brief"
-                            className="description-input"
-                            value={snapshot.draft}
-                            disabled={archived || locked || snapshot.opening}
-                            onChange={(event) =>
-                              controller.setDraft(event.target.value)
-                            }
-                          />
-                          <div className="brief-footer">
-                            <span>
-                              <Clock3 size={13} />
-                              {briefBytes(snapshot.draft)} / 8,192 字节
-                            </span>
-                            <button
-                              className="button secondary"
-                              disabled={
-                                archived ||
-                                locked ||
-                                snapshot.opening ||
-                                !validBrief(snapshot.draft) ||
-                                snapshot.draft === details.brief.text
-                              }
-                              onClick={() => void controller.saveBrief()}
-                            >
-                              {snapshot.saving ? "正在保存…" : "保存为新版本"}
-                            </button>
-                          </div>
-                          {briefBytes(snapshot.draft) > 8192 && (
-                            <p className="detail-note" role="alert">
-                              需求超过 8,192 字节，请缩短后保存。
-                            </p>
-                          )}
-                        </details>
+                        <ProjectBriefRevisionEditor
+                          controller={controller}
+                          snapshot={snapshot}
+                          details={details}
+                          blocked={locked}
+                        />
                       </section>
                       <ConceptWorkbench
                         controller={controller.concepts}

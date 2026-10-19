@@ -285,7 +285,8 @@ export function useInstalledPluginConfiguration({
           }));
           return;
         }
-        const validation = validatePluginConfigurationDraft(
+        const validation = validateConfigurationDraft(
+          expected.pluginId,
           snapshot.schema,
           before.draft!,
         );
@@ -332,6 +333,13 @@ export function useInstalledPluginConfiguration({
       setState((old) => ({
         ...old,
         configuration: latest.configuration,
+        draft:
+          matches && old.schema
+            ? createPluginConfigurationDraft(
+                old.schema,
+                latest.configuration!.parameters,
+              )
+            : old.draft,
         credentialsUnsupported:
           latest.configuration!.credentialBindings.length > 0 ||
           old.credentialsUnsupported,
@@ -414,10 +422,22 @@ export function useInstalledPluginConfiguration({
       : EMPTY;
   const validation =
     visible.schema && visible.draft
-      ? validatePluginConfigurationDraft(visible.schema, visible.draft)
+      ? validateConfigurationDraft(
+          expected.pluginId,
+          visible.schema,
+          visible.draft,
+        )
       : null;
+  const dirty =
+    visible.dirty ||
+    Boolean(
+      validation?.valid &&
+        visible.configuration &&
+        !sameJson(validation.parameters, visible.configuration.parameters),
+    );
   return {
     ...visible,
+    dirty,
     validation,
     saveDisabled:
       visible.status !== "available" ||
@@ -425,7 +445,7 @@ export function useInstalledPluginConfiguration({
       visible.retryable ||
       visible.credentialsUnsupported ||
       !validation?.valid ||
-      (!visible.dirty &&
+      (!dirty &&
         visible.configuration?.pluginVersion === visible.package?.version),
     setDraft,
     save: () => run(false),
@@ -433,6 +453,43 @@ export function useInstalledPluginConfiguration({
     refresh,
     abandonRetry,
   };
+}
+
+/** The Native Short Drama adapter requires a canonical HTTPS origin, not an arbitrary URL. */
+function validateConfigurationDraft(
+  pluginId: string,
+  schema: WorkflowObjectSchema,
+  draft: PluginConfigurationDraft,
+): PluginConfigurationDraftValidation {
+  const validation = validatePluginConfigurationDraft(schema, draft);
+  if (!validation.valid || pluginId !== "crewon.short-drama") return validation;
+  const raw = validation.parameters.baseUrl;
+  try {
+    if (typeof raw !== "string" || /[\s\p{Cc}\p{Cf}]/u.test(raw))
+      throw new Error();
+    const url = new URL(raw);
+    // Only the optional root slash may change. Never silently rewrite a host, port or path.
+    if (
+      url.protocol !== "https:" ||
+      url.username ||
+      url.password ||
+      url.search ||
+      url.hash ||
+      url.pathname !== "/" ||
+      (url.href !== raw && url.href !== `${raw}/`)
+    )
+      throw new Error();
+    const parameters = { ...validation.parameters, baseUrl: url.href };
+    return validatePluginConfigurationDraft(
+      schema,
+      createPluginConfigurationDraft(schema, parameters),
+    );
+  } catch {
+    return {
+      valid: false,
+      issues: [{ path: ["baseUrl"], code: "invalid_string" }],
+    };
+  }
 }
 
 async function readSelectionPackage(

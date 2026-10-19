@@ -1,0 +1,64 @@
+{
+  "version": "50.2.7",
+  "packageDigest": "sha256:5639f183548715fd4e053f34d3b881eaedcdde70a48438f860944d317e8ecc0e",
+  "fixes": [
+    "Keep freshly saved candidate visible across background invalidation without auto adoption",
+    "Inline original source review action beside editor stale notice"
+  ],
+  "checks": {
+    "targetedTests": 49,
+    "typecheck": "passed",
+    "boundary": "passed",
+    "format": "passed"
+  },
+  "client": {
+    "sourceImported": true,
+    "installed": true,
+    "selected": true,
+    "configurationRevision": 20,
+    "previewPassed": true,
+    "executionPreparation": "prepared",
+    "enabled": true,
+    "savedCandidateAcceptance": true,
+    "selectionRevision": 66,
+    "activationRevision": 41,
+    "coldStartProjectListCount": 3,
+    "outline3Adopted": true,
+    "outline3BodyEqualsAdoptedOutline2": true,
+    "scriptCandidateRevision": 2,
+    "scriptBodyEqualsVersion1": true,
+    "scriptCandidateSource": {
+      "briefRevision": 2,
+      "outlineRevision": 3
+    },
+    "savedCandidateRemainsOpenAfterInvalidation": true,
+    "adoptedPointerBeforeConfirmation": 1,
+    "artifacts": [
+      [
+        "outline",
+        6,
+        3,
+        3
+      ],
+      [
+        "script",
+        4,
+        2,
+        2
+      ]
+    ],
+    "scriptReopen": {
+      "selected": 2,
+      "opened": 2,
+      "briefRevision": 2,
+      "outlineRevision": 3,
+      "staleWarning": false
+    }
+  },
+  "generationSubmitted": false,
+  "buildSourceSha256": {
+    "examples/plugins/short-drama/src/workbench/ProjectTextController.ts": "f773b81414e7a55b2f77a9dc89bc5f945ad1b6423aa24a3e0beaa77df6d44fbb",
+    "examples/plugins/short-drama/src/workbench/StoryScriptWorkbench.tsx": "2caa994bbb99aeefc4c4027f0a6bc17230d73a6f9d0aff8e5195bba3ed3dae1e"
+  },
+  "verifiedAt": "2026-10-16T06:42:28.982044+00:00"
+}

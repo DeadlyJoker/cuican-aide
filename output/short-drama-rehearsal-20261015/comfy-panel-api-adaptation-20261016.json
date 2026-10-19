@@ -1,0 +1,94 @@
+{
+  "observedAt": "2026-10-16T08:46:56.024928+00:00",
+  "endpoint": "https://uu564342-7921122e7ab9.westd.seetacloud.com:8443/api/workflow/generate",
+  "baseUrl": "https://uu564342-7921122e7ab9.westd.seetacloud.com:8443/",
+  "serviceProtocol": "workflow-panel-v1",
+  "readOnlyServiceChecks": {
+    "/api/health": {
+      "status": 200,
+      "json": {
+        "status": "ok",
+        "timestamp": "2026-10-16T08:46:55.755Z",
+        "uptime": 2510.578758039
+      }
+    },
+    "/api/comfy/status": {
+      "status": 200,
+      "json": {
+        "running": true,
+        "starting": false,
+        "reason": "ready"
+      }
+    },
+    "/api/comfy/proxy/history?prompt_id=00000000-0000-0000-0000-000000000000": {
+      "status": 200,
+      "json": {}
+    }
+  },
+  "adapter": {
+    "submission": "POST /api/workflow/generate; source=quick; full immutable locally reviewed workflow_template; original operation correlation id",
+    "observation": "GET /api/comfy/proxy/history?prompt_id=<provider id>; GET /api/comfy/proxy/queue",
+    "images": "GET /api/comfy/view with canonical validated filename/subfolder/output query",
+    "unknownOutcome": "Observe original operation only; no automatic re-submission",
+    "historicalConfigurations": "Omitted serviceProtocol retains original native paths and request digest",
+    "referenceUpload": "Not enabled for workflow-panel-v1; native upload consent is not reused"
+  },
+  "pluginVersion": "50.2.10",
+  "checks": {
+    "pluginRuntimeTests": 19,
+    "controlResultAndReadRouteTests": 18,
+    "nativeExecutionPreparationTests": 41,
+    "controlTypecheck": "passed",
+    "runtimeStage": "passed",
+    "nativeBuild": "passed",
+    "pluginFullSuiteTests": 512,
+    "uniqueTargetedAndPluginTests": 571,
+    "artifactTypecheck": "passed",
+    "uiLintAndNativeTypecheck": "passed",
+    "boundary": "passed",
+    "repositoryFormat": "passed",
+    "diffWhitespace": "passed"
+  },
+  "actualClientConfigurationChanged": false,
+  "generationSubmitted": false,
+  "acceptedInClient": false,
+  "blocker": "CUA reported Mac is locked. User manual unlock requested; client upgrade/configuration and generation acceptance remain incomplete.",
+  "pluginPackage": {
+    "directory": "/Users/cheneywang/.codex/worktrees/e9bf/cuican-aide/examples/plugins/short-drama/dist/50.2.10",
+    "digest": "sha256:537f09f81833057917a8986a500e9b32835a6a6b2134fe2aebb93bba91cb64e9",
+    "version": "50.2.10"
+  },
+  "sourceHashes": {
+    "examples/plugins/short-drama/src/comfy-service.ts": "aac53dcd7046629fa79cf70e9a64857f3d34136fbf72efdbafffb934026d0251",
+    "examples/plugins/short-drama/src/runtime.ts": "8153ffd592db17b9ea4bce805cf8fd7a61ef7475bf8cc5e9ec21acc0b82ada10",
+    "examples/plugins/short-drama/src/protocol.ts": "fc0bb6bac2d05afe7c399bcb999ca39a5ef7c4b4e31f67aceb30e0fe08d18844",
+    "examples/plugins/short-drama/src/project-media-runtime.ts": "f08fd719bcf1be94afc621de5583aa16274d459c4621e3e8397ef710f1d918a3",
+    "examples/plugins/short-drama/business.json": "602648424d76d681668e53df973f76c455f22e6843fc7f183a9f8743c405edcb",
+    "apps/crewon-ui/electron/desktopLocalPluginExecutionSetupSnapshot.ts": "fff2ab2968bd955447ba79fa49ea8c62b9798a3485d365e70bc40a9320b299a7",
+    "apps/crewon-ui/electron/desktopLocalPluginExecutionSetup.ts": "e8456c1bb519de4f4e65569e975be1ea2747e0aedd1117f508d39a8c676e5ed3",
+    "packages/artifacts/src/comfyui-image-result-verifier.ts": "b3cd91d104bdd5151a591677c128e03a99b493b759ae62f1bb0e0c5bdbb8b8ab",
+    "apps/control-api/src/extension-task-result-projection.ts": "fb549131633ee2a8741c0669c04cd75822ff180df64ea184ff26197bdeb0501f"
+  },
+  "modelInventoryCorrection": {
+    "observedAt": "2026-10-16T09:12:43.115996+00:00",
+    "incompleteSource": "Panel /api/models/list contains 315 entries and omitted models exposed by the running ComfyUI. Absence there is not missing-model evidence.",
+    "authoritativeNodeCatalogue": "Running native ComfyUI /object_info: 6420 node types; UNETLoader exposes 505 model names and LoraLoaderModelOnly 374",
+    "originalKreaWeights": "Both darkBeast INT8 and krea2_darkbrush are present in actual loader choices; initial missing-weight inference was withdrawn.",
+    "unnecessaryQwenProfile": "Source draft removed; imported immutable 50.2.10 package and its scoped transport changes preserved."
+  },
+  "clientProgress": {
+    "desktopAsarInstalled": true,
+    "nativeSignatureVerified": true,
+    "plugin50_2_10SourceAddedViaClient": true,
+    "plugin50_2_10InstalledAndSelectedViaClient": true,
+    "pluginEnabled": false,
+    "configurationSavedForNewVersion": false,
+    "newProviderGenerationSubmitted": false,
+    "nextRequired": "Save new-version configuration in normal client UI, prepare execution, enable, then perform generation acceptance. New API inventory question handled first."
+  },
+  "followupChecks": {
+    "sourceHashesMatchPrior50_2_10Proof": true,
+    "nativeAndUiTestsAfterDraftRemoval": 65,
+    "passed": true
+  }
+}

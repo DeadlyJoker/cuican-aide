@@ -29,17 +29,22 @@ export type ProjectMaterialPreparationTarget = Readonly<{
 export type ProjectMaterialPreparationInitial = Readonly<{
   schemaVersion:
     | "crewon.project-material-preparation.v1"
-    | "crewon.project-material-preparation.v2";
+    | "crewon.project-material-preparation.v2"
+    | "crewon.project-material-preparation.v3";
   intentId: string;
   requestDigest: string;
   request: ProjectMaterialPreparationRequest;
   source: FrozenProjectReferenceMaterial;
   target: ProjectMaterialPreparationTarget;
   transfer: Readonly<{
-    adapter: "comfyui-image-upload.v1";
+    adapter: "comfyui-image-upload.v1" | "comfyui-workflow-file-upload.v1";
     preparationId: string;
     origin: string;
-    output: Readonly<{ filename: string; subfolder: string; type: "output" }>;
+    output: Readonly<{
+      filename: string;
+      subfolder: string;
+      type: "output" | "input";
+    }>;
     requestDigest: string;
   }>;
   createdAt: string;

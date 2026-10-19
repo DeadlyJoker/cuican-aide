@@ -84,4 +84,14 @@ export interface PluginUiIntentJournalStore {
       at: string;
     }>,
   ): Promise<PluginUiIntentRecord>;
+  refuseUiIntentUnadmittedQuery?(
+    input: Readonly<{
+      account: PluginUiIntentJournalAccount;
+      intentId: string;
+      requestDigest: string;
+      expectedDispatchAttemptCount: number;
+      reasonCode: "project_query_revision_not_admitted";
+      at: string;
+    }>,
+  ): Promise<PluginUiIntentRecord>;
 }

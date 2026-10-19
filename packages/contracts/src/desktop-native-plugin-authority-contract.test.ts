@@ -1,7 +1,34 @@
 import assert from "node:assert/strict";
 import test from "node:test";
-import { parseDesktopNativePluginAuthority } from "./desktop-native-plugin-authority-contract.ts";
+import {
+  isPluginOperationPathPrefix,
+  parseDesktopNativePluginAuthority,
+} from "./desktop-native-plugin-authority-contract.ts";
 const digest = `sha256:${"a".repeat(64)}`;
+test("operation prefixes allow one canonical query ID without extra parameters or broad routes", () => {
+  for (const prefix of ["/history/", "/api/comfy/proxy/history?prompt_id="]) {
+    assert.equal(isPluginOperationPathPrefix(prefix), true);
+    const input = document();
+    input.networkGrants[0]!.paths[1]!.operationPathPrefix = prefix;
+    assert.equal(
+      parseDesktopNativePluginAuthority(input).networkGrants[0]!.paths[1]!
+        .method,
+      "GET",
+    );
+  }
+  for (const prefix of [
+    "/history",
+    "/history?",
+    "/history?id=foreign",
+    "/history?id=&all=",
+    "/history?%69d=",
+    "/history#id=",
+    "//evil.invalid/?id=",
+    "/a/../history?id=",
+  ]) {
+    assert.equal(isPluginOperationPathPrefix(prefix), false, prefix);
+  }
+});
 function document() {
   const pkg = {
     pluginId: "example.image",

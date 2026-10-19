@@ -47,13 +47,13 @@ describe("agent-platform base URL", () => {
       "file:///Applications/CrewON.app/Contents/Resources/index.html",
     );
 
-    expect(agentPlatformBaseUrl()).toBe("http://127.0.0.1:8000");
+    expect(agentPlatformBaseUrl()).toBe("https://pim.aicuican.com");
   });
 
   it("dials the backend directly from the Windows packaged webview", () => {
     stubLocation("file:///C:/Program%20Files/CrewON/resources/index.html");
 
-    expect(agentPlatformBaseUrl()).toBe("http://127.0.0.1:8000");
+    expect(agentPlatformBaseUrl()).toBe("https://pim.aicuican.com");
   });
 
   it("uses the configured runtime backend for packaged desktop login and Agent invocation", () => {
@@ -87,7 +87,7 @@ describe("agent-platform base URL", () => {
   });
 
   it.each(["", "   "])(
-    "keeps the local fallback for an empty runtime backend %j",
+    "uses the account origin for an empty runtime backend %j",
     (backend) => {
       stubLocation(
         "file:///Applications/CrewON.app/Contents/Resources/index.html",
@@ -95,7 +95,7 @@ describe("agent-platform base URL", () => {
       );
       vi.stubEnv("VITE_AGENT_PLATFORM_RUNTIME_BASE_URL", backend);
 
-      expect(agentPlatformBaseUrl()).toBe("http://127.0.0.1:8000");
+      expect(agentPlatformBaseUrl()).toBe("https://pim.aicuican.com");
     },
   );
 
@@ -187,7 +187,7 @@ describe("agent-platform base URL", () => {
     );
     vi.stubEnv("VITE_AGENT_PLATFORM_BASE_URL", "/some-other-proxy");
 
-    expect(agentPlatformBaseUrl()).toBe("http://127.0.0.1:8000");
+    expect(agentPlatformBaseUrl()).toBe("https://pim.aicuican.com");
   });
 
   it("strips a trailing slash so paths do not double up", () => {

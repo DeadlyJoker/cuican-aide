@@ -6,6 +6,7 @@ import type {
 } from "@crewon/contracts";
 import type { ToolCallKind, ToolDefinition } from "@crewon/tool-broker";
 import type { ModelUsageObservationSink } from "@crewon/domain";
+import type { ModelImageObservation } from "./model-image-observation.ts";
 
 export type AgentHistoryItem =
   | Readonly<{
@@ -192,6 +193,8 @@ export interface AgentSegmentControlSink {
 }
 
 export type AgentSegmentRunOptions = Readonly<{
+  /** Captured frame bytes for one tool-free review segment; never durable chat history. */
+  imageObservations?: readonly ModelImageObservation[];
   /** The caller commits an empty Provider continuation before starting another Segment. */
   emptyResponseContinuation?: "durableBoundary";
   controlSink?: AgentSegmentControlSink;

@@ -106,7 +106,7 @@ export function createProductionProjectConversationRuntime(
         !closed &&
         owner !== undefined &&
         owner.supportsAction(
-          "crewon.project-workspace-target.v1.resolveTarget",
+          "crewon.project-workspace-target.v1.getCreationContext",
         ) &&
         foundation.configuration.publications.some(
           (entry) =>

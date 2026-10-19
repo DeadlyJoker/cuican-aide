@@ -146,13 +146,15 @@ function familyAnswers(
   family: 4 | 6,
 ): readonly NetworkResolvedAddress[] {
   if (result.status === "rejected") {
-    // Only an absent record family is optional; SERVFAIL, NXDOMAIN and timeout
-    // are failures, even if the other family returned an address.
+    // A timeout in one independent family does not invalidate a fresh answer
+    // in the other. captureAddresses still requires a nonempty result, and the
+    // complete returned set still passes the production policy and pinned TLS.
+    // Authoritative failures and cancellation remain failures.
     if (
       typeof result.reason === "object" &&
       result.reason !== null &&
       "code" in result.reason &&
-      result.reason.code === "ENODATA"
+      (result.reason.code === "ENODATA" || result.reason.code === "ETIMEOUT")
     ) {
       return [];
     }

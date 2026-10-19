@@ -1,0 +1,27 @@
+{
+  "builtAt": "2026-10-15T10:06:22.116294+00:00",
+  "builtApp": "/private/tmp/crewon-plugin-performance-20261015/rebuilt-auth-client-20261015/mac-arm64/CrewON.app",
+  "appAsarSha256": "4df78b51ba69ce6ae74428b2edce56d59191414638bffa4503f2d975977979f6",
+  "sourceHashes": {
+    "apps/crewon-ui/src/lib/app/useInstalledPluginProjectChatCreation.ts": "ca099b85359c92e0633f0e3a177aada8548e1135850ae535637dba4c3034b242",
+    "apps/crewon-ui/src/lib/app/useInstalledPluginModules.tsx": "f7b7f732c84a95311e4e3d41e7063b53ea3f4136d24cd7d991f59644a4ac43c4",
+    "apps/crewon-ui/src/components/auth/AgentPlatformAuthGate.tsx": "e401b2663c824f1d0535aebbb1e11a37f55561ad2b0c29c3b290f519dcb21c4d",
+    "apps/crewon-ui/src/lib/desktop/DesktopLocalManagementContext.tsx": "cab719ce58be1fccffab7bbbfd4728b253a916c507d0143c3086ecb0a2d20c5a",
+    "examples/plugins/short-drama/src/workbench/ShortDramaProjectNavigation.tsx": "c3c5dac9951aa5eace7f18090f1b360f0cdcec4dceb3fc636f8e313a0ad0b464",
+    "examples/plugins/short-drama/src/workbench/ShortDramaPersistentWorkbench.tsx": "046844b6bf608642408c1249aae90b5df237471821ce7068028246b67fe2c961"
+  },
+  "checks": {
+    "rendererForcedTypecheck": true,
+    "authAndProjectCreationTests": 81,
+    "packagedPluginRelevantTests": 48,
+    "desktopPack": true
+  },
+  "status": "installed AuthGate host; project and brief persisted; mode compatibility and renewal repair not yet built",
+  "activePluginVersion": "50.2.2",
+  "newProjectCreated": true,
+  "isolatedApp": "/private/tmp/crewon-plugin-performance-20261015/CrewON验收.app",
+  "installedAsarMatchesBuilt": true,
+  "projectId": "01a13f43-094c-767a-9414-b5622b236255",
+  "newProjectConversationCreated": false,
+  "newProjectOutlineOrScriptAdopted": false
+}

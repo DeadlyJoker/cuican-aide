@@ -1,0 +1,57 @@
+{
+  "builtAt": "2026-10-17T08:36:40.255Z",
+  "path": "/private/tmp/crewon-plugin-performance-20261015/all-lane-context-profile-20261017.asar",
+  "sha256": "5de2cd70ecf9b00f265f552de673fb0dd64fc774ef6d00f7ebddfafc1c6e3c99",
+  "headerSha256": "789fc30be3e7c454ab5639116cf02afb1c4123a50ad89f2a101f4e17805bd64f",
+  "nonRendererFilesVerified": 17464,
+  "mainUnchanged": true,
+  "clientAcceptancePassed": false,
+  "installedAndHashesVerified": true,
+  "codesignVerify": "passed",
+  "runtimeUnchanged": "sha256:7c0cca2926d36f3b685570f962efe8afa51480027270ee0a765d263270d8fa39",
+  "checks": {
+    "threadContextAndRuntimeTests": 234,
+    "uiBuildAndTypecheck": "passed",
+    "boundary": "passed",
+    "diffWhitespace": "passed"
+  },
+  "features": [
+    "generation, original query and historical query invalidate cached Thread CAS from existing canonical SSE",
+    "typed nonadmission error reconciles durable original intent once without resending business query"
+  ],
+  "clientBlocker": "Mac locked; manual unlock requested. Keychain authorization previously succeeded; Main is running.",
+  "separatelyVerifiedClientWrite": {
+    "name": "林夏",
+    "kind": "concept-input",
+    "revision": 1,
+    "screenshot": "linxia-input-saved-20261017.png"
+  },
+  "sourceOnlyFix": {
+    "description": "Native reference read PDP matches retained source protocol, exact configuration identity and exact GET grant; no upload permission expansion",
+    "installed": false,
+    "testsPassed": 14,
+    "workerTypecheck": "passed",
+    "files": {
+      "apps/runtime-worker/src/plugins/native-reference-material-read-authorization.ts": "38277d6c2a9145b4213d1426b495f0ad9bdf37a10d762b1cee111e5627717401",
+      "apps/runtime-worker/src/plugins/native-reference-material-read-authorization.test.ts": "86886ca3fc788af9a2d4a9402ae16471dba6e30af4255178a02cfe01f6dde7f5",
+      "apps/runtime-worker/src/plugins/native-project-media-runtime.ts": "b7a05c82b734328f1d5f2eede913076ca3085b7f399677c089e7878a5295f5f3"
+    }
+  },
+  "contextFreshnessAcceptedInClient": {
+    "passed": true,
+    "evidence": "client-v4-v5-scene-acceptance-20261017.json",
+    "expectedThreadRevisions": [
+      33,
+      35,
+      37,
+      39
+    ],
+    "dispatchAttemptsPerRequest": [
+      1,
+      1,
+      1,
+      1
+    ]
+  },
+  "automaticRefusalReconciliationAcceptancePassed": false
+}
