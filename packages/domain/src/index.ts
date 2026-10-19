@@ -20,6 +20,7 @@ export * from "./provider-turn-state.ts";
 export * from "./rate-limit-snapshot.ts";
 export * from "./run-plan.ts";
 export * from "./run-lifecycle.ts";
+export * from "./team-task-run-binding.ts";
 export * from "./run-goal-accounting.ts";
 export * from "./thread-lifecycle.ts";
 export * from "./thread-title.ts";

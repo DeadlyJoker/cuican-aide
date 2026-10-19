@@ -1035,3 +1035,7 @@ Standalone Control 现在为显式 Team operations 提供 host-only terminal wai
 ## 第一百一十二批：trusted fence Run binding builder（2026-10-19）
 
 新增 `createTeamTaskRunBinding`，从受信 Team fence 和 capability snapshot identity 构造冻结 binding，禁止调用方手工拼接 task/tenant/space/epoch。该 builder 仍是内部纯值对象，不改变 Run Store；binding capture/build 回归 3/3 通过。
+
+## 第一百一十三批：Run binding 下沉到领域边界（2026-10-19）
+
+将 `TeamTaskRunBinding` 及严格 capture 从 Application 下沉到 `@crewon/domain`，Application 只保留受信 fence builder 和兼容 re-export。这样未来把 binding 写入 `run.created` 事件与 `RunState` 时不会引入 Domain 依赖 Application，也不会让 Runtime Worker 依赖应用层实现。新增领域回归 2/2、Domain 全量 406/406、Application typecheck 通过；本批仍未写入持久 Run，避免在 capability snapshot 来源未确定前伪造运行时授权。
