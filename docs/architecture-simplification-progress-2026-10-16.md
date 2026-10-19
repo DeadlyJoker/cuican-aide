@@ -1023,3 +1023,7 @@ Standalone Control 现在为显式 Team operations 提供 host-only terminal wai
 ## 第一百零九批：host admission 前置 spawn capture（2026-10-19）
 
 `createTeamTaskAutonomousChildAdmission` 现在在 host-bound port 入口先捕获 Team-scoped spawn request，再注入冻结的 parent capability；因此伪造 authority、未知字段和 accessor 不会到达 Store 或事务层。新增 execution 回归覆盖 forged `parentCapability` 直接拒绝，Application typecheck 与定向 execution 测试通过。
+
+## 第一百一十批：Run runtime binding 缺口审计（2026-10-19）
+
+复核 Runtime Worker 的真实路径后确认：`WorkerAgentRuntime` 按 AgentVersion resolver 返回 `toolRuntime` 与 `toolDefinitions`，普通 RunState 没有 Team task/fence 关联字段；因此当前无法仅在 Worker 侧安全判断某个 Run 是否属于 durable Team parent。Team-scoped spawn adapter 需要在 Run 创建/admission 时显式写入并校验绑定，或由受信 Team host 提供独立 runtime resource，不应在 Worker 中根据 thread 名称或普通 Run 字段猜测。
