@@ -24,6 +24,7 @@ export type TeamTaskExecutionHost = Readonly<{
   actor: ActorContext;
   /** Optional host-generated capability; never populated from task/model input. */
   autonomousCapability?: AutonomousTaskCapabilitySnapshot;
+  autonomousChildAdmission?: TeamTaskAutonomousChildAdmission;
   operations: ControlTeamRuntimeClient;
   digester: ContentDigester;
   leaseDurationMs?: number;
@@ -79,6 +80,9 @@ export function createTeamTaskExecutor(input: {
       operations: input.host.operations,
       digester: input.host.digester,
       ...(capability === undefined ? {} : { autonomousCapability: capability }),
+      ...(input.host.autonomousChildAdmission === undefined
+        ? {}
+        : { autonomousChildAdmission: input.host.autonomousChildAdmission }),
       ...(input.host.leaseDurationMs === undefined
         ? {}
         : { leaseDurationMs: input.host.leaseDurationMs }),
@@ -105,6 +109,7 @@ export async function executeTeamTask(input: {
   operations: ControlTeamRuntimeClient;
   digester: ContentDigester;
   autonomousCapability?: AutonomousTaskCapabilitySnapshot;
+  autonomousChildAdmission?: TeamTaskAutonomousChildAdmission;
   leaseDurationMs?: number;
   pollIntervalMs?: number;
   runDeadlineMs?: number;
@@ -233,6 +238,19 @@ export async function executeTeamTask(input: {
       return value;
     });
   const client: ControlTeamRuntimeClient = {
+    ...(input.autonomousChildAdmission === undefined
+      ? {}
+      : {
+          admitAutonomousChild: (
+            admission: Omit<AutonomousTaskChildAdmission, "parentCapability">,
+          ) =>
+            track(() =>
+              input.autonomousChildAdmission!({
+                parentFence: fence,
+                admission,
+              }),
+            ),
+        }),
     appendThreadMessage: (threadId, body, id) =>
       track(async () => {
         const result = await command(

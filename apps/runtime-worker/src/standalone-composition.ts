@@ -40,6 +40,7 @@ import {
 } from "@crewon/application/team-task-scheduler";
 import {
   createTeamTaskExecutor,
+  createTeamTaskAutonomousChildAdmission,
   type TeamTaskExecutionHost,
 } from "@crewon/application/team-task-execution";
 import type {
@@ -818,16 +819,24 @@ async function composeRuntimeWorker(
           ? teamConfig.execute!
           : createTeamTaskExecutor({
               store: journal,
-              host:
-                teamConfig.host.autonomousCapability === undefined
-                  ? {
-                      ...teamConfig.host,
-                      autonomousCapability: deriveRuntimeTeamTaskCapability(
-                        teamConfig.host.actor,
-                        config.route,
-                      ),
-                    }
-                  : teamConfig.host,
+              host: (() => {
+                const capability =
+                  teamConfig.host.autonomousCapability ??
+                  deriveRuntimeTeamTaskCapability(
+                    teamConfig.host.actor,
+                    config.route,
+                  );
+                return {
+                  ...teamConfig.host,
+                  autonomousCapability: capability,
+                  autonomousChildAdmission:
+                    teamConfig.host.autonomousChildAdmission ??
+                    createTeamTaskAutonomousChildAdmission({
+                      store: journal,
+                      capability,
+                    }),
+                } satisfies TeamTaskExecutionHost;
+              })(),
             }),
       ...(teamConfig.onError === undefined
         ? {}

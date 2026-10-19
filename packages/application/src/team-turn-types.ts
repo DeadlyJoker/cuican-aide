@@ -1,5 +1,7 @@
 import type { TeamMemberRuntimeProfile } from "@crewon/domain/team-prompts";
 import type { TeamTaskWriteFence } from "./team-task-journal.ts";
+import type { AutonomousTaskChildAdmission } from "./autonomous-task-admission.ts";
+import type { AutonomousTaskChildAdmissionResult } from "./team-task-journal.ts";
 export type {
   TeamMemberRuntimeCapability,
   TeamMemberRuntimeProfile,
@@ -36,6 +38,10 @@ import type {
  */
 export interface ControlTeamRuntimeClient {
   withTeamTaskFence?(fence: TeamTaskWriteFence): ControlTeamRuntimeClient;
+  /** Optional host-only autonomous admission; never supplied by browser clients. */
+  admitAutonomousChild?(
+    admission: Omit<AutonomousTaskChildAdmission, "parentCapability">,
+  ): Promise<AutonomousTaskChildAdmissionResult>;
   appendThreadMessage(
     threadId: string,
     body: AppendThreadMessageRequest,
