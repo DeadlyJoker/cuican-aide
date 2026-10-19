@@ -31,6 +31,7 @@ import {
   type WorkItem,
 } from "./run-store-port.ts";
 import type { SpaceScopedThreadStore } from "./thread-store-port.ts";
+import { captureTeamTaskRunBinding } from "./team-task-run-binding.ts";
 
 export class RunApplicationService {
   readonly #store: RunStore & SpaceScopedThreadStore;
@@ -56,6 +57,13 @@ export class RunApplicationService {
   ): Promise<CommitRunResult> {
     validateActor(actor);
     validateCreateCommand(command);
+  if (
+    command.teamTaskBinding !== undefined &&
+    (command.teamTaskBinding.tenantId !== actor.tenantId ||
+      command.teamTaskBinding.spaceId !== actor.spaceId)
+  ) {
+    throw new ApplicationError("validation", "team_task_binding_scope_invalid");
+  }
     const resource: RunAuthorizationResource = {
       kind: "run",
       tenantId: actor.tenantId,
@@ -84,6 +92,9 @@ export class RunApplicationService {
         agentVersionId: command.route.agentVersionId,
         policySnapshotId: command.route.policySnapshotId,
         workspaceBindingId: command.route.workspaceBindingId,
+        ...(command.teamTaskBinding === undefined
+          ? {}
+          : { teamTaskBinding: command.teamTaskBinding }),
         collaborationMode: "default",
         ...(command.toolPermissionMode === undefined
           ? {}
@@ -556,6 +567,8 @@ function validateCreateCommand(command: CreateRunCommand): void {
   requireNonEmpty(command.route.agentVersionId, "agent_version_id_invalid");
   requireNonEmpty(command.route.policySnapshotId, "policy_snapshot_id_invalid");
   validateToolPermissionMode(command.toolPermissionMode);
+  if (command.teamTaskBinding !== undefined)
+    captureTeamTaskRunBinding(command.teamTaskBinding);
   if (command.route.workspaceBindingId !== null) {
     requireNonEmpty(
       command.route.workspaceBindingId,

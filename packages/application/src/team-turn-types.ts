@@ -1,5 +1,6 @@
 import type { TeamMemberRuntimeProfile } from "@crewon/domain/team-prompts";
 import type { TeamTaskWriteFence } from "./team-task-journal.ts";
+import type { TeamTaskRunBinding } from "./team-task-run-binding.ts";
 import type { AutonomousTaskChildAdmission } from "./autonomous-task-admission.ts";
 import type {
   AutonomousTaskChildAdmissionResult,
@@ -70,6 +71,8 @@ export interface ControlTeamRuntimeClient {
   createRun(
     body: CreateRunRequest,
     idempotencyKey: string,
+    options?: Readonly<{ signal?: AbortSignal }>,
+    binding?: TeamTaskRunBinding,
   ): Promise<RunMutationResponse>;
   forkThread(
     threadId: string,

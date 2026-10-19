@@ -1043,3 +1043,7 @@ Standalone Control 现在为显式 Team operations 提供 host-only terminal wai
 ## 第一百一十四批：Run 生命周期承载 Team binding（2026-10-19）
 
 将可选 `teamTaskBinding` 接入 `run.created` 事件和 `RunState`，旧事件保持兼容；领域 reducer 对 binding 做严格 capture，并要求 tenant/space 与 Run 一致，跨作用域直接拒绝。由于 Store 持久化的是事件 JSON，现有 SQLite/PostgreSQL 回放天然保留该字段；本批尚未让普通创建命令自行生成 binding，避免在 capability snapshot 尚无受信来源时扩大授权面。Domain 全量 407/407、Application typecheck 通过。
+
+## 第一百一十五批：Team host 绑定回流到 Run 创建（2026-10-19）
+
+将 Team host 生成的 capability snapshot digest 作为内部 `TeamTaskRunBinding` identity，沿 `ControlTeamRuntimeClient` 的受信第四参数传到 `RunApplicationService`，再写入 `run.created`。普通 `ControlApiClient` 的既有第三参数（请求选项）保持兼容；binding 不进入公开 HTTP body，且创建服务重新校验 tenant/space 和严格字段。Application 全量 915/953（38 项环境跳过）、Control API/Application/Runtime Worker typecheck 通过；Node 22 运行时仅有仓库要求 Node 24 的 engine warning。

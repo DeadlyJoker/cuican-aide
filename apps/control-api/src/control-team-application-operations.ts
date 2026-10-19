@@ -12,6 +12,7 @@ import type {
 } from "@crewon/application";
 import type { ControlTeamRuntimeClient as TeamClient } from "@crewon/application/team-turn";
 import type { TeamTaskWriteFence } from "@crewon/application/team-task-journal";
+import type { TeamTaskRunBinding } from "@crewon/application/team-task-run-binding";
 import type { TeamRunTerminalWait } from "@crewon/application/team-turn";
 import { RunEventHub, RunEventSubscription } from "./run-event-hub.ts";
 import {
@@ -85,8 +86,8 @@ function createBoundOperations(
       appendThreadMessage(dependencies, fence, threadId, body, idempotencyKey),
     authorizeOfficeRun: (officeVersionId, body) =>
       authorizeOfficeRun(dependencies, officeVersionId, body),
-    createRun: (body, idempotencyKey) =>
-      createRun(dependencies, fence, body, idempotencyKey),
+    createRun: (body, idempotencyKey, _options, binding) =>
+      createRun(dependencies, fence, body, idempotencyKey, binding),
     forkThread: (threadId, body, idempotencyKey) =>
       forkThread(dependencies, fence, threadId, body, idempotencyKey),
     getExecutionIntentCapability: async () =>
@@ -244,7 +245,20 @@ async function createRun(
   fence: TeamTaskWriteFence | null,
   body: CreateRunRequest,
   idempotencyKey: string,
+  binding?: TeamTaskRunBinding,
 ): Promise<RunMutationResponse> {
+  if (binding !== undefined) {
+    if (
+      fence === null ||
+      binding.tenantId !== fence.tenantId ||
+      binding.spaceId !== fence.spaceId ||
+      binding.teamTaskId !== fence.taskId ||
+      binding.parentTaskId !== fence.taskId ||
+      binding.admissionEpoch !== fence.epoch
+    ) {
+      throw new Error("team_task_run_binding_fence_mismatch");
+    }
+  }
   const route = await d.routeResolver.resolveRoute({
     actor: d.actor,
     threadId: body.threadId,
@@ -257,6 +271,7 @@ async function createRun(
     route,
     toolPermissionMode: body.toolPermissionMode ?? "requestApproval",
     ...(fence === null ? {} : { teamTaskFence: fence }),
+    ...(binding === undefined ? {} : { teamTaskBinding: binding }),
   });
   return { disposition: result.disposition, run: projectRun(result.state) };
 }

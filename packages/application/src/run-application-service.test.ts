@@ -127,6 +127,44 @@ test("creates a scoped run with atomic notification and execution handoff", asyn
   ]);
 });
 
+test("persists a trusted Team binding in the created Run event", async () => {
+  const store = new RecordingRunStore();
+  const service = serviceWith(store, new RecordingAuthorization(), [
+    "run-team-1",
+    "event-team-1",
+    "outbox-team-1",
+    "work-item-team-1",
+  ]);
+  const result = await service.createRun(actor(), {
+    ...createCommand(),
+    teamTaskBinding: {
+      schemaVersion: "crewon.team-task-run-binding.v0",
+      tenantId: "tenant-1",
+      spaceId: "space-1",
+      teamTaskId: "team-1",
+      parentTaskId: "team-1",
+      admissionEpoch: 1,
+      capabilitySnapshotId: "sha256:capability",
+    },
+  });
+  assert.deepEqual(result.state.teamTaskBinding, {
+    schemaVersion: "crewon.team-task-run-binding.v0",
+    tenantId: "tenant-1",
+    spaceId: "space-1",
+    teamTaskId: "team-1",
+    parentTaskId: "team-1",
+    admissionEpoch: 1,
+    capabilitySnapshotId: "sha256:capability",
+  });
+  assert.deepEqual(
+    (store.commits[0]?.events[0] as Extract<
+      RunLifecycleEvent,
+      { type: "run.created" }
+    >).data.teamTaskBinding,
+    result.state.teamTaskBinding,
+  );
+});
+
 test("fails closed when authorization denies or becomes unavailable", async () => {
   const deniedStore = new RecordingRunStore();
   const denied = new RecordingAuthorization({

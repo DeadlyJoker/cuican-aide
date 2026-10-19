@@ -29,6 +29,7 @@ import type {
   AutonomousTaskChildRecord,
 } from "./team-task-journal.ts";
 import { waitForAutonomousChildren } from "./autonomous-child-wait.ts";
+import { createTeamTaskRunBinding } from "./team-task-run-binding.ts";
 
 /** Explicit host identity and operations required by a durable Team executor. */
 export type TeamTaskExecutionHost = Readonly<{
@@ -211,6 +212,15 @@ export async function executeTeamTask(input: {
   const fencedOperations = operations.withTeamTaskFence
     ? operations.withTeamTaskFence(fence)
     : operations;
+  const teamTaskRunBinding =
+    input.autonomousCapability === undefined
+      ? undefined
+      : createTeamTaskRunBinding({
+          fence,
+          capabilitySnapshotId: input.digester.sha256(
+            teamJournalJson(input.autonomousCapability),
+          ),
+        });
   let stopped = false;
   const pending = new Set<Promise<unknown>>();
   let mainThreadRevision: number | null = null;
@@ -376,10 +386,15 @@ export async function executeTeamTask(input: {
           fencedOperations.forkThread(threadId, body, id),
         ),
       ),
-    createRun: (body, id) =>
+    createRun: (body, id, _options, binding) =>
       track(() =>
-        command("createRun", [body, id], id, () =>
-          fencedOperations.createRun(body, id),
+        command("createRun", [body, id, binding ?? teamTaskRunBinding ?? null], id, () =>
+          fencedOperations.createRun(
+            body,
+            id,
+            undefined,
+            binding ?? teamTaskRunBinding,
+          ),
         ),
       ),
     startTurn: (threadId, body, id) =>
