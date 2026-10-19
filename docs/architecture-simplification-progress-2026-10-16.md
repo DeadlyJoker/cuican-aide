@@ -975,3 +975,7 @@ host admission port 在绑定时会复制并冻结 capability snapshot，后续�
 ## 第九十七批：受信 Run 终态等待 port 骨架（2026-10-19）
 
 新增内部 `TeamRunTerminalWait` port，并从 `TeamTaskExecutionHost` 传递到 Team turn 各阶段。默认没有该 port 时仍使用原 polling；显式提供时，application 先校验返回的 Run identity、终态、取消和 deadline，错误结果 fail closed。HTTP、浏览器和现有 Control operations 未实现该 port，因此没有改变公开协议或凭据边界。新增回归覆盖 host wait 成功、跨 Run 返回拒绝、首读立即和后续 polling 节流；Application typecheck 与 SQLite Team application 集成通过。
+
+## 第九十八批：EventHub 直连失败注记（2026-10-19）
+
+尝试将 Control 进程内 `RunEventHub` 直接作为该 port 的实现时，真实 standalone HTTP 回归暴露了事件可达性前提：当 `outboxScanIntervalMs=null`、仅依赖持久扫描关闭的配置下，Run 已持久完成但 EventHub 没有事件，Team 会一直等待到 deadline。该接线已撤回，未进入提交；说明下一实现必须同时具备事件订阅、持久 `getRun`/事件游标兜底和订阅关闭清理，不能把 EventHub 存在误认为事件必达。恢复默认 polling 后 standalone HTTP 2/2 通过。
