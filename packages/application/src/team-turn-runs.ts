@@ -4,6 +4,7 @@ import type {
   ControlTeamRuntimeClient,
   StartControlTeamTurnInput,
   ControlTeamRunAcceptedEvent,
+  TeamRunTerminalWait,
 } from "./team-turn-types.ts";
 
 // Preserve the existing transient-read recovery window during host migration.
@@ -15,6 +16,7 @@ export async function waitForTerminalRun(input: {
   pollIntervalMs: number;
   runDeadlineMs: number;
   signal?: AbortSignal;
+  waitForRunTerminal?: TeamRunTerminalWait;
 }): Promise<RunView> {
   const deadline = Date.now() + input.runDeadlineMs;
   let current = input.run;
@@ -24,6 +26,21 @@ export async function waitForTerminalRun(input: {
     input.signal?.throwIfAborted();
     if (Date.now() >= deadline) {
       throw new Error("control_team_run_deadline_exceeded");
+    }
+    if (input.waitForRunTerminal !== undefined) {
+      const terminal = await input.waitForRunTerminal({
+        run: current,
+        deadlineAt: deadline,
+        ...(input.signal === undefined ? {} : { signal: input.signal }),
+      });
+      input.signal?.throwIfAborted();
+      if (Date.now() >= deadline) {
+        throw new Error("control_team_run_deadline_exceeded");
+      }
+      if (terminal.runId !== current.runId || !isTerminalRun(terminal)) {
+        throw new Error("control_team_run_terminal_wait_invalid");
+      }
+      return terminal;
     }
     if (nextDelayMs > 0) {
       await new Promise((resolve) => setTimeout(resolve, nextDelayMs));

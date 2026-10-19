@@ -971,3 +971,7 @@ host admission port 在绑定时会复制并冻结 capability snapshot，后续�
 ## 第九十六批：Team 事件等待边界审计（2026-10-19）
 
 复核现有 Run SSE 后确认它依赖 `ControlApiClient.openRunEventStream`、HTTP 身份和 `Last-Event-ID` 恢复，而后台 Team scheduler 使用进程内 `ControlTeamRuntimeClient`。当前不能把 SSE client 或 session 凭据直接塞进 application/runtime worker，否则会混淆 Control 授权边界和 scheduler 的 durable fence。现阶段保留首读立即加有界 polling 的安全路径；下一步应新增 host-only 的 `waitForRunTerminal` port，由受信 composition 提供事件等待与断线恢复，application 仍校验 run identity、终态、deadline 和取消，未实现前不改变现有后台路径。
+
+## 第九十七批：受信 Run 终态等待 port 骨架（2026-10-19）
+
+新增内部 `TeamRunTerminalWait` port，并从 `TeamTaskExecutionHost` 传递到 Team turn 各阶段。默认没有该 port 时仍使用原 polling；显式提供时，application 先校验返回的 Run identity、终态、取消和 deadline，错误结果 fail closed。HTTP、浏览器和现有 Control operations 未实现该 port，因此没有改变公开协议或凭据边界。新增回归覆盖 host wait 成功、跨 Run 返回拒绝、首读立即和后续 polling 节流；Application typecheck 与 SQLite Team application 集成通过。

@@ -85,6 +85,13 @@ export interface ControlTeamRuntimeClient {
   ): Promise<StartTurnResponse>;
 }
 
+/** Host-only terminal wait; HTTP and browser clients do not provide it. */
+export type TeamRunTerminalWait = (input: {
+  run: RunView;
+  deadlineAt: number;
+  signal?: AbortSignal;
+}) => Promise<RunView>;
+
 export type ControlTeamMember = Readonly<{
   memberId: string;
   displayName: string;
@@ -159,6 +166,8 @@ export type StartControlTeamTurnInput = Readonly<{
   signal?: AbortSignal;
   /** Only the backend task host supplies immutable stage observations. */
   checkpoint?: TeamTurnCheckpoint;
+  /** Only a trusted host may replace polling with a durable event wait. */
+  waitForRunTerminal?: TeamRunTerminalWait;
 }> &
   (
     | Readonly<{

@@ -70,6 +70,7 @@ export async function startControlTeamTurn(
     ...input,
     pollIntervalMs,
     runDeadlineMs,
+    waitForRunTerminal: input.waitForRunTerminal,
   });
   const forkSource = await readTeamCheckpoint(input, "context", () =>
     input.client.getThread(input.threadId),
@@ -227,6 +228,7 @@ export async function startControlTeamTurn(
       pollIntervalMs,
       runDeadlineMs,
       signal: input.signal,
+      waitForRunTerminal: input.waitForRunTerminal,
     });
     const managerPlan =
       managerTerminal.status === "completed"
@@ -302,6 +304,7 @@ export async function startControlTeamTurn(
         pollIntervalMs,
         runDeadlineMs,
         signal: input.signal,
+        waitForRunTerminal: input.waitForRunTerminal,
       });
       const directOutput =
         terminal.status === "completed"
@@ -376,6 +379,7 @@ export async function startControlTeamTurn(
     idempotencyKey: finalManagerIdempotencyKey,
     pollIntervalMs,
     runDeadlineMs,
+    waitForRunTerminal: input.waitForRunTerminal,
   });
   const finalManagerIntentMatches = controlStartTurnExecutionIntentMatches(
     finalManagerStarted,
@@ -414,6 +418,7 @@ export async function startControlTeamTurn(
     run: finalManagerStarted.run,
     pollIntervalMs,
     runDeadlineMs,
+    waitForRunTerminal: input.waitForRunTerminal,
     signal: input.signal,
   });
   const delegation =
@@ -474,6 +479,7 @@ export async function startControlTeamTurn(
     idempotencyKey: memberIdempotencyKey,
     pollIntervalMs,
     runDeadlineMs,
+    waitForRunTerminal: input.waitForRunTerminal,
   });
   const memberIntentMatches = controlStartTurnExecutionIntentMatches(
     memberStarted,

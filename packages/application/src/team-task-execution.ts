@@ -5,6 +5,7 @@ import { startControlTeamTurn } from "./team-turn.ts";
 import type {
   ControlTeamRuntimeClient,
   TeamTurnCheckpoint,
+  TeamRunTerminalWait,
 } from "./team-turn-types.ts";
 import {
   TeamTaskJournalError,
@@ -33,6 +34,8 @@ export type TeamTaskExecutionHost = Readonly<{
   leaseDurationMs?: number;
   pollIntervalMs?: number;
   runDeadlineMs?: number;
+  /** Optional trusted event wait; polling remains the default fallback. */
+  waitForRunTerminal?: TeamRunTerminalWait;
 }>;
 
 export type TeamTaskAutonomousChildAdmission = (input: {
@@ -96,6 +99,9 @@ export function createTeamTaskExecutor(input: {
       ...(input.host.runDeadlineMs === undefined
         ? {}
         : { runDeadlineMs: input.host.runDeadlineMs }),
+      ...(input.host.waitForRunTerminal === undefined
+        ? {}
+        : { waitForRunTerminal: input.host.waitForRunTerminal }),
       signal,
     });
   };
@@ -117,6 +123,7 @@ export async function executeTeamTask(input: {
   leaseDurationMs?: number;
   pollIntervalMs?: number;
   runDeadlineMs?: number;
+  waitForRunTerminal?: TeamRunTerminalWait;
   signal?: AbortSignal;
 }) {
   const { store, fence, operations } = input;
@@ -387,6 +394,9 @@ export async function executeTeamTask(input: {
         ...(input.runDeadlineMs === undefined
           ? {}
           : { runDeadlineMs: input.runDeadlineMs }),
+        ...(input.waitForRunTerminal === undefined
+          ? {}
+          : { waitForRunTerminal: input.waitForRunTerminal }),
         ...(acceptedMessage === undefined ? {} : { acceptedMessage }),
         ...(task.intent.mainHistorySequence === undefined
           ? {}

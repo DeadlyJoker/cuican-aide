@@ -1,5 +1,8 @@
 import type { StartTurnRequest, StartTurnResponse } from "@crewon/contracts";
-import type { ControlTeamRuntimeClient } from "./team-turn-types.ts";
+import type {
+  ControlTeamRuntimeClient,
+  TeamRunTerminalWait,
+} from "./team-turn-types.ts";
 import {
   readTeamCheckpoint,
   type TeamTurnCheckpoint,
@@ -38,6 +41,7 @@ export async function pauseTeamGoalIfNeeded(input: {
   pollIntervalMs: number;
   runDeadlineMs: number;
   signal?: AbortSignal;
+  waitForRunTerminal?: TeamRunTerminalWait;
   checkpoint?: TeamTurnCheckpoint;
 }): Promise<{ threadRevision: number } | null> {
   const current = await readTeamCheckpoint(input, "goalInitial", () =>
@@ -89,6 +93,7 @@ export async function pauseTeamGoalIfNeeded(input: {
     pollIntervalMs: input.pollIntervalMs,
     runDeadlineMs: input.runDeadlineMs,
     signal: input.signal,
+    waitForRunTerminal: input.waitForRunTerminal,
   });
   const snapshot = await readTeamCheckpoint(input, "goalPausedThread", () =>
     input.client.getThread(input.threadId),
@@ -110,6 +115,7 @@ export async function startFinalTeamTurn(input: {
   pollIntervalMs: number;
   runDeadlineMs: number;
   signal?: AbortSignal;
+  waitForRunTerminal?: TeamRunTerminalWait;
 }): Promise<StartTurnResponse> {
   const retryDeadline =
     Date.now() +
@@ -174,6 +180,7 @@ async function settleGoalMutationRuns(input: {
   pollIntervalMs: number;
   runDeadlineMs: number;
   signal?: AbortSignal;
+  waitForRunTerminal?: TeamRunTerminalWait;
 }): Promise<void> {
   for (const run of [input.response.canceledRun, input.response.retainedRun]) {
     if (run !== null && !isTerminalRun(run)) {
@@ -183,6 +190,7 @@ async function settleGoalMutationRuns(input: {
         pollIntervalMs: input.pollIntervalMs,
         runDeadlineMs: input.runDeadlineMs,
         signal: input.signal,
+        waitForRunTerminal: input.waitForRunTerminal,
       });
     }
   }

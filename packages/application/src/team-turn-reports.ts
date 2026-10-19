@@ -5,6 +5,7 @@ import type {
   ControlTeamMember,
   ControlTeamPlan,
   ControlTeamRunAcceptedEvent,
+  TeamRunTerminalWait,
 } from "./team-turn-types.ts";
 import {
   readTeamCheckpoint,
@@ -49,6 +50,7 @@ export async function recoverWorker(input: {
   pollIntervalMs: number;
   runDeadlineMs: number;
   signal?: AbortSignal;
+  waitForRunTerminal?: TeamRunTerminalWait;
   checkpoint?: TeamTurnCheckpoint;
 }): Promise<MemberReport> {
   const snapshot = await readTeamCheckpoint(
@@ -94,6 +96,7 @@ export async function recoverWorker(input: {
     pollIntervalMs: input.pollIntervalMs,
     runDeadlineMs: input.runDeadlineMs,
     signal: input.signal,
+    waitForRunTerminal: input.waitForRunTerminal,
   });
   const output =
     terminal.status === "completed"
