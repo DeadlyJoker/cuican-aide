@@ -1,6 +1,10 @@
 import type { Pool, PoolClient } from "pg";
 import type { RunState } from "@crewon/domain";
 import { RunStoreError } from "@crewon/application";
+import {
+  captureAutonomousTaskChildAdmission,
+  type AutonomousTaskChildAdmission,
+} from "@crewon/application/autonomous-task-admission";
 import type {
   CommitThreadInput,
   CommitThreadResult,
@@ -12,6 +16,7 @@ import {
   teamJournalFail,
   validateTeamLeaseDuration,
   teamJournalId,
+  validateTeamTaskFence,
   validateTeamTaskListLimit,
   validateTeamTaskScope,
   type TeamTaskIntent,
@@ -21,6 +26,8 @@ import {
   type TeamTaskEffect,
   type TeamTaskAdmissionResult,
   type TeamTaskJournalStore,
+  type AutonomousTaskChildAdmissionResult,
+  TEAM_JOURNAL_LIMITS,
 } from "@crewon/application/team-task-journal";
 import type { ControlTeamTurnResult } from "@crewon/application/team-turn";
 import {
@@ -40,6 +47,7 @@ import {
 } from "./team-task-journal-state.ts";
 import { advisoryLock, threadLockKey } from "./postgres-thread-lock.ts";
 import { rollbackPostgres } from "./postgres-store-support.ts";
+import { AUTONOMOUS_TASK_CHILD_ADMISSIONS_TABLE } from "./postgres-autonomous-task-edge-store.ts";
 
 type TeamJournalHost = {
   assertOpen(): void;
@@ -81,6 +89,28 @@ export class ExperimentalPostgresTeamTaskJournal
     );
     if (rows.length !== 1 || rows[0]!.version !== 1)
       teamJournalFail("team_journal_schema_unsupported");
+  }
+  async #edgeSchema(client: PoolClient): Promise<void> {
+    const { rows } = await client.query(
+      "SELECT to_regclass($1) AS schema_table,to_regclass($2) AS edge_table,to_regclass($3) AS admission_table",
+      [
+        this.#table("autonomous_task_edge_schema"),
+        this.#table("autonomous_task_edges"),
+        this.#table(AUTONOMOUS_TASK_CHILD_ADMISSIONS_TABLE),
+      ],
+    );
+    if (
+      rows.length !== 1 ||
+      rows[0]!.schema_table === null ||
+      rows[0]!.edge_table === null ||
+      rows[0]!.admission_table === null
+    )
+      teamJournalFail("autonomous_task_edge_schema_unavailable");
+    const version = await client.query(
+      `SELECT version FROM ${this.#table("autonomous_task_edge_schema")} LIMIT 2`,
+    );
+    if (version.rows.length !== 1 || Number(version.rows[0]!.version) !== 1)
+      teamJournalFail("autonomous_task_edge_schema_unsupported");
   }
   async #transaction<T>(
     locator: TeamTaskLocator | null,
@@ -457,8 +487,146 @@ export class ExperimentalPostgresTeamTaskJournal
       );
     });
   }
-  async admitAutonomousChild(): Promise<never> {
-    throw new RunStoreError("autonomous_task_child_admission_unavailable");
+  async admitAutonomousChild(
+    input: AutonomousTaskChildAdmission & { parentFence: TeamTaskFence },
+  ): Promise<AutonomousTaskChildAdmissionResult> {
+    const { parentFence, ...admissionInput } = input;
+    const admission = captureAutonomousTaskChildAdmission(admissionInput);
+    validateTeamTaskFence(parentFence);
+    if (
+      parentFence.tenantId !== admission.capability.tenantId ||
+      parentFence.spaceId !== admission.capability.spaceId ||
+      parentFence.taskId !== admission.parentTaskId
+    )
+      teamJournalFail("autonomous_task_child_scope_mismatch");
+    const effect = captureTeamEffect({
+      key: `command:autonomous.child:${admission.idempotencyKey}`,
+      kind: "command",
+      request: {
+        schemaVersion: "crewon.autonomous-task-child-admission.v0",
+        parentTaskId: admission.parentTaskId,
+        childTaskId: admission.childTaskId,
+        edge: admission.edge,
+        budget: admission.budget,
+        capability: admission.capability,
+      },
+    });
+    return this.#transaction(parentFence, async (client) => {
+      await this.#edgeSchema(client);
+      const parent = await this.#fenced(client, parentFence);
+      if (
+        parent.intent.actorId !== admission.capability.actorId ||
+        parent.intent.principalId !== admission.capability.principalId
+      )
+        teamJournalFail("autonomous_task_child_issuer_mismatch");
+      const existing = await client.query(
+        `SELECT * FROM ${this.#table(AUTONOMOUS_TASK_CHILD_ADMISSIONS_TABLE)} WHERE tenant_id=$1 AND space_id=$2 AND parent_task_id=$3 AND idempotency_key=$4`,
+        [
+          admission.capability.tenantId,
+          admission.capability.spaceId,
+          admission.parentTaskId,
+          admission.idempotencyKey,
+        ],
+      );
+      const priorEffect = await this.#effect(client, parentFence, effect.key);
+      if (existing.rows.length !== 0 || priorEffect) {
+        if (existing.rows.length === 0 || !priorEffect || !priorEffect.settled)
+          teamJournalFail("autonomous_task_child_admission_corrupt");
+        assertTeamEffectReplay(priorEffect, effect);
+        const child = await this.#read(client, admission.childIntent);
+        if (!child) teamJournalFail("autonomous_task_child_admission_corrupt");
+        const edge = await readPostgresAutonomousEdge(
+          client,
+          this.schemaSql,
+          admission,
+        );
+        return {
+          disposition: "replayed" as const,
+          task: child,
+          edge,
+          effect: priorEffect,
+          wakeKey: String(existing.rows[0]!.wake_key),
+        };
+      }
+      const intentJson = teamJournalJson(
+        admission.childIntent,
+        TEAM_JOURNAL_LIMITS.intentBytes,
+      );
+      const child = await this.#createInTransaction(
+        client,
+        admission.childIntent,
+        intentJson,
+      );
+      const createdAt = await this.#now(client);
+      const wakeKey = `team-task:${admission.childTaskId}`;
+      const budgetJson = teamJournalJson(admission.budget);
+      const capabilityJson = teamJournalJson(admission.capability);
+      await client.query(
+        `INSERT INTO ${this.#table("autonomous_task_edges")} (tenant_id,space_id,root_task_id,parent_task_id,child_task_id,depth,child_ordinal,created_at) VALUES($1,$2,$3,$4,$5,$6,$7,$8)`,
+        [
+          admission.capability.tenantId,
+          admission.capability.spaceId,
+          admission.edge.rootTaskId,
+          admission.edge.parentTaskId,
+          admission.edge.childTaskId,
+          admission.edge.depth,
+          admission.edge.childOrdinal,
+          createdAt,
+        ],
+      );
+      await client.query(
+        `INSERT INTO ${this.#table(AUTONOMOUS_TASK_CHILD_ADMISSIONS_TABLE)} (tenant_id,space_id,parent_task_id,child_task_id,idempotency_key,budget_json,capability_json,intent_json,wake_key,created_at) VALUES($1,$2,$3,$4,$5,$6,$7,$8,$9,$10)`,
+        [
+          admission.capability.tenantId,
+          admission.capability.spaceId,
+          admission.parentTaskId,
+          admission.childTaskId,
+          admission.idempotencyKey,
+          budgetJson,
+          capabilityJson,
+          intentJson,
+          wakeKey,
+          createdAt,
+        ],
+      );
+      const response = {
+        schemaVersion: "crewon.autonomous-task-child-result.v0",
+        childTaskId: admission.childTaskId,
+        wakeKey,
+        edge: { ...admission.edge, createdAt },
+      };
+      const requestBytes = teamJournalBytes(effect.requestJson);
+      const responseText = teamJournalJson(response);
+      assertTeamJournalBudget(
+        parent,
+        requestBytes + teamJournalBytes(responseText),
+        true,
+      );
+      await client.query(
+        `INSERT INTO ${this.#table("team_task_effects")} (tenant_id,space_id,task_id,effect_key,kind,request_json,response_json) VALUES($1,$2,$3,$4,$5,$6,$7)`,
+        [
+          ...teamTaskKeys(parentFence),
+          effect.key,
+          effect.kind,
+          effect.requestJson,
+          responseText,
+        ],
+      );
+      await client.query(
+        `UPDATE ${this.#table("team_task_journals")} SET effect_count=effect_count+1,journal_bytes=journal_bytes+$1,revision=revision+1 WHERE tenant_id=$2 AND space_id=$3 AND task_id=$4`,
+        [
+          requestBytes + teamJournalBytes(responseText),
+          ...teamTaskKeys(parentFence),
+        ],
+      );
+      return {
+        disposition: "created" as const,
+        task: child,
+        edge: Object.freeze({ ...admission.edge, createdAt }),
+        effect: (await this.#effect(client, parentFence, effect.key))!,
+        wakeKey,
+      };
+    });
   }
   async finalAccepted(fence: TeamTaskFence, value: ControlTeamTurnResult) {
     await this.#transaction(fence, async (client) => {
@@ -480,4 +648,33 @@ export class ExperimentalPostgresTeamTaskJournal
       );
     });
   }
+}
+
+async function readPostgresAutonomousEdge(
+  client: PoolClient,
+  schemaSql: string,
+  admission: AutonomousTaskChildAdmission,
+): Promise<import("@crewon/application").AutonomousTaskEdge> {
+  const { rows } = await client.query(
+    `SELECT * FROM ${schemaSql}.autonomous_task_edges WHERE tenant_id=$1 AND space_id=$2 AND child_task_id=$3`,
+    [
+      admission.capability.tenantId,
+      admission.capability.spaceId,
+      admission.childTaskId,
+    ],
+  );
+  const row = rows[0] as Record<string, unknown> | undefined;
+  if (!row) teamJournalFail("autonomous_task_child_admission_corrupt");
+  const createdAt = Number(row.created_at);
+  if (!Number.isSafeInteger(createdAt) || createdAt < 0)
+    teamJournalFail("autonomous_task_child_admission_corrupt");
+  if (
+    row.root_task_id !== admission.edge.rootTaskId ||
+    row.parent_task_id !== admission.edge.parentTaskId ||
+    row.child_task_id !== admission.edge.childTaskId ||
+    Number(row.depth) !== admission.edge.depth ||
+    Number(row.child_ordinal) !== admission.edge.childOrdinal
+  )
+    teamJournalFail("autonomous_task_child_admission_corrupt");
+  return Object.freeze({ ...admission.edge, createdAt });
 }

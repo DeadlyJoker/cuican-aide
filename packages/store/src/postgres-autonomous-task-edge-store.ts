@@ -12,6 +12,8 @@ import { rollbackPostgres } from "./postgres-store-support.ts";
 
 const SCHEMA = "autonomous_task_edge_schema";
 const TABLE = "autonomous_task_edges";
+export const AUTONOMOUS_TASK_CHILD_ADMISSIONS_TABLE =
+  "autonomous_task_child_admissions";
 const COLUMNS = `tenant_id TEXT NOT NULL, space_id TEXT NOT NULL,
  root_task_id TEXT NOT NULL, parent_task_id TEXT NOT NULL, child_task_id TEXT NOT NULL,
  depth INTEGER NOT NULL CHECK(depth>=1 AND depth<=8),
@@ -19,6 +21,14 @@ const COLUMNS = `tenant_id TEXT NOT NULL, space_id TEXT NOT NULL,
  created_at BIGINT NOT NULL CHECK(created_at>=0),
  PRIMARY KEY(tenant_id,space_id,parent_task_id,child_ordinal),
  UNIQUE(tenant_id,space_id,child_task_id)`;
+const ADMISSION_COLUMNS = `tenant_id TEXT NOT NULL, space_id TEXT NOT NULL,
+ parent_task_id TEXT NOT NULL, child_task_id TEXT NOT NULL,
+ idempotency_key TEXT NOT NULL, budget_json TEXT NOT NULL,
+ capability_json TEXT NOT NULL, intent_json TEXT NOT NULL,
+ wake_key TEXT NOT NULL, created_at BIGINT NOT NULL CHECK(created_at>=0),
+ PRIMARY KEY(tenant_id,space_id,child_task_id),
+ UNIQUE(tenant_id,space_id,parent_task_id,idempotency_key),
+ UNIQUE(tenant_id,space_id,wake_key)`;
 
 type Row = Record<string, unknown>;
 
@@ -41,13 +51,18 @@ export class ExperimentalPostgresAutonomousTaskEdgeStore
 
   async #schema(client: PoolClient | Pool): Promise<void> {
     const { rows } = await client.query(
-      "SELECT to_regclass($1) AS schema_table,to_regclass($2) AS edge_table",
-      [this.#table(SCHEMA), this.#table(TABLE)],
+      "SELECT to_regclass($1) AS schema_table,to_regclass($2) AS edge_table,to_regclass($3) AS admission_table",
+      [
+        this.#table(SCHEMA),
+        this.#table(TABLE),
+        this.#table(AUTONOMOUS_TASK_CHILD_ADMISSIONS_TABLE),
+      ],
     );
     if (
       rows.length !== 1 ||
       rows[0]!.schema_table === null ||
-      rows[0]!.edge_table === null
+      rows[0]!.edge_table === null ||
+      rows[0]!.admission_table === null
     )
       throw new RunStoreError("autonomous_task_edge_schema_unavailable");
     const version = await client.query(
@@ -101,25 +116,43 @@ export class ExperimentalPostgresAutonomousTaskEdgeStore
       null,
       async (client) => {
         const { rows } = await client.query(
-          "SELECT to_regclass($1) AS schema_table,to_regclass($2) AS edge_table",
-          [this.#table(SCHEMA), this.#table(TABLE)],
+          "SELECT to_regclass($1) AS schema_table,to_regclass($2) AS edge_table,to_regclass($3) AS admission_table",
+          [
+            this.#table(SCHEMA),
+            this.#table(TABLE),
+            this.#table(AUTONOMOUS_TASK_CHILD_ADMISSIONS_TABLE),
+          ],
         );
         const present =
           rows.length === 1 &&
           rows[0]!.schema_table !== null &&
-          rows[0]!.edge_table !== null;
+          rows[0]!.edge_table !== null &&
+          rows[0]!.admission_table !== null;
         if (present) {
           await this.#schema(client);
           return;
         }
         if (
           rows.length === 1 &&
-          (rows[0]!.schema_table !== null || rows[0]!.edge_table !== null)
+          (rows[0]!.schema_table !== null ||
+            rows[0]!.edge_table !== null ||
+            rows[0]!.admission_table !== null)
         )
-          throw new RunStoreError("autonomous_task_edge_schema_corrupt");
+          if (
+            rows[0]!.schema_table !== null &&
+            rows[0]!.edge_table !== null &&
+            rows[0]!.admission_table === null
+          ) {
+            await client.query(
+              `CREATE TABLE ${this.#table(AUTONOMOUS_TASK_CHILD_ADMISSIONS_TABLE)} (${ADMISSION_COLUMNS});`,
+            );
+            await this.#schema(client);
+            return;
+          } else throw new RunStoreError("autonomous_task_edge_schema_corrupt");
         await client.query(`CREATE TABLE ${this.#table(SCHEMA)} (singleton INTEGER PRIMARY KEY CHECK(singleton=1),version INTEGER NOT NULL CHECK(version=1));
           INSERT INTO ${this.#table(SCHEMA)} VALUES(1,1);
           CREATE TABLE ${this.#table(TABLE)} (${COLUMNS});
+          CREATE TABLE ${this.#table(AUTONOMOUS_TASK_CHILD_ADMISSIONS_TABLE)} (${ADMISSION_COLUMNS});
           CREATE INDEX autonomous_task_edge_root_lookup ON ${this.#table(TABLE)}(tenant_id,space_id,root_task_id,depth,child_ordinal);`);
       },
       false,

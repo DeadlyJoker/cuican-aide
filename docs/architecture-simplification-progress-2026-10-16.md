@@ -861,3 +861,9 @@ Node 24 下新增契约测试 2/2、Application typecheck 和格式检查通过�
 `ExperimentalSqliteTeamTaskJournal.admitAutonomousChild` 现在在一个 `BEGIN IMMEDIATE` 中完成 parent fenced spawn effect、child Team journal、edge、budget/capability metadata 和 deterministic wake key。重复 admission 通过同一 effect/metadata replay；child ordinal 冲突会让整个事务回滚，测试确认 child journal、edge 和 parent effect 都不会残留。
 
 该入口仍是显式内部能力，没有 HTTP、模型直发或默认 scheduler 接线。Node 24 真实 SQLite Control/Store fixture 的原子 admission 测试 1/1 通过；Application、Store、Control API typecheck 通过。PostgreSQL 当前实现对该新操作 fail closed，避免在没有测试库和等价事务覆盖时假装支持；下一步补 PostgreSQL 同一事务实现和故障注入。
+
+## 第七十七批：PostgreSQL 原子 child admission 实现（2026-10-19）
+
+PostgreSQL edge schema 现在与 SQLite 对齐，包含 child admission metadata 表及旧 edge schema 的 additive migration。`ExperimentalPostgresTeamTaskJournal.admitAutonomousChild` 使用同一连接、事务和 Team advisory lock，按与 SQLite 相同的顺序提交 parent effect、child journal、edge、metadata 和 wake key；重复请求 replay，冲突由事务回滚。
+
+当前环境没有 `CREWON_TEST_POSTGRES_URL`，因此本批只完成 PostgreSQL typecheck，并继续保持 integration test skip；SQLite 原子 admission 1/1、契约/edge 3/3 仍通过。没有把 PostgreSQL 运行时结果描述为已验收，下一步在测试库可用后重跑双 backend 故障注入。
