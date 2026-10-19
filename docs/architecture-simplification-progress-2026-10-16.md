@@ -1051,3 +1051,7 @@ Standalone Control 现在为显式 Team operations 提供 host-only terminal wai
 ## 第一百一十六批：Run binding 双 Store 重启回归（2026-10-19）
 
 新增 SQLite 与 PostgreSQL RunStore 回归：带 `teamTaskBinding` 的 `run.created` 原子提交后关闭并重新打开 Store，重新读取 snapshot、事件和幂等 receipt，binding 均保持一致。SQLite 回归通过；使用隔离临时 PostgreSQL 实例运行 PostgreSQL RunStore 全部 47 项通过。一次初测暴露的是测试 locator 错写为 `run-1` 而 fixture 实际为 `run-store-1`，已修正并重新验证。
+
+## 第一百一十七批：Runtime Worker Team runtime resolver（2026-10-19）
+
+Runtime Worker 现在从持久化 `teamTaskBinding` 进入显式 Team runtime resolver；resolver 收到完整 RunState、binding 和基础 AgentVersion runtime，负责解析实际 Team host/runtime。binding 缺少 resolver 时保留普通 AgentVersion 兼容路径；resolver 明确返回不可用，或 binding 与 Run tenant/space 不一致时，Worker 以永久错误 fail-closed，避免降级到错误 Team runtime。Standalone composition 暴露受信 resolver 注入点，新增回归覆盖持久 binding 回流、resolver 调用、不可用和跨作用域拒绝。真实 standalone Control HTTP → Worker → SSE durable Team UI 回归通过；Node 22 运行时仅有仓库要求 Node 24 的 engine warning。

@@ -60,7 +60,11 @@ import type {
 } from "@crewon/device-dispatch";
 import type { ToolRuntimePort } from "@crewon/tool-broker";
 
-import { RuntimeWorker, type RuntimeWorkerConfig } from "./runtime-worker.ts";
+import {
+  RuntimeWorker,
+  type RuntimeWorkerConfig,
+  type TeamRunRuntimeResolverPort,
+} from "./runtime-worker.ts";
 import { preparePluginTaskAdmissionProbe } from "./plugins/plugin-task-admission-probe.ts";
 import { createPluginCreditSettlementMaintenance } from "./plugins/plugin-credit-settlement-maintenance.ts";
 import {
@@ -189,6 +193,8 @@ export type RuntimeWorkerCompositionConfig = Readonly<{
   modelContextWindowTokens?: number;
   expectedAgentVersionDigest?: string | null;
   agentVersionRuntimeFactory?: AgentVersionRuntimeFactoryPort;
+  /** Resolves persisted Team bindings into the concrete Team runtime. */
+  teamRunRuntimeResolver?: TeamRunRuntimeResolverPort;
   agentVersionDeployments?: readonly AgentVersionDeploymentCandidate[];
   additionalAgentVersions?: readonly CompiledAgentVersion[];
   extensionRuntime?: RuntimeExtensionCompositionConfig;
@@ -879,6 +885,7 @@ async function composeRuntimeWorker(
         config.modelSwitchCompactionResolver ??
         runtimeResolver.priorModelCompactionResolver(),
       agentVersionRuntimeResolver: runtimeResolver,
+      teamRunRuntimeResolver: config.teamRunRuntimeResolver,
       pluginTaskAdmissions,
       installedPluginRuntimeResolver,
       pluginCreditSettlement,

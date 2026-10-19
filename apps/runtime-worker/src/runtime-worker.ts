@@ -91,6 +91,7 @@ import {
 import type {
   RunLifecycleEvent,
   RunState,
+  TeamTaskRunBinding,
   ToolApprovalState,
   ToolExecutionReceiptState,
 } from "@crewon/domain";
@@ -230,7 +231,7 @@ export type RuntimeWorkerConfig = Readonly<{
 
 export type { RuntimeWorkerOutcome } from "./runtime-worker-outcome.ts";
 
-type WorkerAgentRuntime = Readonly<{
+export type WorkerAgentRuntime = Readonly<{
   executionAuthority: AgentExecutionAuthority;
   installedPluginAdmission: "none" | "present";
   kernel: AgentKernelPort;
@@ -244,6 +245,39 @@ type WorkerAgentRuntime = Readonly<{
   modelContextWindowTokens: number;
   maxToolRounds: number;
 }>;
+
+/** Host-only runtime override for Runs admitted by a durable Team task. */
+export type TeamRunRuntimeResolverPort = Readonly<{
+  resolve(input: {
+    run: RunState;
+    binding: TeamTaskRunBinding;
+    base: WorkerAgentRuntime;
+  }): Promise<WorkerAgentRuntime | null>;
+}>;
+
+export async function resolveTeamRunRuntime(input: {
+  run: RunState;
+  base: WorkerAgentRuntime;
+  resolver?: TeamRunRuntimeResolverPort;
+}): Promise<WorkerAgentRuntime> {
+  const binding = input.run.teamTaskBinding;
+  const resolver = input.resolver;
+  if (binding === undefined || resolver === undefined) return input.base;
+  if (
+    binding.tenantId !== input.run.tenantId ||
+    binding.spaceId !== input.run.spaceId
+  ) {
+    throw new PermanentWorkerError("team_runtime_binding_scope_invalid");
+  }
+  const resolved = await resolver.resolve({
+    run: input.run,
+    binding,
+    base: input.base,
+  });
+  if (resolved === null)
+    throw new PermanentWorkerError("team_runtime_unavailable");
+  return resolved;
+}
 
 export class RuntimeWorker {
   readonly #executionBudget: RuntimeExecutionBudget;
@@ -271,6 +305,7 @@ export class RuntimeWorker {
   readonly #agentVersionRuntimeResolver:
     | AgentVersionRuntimeResolverPort
     | undefined;
+  readonly #teamRunRuntimeResolver: TeamRunRuntimeResolverPort | undefined;
   readonly #pluginTaskAdmissions: PluginTaskAdmissionProbe | undefined;
   readonly #installedPluginRuntimeResolver:
     | InstalledPluginRunRuntimeResolverPort
@@ -339,6 +374,7 @@ export class RuntimeWorker {
       governedContext?: GovernedContextBundle;
       modelSwitchCompactionResolver?: PriorModelCompactionResolverPort;
       agentVersionRuntimeResolver?: AgentVersionRuntimeResolverPort;
+      teamRunRuntimeResolver?: TeamRunRuntimeResolverPort;
       pluginTaskAdmissions?: PluginTaskAdmissionProbe;
       installedPluginRuntimeResolver?: InstalledPluginRunRuntimeResolverPort;
       pluginCreditSettlement?: PluginCreditSettlementMaintenancePort;
@@ -391,6 +427,7 @@ export class RuntimeWorker {
       dependencies.modelSwitchCompactionResolver;
     this.#agentVersionRuntimeResolver =
       dependencies.agentVersionRuntimeResolver;
+    this.#teamRunRuntimeResolver = dependencies.teamRunRuntimeResolver;
     this.#pluginTaskAdmissions = dependencies.pluginTaskAdmissions;
     this.#installedPluginRuntimeResolver =
       dependencies.installedPluginRuntimeResolver;
@@ -856,7 +893,7 @@ export class RuntimeWorker {
         throw new InstalledPluginRuntimeError(
           "installed_plugin_materialization_unavailable",
         );
-      return {
+      return this.#applyTeamRuntime(run, {
         executionAuthority: "crewonKernel",
         installedPluginAdmission: "none",
         kernel: this.#kernel,
@@ -869,7 +906,7 @@ export class RuntimeWorker {
         autoCompactAtTokens: this.#autoCompactAtTokens,
         modelContextWindowTokens: this.#modelContextWindowTokens,
         maxToolRounds: this.#maxToolRounds,
-      };
+      });
     }
     const resolver = this.#agentVersionRuntimeResolver;
     const resolved = await acquireRuntimeResource({
@@ -885,7 +922,7 @@ export class RuntimeWorker {
       throw new PermanentWorkerError("agent_version_runtime_identity_mismatch");
     }
     const runtime = this.#projectAgentVersionRuntime(resolved);
-    if (admission === null) return runtime;
+    if (admission === null) return this.#applyTeamRuntime(run, runtime);
     const toolRuntime = await this.#preflight.run({
       identity: {
         tenantId: run.tenantId,
@@ -916,7 +953,22 @@ export class RuntimeWorker {
           }
         }),
     });
-    return { ...runtime, toolRuntime, installedPluginAdmission: "present" };
+    return this.#applyTeamRuntime(run, {
+      ...runtime,
+      toolRuntime,
+      installedPluginAdmission: "present",
+    });
+  }
+
+  async #applyTeamRuntime(
+    run: RunState,
+    base: WorkerAgentRuntime,
+  ): Promise<WorkerAgentRuntime> {
+    return resolveTeamRunRuntime({
+      run,
+      base,
+      resolver: this.#teamRunRuntimeResolver,
+    });
   }
 
   #projectAgentVersionRuntime(
@@ -3344,7 +3396,7 @@ function manualCompactionRequest(
   };
 }
 
-class PermanentWorkerError extends Error {
+export class PermanentWorkerError extends Error {
   readonly code: string;
 
   constructor(code: string) {
