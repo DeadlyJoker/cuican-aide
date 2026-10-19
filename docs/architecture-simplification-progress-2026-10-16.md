@@ -955,3 +955,7 @@ host admission port 在绑定时会复制并冻结 capability snapshot，后续�
 ## 第九十二批：Runtime Worker executor 暴露受信 child admission port（2026-10-19）
 
 `ControlTeamRuntimeClient` 增加可选的 host-only `admitAutonomousChild` 方法。Runtime Worker 显式 Team host 会把可信 capability 与同一 Team journal 绑定后暴露该方法；调用直接进入原子 child admission 事务，不经过普通 command effect，避免重复回执。浏览器/HTTP operations 不实现该可选方法，默认 scheduler 和现有 Team turn 行为不变。
+
+## 第九十三批：等待期间过期 child 的真实 scheduler 回归（2026-10-19）
+
+扩展 SQLite/PostgreSQL 参数化 interruption 集成：先用短 deadline 成功写入 autonomous child，再等待其跨过 deadline，最后让真实 `TeamTaskScheduler` wake。回归确认 scheduler 在发现 runnable work 前先通过数据库事务把过期 child 标为 `cancel_requested`，有效 child 仍可被 claim，过期 child 不会进入 executor。原有 admission 失败回滚（child、edge、parent effect 均无残留）继续保留。当前环境没有 `CREWON_TEST_POSTGRES_URL`，PostgreSQL 分支仍只注册并跳过，未声称运行时验收。

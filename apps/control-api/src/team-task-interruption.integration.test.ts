@@ -428,6 +428,39 @@ workflowDeploymentIntegrationTest(
       ),
       false,
     );
+    const fork3 = await operations.forkThread(
+      thread.threadId,
+      {
+        expectedRevision: (await server.client.getThread(thread.threadId))
+          .thread.revision,
+        throughHistorySequence: null,
+      },
+      "atomic-expiring-child-fork",
+    );
+    const expiringChild = {
+      ...child,
+      taskId: "atomic-expiring-child",
+      turn: {
+        ...child.turn,
+        threadId: fork3.thread.threadId,
+        expectedRevision: fork3.thread.revision,
+      },
+    } satisfies TeamTaskIntent;
+    const expiringDeadline = new Date(Date.now() + 100).toISOString();
+    await journal.admitAutonomousChild({
+      ...admission,
+      idempotencyKey: "spawn-expiring-child",
+      childTaskId: expiringChild.taskId,
+      childIntent: expiringChild,
+      edge: {
+        ...admission.edge,
+        childTaskId: expiringChild.taskId,
+        childOrdinal: 2,
+      },
+      budget: { ...admission.budget, deadlineAt: expiringDeadline },
+    });
+    await setTimeout(150);
+    assert.equal((await journal.read(expiringChild))?.cancelRequested, false);
     let childStartedResolve!: () => void;
     const childStarted = new Promise<void>((resolve) => {
       childStartedResolve = resolve;
@@ -464,6 +497,7 @@ workflowDeploymentIntegrationTest(
     });
     assert.equal((await scheduler.wake()).started, 1);
     await childStarted;
+    assert.equal((await journal.read(expiringChild))?.cancelRequested, true);
     await journal.cancelAutonomousTree(parent);
     assert.equal((await journal.read(parent))?.cancelRequested, true);
     assert.equal((await journal.read(child))?.cancelRequested, true);
