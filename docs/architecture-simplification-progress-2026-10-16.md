@@ -1047,3 +1047,7 @@ Standalone Control 现在为显式 Team operations 提供 host-only terminal wai
 ## 第一百一十五批：Team host 绑定回流到 Run 创建（2026-10-19）
 
 将 Team host 生成的 capability snapshot digest 作为内部 `TeamTaskRunBinding` identity，沿 `ControlTeamRuntimeClient` 的受信第四参数传到 `RunApplicationService`，再写入 `run.created`。普通 `ControlApiClient` 的既有第三参数（请求选项）保持兼容；binding 不进入公开 HTTP body，且创建服务重新校验 tenant/space 和严格字段。Application 全量 915/953（38 项环境跳过）、Control API/Application/Runtime Worker typecheck 通过；Node 22 运行时仅有仓库要求 Node 24 的 engine warning。
+
+## 第一百一十六批：Run binding 双 Store 重启回归（2026-10-19）
+
+新增 SQLite 与 PostgreSQL RunStore 回归：带 `teamTaskBinding` 的 `run.created` 原子提交后关闭并重新打开 Store，重新读取 snapshot、事件和幂等 receipt，binding 均保持一致。SQLite 回归通过；使用隔离临时 PostgreSQL 实例运行 PostgreSQL RunStore 全部 47 项通过。一次初测暴露的是测试 locator 错写为 `run-1` 而 fixture 实际为 `run-store-1`，已修正并重新验证。

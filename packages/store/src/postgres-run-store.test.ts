@@ -4,6 +4,7 @@ import { randomUUID } from "node:crypto";
 import test from "node:test";
 
 import { RunStoreError } from "@crewon/application";
+import type { RunLifecycleEvent } from "@crewon/domain";
 import { Pool } from "pg";
 
 import { PostgresRunStore } from "./postgres-run-store.ts";
@@ -255,6 +256,62 @@ if (connectionString === undefined) {
       assert.deepEqual(await first.listPendingWorkItems(10), input.workItems);
     } finally {
       await Promise.all([first.close(), second.close()]);
+    }
+  });
+
+  test("persists and replays a Team Run binding across PostgreSQL restart", async () => {
+    const schema = testSchema();
+    let first: TestPostgresRunStore | null = null;
+    let reopened: TestPostgresRunStore | null = null;
+    try {
+      first = await createTestStore(connectionString, schema, false);
+      await seedThread(first);
+      const base = createRunningCommitFixture();
+      const binding = {
+        schemaVersion: "crewon.team-task-run-binding.v0" as const,
+        tenantId: "tenant-1",
+        spaceId: "space-1",
+        teamTaskId: "team-1",
+        parentTaskId: "team-1",
+        admissionEpoch: 3,
+        capabilitySnapshotId: "sha256:capability",
+      };
+      const input = {
+        ...base,
+        events: base.events.map((event) =>
+          event.type === "run.created"
+            ? { ...event, data: { ...event.data, teamTaskBinding: binding } }
+            : event,
+        ),
+      };
+      const committed = await first.commitRun(input);
+      assert.deepEqual(committed.state.teamTaskBinding, binding);
+      await first.close();
+      first = null;
+
+      reopened = await createTestStore(connectionString, schema, false);
+      const state = await reopened.loadRun({
+        tenantId: "tenant-1",
+        runId: "run-store-1",
+      });
+      assert.deepEqual(state?.teamTaskBinding, binding);
+      const events = await reopened.listRunEvents(
+        { tenantId: "tenant-1", runId: "run-store-1" },
+        0,
+        100,
+      );
+      assert.deepEqual(
+        (events[0] as Extract<RunLifecycleEvent, { type: "run.created" }>).data
+          .teamTaskBinding,
+        binding,
+      );
+      assert.equal((await reopened.commitRun(input)).disposition, "replayed");
+    } finally {
+      await first?.close();
+      await reopened?.close();
+      const admin = new Pool({ connectionString, max: 1 });
+      await admin.query(`DROP SCHEMA IF EXISTS "${schema}" CASCADE`);
+      await admin.end();
     }
   });
 

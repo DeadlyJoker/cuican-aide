@@ -21,6 +21,7 @@ import {
   createRunGoalAccountingCursor,
   prepareToolExecutionReceipt,
   startRunGoalAccounting,
+  type RunLifecycleEvent,
   type RunGoalBinding,
   type RunState,
 } from "@crewon/domain";
@@ -416,6 +417,47 @@ test("persists snapshot, events, queues and idempotency across restart", async (
     outbox: input.outbox,
     workItems: input.workItems,
   });
+});
+
+test("persists and replays a Team Run binding across SQLite restart", async (context) => {
+  const path = temporaryDatabasePath(context);
+  const base = createRunningCommitFixture();
+  const binding = {
+    schemaVersion: "crewon.team-task-run-binding.v0" as const,
+    tenantId: "tenant-1",
+    spaceId: "space-1",
+    teamTaskId: "team-1",
+    parentTaskId: "team-1",
+    admissionEpoch: 3,
+    capabilitySnapshotId: "sha256:capability",
+  };
+  const input = {
+    ...base,
+    events: base.events.map((event) =>
+      event.type === "run.created"
+        ? { ...event, data: { ...event.data, teamTaskBinding: binding } }
+        : event,
+    ),
+  };
+  const first = new SqliteRunStore(path);
+  await seedThread(first);
+  const committed = await first.commitRun(input);
+  assert.deepEqual(committed.state.teamTaskBinding, binding);
+  await first.close();
+
+  const reopened = new SqliteRunStore(path);
+  context.after(() => reopened.close());
+  const state = await reopened.loadRun(runLocator());
+  assert.deepEqual(state?.teamTaskBinding, binding);
+  const events = await reopened.listRunEvents(runLocator(), 0, 100);
+  assert.deepEqual(
+    (events[0] as Extract<RunLifecycleEvent, { type: "run.created" }>).data
+      .teamTaskBinding,
+    binding,
+  );
+  const replay = await reopened.commitRun(input);
+  assert.equal(replay.disposition, "replayed");
+  assert.deepEqual(replay.state.teamTaskBinding, binding);
 });
 
 test("reclaims Outbox and Work Item leases after an unclean owner restart", async (context) => {
