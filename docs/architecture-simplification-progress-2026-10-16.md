@@ -987,3 +987,7 @@ Standalone Control 现在为显式 Team operations 提供 host-only terminal wai
 ## 第一百批：workspace queue 隔离回归（2026-10-19）
 
 补充真实本地命令适配器回归：同一 workspace 的慢命令继续保持串行副作用保护；不同 workspace runtime 的 queue 独立，A workspace 的 500ms 命令运行时，B workspace 的快速读取先完成。该测试只固定现有资源作用域事实，没有按 shell 文本推断读写权限，也没有放开同一 workspace 的并行写入。
+
+## 第一百零一批：autonomous child 组合快照读取（2026-10-19）
+
+在 SQLite/PostgreSQL 的 Team journal 内新增 `listAutonomousChildren`：一次数据库快照按 parent edge 顺序读取 child edge 和对应 `TeamTaskRecord`，缺失 child 或损坏 edge 直接 fail closed，结果数量限制为 32。新增 interruption 回归验证 parent admission 后能同时得到 child identity、edge 和 coordinating 状态；临时 PostgreSQL 实例与 SQLite 16 项全部通过。该 port 只提供一致的只读观察，尚未改变父任务等待、聚合或 HTTP 结果协议。

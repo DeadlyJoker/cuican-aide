@@ -9,6 +9,7 @@ import type {
 } from "./thread-store-port.ts";
 import { canonicalJson } from "./canonical-json.ts";
 import type { AutonomousTaskChildAdmission } from "./autonomous-task-admission.ts";
+import type { AutonomousTaskEdge } from "./autonomous-task-edge-store-port.ts";
 
 export type TeamTaskTurn = Pick<
   StartControlTeamTurnInput,
@@ -92,6 +93,13 @@ export interface TeamTaskJournalStore {
     thread: CommitThreadInput;
   }): Promise<TeamTaskAdmissionResult>;
   read(locator: TeamTaskLocator): Promise<TeamTaskRecord | null>;
+  /** Reads child edges and their durable task records from one Store snapshot. */
+  listAutonomousChildren(input: {
+    tenantId: string;
+    spaceId: string;
+    parentTaskId: string;
+    limit?: number;
+  }): Promise<readonly AutonomousTaskChildRecord[]>;
   claim(
     input: TeamTaskLocator & {
       ownerId: string;
@@ -130,6 +138,11 @@ export type AutonomousTaskChildAdmissionResult = Readonly<{
   edge: import("./autonomous-task-edge-store-port.ts").AutonomousTaskEdge;
   effect: TeamTaskEffect;
   wakeKey: string;
+}>;
+
+export type AutonomousTaskChildRecord = Readonly<{
+  edge: AutonomousTaskEdge;
+  task: TeamTaskRecord;
 }>;
 
 /** These errors stop orchestration immediately; they are not transient Run reads. */

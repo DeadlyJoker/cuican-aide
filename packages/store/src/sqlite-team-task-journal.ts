@@ -8,6 +8,7 @@ import {
   captureAutonomousTaskChildAdmission,
   type AutonomousTaskChildAdmission,
 } from "@crewon/application/autonomous-task-admission";
+import { captureAutonomousTaskEdgeLink } from "@crewon/application/task-lineage-policy";
 import type { AutonomousTaskChildAdmissionResult } from "@crewon/application/team-task-journal";
 import {
   captureTeamTaskIntent,
@@ -27,6 +28,7 @@ import {
   type TeamTaskEffect,
   type TeamTaskAdmissionResult,
   type TeamTaskJournalStore,
+  type AutonomousTaskChildRecord,
   TEAM_JOURNAL_LIMITS,
 } from "@crewon/application/team-task-journal";
 import type { ControlTeamTurnResult } from "@crewon/application/team-turn";
@@ -236,6 +238,58 @@ export class ExperimentalSqliteTeamTaskJournal implements TeamTaskJournalStore {
     this.host.assertOpen();
     this.#schema();
     return this.#read(locator);
+  }
+  async listAutonomousChildren(input: {
+    tenantId: string;
+    spaceId: string;
+    parentTaskId: string;
+    limit?: number;
+  }): Promise<readonly AutonomousTaskChildRecord[]> {
+    validateTeamTaskScope(input);
+    teamJournalId(input.parentTaskId);
+    const limit = input.limit ?? 32;
+    validateTeamTaskListLimit(limit);
+    if (limit > 32) teamJournalFail("team_journal_limit_invalid");
+    this.host.assertOpen();
+    this.#schema();
+    this.#edgeSchema();
+    const rows = this.database
+      .prepare(
+        `SELECT t.*,t.task_id AS journal_task_id,e.root_task_id,e.parent_task_id,e.child_task_id,e.depth,e.child_ordinal,e.created_at
+         FROM team_task_journals t
+         LEFT JOIN autonomous_task_edges e
+           ON e.tenant_id=t.tenant_id AND e.space_id=t.space_id AND e.child_task_id=t.task_id
+         WHERE e.tenant_id=? AND e.space_id=? AND e.parent_task_id=?
+         ORDER BY e.child_ordinal LIMIT ?`,
+      )
+      .all(
+        input.tenantId,
+        input.spaceId,
+        input.parentTaskId,
+        limit,
+      ) as TeamJournalRow[];
+    return rows.map((row) => {
+      if (row.journal_task_id !== row.task_id)
+        teamJournalFail("autonomous_task_child_missing");
+      const createdAt = Number(row.created_at);
+      if (!Number.isSafeInteger(createdAt) || createdAt < 0)
+        teamJournalFail("autonomous_task_edge_corrupt");
+      const edge = captureAutonomousTaskEdgeLink({
+        schemaVersion: "crewon.autonomous-task-edge.v0",
+        rootTaskId: row.root_task_id,
+        parentTaskId: row.parent_task_id,
+        childTaskId: row.child_task_id,
+        depth: row.depth,
+        childOrdinal: row.child_ordinal,
+      });
+      const task = decodeTeamTask(row, {
+        tenantId: input.tenantId,
+        spaceId: input.spaceId,
+        taskId: String(row.task_id),
+      });
+      if (task === null) teamJournalFail("autonomous_task_child_missing");
+      return { edge: { ...edge, createdAt }, task };
+    });
   }
   async create(input: TeamTaskIntent) {
     const intent = captureTeamTaskIntent(input),

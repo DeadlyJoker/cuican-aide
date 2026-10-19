@@ -319,6 +319,15 @@ workflowDeploymentIntegrationTest(
       ).length,
       1,
     );
+    const childSnapshots = await journal.listAutonomousChildren({
+      tenantId: f.actor.tenantId,
+      spaceId: f.actor.spaceId,
+      parentTaskId: parent.taskId,
+    });
+    assert.equal(childSnapshots.length, 1);
+    assert.equal(childSnapshots[0]?.edge.childTaskId, child.taskId);
+    assert.equal(childSnapshots[0]?.task.intent.taskId, child.taskId);
+    assert.equal(childSnapshots[0]?.task.status, "coordinating");
     const replay = await journal.admitAutonomousChild(admission);
     assert.equal(replay.disposition, "replayed");
     assert.equal(replay.edge.createdAt, first.edge.createdAt);
