@@ -933,3 +933,7 @@ child admission 输入现在同时携带 parent capability snapshot，并在 cap
 `TeamTaskExecutionHost` 现在可接收由 host 生成的完整 capability snapshot，并在 executor 启动前校验其 tenant/space/actor/principal 与 host 和 task 一致。该字段是可选的，缺省不会把任意环境变量或模型输入转换成 capability；一旦提供，scope 不匹配立即 fail closed 且不读取 journal。
 
 新增 application executor 回归覆盖 capability snapshot 冒用。真正接入 autonomous spawn 时必须从受信 standalone/production composition 填充该字段。
+
+## 第八十九批：standalone scheduler 传递 host capability source（2026-10-19）
+
+`StandaloneTeamTaskSchedulerConfig` 现在可以显式传递 host-generated capability snapshot，并原样交给 `TeamTaskExecutionHost`；executor composition 在 scheduler 创建时立即校验其 identity scope，错误配置不会等到首个 task 才暴露。字段仍为可选，现有 standalone Team 路径不自动生成权限，也没有开启 autonomous spawn。

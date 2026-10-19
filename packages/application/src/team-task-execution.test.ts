@@ -67,22 +67,12 @@ test("Team execution host rejects a capability snapshot from another identity", 
     operations: {} as ControlTeamRuntimeClient,
     digester: { sha256: () => "sha256:" + "0".repeat(64) },
   };
-  const execute = createTeamTaskExecutor({
-    host,
-    store: { read: async () => null } as unknown as TeamTaskJournalStore,
-  });
-  await assert.rejects(
-    execute(
-      {
-        tenantId: actor.tenantId,
-        spaceId: actor.spaceId,
-        taskId: "task-1",
-        ownerId: "owner-1",
-        leaseId: "lease-1",
-        epoch: 1,
-      },
-      new AbortController().signal,
-    ),
+  assert.throws(
+    () =>
+      createTeamTaskExecutor({
+        host,
+        store: { read: async () => null } as unknown as TeamTaskJournalStore,
+      }),
     /team_task_host_capability_scope_mismatch/u,
   );
 });

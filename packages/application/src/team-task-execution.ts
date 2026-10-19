@@ -34,21 +34,21 @@ export function createTeamTaskExecutor(input: {
   store: TeamTaskJournalStore;
   host: TeamTaskExecutionHost;
 }): (fence: TeamTaskFence, signal: AbortSignal) => Promise<void> {
+  const capability = input.host.autonomousCapability;
+  if (
+    capability !== undefined &&
+    (capability.tenantId !== input.host.actor.tenantId ||
+      capability.spaceId !== input.host.actor.spaceId ||
+      capability.actorId !== input.host.actor.actorId ||
+      capability.principalId !== input.host.actor.principalId)
+  )
+    teamJournalFail("team_task_host_capability_scope_mismatch");
   return async (fence, signal) => {
     if (
       input.host.actor.tenantId !== fence.tenantId ||
       input.host.actor.spaceId !== fence.spaceId
     )
       teamJournalFail("team_task_host_scope_mismatch");
-    const capability = input.host.autonomousCapability;
-    if (
-      capability !== undefined &&
-      (capability.tenantId !== input.host.actor.tenantId ||
-        capability.spaceId !== input.host.actor.spaceId ||
-        capability.actorId !== input.host.actor.actorId ||
-        capability.principalId !== input.host.actor.principalId)
-    )
-      teamJournalFail("team_task_host_capability_scope_mismatch");
     await executeTeamTask({
       store: input.store,
       actor: input.host.actor,

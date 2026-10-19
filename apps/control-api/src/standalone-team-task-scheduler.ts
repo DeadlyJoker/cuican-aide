@@ -1,5 +1,9 @@
 import { randomUUID } from "node:crypto";
-import type { ActorContext, ContentDigester } from "@crewon/application";
+import type {
+  ActorContext,
+  AutonomousTaskCapabilitySnapshot,
+  ContentDigester,
+} from "@crewon/application";
 import {
   createTeamTaskExecutor,
   type TeamTaskExecutionHost,
@@ -17,6 +21,7 @@ export type StandaloneTeamTaskSchedulerConfig = Readonly<{
   actor: ActorContext;
   operations: ControlTeamRuntimeClient;
   digester: ContentDigester;
+  autonomousCapability?: AutonomousTaskCapabilitySnapshot;
   ownerId?: string;
   concurrency?: number;
   listLimit?: number;
@@ -56,6 +61,9 @@ export async function createStandaloneTeamTaskScheduler(
         store: journal,
         host: {
           actor: config.actor,
+          ...(config.autonomousCapability === undefined
+            ? {}
+            : { autonomousCapability: config.autonomousCapability }),
           operations: config.operations,
           digester: config.digester,
         } satisfies TeamTaskExecutionHost,
