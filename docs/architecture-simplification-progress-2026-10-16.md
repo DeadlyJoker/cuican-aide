@@ -1011,3 +1011,7 @@ Standalone Control 现在为显式 Team operations 提供 host-only terminal wai
 ## 第一百零六批：通用模型工具边界审计（2026-10-19）
 
 复核 Runtime Worker 的通用 `ToolRuntimePort` 后确认，它只接收经过 Run/action-intent/approval 校验的工具命令，没有 Team parent fence 或 child admission context。当前不把 autonomous waiter 注入通用工具上下文，避免模型工具绕过 Team host 身份边界；未来若开放自主 spawn，必须新增显式 Team-scoped tool contract，并在 Run policy、parent fence 和 durable admission 之间建立同一事务边界。
+
+## 第一百零七批：durable Team UI 真实回流验收（2026-10-19）
+
+运行仓库现有 `test:durable-team-ui` harness：真实 standalone Control HTTP、Worker、Team scheduler、Run SSE 和 `ControlThreadRuntime` durable 分支完成一轮任务，测试 `1/1` 通过。该验收确认后续 child waiter/reader 接线没有破坏提交、最终 assistant 消息和 SSE 回流；实验入口仍默认关闭。
