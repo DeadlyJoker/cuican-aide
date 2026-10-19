@@ -1,5 +1,6 @@
 import type { Pool, PoolClient } from "pg";
 import type { RunState } from "@crewon/domain";
+import { RunStoreError } from "@crewon/application";
 import type {
   CommitThreadInput,
   CommitThreadResult,
@@ -455,6 +456,9 @@ export class ExperimentalPostgresTeamTaskJournal
         teamTaskKeys(locator),
       );
     });
+  }
+  async admitAutonomousChild(): Promise<never> {
+    throw new RunStoreError("autonomous_task_child_admission_unavailable");
   }
   async finalAccepted(fence: TeamTaskFence, value: ControlTeamTurnResult) {
     await this.#transaction(fence, async (client) => {

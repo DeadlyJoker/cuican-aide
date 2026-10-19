@@ -6,6 +6,7 @@ import { join } from "node:path";
 import { setTimeout } from "node:timers/promises";
 import { fileURLToPath } from "node:url";
 import { executeTeamTask } from "@crewon/application/team-task-execution";
+import { resolveControlTeamPlan } from "@crewon/application/team-turn";
 import {
   TeamTaskJournalError,
   type TeamTaskIntent,
@@ -163,6 +164,191 @@ function isCode(code: string) {
   return (error: unknown) =>
     error instanceof TeamTaskJournalError && error.code === code;
 }
+
+workflowDeploymentIntegrationTest(
+  "atomically admits an autonomous child with its edge, metadata and parent receipt",
+  async (t, fixture) => {
+    const f = await fixture(t, {
+      output: (request) =>
+        lastUser(request) === priorContext ? "PRIOR_REPLY" : "MEMBER_REPORT",
+    });
+    const server = await f.control(null);
+    const members = [
+      {
+        memberId: "manager",
+        displayName: "Lead",
+        agentVersionId: "agent-1",
+        responsibility:
+          "Own the final decision and preserve every unresolved conflict.",
+      },
+      {
+        memberId: "qa",
+        displayName: "QA",
+        agentVersionId: "verifier-1",
+        responsibility:
+          "Verify acceptance claims against reproducible test evidence.",
+      },
+      {
+        memberId: "security",
+        displayName: "Security",
+        agentVersionId: "agent-1",
+        responsibility:
+          "Identify security blockers and missing threat-model evidence.",
+      },
+    ];
+    const { office } = await server.client.createOffice(
+      {
+        expectedRevision: 0,
+        title: "Team application acceptance",
+        members,
+        executionTargets: members.map((member) => ({
+          targetId: member.memberId,
+          agentVersionId: member.agentVersionId,
+        })),
+      },
+      "atomic-team-office",
+    );
+    const createdThread = await server.client.createThread(
+      { title: "Atomic Team main" },
+      "atomic-team-thread",
+    );
+    const thread = createdThread.thread;
+    const plan = await resolveControlTeamPlan({
+      client: server.client,
+      threadId: thread.threadId,
+      officeVersionId: office.officeVersionId,
+      catalog: await server.client.getActiveAgentVersionCatalog(),
+    });
+    const journal = await f.store.experimentalTeamTaskJournalStore();
+    const edges = await f.store.experimentalAutonomousTaskEdgeStore();
+    await journal.migrate();
+    await edges.migrate();
+    const parent: TeamTaskIntent = {
+      schemaVersion: "crewon.team-task.v1",
+      ...f.actor,
+      taskId: "atomic-parent",
+      turn: {
+        threadId: thread.threadId,
+        expectedRevision: thread.revision,
+        content: originalTask,
+        plan,
+        responseMode: "manager",
+        managerResponseKind: "office",
+      },
+    };
+    await journal.create(parent);
+    const parentFence = (await journal.claim({
+      ...parent,
+      ownerId: "atomic-owner",
+      leaseId: "atomic-lease",
+      durationMs: 30_000,
+    }))!;
+    const operations = teamOperations(server.client);
+    const fork = await operations.forkThread(
+      thread.threadId,
+      { expectedRevision: thread.revision, throughHistorySequence: null },
+      "atomic-child-fork",
+    );
+    const child: TeamTaskIntent = {
+      schemaVersion: "crewon.team-task.v1",
+      ...f.actor,
+      taskId: "atomic-child",
+      turn: {
+        threadId: fork.thread.threadId,
+        expectedRevision: fork.thread.revision,
+        content: "child work",
+        plan,
+        responseMode: "manager",
+        managerResponseKind: "office",
+      },
+    };
+    const admission = {
+      schemaVersion: "crewon.autonomous-task-child-admission.v0" as const,
+      idempotencyKey: "spawn-atomic-1",
+      parentTaskId: parent.taskId,
+      childTaskId: child.taskId,
+      edge: {
+        schemaVersion: "crewon.autonomous-task-edge.v0" as const,
+        rootTaskId: parent.taskId,
+        parentTaskId: parent.taskId,
+        childTaskId: child.taskId,
+        depth: 1,
+        childOrdinal: 1,
+      },
+      budget: {
+        schemaVersion: "crewon.autonomous-task-budget.v0" as const,
+        maxDepth: 3,
+        maxChildren: 4,
+        deadlineAt: "2030-01-02T03:04:05Z",
+        tokenBudget: 1000,
+        outputBytesBudget: 4096,
+      },
+      capability: {
+        schemaVersion: "crewon.autonomous-task-capability.v0" as const,
+        ...f.actor,
+        authorityId: "authority-1",
+        runtimeGeneration: "runtime-1",
+        policySnapshotId: "policy-1",
+        workspaceBindingId: null,
+        toolPermissionMode: "requestApproval" as const,
+      },
+      childIntent: child,
+      parentFence,
+    };
+    const first = await journal.admitAutonomousChild(admission);
+    assert.equal(first.disposition, "created");
+    assert.equal(first.task.intent.taskId, child.taskId);
+    assert.equal(first.effect.settled, true);
+    assert.equal(
+      (
+        await edges.listChildren({
+          tenantId: f.actor.tenantId,
+          spaceId: f.actor.spaceId,
+          parentTaskId: parent.taskId,
+        })
+      ).length,
+      1,
+    );
+    const replay = await journal.admitAutonomousChild(admission);
+    assert.equal(replay.disposition, "replayed");
+    assert.equal(replay.edge.createdAt, first.edge.createdAt);
+
+    const fork2 = await operations.forkThread(
+      thread.threadId,
+      {
+        expectedRevision: (await server.client.getThread(thread.threadId))
+          .thread.revision,
+        throughHistorySequence: null,
+      },
+      "atomic-child-fork-2",
+    );
+    const child2 = {
+      ...child,
+      taskId: "atomic-child-rollback",
+      turn: {
+        ...child.turn,
+        threadId: fork2.thread.threadId,
+        expectedRevision: fork2.thread.revision,
+      },
+    } satisfies TeamTaskIntent;
+    await assert.rejects(
+      journal.admitAutonomousChild({
+        ...admission,
+        idempotencyKey: "spawn-atomic-2",
+        childTaskId: child2.taskId,
+        childIntent: child2,
+        edge: { ...admission.edge, childTaskId: child2.taskId },
+      }),
+    );
+    assert.equal(await journal.read(child2), null);
+    assert.equal(
+      (await journal.effects(parent)).some((effect) =>
+        effect.key.endsWith("spawn-atomic-2"),
+      ),
+      false,
+    );
+  },
+);
 
 workflowDeploymentIntegrationTest(
   "Team cancellation interrupts live Run waiting without transient-read retries, final submission, or freezing a nonterminal response",

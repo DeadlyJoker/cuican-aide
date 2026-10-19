@@ -5,12 +5,18 @@ import type {
   CommitThreadResult,
 } from "@crewon/application";
 import {
+  captureAutonomousTaskChildAdmission,
+  type AutonomousTaskChildAdmission,
+} from "@crewon/application/autonomous-task-admission";
+import type { AutonomousTaskChildAdmissionResult } from "@crewon/application/team-task-journal";
+import {
   captureTeamTaskIntent,
   teamJournalJson,
   teamJournalBytes,
   teamJournalFail,
   validateTeamLeaseDuration,
   teamJournalId,
+  validateTeamTaskFence,
   validateTeamTaskListLimit,
   validateTeamTaskScope,
   type TeamTaskIntent,
@@ -20,6 +26,7 @@ import {
   type TeamTaskEffect,
   type TeamTaskAdmissionResult,
   type TeamTaskJournalStore,
+  TEAM_JOURNAL_LIMITS,
 } from "@crewon/application/team-task-journal";
 import type { ControlTeamTurnResult } from "@crewon/application/team-turn";
 import {
@@ -37,6 +44,7 @@ import {
   assertTeamFinalRun,
   type TeamJournalRow,
 } from "./team-task-journal-state.ts";
+import { AUTONOMOUS_TASK_CHILD_ADMISSIONS_TABLE } from "./sqlite-autonomous-task-edge-store.ts";
 
 type TeamJournalHost = {
   assertOpen(): void;
@@ -64,6 +72,20 @@ export class ExperimentalSqliteTeamTaskJournal implements TeamTaskJournalStore {
       .all();
     if (versions.length !== 1 || versions[0]!.version !== 1)
       teamJournalFail("team_journal_schema_unsupported");
+  }
+  #edgeSchema() {
+    const names = this.database
+      .prepare(
+        `SELECT name FROM sqlite_master WHERE type='table' AND name IN ('autonomous_task_edge_schema','autonomous_task_edges','${AUTONOMOUS_TASK_CHILD_ADMISSIONS_TABLE}')`,
+      )
+      .all();
+    if (names.length !== 3)
+      teamJournalFail("autonomous_task_edge_schema_unavailable");
+    const version = this.database
+      .prepare("SELECT version FROM autonomous_task_edge_schema")
+      .all();
+    if (version.length !== 1 || version[0]!.version !== 1)
+      teamJournalFail("autonomous_task_edge_schema_unsupported");
   }
   #transaction<T>(work: () => T, schema = true): T {
     this.host.assertOpen();
@@ -441,6 +463,150 @@ export class ExperimentalSqliteTeamTaskJournal implements TeamTaskJournalStore {
         .run(...teamTaskKeys(locator));
     });
   }
+
+  async admitAutonomousChild(
+    input: AutonomousTaskChildAdmission & { parentFence: TeamTaskFence },
+  ): Promise<AutonomousTaskChildAdmissionResult> {
+    const { parentFence, ...admissionInput } = input;
+    const admission = captureAutonomousTaskChildAdmission(admissionInput);
+    validateTeamTaskFence(parentFence);
+    if (
+      parentFence.tenantId !== admission.capability.tenantId ||
+      parentFence.spaceId !== admission.capability.spaceId ||
+      parentFence.taskId !== admission.parentTaskId
+    )
+      teamJournalFail("autonomous_task_child_scope_mismatch");
+    const effect = captureTeamEffect({
+      key: `command:autonomous.child:${admission.idempotencyKey}`,
+      kind: "command",
+      request: {
+        schemaVersion: "crewon.autonomous-task-child-admission.v0",
+        parentTaskId: admission.parentTaskId,
+        childTaskId: admission.childTaskId,
+        edge: admission.edge,
+        budget: admission.budget,
+        capability: admission.capability,
+      },
+    });
+    return this.#transaction(() => {
+      this.#edgeSchema();
+      const parent = this.#fenced(parentFence);
+      if (
+        parent.intent.actorId !== admission.capability.actorId ||
+        parent.intent.principalId !== admission.capability.principalId
+      )
+        teamJournalFail("autonomous_task_child_issuer_mismatch");
+      const existingAdmission = this.database
+        .prepare(
+          `SELECT * FROM ${AUTONOMOUS_TASK_CHILD_ADMISSIONS_TABLE} WHERE tenant_id=? AND space_id=? AND parent_task_id=? AND idempotency_key=?`,
+        )
+        .get(
+          admission.capability.tenantId,
+          admission.capability.spaceId,
+          admission.parentTaskId,
+          admission.idempotencyKey,
+        ) as Record<string, unknown> | undefined;
+      const priorEffect = this.#effect(parentFence, effect.key);
+      if (existingAdmission || priorEffect) {
+        if (!existingAdmission || !priorEffect || !priorEffect.settled)
+          teamJournalFail("autonomous_task_child_admission_corrupt");
+        assertTeamEffectReplay(priorEffect, effect);
+        const child = this.#read(admission.childIntent);
+        if (!child) teamJournalFail("autonomous_task_child_admission_corrupt");
+        const edge = readAutonomousEdge(this.database, admission);
+        return {
+          disposition: "replayed" as const,
+          task: child,
+          edge,
+          effect: priorEffect,
+          wakeKey: String(existingAdmission.wake_key),
+        };
+      }
+      const intentJson = teamJournalJson(
+        admission.childIntent,
+        TEAM_JOURNAL_LIMITS.intentBytes,
+      );
+      const child = this.#createInTransaction(
+        admission.childIntent,
+        intentJson,
+      );
+      const createdAt = this.host.now();
+      if (!Number.isSafeInteger(createdAt) || createdAt < 0)
+        teamJournalFail("autonomous_task_child_clock_invalid");
+      const wakeKey = `team-task:${admission.childTaskId}`;
+      const budgetJson = teamJournalJson(admission.budget);
+      const capabilityJson = teamJournalJson(admission.capability);
+      this.database
+        .prepare(
+          `INSERT INTO autonomous_task_edges (tenant_id,space_id,root_task_id,parent_task_id,child_task_id,depth,child_ordinal,created_at) VALUES(?,?,?,?,?,?,?,?)`,
+        )
+        .run(
+          admission.capability.tenantId,
+          admission.capability.spaceId,
+          admission.edge.rootTaskId,
+          admission.edge.parentTaskId,
+          admission.edge.childTaskId,
+          admission.edge.depth,
+          admission.edge.childOrdinal,
+          createdAt,
+        );
+      this.database
+        .prepare(
+          `INSERT INTO ${AUTONOMOUS_TASK_CHILD_ADMISSIONS_TABLE} (tenant_id,space_id,parent_task_id,child_task_id,idempotency_key,budget_json,capability_json,intent_json,wake_key,created_at) VALUES(?,?,?,?,?,?,?,?,?,?)`,
+        )
+        .run(
+          admission.capability.tenantId,
+          admission.capability.spaceId,
+          admission.parentTaskId,
+          admission.childTaskId,
+          admission.idempotencyKey,
+          budgetJson,
+          capabilityJson,
+          intentJson,
+          wakeKey,
+          createdAt,
+        );
+      const response = {
+        schemaVersion: "crewon.autonomous-task-child-result.v0",
+        childTaskId: admission.childTaskId,
+        wakeKey,
+        edge: { ...admission.edge, createdAt },
+      };
+      const requestBytes = teamJournalBytes(effect.requestJson);
+      const responseText = teamJournalJson(response);
+      assertTeamJournalBudget(
+        parent,
+        requestBytes + teamJournalBytes(responseText),
+        true,
+      );
+      this.database
+        .prepare(
+          `INSERT INTO team_task_effects (tenant_id,space_id,task_id,effect_key,kind,request_json,response_json) VALUES(?,?,?,?,?,?,?)`,
+        )
+        .run(
+          ...teamTaskKeys(parentFence),
+          effect.key,
+          effect.kind,
+          effect.requestJson,
+          responseText,
+        );
+      this.database
+        .prepare(
+          `UPDATE team_task_journals SET effect_count=effect_count+1,journal_bytes=journal_bytes+?,revision=revision+1 WHERE tenant_id=? AND space_id=? AND task_id=?`,
+        )
+        .run(
+          requestBytes + teamJournalBytes(responseText),
+          ...teamTaskKeys(parentFence),
+        );
+      return {
+        disposition: "created" as const,
+        task: child,
+        edge: Object.freeze({ ...admission.edge, createdAt }),
+        effect: this.#effect(parentFence, effect.key)!,
+        wakeKey,
+      };
+    });
+  }
   async finalAccepted(fence: TeamTaskFence, value: ControlTeamTurnResult) {
     this.#transaction(() => {
       const task = this.#fenced(fence),
@@ -462,4 +628,32 @@ export class ExperimentalSqliteTeamTaskJournal implements TeamTaskJournalStore {
         .run(text, teamJournalBytes(text), ...teamTaskKeys(fence));
     });
   }
+}
+
+function readAutonomousEdge(
+  database: DatabaseSync,
+  admission: AutonomousTaskChildAdmission,
+): import("@crewon/application").AutonomousTaskEdge {
+  const row = database
+    .prepare(
+      `SELECT * FROM autonomous_task_edges WHERE tenant_id=? AND space_id=? AND child_task_id=?`,
+    )
+    .get(
+      admission.capability.tenantId,
+      admission.capability.spaceId,
+      admission.childTaskId,
+    ) as Record<string, unknown> | undefined;
+  if (!row) teamJournalFail("autonomous_task_child_admission_corrupt");
+  const createdAt = Number(row.created_at);
+  if (!Number.isSafeInteger(createdAt) || createdAt < 0)
+    teamJournalFail("autonomous_task_child_admission_corrupt");
+  if (
+    row.root_task_id !== admission.edge.rootTaskId ||
+    row.parent_task_id !== admission.edge.parentTaskId ||
+    row.child_task_id !== admission.edge.childTaskId ||
+    Number(row.depth) !== admission.edge.depth ||
+    Number(row.child_ordinal) !== admission.edge.childOrdinal
+  )
+    teamJournalFail("autonomous_task_child_admission_corrupt");
+  return Object.freeze({ ...admission.edge, createdAt });
 }

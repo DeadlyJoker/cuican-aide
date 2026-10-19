@@ -8,6 +8,7 @@ import type {
   CommitThreadResult,
 } from "./thread-store-port.ts";
 import { canonicalJson } from "./canonical-json.ts";
+import type { AutonomousTaskChildAdmission } from "./autonomous-task-admission.ts";
 
 export type TeamTaskTurn = Pick<
   StartControlTeamTurnInput,
@@ -111,7 +112,19 @@ export interface TeamTaskJournalStore {
     fence: TeamTaskFence,
     result: ControlTeamTurnResult,
   ): Promise<void>;
+  /** Experimental atomic parent effect + child journal + edge admission. */
+  admitAutonomousChild(
+    input: AutonomousTaskChildAdmission & { parentFence: TeamTaskFence },
+  ): Promise<AutonomousTaskChildAdmissionResult>;
 }
+
+export type AutonomousTaskChildAdmissionResult = Readonly<{
+  disposition: "created" | "replayed";
+  task: TeamTaskRecord;
+  edge: import("./autonomous-task-edge-store-port.ts").AutonomousTaskEdge;
+  effect: TeamTaskEffect;
+  wakeKey: string;
+}>;
 
 /** These errors stop orchestration immediately; they are not transient Run reads. */
 export class TeamTaskJournalError extends Error {

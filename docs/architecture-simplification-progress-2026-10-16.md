@@ -855,3 +855,9 @@ Node 24 验证：Application 全量 933 项中 895 项通过、38 项既有条�
 新增纯 application capture `captureAutonomousTaskChildAdmission`，把 parent/child edge、Team child intent、冻结 budget、capability snapshot 和幂等 key 绑定成一次 admission 输入。它在写入前拒绝 tenant/space/actor/principal 不一致、child ID/edge 不一致、depth 超预算和 accessor/未知字段；capture 本身不写 Store、不生成 wake、不声称原子提交。
 
 Node 24 下新增契约测试 2/2、Application typecheck 和格式检查通过。下一步再把这个输入接到 SQLite/PostgreSQL 同一事务的内部 Store port，补 parent effect、child journal、edge、metadata 和 wake 的故障注入回滚测试。
+
+## 第七十六批：SQLite 原子 child admission 与回滚验证（2026-10-19）
+
+`ExperimentalSqliteTeamTaskJournal.admitAutonomousChild` 现在在一个 `BEGIN IMMEDIATE` 中完成 parent fenced spawn effect、child Team journal、edge、budget/capability metadata 和 deterministic wake key。重复 admission 通过同一 effect/metadata replay；child ordinal 冲突会让整个事务回滚，测试确认 child journal、edge 和 parent effect 都不会残留。
+
+该入口仍是显式内部能力，没有 HTTP、模型直发或默认 scheduler 接线。Node 24 真实 SQLite Control/Store fixture 的原子 admission 测试 1/1 通过；Application、Store、Control API typecheck 通过。PostgreSQL 当前实现对该新操作 fail closed，避免在没有测试库和等价事务覆盖时假装支持；下一步补 PostgreSQL 同一事务实现和故障注入。

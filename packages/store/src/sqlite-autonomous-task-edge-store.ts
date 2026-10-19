@@ -10,6 +10,8 @@ import { RunStoreError } from "@crewon/application";
 
 const TABLE = "autonomous_task_edges";
 const SCHEMA = "autonomous_task_edge_schema";
+export const AUTONOMOUS_TASK_CHILD_ADMISSIONS_TABLE =
+  "autonomous_task_child_admissions";
 const COLUMNS = `tenant_id TEXT NOT NULL, space_id TEXT NOT NULL,
  root_task_id TEXT NOT NULL, parent_task_id TEXT NOT NULL, child_task_id TEXT NOT NULL,
  depth INTEGER NOT NULL CHECK(depth>=1 AND depth<=8),
@@ -17,6 +19,14 @@ const COLUMNS = `tenant_id TEXT NOT NULL, space_id TEXT NOT NULL,
  created_at INTEGER NOT NULL CHECK(created_at>=0),
  PRIMARY KEY(tenant_id,space_id,parent_task_id,child_ordinal),
  UNIQUE(tenant_id,space_id,child_task_id)`;
+const ADMISSION_COLUMNS = `tenant_id TEXT NOT NULL, space_id TEXT NOT NULL,
+ parent_task_id TEXT NOT NULL, child_task_id TEXT NOT NULL,
+ idempotency_key TEXT NOT NULL, budget_json TEXT NOT NULL,
+ capability_json TEXT NOT NULL, intent_json TEXT NOT NULL,
+ wake_key TEXT NOT NULL, created_at INTEGER NOT NULL CHECK(created_at>=0),
+ PRIMARY KEY(tenant_id,space_id,child_task_id),
+ UNIQUE(tenant_id,space_id,parent_task_id,idempotency_key),
+ UNIQUE(tenant_id,space_id,wake_key)`;
 
 type Host = Readonly<{ assertOpen(): void; now(): number }>;
 type Row = Record<string, unknown>;
@@ -35,10 +45,10 @@ export class ExperimentalSqliteAutonomousTaskEdgeStore
   #schema(): void {
     const names = this.#database
       .prepare(
-        `SELECT name FROM sqlite_master WHERE type='table' AND name IN ('${SCHEMA}','${TABLE}')`,
+        `SELECT name FROM sqlite_master WHERE type='table' AND name IN ('${SCHEMA}','${TABLE}','${AUTONOMOUS_TASK_CHILD_ADMISSIONS_TABLE}')`,
       )
       .all();
-    if (names.length !== 2)
+    if (names.length !== 3)
       throw new RunStoreError("autonomous_task_edge_schema_unavailable");
     const versions = this.#database
       .prepare(`SELECT version FROM ${SCHEMA}`)
@@ -69,10 +79,21 @@ export class ExperimentalSqliteAutonomousTaskEdgeStore
     this.#transaction(() => {
       const names = this.#database
         .prepare(
-          `SELECT name FROM sqlite_master WHERE type='table' AND name IN ('${SCHEMA}','${TABLE}')`,
+          `SELECT name FROM sqlite_master WHERE type='table' AND name IN ('${SCHEMA}','${TABLE}','${AUTONOMOUS_TASK_CHILD_ADMISSIONS_TABLE}')`,
         )
         .all();
       if (names.length !== 0) {
+        const present = new Set(names.map((row) => String(row.name)));
+        if (
+          names.length === 2 &&
+          present.has(SCHEMA) &&
+          present.has(TABLE) &&
+          !present.has(AUTONOMOUS_TASK_CHILD_ADMISSIONS_TABLE)
+        ) {
+          this.#database.exec(
+            `CREATE TABLE ${AUTONOMOUS_TASK_CHILD_ADMISSIONS_TABLE} (${ADMISSION_COLUMNS}) STRICT;`,
+          );
+        }
         this.#schema();
         return;
       }
@@ -80,6 +101,7 @@ export class ExperimentalSqliteAutonomousTaskEdgeStore
         .exec(`CREATE TABLE ${SCHEMA} (singleton INTEGER PRIMARY KEY CHECK(singleton=1),version INTEGER NOT NULL CHECK(version=1)) STRICT;
         INSERT INTO ${SCHEMA} VALUES(1,1);
         CREATE TABLE ${TABLE} (${COLUMNS}) STRICT;
+        CREATE TABLE ${AUTONOMOUS_TASK_CHILD_ADMISSIONS_TABLE} (${ADMISSION_COLUMNS}) STRICT;
         CREATE INDEX autonomous_task_edge_root_lookup ON ${TABLE}(tenant_id,space_id,root_task_id,depth,child_ordinal);`);
     }, false);
   }
