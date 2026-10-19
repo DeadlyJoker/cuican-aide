@@ -950,6 +950,8 @@ Runtime Worker 的显式 Team host 现在可从已经校验的 `config.route` �
 
 Application 回归验证 parent capability 被强制绑定；现有 Team executor、Store 和 Control 路径保持不变。
 
+host admission port 在绑定时会复制并冻结 capability snapshot，后续异步执行不会受到调用方对象突变影响。
+
 ## 第九十二批：Runtime Worker executor 暴露受信 child admission port（2026-10-19）
 
 `ControlTeamRuntimeClient` 增加可选的 host-only `admitAutonomousChild` 方法。Runtime Worker 显式 Team host 会把可信 capability 与同一 Team journal 绑定后暴露该方法；调用直接进入原子 child admission 事务，不经过普通 command effect，避免重复回执。浏览器/HTTP operations 不实现该可选方法，默认 scheduler 和现有 Team turn 行为不变。

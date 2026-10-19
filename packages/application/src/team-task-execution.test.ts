@@ -138,4 +138,5 @@ test("host child admission binds parent capability instead of accepting caller a
   });
   assert.deepEqual(received.value?.parentCapability, capability);
   assert.deepEqual(received.value?.parentFence, parentFence);
+  assert.ok(Object.isFrozen(received.value?.parentCapability));
 });
