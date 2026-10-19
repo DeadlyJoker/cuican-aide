@@ -20,7 +20,10 @@ import {
   captureAutonomousTaskCapability,
   type AutonomousTaskCapabilitySnapshot,
 } from "./task-lineage-policy.ts";
-import type { AutonomousTaskChildAdmission } from "./autonomous-task-admission.ts";
+import {
+  captureAutonomousTaskChildSpawnRequest,
+  type AutonomousTaskChildAdmission,
+} from "./autonomous-task-admission.ts";
 import type {
   AutonomousTaskChildAdmissionResult,
   AutonomousTaskChildRecord,
@@ -96,12 +99,14 @@ export function createTeamTaskAutonomousChildAdmission(input: {
   capability: AutonomousTaskCapabilitySnapshot;
 }): TeamTaskAutonomousChildAdmission {
   const capability = captureAutonomousTaskCapability(input.capability);
-  return ({ parentFence, admission }) =>
-    input.store.admitAutonomousChild({
-      ...admission,
+  return ({ parentFence, admission }) => {
+    const request = captureAutonomousTaskChildSpawnRequest(admission);
+    return input.store.admitAutonomousChild({
+      ...request,
       parentCapability: capability,
       parentFence,
     });
+  };
 }
 
 /** Binds one explicit host to the scheduler's durable journal. */

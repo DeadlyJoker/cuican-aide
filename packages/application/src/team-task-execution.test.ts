@@ -135,12 +135,57 @@ test("host child admission binds parent capability instead of accepting caller a
         outputBytesBudget: 1024,
       },
       capability,
-      childIntent: {} as never,
+      childIntent: {
+        schemaVersion: "crewon.team-task.v1",
+        ...actor,
+        taskId: "child-task",
+        turn: {
+          threadId: "child-thread",
+          expectedRevision: 1,
+          content: "child work",
+          plan: {
+            officeVersionId: "office-1",
+            officeTitle: "Child office",
+            manager: {
+              memberId: "manager",
+              displayName: "Manager",
+              agentVersionId: "agent-manager",
+              targetId: "target-manager",
+            },
+            workers: [
+              {
+                memberId: "worker",
+                displayName: "Worker",
+                agentVersionId: "agent-worker",
+                targetId: "target-worker",
+              },
+            ],
+          },
+          responseMode: "manager",
+          managerResponseKind: "office",
+        },
+      },
     },
   });
   assert.deepEqual(received.value?.parentCapability, capability);
   assert.deepEqual(received.value?.parentFence, parentFence);
   assert.ok(Object.isFrozen(received.value?.parentCapability));
+  const {
+    parentCapability: _capturedParentCapability,
+    parentFence: _capturedParentFence,
+    ...spawnRequest
+  } = received.value!;
+  assert.throws(
+    () =>
+      admission({
+        parentFence,
+        admission: {
+          ...spawnRequest,
+          parentCapability: capability,
+        } as never,
+      }),
+    /autonomous_task_child_admission_invalid/u,
+  );
 });
 
 test("host child reader binds the parent fence scope and task identity", async () => {

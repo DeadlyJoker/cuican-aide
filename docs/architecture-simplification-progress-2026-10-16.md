@@ -1019,3 +1019,7 @@ Standalone Control 现在为显式 Team operations 提供 host-only terminal wai
 ## 第一百零八批：Team-scoped spawn request contract（2026-10-19）
 
 新增 `captureAutonomousTaskChildSpawnRequest`，作为未来显式 Team tool 的输入边界：严格拒绝 getter、未知字段和伪造 `parentCapability`，校验 child identity、edge、budget、capability 与 intent 一致性。它只返回不含 parent authority 的 spawn request，后续必须由 host fence/admission port 绑定 parent capability；当前没有接入通用模型工具或 HTTP。
+
+## 第一百零九批：host admission 前置 spawn capture（2026-10-19）
+
+`createTeamTaskAutonomousChildAdmission` 现在在 host-bound port 入口先捕获 Team-scoped spawn request，再注入冻结的 parent capability；因此伪造 authority、未知字段和 accessor 不会到达 Store 或事务层。新增 execution 回归覆盖 forged `parentCapability` 直接拒绝，Application typecheck 与定向 execution 测试通过。
