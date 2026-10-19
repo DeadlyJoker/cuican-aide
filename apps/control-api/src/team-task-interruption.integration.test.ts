@@ -470,6 +470,11 @@ workflowDeploymentIntegrationTest(
     await scheduler.idle();
     assert.equal(childAborted, true);
     assert.equal(schedulerErrors, 1);
+    assert.deepEqual(await scheduler.wake(), {
+      started: 0,
+      skipped: 0,
+      capacity: 1,
+    });
     await scheduler.close();
   },
 );
