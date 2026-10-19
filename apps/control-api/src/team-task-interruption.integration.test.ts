@@ -313,6 +313,16 @@ workflowDeploymentIntegrationTest(
     const replay = await journal.admitAutonomousChild(admission);
     assert.equal(replay.disposition, "replayed");
     assert.equal(replay.edge.createdAt, first.edge.createdAt);
+    await assert.rejects(
+      journal.admitAutonomousChild({
+        ...admission,
+        childIntent: {
+          ...child,
+          turn: { ...child.turn, content: "same key, different child input" },
+        },
+      }),
+      isCode("team_journal_effect_conflict"),
+    );
 
     const fork2 = await operations.forkThread(
       thread.threadId,

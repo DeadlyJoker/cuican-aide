@@ -41,6 +41,7 @@ import {
   decodeTeamEffect,
   captureTeamEffect,
   assertTeamEffectReplay,
+  assertAutonomousChildAdmissionReplay,
   assertTeamJournalBudget,
   assertTeamTaskSource,
   captureTeamResult,
@@ -534,6 +535,7 @@ export class ExperimentalPostgresTeamTaskJournal
         if (existing.rows.length === 0 || !priorEffect || !priorEffect.settled)
           teamJournalFail("autonomous_task_child_admission_corrupt");
         assertTeamEffectReplay(priorEffect, effect);
+        assertAutonomousChildAdmissionReplay(existing.rows[0]!, admission);
         const child = await this.#read(client, admission.childIntent);
         if (!child) teamJournalFail("autonomous_task_child_admission_corrupt");
         const edge = await readPostgresAutonomousEdge(

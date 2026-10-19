@@ -879,3 +879,11 @@ Node 24 下 Store、Control API typecheck 通过，SQLite 原子 admission 集�
 扩展原子 admission 集成场景：child 被真实 `TeamTaskScheduler` claim 后，父树调用 `cancelAutonomousTree`，durable cancellation watcher 读取 child 状态并 abort 在途 executor；测试断言 executor 收到取消、scheduler error 收敛且 scheduler 能正常 close。这个路径验证了 admission → edge → tree cancel → watcher → executor abort 的连续链路。
 
 Node 24 SQLite/Control 集成测试 1/1 通过，Store/Application/Control API typecheck 通过；PostgreSQL runtime 仍按环境缺少测试库跳过。外部副作用仍遵循未知 effect/reconcile 边界，没有把 abort 当作供应商回滚证明。
+
+## 第八十批：自主 child admission 幂等输入完整性（2026-10-19）
+
+复核 SQLite/PostgreSQL 的 child admission 重放路径时发现，父 effect 会比较 edge、budget 和 capability，但 admission 表中的冻结 child intent 未参与重放比较。同一 parent、幂等键和 authority 元数据下，如果重试请求替换 child intent，旧实现会直接返回已有 child，造成幂等键与实际执行输入脱离。
+
+现在双 backend 在返回 replay 前同时核对持久化的 child task id、budget、capability、intent 和 wake key。字段缺失或类型损坏按 journal corruption 拒绝；合法但内容不同按 effect conflict 拒绝。新增 SQLite 真实 Control/Worker interruption 回归覆盖同键不同 child intent，事务和原有 edge 冲突回滚路径保持不变。
+
+Node 22 当前环境下定向 Control/Store typecheck 通过；Team interruption Node test 16 项中 SQLite 8 项通过、PostgreSQL 8 项因未提供 `CREWON_TEST_POSTGRES_URL` 跳过。Node 24 仍是仓库要求的最终验证环境。

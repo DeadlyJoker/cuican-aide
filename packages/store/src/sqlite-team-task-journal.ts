@@ -39,6 +39,7 @@ import {
   decodeTeamEffect,
   captureTeamEffect,
   assertTeamEffectReplay,
+  assertAutonomousChildAdmissionReplay,
   assertTeamJournalBudget,
   assertTeamTaskSource,
   captureTeamResult,
@@ -512,6 +513,7 @@ export class ExperimentalSqliteTeamTaskJournal implements TeamTaskJournalStore {
         if (!existingAdmission || !priorEffect || !priorEffect.settled)
           teamJournalFail("autonomous_task_child_admission_corrupt");
         assertTeamEffectReplay(priorEffect, effect);
+        assertAutonomousChildAdmissionReplay(existingAdmission, admission);
         const child = this.#read(admission.childIntent);
         if (!child) teamJournalFail("autonomous_task_child_admission_corrupt");
         const edge = readAutonomousEdge(this.database, admission);

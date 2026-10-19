@@ -16,6 +16,7 @@ import {
   type TeamTaskEffect,
 } from "@crewon/application/team-task-journal";
 import type { ControlTeamTurnResult } from "@crewon/application/team-turn";
+import type { AutonomousTaskChildAdmission } from "@crewon/application/autonomous-task-admission";
 
 export type TeamJournalRow = Record<string, unknown>;
 export const TEAM_TABLES = [
@@ -181,6 +182,35 @@ export function assertTeamEffectReplay(
     teamJournalJson(prior.request) !== teamJournalJson(effect.request)
   )
     teamJournalFail("team_journal_effect_conflict");
+}
+
+/**
+ * Idempotent child admission must replay the exact frozen child input. The
+ * effect request intentionally carries admission authority, while the
+ * admission row carries the child intent and its snapshots.
+ */
+export function assertAutonomousChildAdmissionReplay(
+  row: TeamJournalRow,
+  admission: AutonomousTaskChildAdmission,
+): void {
+  const intentJson = teamJournalJson(
+    admission.childIntent,
+    TEAM_JOURNAL_LIMITS.intentBytes,
+  );
+  const budgetJson = teamJournalJson(admission.budget);
+  const capabilityJson = teamJournalJson(admission.capability);
+  const wakeKey = `team-task:${admission.childTaskId}`;
+  for (const [key, expected] of [
+    ["child_task_id", admission.childTaskId],
+    ["budget_json", budgetJson],
+    ["capability_json", capabilityJson],
+    ["intent_json", intentJson],
+    ["wake_key", wakeKey],
+  ] as const) {
+    if (typeof row[key] !== "string")
+      teamJournalFail("autonomous_task_child_admission_corrupt");
+    if (row[key] !== expected) teamJournalFail("team_journal_effect_conflict");
+  }
 }
 export function assertTeamJournalBudget(
   task: TeamTaskRecord,
