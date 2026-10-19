@@ -16,6 +16,8 @@ import {
   type TeamTaskJournalStore,
 } from "./team-task-journal.ts";
 import type { AutonomousTaskCapabilitySnapshot } from "./task-lineage-policy.ts";
+import type { AutonomousTaskChildAdmission } from "./autonomous-task-admission.ts";
+import type { AutonomousTaskChildAdmissionResult } from "./team-task-journal.ts";
 
 /** Explicit host identity and operations required by a durable Team executor. */
 export type TeamTaskExecutionHost = Readonly<{
@@ -28,6 +30,27 @@ export type TeamTaskExecutionHost = Readonly<{
   pollIntervalMs?: number;
   runDeadlineMs?: number;
 }>;
+
+export type TeamTaskAutonomousChildAdmission = (input: {
+  parentFence: TeamTaskFence;
+  admission: Omit<AutonomousTaskChildAdmission, "parentCapability">;
+}) => Promise<AutonomousTaskChildAdmissionResult>;
+
+/**
+ * Binds parent capability to a trusted executor host. Callers can provide the
+ * child intent and budgets, but cannot replace the parent authority snapshot.
+ */
+export function createTeamTaskAutonomousChildAdmission(input: {
+  store: TeamTaskJournalStore;
+  capability: AutonomousTaskCapabilitySnapshot;
+}): TeamTaskAutonomousChildAdmission {
+  return ({ parentFence, admission }) =>
+    input.store.admitAutonomousChild({
+      ...admission,
+      parentCapability: input.capability,
+      parentFence,
+    });
+}
 
 /** Binds one explicit host to the scheduler's durable journal. */
 export function createTeamTaskExecutor(input: {

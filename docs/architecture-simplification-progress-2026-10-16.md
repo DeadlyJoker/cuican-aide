@@ -943,3 +943,9 @@ child admission 输入现在同时携带 parent capability snapshot，并在 cap
 Runtime Worker 的显式 Team host 现在可从已经校验的 `config.route` 派生 capability snapshot：authority、runtime generation、policy snapshot 和 workspace binding 均来自同一运行时 route，tool permission 默认固定为 `requestApproval`。调用方显式提供 capability 时仍保留原值并由 executor 校验；Control standalone 没有 route authority，因此不做同样的自动派生。
 
 该接线只准备受信 host 输入，未开放模型 spawn 或默认 Team scheduler。
+
+## 第九十一批：host-bound autonomous child admission port（2026-10-19）
+
+新增 `createTeamTaskAutonomousChildAdmission` 内部 port。它接收 host capability 和 Team journal，调用者只能提交 child intent/edge/budget/capability，其 parent capability 始终由 host 注入；因此未来模型或 Team turn 无法覆盖 parent authority。该 port 尚未接入模型工具、HTTP 或默认 scheduler。
+
+Application 回归验证 parent capability 被强制绑定；现有 Team executor、Store 和 Control 路径保持不变。
