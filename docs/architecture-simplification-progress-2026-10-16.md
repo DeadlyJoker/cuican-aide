@@ -963,3 +963,7 @@ host admission port 在绑定时会复制并冻结 capability snapshot，后续�
 ## 第九十四批：临时 PostgreSQL 实例双 backend 验收（2026-10-19）
 
 使用本机 PostgreSQL 服务端工具在临时数据目录和隔离端口启动一次性测试实例，未连接或修改项目数据库。`team-task-interruption.integration.test.ts` 的 SQLite 与 PostgreSQL 16 项全部通过，包含原子 admission、deadline 过期回滚、等待期间过期收敛、scheduler claim、取消 watcher、SIGKILL 租约恢复和未知 effect 恢复。测试结束后临时实例已停止；这次结果证明 PostgreSQL 事务实现和 SQLite 行为在该隔离环境中一致，但不替代生产规模或网络数据库压测。
+
+## 第九十五批：Team Run 首次终态读取降延迟（2026-10-19）
+
+`waitForTerminalRun` 原先在收到 queued Run 后无条件等待一个 polling interval，默认配置会给每个阶段增加最多约 1 秒的本地等待，即使 Run 已经完成。现在首次读取立即执行，只有确认仍为非终态后才按原间隔等待；瞬时读取失败继续使用原有指数退避和 deadline。新增回归验证首读无等待、后续轮询仍节流，并通过 Team application integration 32 项（SQLite 16 项通过，未配置测试库的 PostgreSQL 16 项跳过）。

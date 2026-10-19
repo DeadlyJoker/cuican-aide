@@ -10,7 +10,7 @@ import type {
 const MAX_CONSECUTIVE_RUN_READ_FAILURES = 20;
 
 export async function waitForTerminalRun(input: {
-  client: ControlTeamRuntimeClient;
+  client: Pick<ControlTeamRuntimeClient, "getRun">;
   run: RunView;
   pollIntervalMs: number;
   runDeadlineMs: number;
@@ -19,16 +19,20 @@ export async function waitForTerminalRun(input: {
   const deadline = Date.now() + input.runDeadlineMs;
   let current = input.run;
   let consecutiveReadFailures = 0;
+  let nextDelayMs = 0;
   while (!isTerminalRun(current)) {
     input.signal?.throwIfAborted();
     if (Date.now() >= deadline) {
       throw new Error("control_team_run_deadline_exceeded");
     }
-    await new Promise((resolve) => setTimeout(resolve, input.pollIntervalMs));
+    if (nextDelayMs > 0) {
+      await new Promise((resolve) => setTimeout(resolve, nextDelayMs));
+    }
     input.signal?.throwIfAborted();
     try {
       current = (await input.client.getRun(current.runId)).run;
       consecutiveReadFailures = 0;
+      nextDelayMs = input.pollIntervalMs;
     } catch (error) {
       if (error instanceof TeamTaskJournalError) throw error;
       consecutiveReadFailures += 1;
@@ -43,7 +47,7 @@ export async function waitForTerminalRun(input: {
         Math.max(250, input.pollIntervalMs) *
           2 ** Math.min(consecutiveReadFailures - 1, 4),
       );
-      await new Promise((resolve) => setTimeout(resolve, retryDelayMs));
+      nextDelayMs = retryDelayMs;
     }
   }
   return current;
