@@ -1007,3 +1007,7 @@ Standalone Control 现在为显式 Team operations 提供 host-only terminal wai
 ## 第一百零五批：host-only autonomous child waiter 接线（2026-10-19）
 
 `ControlTeamRuntimeClient` 增加可选的 `waitForAutonomousChildren`，由 parent lease fence 绑定 child IDs、snapshot reader、deadline 和取消信号；Runtime Worker 显式 Team host 自动把同一 journal reader 包装成 waiter，显式 host 实现优先。新增 execution 回归覆盖 fence 绑定，Application/Runtime Worker typecheck 与 8 项定向测试通过；默认 Team、HTTP 和模型工具路径仍不调用该方法。
+
+## 第一百零六批：通用模型工具边界审计（2026-10-19）
+
+复核 Runtime Worker 的通用 `ToolRuntimePort` 后确认，它只接收经过 Run/action-intent/approval 校验的工具命令，没有 Team parent fence 或 child admission context。当前不把 autonomous waiter 注入通用工具上下文，避免模型工具绕过 Team host 身份边界；未来若开放自主 spawn，必须新增显式 Team-scoped tool contract，并在 Run policy、parent fence 和 durable admission 之间建立同一事务边界。
