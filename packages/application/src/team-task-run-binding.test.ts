@@ -1,6 +1,9 @@
 import assert from "node:assert/strict";
 import test from "node:test";
-import { captureTeamTaskRunBinding } from "./team-task-run-binding.ts";
+import {
+  captureTeamTaskRunBinding,
+  createTeamTaskRunBinding,
+} from "./team-task-run-binding.ts";
 
 const binding = {
   schemaVersion: "crewon.team-task-run-binding.v0" as const,
@@ -37,4 +40,21 @@ test("Run binding capture rejects authority injection and accessors", () => {
   });
   assert.throws(() => captureTeamTaskRunBinding(accessor));
   assert.equal(reads, 0);
+});
+
+test("Run binding builder derives identity and epoch from the trusted fence", () => {
+  assert.deepEqual(
+    createTeamTaskRunBinding({
+      fence: {
+        tenantId: "tenant-1",
+        spaceId: "space-1",
+        taskId: "team-task-1",
+        ownerId: "owner-1",
+        leaseId: "lease-1",
+        epoch: 3,
+      },
+      capabilitySnapshotId: "capability-1",
+    }),
+    { ...binding, parentTaskId: "team-task-1", admissionEpoch: 3 },
+  );
 });

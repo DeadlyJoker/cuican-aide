@@ -1031,3 +1031,7 @@ Standalone Control 现在为显式 Team operations 提供 host-only terminal wai
 ## 第一百一十一批：Run binding 内部值对象（2026-10-19）
 
 新增 `TeamTaskRunBinding` 内部值对象及严格 capture：固定 tenant/space、teamTask、parentTask、admission epoch 和 capability snapshot identity，拒绝未知 authority 字段、accessor 与非法 epoch。该对象尚未接入 Run 持久化或 public projection；Application 回归 2/2、typecheck 通过，为下一步 SQLite/PostgreSQL 同事务写入提供单一校验入口。
+
+## 第一百一十二批：trusted fence Run binding builder（2026-10-19）
+
+新增 `createTeamTaskRunBinding`，从受信 Team fence 和 capability snapshot identity 构造冻结 binding，禁止调用方手工拼接 task/tenant/space/epoch。该 builder 仍是内部纯值对象，不改变 Run Store；binding capture/build 回归 3/3 通过。
