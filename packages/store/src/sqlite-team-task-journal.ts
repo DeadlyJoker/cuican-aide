@@ -565,6 +565,25 @@ export class ExperimentalSqliteTeamTaskJournal implements TeamTaskJournalStore {
     return this.#transaction(() => {
       this.#edgeSchema();
       const parent = this.#fenced(parentFence);
+      const parentAdmission = this.database
+        .prepare(
+          `SELECT capability_json FROM ${AUTONOMOUS_TASK_CHILD_ADMISSIONS_TABLE}
+           WHERE tenant_id=? AND space_id=? AND child_task_id=?`,
+        )
+        .get(
+          admission.capability.tenantId,
+          admission.capability.spaceId,
+          admission.parentTaskId,
+        ) as { capability_json?: unknown } | undefined;
+      if (parentAdmission !== undefined) {
+        if (typeof parentAdmission.capability_json !== "string")
+          teamJournalFail("autonomous_task_parent_capability_corrupt");
+        if (
+          parentAdmission.capability_json !==
+          teamJournalJson(admission.parentCapability)
+        )
+          teamJournalFail("autonomous_task_parent_capability_mismatch");
+      }
       if (
         parent.intent.actorId !== admission.capability.actorId ||
         parent.intent.principalId !== admission.capability.principalId

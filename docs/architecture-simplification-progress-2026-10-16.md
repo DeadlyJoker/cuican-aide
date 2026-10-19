@@ -921,3 +921,9 @@ Node 22 当前环境下 scheduler 6/6、Team interruption SQLite 8/8、Store/Con
 child admission 输入现在同时携带 parent capability snapshot，并在 capture 阶段调用既有 subset 校验。child 不能跨身份、authority、runtime、policy 或 workspace，也不能提升 tool permission；parent capability 纳入 parent effect request，因此同一幂等键重放时也会比较 authority 输入。新增契约回归覆盖 child 从 `requestApproval` 提升到 `fullAccess` 的拒绝。
 
 这仍是内部 admission contract，未开放模型直发或生产 scheduler；下一步接入真实 executor 时必须从当前受信 host 生成 parent snapshot，不能由模型自填。
+
+## 第八十七批：父 autonomous capability 的持久绑定（2026-10-19）
+
+当 parent 本身是 autonomous child 时，SQLite/PostgreSQL admission 事务现在读取 parent admission 持久化的 capability JSON，并与本次提交的 `parentCapability` 精确比较。缺失/损坏按 authority corruption 拒绝，不匹配按 parent capability mismatch 拒绝；root parent 没有上级 metadata 时仍要求受信 host 提供 snapshot。
+
+该校验复用同一 parent transaction 和幂等 effect 边界，没有新增 HTTP 或模型入口。

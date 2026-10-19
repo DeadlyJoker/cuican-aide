@@ -567,6 +567,22 @@ export class ExperimentalPostgresTeamTaskJournal
     return this.#transaction(parentFence, async (client) => {
       await this.#edgeSchema(client);
       const parent = await this.#fenced(client, parentFence);
+      const { rows: parentAdmissions } = await client.query(
+        `SELECT capability_json FROM ${this.#table(AUTONOMOUS_TASK_CHILD_ADMISSIONS_TABLE)}
+         WHERE tenant_id=$1 AND space_id=$2 AND child_task_id=$3`,
+        [
+          admission.capability.tenantId,
+          admission.capability.spaceId,
+          admission.parentTaskId,
+        ],
+      );
+      if (parentAdmissions.length !== 0) {
+        const storedCapability = parentAdmissions[0]!.capability_json;
+        if (typeof storedCapability !== "string")
+          teamJournalFail("autonomous_task_parent_capability_corrupt");
+        if (storedCapability !== teamJournalJson(admission.parentCapability))
+          teamJournalFail("autonomous_task_parent_capability_mismatch");
+      }
       if (
         parent.intent.actorId !== admission.capability.actorId ||
         parent.intent.principalId !== admission.capability.principalId
