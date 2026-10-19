@@ -911,3 +911,7 @@ Store、Control API typecheck 和 Team interruption 16 项定向回归通过（S
 仅从 runnable 查询中过滤过期 child 会留下永久 coordinating 记录。本批增加 Store 的 `cancelExpiredAutonomousTasks`：scheduler 每次 wake 先在同一数据库事务内把已过期的 autonomous child 标记为 `cancel_requested`，再执行 runnable 查询；普通 Team task 和没有 autonomous metadata 的旧路径不受影响。
 
 Node 22 当前环境下 scheduler 6/6、Team interruption SQLite 8/8、Store/Control API typecheck 和格式检查通过；PostgreSQL runtime 仍需配置隔离测试库后重跑。
+
+## 第八十五批：scheduler 过期任务收敛调用契约（2026-10-19）
+
+补充 application scheduler 回归，明确每次 wake 必须先调用过期 autonomous task 收敛，再发现和 claim runnable work；测试证明被收敛的 locator 不会进入 executor。该测试不替代 SQLite/PostgreSQL 事务回归，双 backend runtime 仍按环境单独验证。

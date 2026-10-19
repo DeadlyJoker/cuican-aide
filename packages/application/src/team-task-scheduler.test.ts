@@ -96,6 +96,34 @@ test("coalesces wake calls, enforces concurrency, and refills a freed slot", asy
   assert.deepEqual(fake.available, []);
 });
 
+test("expires autonomous tasks before discovering runnable work", async () => {
+  const fake = fakeStore([locators[0]!]);
+  let expiredScope: { tenantId: string; spaceId: string } | null = null;
+  const scheduler = new TeamTaskScheduler(
+    schedulerInput({
+      store: {
+        ...fake.store,
+        cancelExpiredAutonomousTasks: async (input) => {
+          expiredScope = input;
+          fake.available.splice(0, 1);
+          return [locators[0]!];
+        },
+      },
+      concurrency: 1,
+      execute: async () => {
+        throw new Error("expired task must not execute");
+      },
+    }),
+  );
+  assert.deepEqual(await scheduler.wake(), {
+    started: 0,
+    skipped: 0,
+    capacity: 1,
+  });
+  assert.deepEqual(expiredScope, scope);
+  await scheduler.close();
+});
+
 test("does not execute a raced claim and reports executor failure without retrying immediately", async () => {
   const fake = fakeStore([locators[0]!]);
   let errors = 0;
