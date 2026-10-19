@@ -584,7 +584,8 @@ export function CommandSidebar({
 
         <div
           className="command-sidebar-workspaces"
-          hidden={section !== "work" || hasPluginSidebar}
+          hidden={section !== "work" && !hasPluginSidebar}
+          data-shared-workspace-sessions={hasPluginSidebar ? "true" : undefined}
         >
           <CommandSidebarWorkspaceTree
             workspaceAuthority={workspaceAuthority}
