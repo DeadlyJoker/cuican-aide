@@ -180,13 +180,29 @@ export class ExperimentalPostgresTeamTaskJournal
     validateTeamTaskListLimit(input.limit);
     this.host.assertOpen();
     await this.#schema(this.pool);
+    const { rows: admissionTables } = await this.pool.query(
+      "SELECT to_regclass($1) AS table_name",
+      [this.#table(AUTONOMOUS_TASK_CHILD_ADMISSIONS_TABLE)],
+    );
+    const hasAutonomousAdmissions = admissionTables[0]?.table_name !== null;
+    const deadlineFilter = hasAutonomousAdmissions
+      ? `AND (NOT EXISTS (
+           SELECT 1 FROM ${this.#table(AUTONOMOUS_TASK_CHILD_ADMISSIONS_TABLE)} a
+           WHERE a.tenant_id=t.tenant_id AND a.space_id=t.space_id AND a.child_task_id=t.task_id
+         ) OR EXISTS (
+           SELECT 1 FROM ${this.#table(AUTONOMOUS_TASK_CHILD_ADMISSIONS_TABLE)} a
+           WHERE a.tenant_id=t.tenant_id AND a.space_id=t.space_id AND a.child_task_id=t.task_id
+             AND ((a.budget_json::jsonb->>'deadlineAt')::timestamptz > clock_timestamp())
+         ))`
+      : "";
     const { rows } = await this.pool.query(
-      `SELECT tenant_id,space_id,task_id
-       FROM ${this.#table("team_task_journals")}
-       WHERE tenant_id=$1 AND space_id=$2 AND status='coordinating'
-         AND cancel_requested=0
-         AND (lease_expires_at IS NULL OR lease_expires_at<=floor(extract(epoch FROM clock_timestamp())*1000)::bigint)
-       ORDER BY revision,task_id
+      `SELECT t.tenant_id,t.space_id,t.task_id
+       FROM ${this.#table("team_task_journals")} t
+       WHERE t.tenant_id=$1 AND t.space_id=$2 AND t.status='coordinating'
+         AND t.cancel_requested=0
+         AND (t.lease_expires_at IS NULL OR t.lease_expires_at<=floor(extract(epoch FROM clock_timestamp())*1000)::bigint)
+         ${deadlineFilter}
+       ORDER BY t.revision,t.task_id
        LIMIT $3`,
       [input.tenantId, input.spaceId, input.limit],
     );

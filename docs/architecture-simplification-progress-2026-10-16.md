@@ -899,3 +899,9 @@ Node 22 当前环境下定向 Control/Store typecheck 通过；Team interruption
 child admission 现在在各自数据库事务内读取数据库时钟，过期 deadline 在创建 child journal 前拒绝。新增真实 interruption 回归：过期请求返回 `autonomous_task_deadline_expired`，child journal、edge 和 parent effect 均不残留；随后 scheduler 的 runnable 集合只包含有效 child，过期 child 不会进入执行器。
 
 同一测试同时覆盖 SQLite 与 PostgreSQL；当前环境未提供 `CREWON_TEST_POSTGRES_URL` 时仅跳过 PostgreSQL 分支，不把 SQLite 结果当成 PostgreSQL runtime 验收。
+
+## 第八十三批：scheduler runnable 过滤过期 autonomous child（2026-10-19）
+
+deadline 校验不能只发生在 admission 时：已入库 child 可能在等待期间跨过 deadline。SQLite/PostgreSQL 的 `listRunnable` 现在在存在 autonomous admission metadata 时按冻结 budget deadline 过滤已过期 child；普通 Team task 和未启用 edge schema 的旧路径保持原查询。这样 scheduler 的 claim 前发现不会把过期 child交给 executor。
+
+Store、Control API typecheck 和 Team interruption 16 项定向回归通过（SQLite 8 项通过，PostgreSQL 8 项因环境未配置测试库跳过）；当前没有改变过期任务的终态写入，后续应补偿取消/归档策略。

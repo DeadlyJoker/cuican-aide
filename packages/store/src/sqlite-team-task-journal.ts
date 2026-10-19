@@ -131,6 +131,27 @@ export class ExperimentalSqliteTeamTaskJournal implements TeamTaskJournalStore {
     validateTeamTaskListLimit(input.limit);
     this.host.assertOpen();
     this.#schema();
+    const now = this.host.now();
+    const hasAutonomousAdmissions =
+      this.database
+        .prepare(
+          `SELECT 1 FROM sqlite_master WHERE type='table' AND name=? LIMIT 1`,
+        )
+        .get(AUTONOMOUS_TASK_CHILD_ADMISSIONS_TABLE) !== undefined;
+    const deadlineFilter = hasAutonomousAdmissions
+      ? `AND (NOT EXISTS (
+           SELECT 1 FROM ${AUTONOMOUS_TASK_CHILD_ADMISSIONS_TABLE} a
+           WHERE a.tenant_id=team_task_journals.tenant_id
+             AND a.space_id=team_task_journals.space_id
+             AND a.child_task_id=team_task_journals.task_id
+         ) OR EXISTS (
+           SELECT 1 FROM ${AUTONOMOUS_TASK_CHILD_ADMISSIONS_TABLE} a
+           WHERE a.tenant_id=team_task_journals.tenant_id
+             AND a.space_id=team_task_journals.space_id
+             AND a.child_task_id=team_task_journals.task_id
+             AND json_extract(a.budget_json,'$.deadlineAt')>?
+         ))`
+      : "";
     const rows = this.database
       .prepare(
         `SELECT tenant_id,space_id,task_id
@@ -138,10 +159,17 @@ export class ExperimentalSqliteTeamTaskJournal implements TeamTaskJournalStore {
          WHERE tenant_id=? AND space_id=? AND status='coordinating'
            AND cancel_requested=0
            AND (lease_expires_at IS NULL OR lease_expires_at<=?)
+           ${deadlineFilter}
          ORDER BY revision,task_id
          LIMIT ?`,
       )
-      .all(input.tenantId, input.spaceId, this.host.now(), input.limit) as {
+      .all(
+        input.tenantId,
+        input.spaceId,
+        now,
+        ...(hasAutonomousAdmissions ? [new Date(now).toISOString()] : []),
+        input.limit,
+      ) as {
       tenant_id: string;
       space_id: string;
       task_id: string;
