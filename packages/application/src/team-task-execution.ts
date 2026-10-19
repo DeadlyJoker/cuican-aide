@@ -25,6 +25,7 @@ import type {
   AutonomousTaskChildAdmissionResult,
   AutonomousTaskChildRecord,
 } from "./team-task-journal.ts";
+import { waitForAutonomousChildren } from "./autonomous-child-wait.ts";
 
 /** Explicit host identity and operations required by a durable Team executor. */
 export type TeamTaskExecutionHost = Readonly<{
@@ -33,6 +34,7 @@ export type TeamTaskExecutionHost = Readonly<{
   autonomousCapability?: AutonomousTaskCapabilitySnapshot;
   autonomousChildAdmission?: TeamTaskAutonomousChildAdmission;
   autonomousChildReader?: TeamTaskAutonomousChildReader;
+  autonomousChildWaiter?: TeamTaskAutonomousChildWaiter;
   operations: ControlTeamRuntimeClient;
   digester: ContentDigester;
   leaseDurationMs?: number;
@@ -51,6 +53,27 @@ export type TeamTaskAutonomousChildReader = (input: {
   parentFence: TeamTaskFence;
   limit?: number;
 }) => Promise<readonly AutonomousTaskChildRecord[]>;
+
+export type TeamTaskAutonomousChildWaiter = (input: {
+  parentFence: TeamTaskFence;
+  childTaskIds: readonly string[];
+  deadlineMs: number;
+  pollIntervalMs?: number;
+  signal?: AbortSignal;
+}) => Promise<readonly AutonomousTaskChildRecord[]>;
+
+export function createTeamTaskAutonomousChildWaiter(input: {
+  reader: TeamTaskAutonomousChildReader;
+}): TeamTaskAutonomousChildWaiter {
+  return ({ parentFence, childTaskIds, deadlineMs, pollIntervalMs, signal }) =>
+    waitForAutonomousChildren({
+      read: (options) => input.reader({ parentFence, limit: options?.limit }),
+      childTaskIds,
+      deadlineMs,
+      ...(pollIntervalMs === undefined ? {} : { pollIntervalMs }),
+      ...(signal === undefined ? {} : { signal }),
+    });
+}
 
 export function createTeamTaskAutonomousChildReader(input: {
   store: TeamTaskJournalStore;
@@ -114,6 +137,9 @@ export function createTeamTaskExecutor(input: {
       ...(input.host.autonomousChildReader === undefined
         ? {}
         : { autonomousChildReader: input.host.autonomousChildReader }),
+      ...(input.host.autonomousChildWaiter === undefined
+        ? {}
+        : { autonomousChildWaiter: input.host.autonomousChildWaiter }),
       ...(input.host.leaseDurationMs === undefined
         ? {}
         : { leaseDurationMs: input.host.leaseDurationMs }),
@@ -145,6 +171,7 @@ export async function executeTeamTask(input: {
   autonomousCapability?: AutonomousTaskCapabilitySnapshot;
   autonomousChildAdmission?: TeamTaskAutonomousChildAdmission;
   autonomousChildReader?: TeamTaskAutonomousChildReader;
+  autonomousChildWaiter?: TeamTaskAutonomousChildWaiter;
   leaseDurationMs?: number;
   pollIntervalMs?: number;
   runDeadlineMs?: number;
@@ -299,6 +326,22 @@ export async function executeTeamTask(input: {
                 ...(options?.limit === undefined
                   ? {}
                   : { limit: options.limit }),
+              }),
+            ),
+        }),
+    ...(input.autonomousChildWaiter === undefined
+      ? {}
+      : {
+          waitForAutonomousChildren: (options: {
+            childTaskIds: readonly string[];
+            deadlineMs: number;
+            pollIntervalMs?: number;
+            signal?: AbortSignal;
+          }) =>
+            track(() =>
+              input.autonomousChildWaiter!({
+                parentFence: fence,
+                ...options,
               }),
             ),
         }),

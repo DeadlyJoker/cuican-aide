@@ -42,6 +42,7 @@ import {
   createTeamTaskExecutor,
   createTeamTaskAutonomousChildAdmission,
   createTeamTaskAutonomousChildReader,
+  createTeamTaskAutonomousChildWaiter,
   type TeamTaskExecutionHost,
 } from "@crewon/application/team-task-execution";
 import type {
@@ -827,6 +828,9 @@ async function composeRuntimeWorker(
                     teamConfig.host.actor,
                     config.route,
                   );
+                const autonomousChildReader =
+                  teamConfig.host.autonomousChildReader ??
+                  createTeamTaskAutonomousChildReader({ store: journal });
                 return {
                   ...teamConfig.host,
                   autonomousCapability: capability,
@@ -836,9 +840,12 @@ async function composeRuntimeWorker(
                       store: journal,
                       capability,
                     }),
-                  autonomousChildReader:
-                    teamConfig.host.autonomousChildReader ??
-                    createTeamTaskAutonomousChildReader({ store: journal }),
+                  autonomousChildReader,
+                  autonomousChildWaiter:
+                    teamConfig.host.autonomousChildWaiter ??
+                    createTeamTaskAutonomousChildWaiter({
+                      reader: autonomousChildReader,
+                    }),
                 } satisfies TeamTaskExecutionHost;
               })(),
             }),

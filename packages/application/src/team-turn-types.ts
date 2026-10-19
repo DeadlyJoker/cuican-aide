@@ -49,6 +49,13 @@ export interface ControlTeamRuntimeClient {
   listAutonomousChildren?(input?: {
     limit?: number;
   }): Promise<readonly AutonomousTaskChildRecord[]>;
+  /** Optional host-only bounded child wait, scoped to the leased parent task. */
+  waitForAutonomousChildren?(input: {
+    childTaskIds: readonly string[];
+    deadlineMs: number;
+    pollIntervalMs?: number;
+    signal?: AbortSignal;
+  }): Promise<readonly AutonomousTaskChildRecord[]>;
   /** Optional host-only event wait; never supplied by browser clients. */
   waitForRunTerminal?: TeamRunTerminalWait;
   appendThreadMessage(

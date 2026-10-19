@@ -1003,3 +1003,7 @@ Standalone Control 现在为显式 Team operations 提供 host-only terminal wai
 ## 第一百零四批：有界 autonomous child 收敛等待原语（2026-10-19）
 
 新增 application `waitForAutonomousChildren`：按调用者给定的 bounded child ID 集合读取 host child snapshots，保持返回顺序，只有 child `finalAccepted` 或 durable `cancelRequested` 才视为收敛；缺失、超时和取消均 fail closed。轮询有 deadline 和 interval 上限，不引入新的数据库或 HTTP 状态。新增 3 项 application 回归覆盖顺序、取消收敛和永久 coordinating 超时。
+
+## 第一百零五批：host-only autonomous child waiter 接线（2026-10-19）
+
+`ControlTeamRuntimeClient` 增加可选的 `waitForAutonomousChildren`，由 parent lease fence 绑定 child IDs、snapshot reader、deadline 和取消信号；Runtime Worker 显式 Team host 自动把同一 journal reader 包装成 waiter，显式 host 实现优先。新增 execution 回归覆盖 fence 绑定，Application/Runtime Worker typecheck 与 8 项定向测试通过；默认 Team、HTTP 和模型工具路径仍不调用该方法。

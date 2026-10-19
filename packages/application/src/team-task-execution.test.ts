@@ -4,6 +4,7 @@ import type { ControlTeamRuntimeClient } from "./team-turn-types.ts";
 import {
   createTeamTaskAutonomousChildAdmission,
   createTeamTaskAutonomousChildReader,
+  createTeamTaskAutonomousChildWaiter,
   createTeamTaskExecutor,
   type TeamTaskExecutionHost,
 } from "./team-task-execution.ts";
@@ -168,5 +169,42 @@ test("host child reader binds the parent fence scope and task identity", async (
     spaceId: actor.spaceId,
     parentTaskId: parentFence.taskId,
     limit: 4,
+  });
+});
+
+test("host child waiter preserves the parent fence while waiting for child snapshots", async () => {
+  let received: Record<string, unknown> | null = null;
+  const waiter = createTeamTaskAutonomousChildWaiter({
+    reader: async (input) => {
+      received = input as unknown as Record<string, unknown>;
+      return [
+        {
+          edge: { childTaskId: "child-task" },
+          task: {
+            intent: { taskId: "child-task" },
+            status: "finalAccepted",
+            cancelRequested: false,
+          },
+        },
+      ] as never;
+    },
+  });
+  const parentFence: TeamTaskFence = {
+    tenantId: actor.tenantId,
+    spaceId: actor.spaceId,
+    taskId: "parent-task",
+    ownerId: "owner-1",
+    leaseId: "lease-1",
+    epoch: 1,
+  };
+  const snapshots = await waiter({
+    parentFence,
+    childTaskIds: ["child-task"],
+    deadlineMs: 100,
+  });
+  assert.equal(snapshots.length, 1);
+  assert.deepEqual(received, {
+    parentFence,
+    limit: 32,
   });
 });
