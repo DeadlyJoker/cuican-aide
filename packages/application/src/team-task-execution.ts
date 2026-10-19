@@ -127,6 +127,8 @@ export async function executeTeamTask(input: {
   signal?: AbortSignal;
 }) {
   const { store, fence, operations } = input;
+  const waitForRunTerminal =
+    input.waitForRunTerminal ?? operations.waitForRunTerminal;
   validateTeamTaskFence(fence);
   const leaseMs = input.leaseDurationMs ?? 30_000;
   validateTeamLeaseDuration(leaseMs);
@@ -394,9 +396,7 @@ export async function executeTeamTask(input: {
         ...(input.runDeadlineMs === undefined
           ? {}
           : { runDeadlineMs: input.runDeadlineMs }),
-        ...(input.waitForRunTerminal === undefined
-          ? {}
-          : { waitForRunTerminal: input.waitForRunTerminal }),
+        ...(waitForRunTerminal === undefined ? {} : { waitForRunTerminal }),
         ...(acceptedMessage === undefined ? {} : { acceptedMessage }),
         ...(task.intent.mainHistorySequence === undefined
           ? {}

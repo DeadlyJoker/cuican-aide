@@ -12,6 +12,8 @@ import type {
 } from "@crewon/application";
 import type { ControlTeamRuntimeClient as TeamClient } from "@crewon/application/team-turn";
 import type { TeamTaskWriteFence } from "@crewon/application/team-task-journal";
+import type { TeamRunTerminalWait } from "@crewon/application/team-turn";
+import { RunEventHub, RunEventSubscription } from "./run-event-hub.ts";
 import {
   formatMessageCursor,
   parseMessageListQuery,
@@ -49,6 +51,7 @@ export type ControlTeamApplicationOperationsDependencies = Readonly<{
   goals: ThreadGoalApplicationService;
   turns: TurnApplicationService;
   routeResolver: RunRouteResolverPort;
+  eventHub?: RunEventHub;
 }>;
 
 /**
@@ -70,6 +73,14 @@ function createBoundOperations(
     createBoundOperations(dependencies, structuredClone(next));
   return {
     withTeamTaskFence: withFence,
+    ...(dependencies.eventHub === undefined
+      ? {}
+      : {
+          waitForRunTerminal: createRunTerminalWait(
+            dependencies,
+            dependencies.eventHub,
+          ),
+        }),
     appendThreadMessage: (threadId, body, idempotencyKey) =>
       appendThreadMessage(dependencies, fence, threadId, body, idempotencyKey),
     authorizeOfficeRun: (officeVersionId, body) =>
@@ -91,6 +102,100 @@ function createBoundOperations(
     startTurn: (threadId, body, idempotencyKey) =>
       startTurn(dependencies, fence, threadId, body, idempotencyKey),
   };
+}
+
+const EVENT_WAIT_FALLBACK_INTERVAL_MS = 250;
+
+function createRunTerminalWait(
+  d: ControlTeamApplicationOperationsDependencies,
+  eventHub: RunEventHub,
+): TeamRunTerminalWait {
+  return async ({ run, deadlineAt, signal }) => {
+    let subscription = eventHub.subscribe(run.runId);
+    try {
+      let current = (await getRun(d, run.runId)).run;
+      if (isTerminalRun(current)) return current;
+      while (true) {
+        signal?.throwIfAborted();
+        const remainingMs = deadlineAt - Date.now();
+        if (remainingMs <= 0)
+          throw new Error("control_team_run_deadline_exceeded");
+        const next = await nextRunEvent(
+          subscription,
+          signal,
+          Math.min(remainingMs, EVENT_WAIT_FALLBACK_INTERVAL_MS),
+        );
+        if (next.kind === "timeout") {
+          await subscription.return();
+          subscription = eventHub.subscribe(run.runId);
+          current = (await getRun(d, run.runId)).run;
+        } else {
+          if (next.result.done)
+            throw new Error("control_team_run_event_wait_closed");
+          if (isTerminalEvent(next.result.value.type))
+            current = (await getRun(d, run.runId)).run;
+        }
+        if (isTerminalRun(current)) return current;
+      }
+    } finally {
+      await subscription.return();
+    }
+  };
+}
+
+function nextRunEvent(
+  subscription: RunEventSubscription,
+  signal: AbortSignal | undefined,
+  timeoutMs: number,
+): Promise<
+  | { kind: "timeout" }
+  | {
+      kind: "event";
+      result: IteratorResult<import("@crewon/domain").RunLifecycleEvent>;
+    }
+> {
+  return new Promise((resolve, reject) => {
+    let timer: NodeJS.Timeout | undefined = setTimeout(() => {
+      timer = undefined;
+      resolve({ kind: "timeout" });
+    }, timeoutMs);
+    const onAbort = () => {
+      if (timer !== undefined) clearTimeout(timer);
+      timer = undefined;
+      reject(signal?.reason ?? new Error("control_team_run_cancelled"));
+    };
+    signal?.addEventListener("abort", onAbort, { once: true });
+    void subscription.next().then(
+      (result) => {
+        if (timer !== undefined) clearTimeout(timer);
+        timer = undefined;
+        signal?.removeEventListener("abort", onAbort);
+        resolve({ kind: "event", result });
+      },
+      (error) => {
+        if (timer !== undefined) clearTimeout(timer);
+        timer = undefined;
+        signal?.removeEventListener("abort", onAbort);
+        reject(error);
+      },
+    );
+  });
+}
+
+function isTerminalEvent(
+  type: import("@crewon/domain").RunLifecycleEvent["type"],
+): boolean {
+  return (
+    type === "run.completed" || type === "run.failed" || type === "run.canceled"
+  );
+}
+
+function isTerminalRun(run: { status: string }): boolean {
+  return (
+    run.status === "completed" ||
+    run.status === "failed" ||
+    run.status === "canceled"
+  );
 }
 
 async function appendThreadMessage(

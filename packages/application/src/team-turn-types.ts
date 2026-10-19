@@ -42,6 +42,8 @@ export interface ControlTeamRuntimeClient {
   admitAutonomousChild?(
     admission: Omit<AutonomousTaskChildAdmission, "parentCapability">,
   ): Promise<AutonomousTaskChildAdmissionResult>;
+  /** Optional host-only event wait; never supplied by browser clients. */
+  waitForRunTerminal?: TeamRunTerminalWait;
   appendThreadMessage(
     threadId: string,
     body: AppendThreadMessageRequest,

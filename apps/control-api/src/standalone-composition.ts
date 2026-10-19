@@ -871,6 +871,7 @@ function composeControlApi(
       goals,
       turns,
       routeResolver,
+      eventHub,
     });
     const app = buildControlApi({
       pluginCreditReads: composePluginCreditReads(

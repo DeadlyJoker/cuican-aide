@@ -979,3 +979,7 @@ host admission port 在绑定时会复制并冻结 capability snapshot，后续�
 ## 第九十八批：EventHub 直连失败注记（2026-10-19）
 
 尝试将 Control 进程内 `RunEventHub` 直接作为该 port 的实现时，真实 standalone HTTP 回归暴露了事件可达性前提：当 `outboxScanIntervalMs=null`、仅依赖持久扫描关闭的配置下，Run 已持久完成但 EventHub 没有事件，Team 会一直等待到 deadline。该接线已撤回，未进入提交；说明下一实现必须同时具备事件订阅、持久 `getRun`/事件游标兜底和订阅关闭清理，不能把 EventHub 存在误认为事件必达。恢复默认 polling 后 standalone HTTP 2/2 通过。
+
+## 第九十九批：EventHub 等待与持久状态兜底（2026-10-19）
+
+Standalone Control 现在为显式 Team operations 提供 host-only terminal wait：先订阅对应 Run，再读取持久状态；事件到达时立即重新读取最终 Run，事件在短窗口内不可达时关闭旧订阅、重新订阅并用持久 `getRun` 兜底。这样 `outboxScanIntervalMs=null` 仍能完成任务，订阅不会因超时累积挂起 waiter；application 继续校验 Run identity、终态、deadline 和取消。真实 standalone HTTP admission/cancel 2/2、headless Team SQLite 4/4、Application/Control API typecheck 通过。
