@@ -40,6 +40,7 @@ import {
   captureTeamEffect,
   assertTeamEffectReplay,
   assertAutonomousChildAdmissionReplay,
+  assertAutonomousTaskDeadline,
   assertTeamJournalBudget,
   assertTeamTaskSource,
   captureTeamResult,
@@ -529,13 +530,12 @@ export class ExperimentalSqliteTeamTaskJournal implements TeamTaskJournalStore {
         admission.childIntent,
         TEAM_JOURNAL_LIMITS.intentBytes,
       );
+      const createdAt = this.host.now();
+      assertAutonomousTaskDeadline(admission.budget.deadlineAt, createdAt);
       const child = this.#createInTransaction(
         admission.childIntent,
         intentJson,
       );
-      const createdAt = this.host.now();
-      if (!Number.isSafeInteger(createdAt) || createdAt < 0)
-        teamJournalFail("autonomous_task_child_clock_invalid");
       const wakeKey = `team-task:${admission.childTaskId}`;
       const budgetJson = teamJournalJson(admission.budget);
       const capabilityJson = teamJournalJson(admission.capability);

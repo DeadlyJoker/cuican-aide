@@ -42,6 +42,7 @@ import {
   captureTeamEffect,
   assertTeamEffectReplay,
   assertAutonomousChildAdmissionReplay,
+  assertAutonomousTaskDeadline,
   assertTeamJournalBudget,
   assertTeamTaskSource,
   captureTeamResult,
@@ -555,12 +556,13 @@ export class ExperimentalPostgresTeamTaskJournal
         admission.childIntent,
         TEAM_JOURNAL_LIMITS.intentBytes,
       );
+      const createdAt = await this.#now(client);
+      assertAutonomousTaskDeadline(admission.budget.deadlineAt, createdAt);
       const child = await this.#createInTransaction(
         client,
         admission.childIntent,
         intentJson,
       );
-      const createdAt = await this.#now(client);
       const wakeKey = `team-task:${admission.childTaskId}`;
       const budgetJson = teamJournalJson(admission.budget);
       const capabilityJson = teamJournalJson(admission.capability);

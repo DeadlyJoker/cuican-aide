@@ -212,6 +212,17 @@ export function assertAutonomousChildAdmissionReplay(
     if (row[key] !== expected) teamJournalFail("team_journal_effect_conflict");
   }
 }
+
+export function assertAutonomousTaskDeadline(
+  deadlineAt: string,
+  now: number,
+): void {
+  const deadline = Date.parse(deadlineAt);
+  if (!Number.isFinite(deadline) || !Number.isSafeInteger(now) || now < 0)
+    teamJournalFail("autonomous_task_deadline_invalid");
+  if (now >= deadline) teamJournalFail("autonomous_task_deadline_expired");
+}
+
 export function assertTeamJournalBudget(
   task: TeamTaskRecord,
   bytes: number,

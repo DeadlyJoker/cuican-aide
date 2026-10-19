@@ -324,6 +324,67 @@ workflowDeploymentIntegrationTest(
       isCode("team_journal_effect_conflict"),
     );
 
+    const expiredFork = await operations.forkThread(
+      thread.threadId,
+      {
+        expectedRevision: (await server.client.getThread(thread.threadId))
+          .thread.revision,
+        throughHistorySequence: null,
+      },
+      "atomic-expired-child-fork",
+    );
+    const expiredChild = {
+      ...child,
+      taskId: "atomic-expired-child",
+      turn: {
+        ...child.turn,
+        threadId: expiredFork.thread.threadId,
+        expectedRevision: expiredFork.thread.revision,
+      },
+    } satisfies TeamTaskIntent;
+    await assert.rejects(
+      journal.admitAutonomousChild({
+        ...admission,
+        idempotencyKey: "spawn-expired-child",
+        childTaskId: expiredChild.taskId,
+        childIntent: expiredChild,
+        edge: {
+          ...admission.edge,
+          childTaskId: expiredChild.taskId,
+          childOrdinal: 2,
+        },
+        budget: { ...admission.budget, deadlineAt: "2000-01-01T00:00:00.000Z" },
+      }),
+      isCode("autonomous_task_deadline_expired"),
+    );
+    assert.equal(await journal.read(expiredChild), null);
+    assert.equal(
+      (await journal.effects(parent)).some((effect) =>
+        effect.key.endsWith("spawn-expired-child"),
+      ),
+      false,
+    );
+    assert.equal(
+      (
+        await edges.listChildren({
+          tenantId: f.actor.tenantId,
+          spaceId: f.actor.spaceId,
+          parentTaskId: parent.taskId,
+        })
+      ).length,
+      1,
+    );
+    assert.equal(
+      (
+        await journal.listRunnable({
+          tenantId: f.actor.tenantId,
+          spaceId: f.actor.spaceId,
+          limit: 10,
+        })
+      ).some((locator) => locator.taskId === expiredChild.taskId),
+      false,
+    );
+
     const fork2 = await operations.forkThread(
       thread.threadId,
       {

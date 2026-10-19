@@ -893,3 +893,9 @@ Node 22 当前环境下定向 Control/Store typecheck 通过；Team interruption
 补齐 child admission 的预算边界：`childOrdinal` 现在必须不大于冻结 budget 的 `maxChildren`。此前只检查 depth，`maxChildren=0` 仍可接受 ordinal 1，导致持久化 child 超出声明预算。
 
 新增 application 契约回归覆盖零 child 预算；该校验发生在 Store 事务之前，不改变现有数据库或 HTTP 形状。
+
+## 第八十二批：过期 child admission 的双 backend 回归（2026-10-19）
+
+child admission 现在在各自数据库事务内读取数据库时钟，过期 deadline 在创建 child journal 前拒绝。新增真实 interruption 回归：过期请求返回 `autonomous_task_deadline_expired`，child journal、edge 和 parent effect 均不残留；随后 scheduler 的 runnable 集合只包含有效 child，过期 child 不会进入执行器。
+
+同一测试同时覆盖 SQLite 与 PostgreSQL；当前环境未提供 `CREWON_TEST_POSTGRES_URL` 时仅跳过 PostgreSQL 分支，不把 SQLite 结果当成 PostgreSQL runtime 验收。
