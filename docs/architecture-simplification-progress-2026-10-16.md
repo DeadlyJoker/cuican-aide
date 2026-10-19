@@ -905,3 +905,9 @@ child admission 现在在各自数据库事务内读取数据库时钟，过期 
 deadline 校验不能只发生在 admission 时：已入库 child 可能在等待期间跨过 deadline。SQLite/PostgreSQL 的 `listRunnable` 现在在存在 autonomous admission metadata 时按冻结 budget deadline 过滤已过期 child；普通 Team task 和未启用 edge schema 的旧路径保持原查询。这样 scheduler 的 claim 前发现不会把过期 child交给 executor。
 
 Store、Control API typecheck 和 Team interruption 16 项定向回归通过（SQLite 8 项通过，PostgreSQL 8 项因环境未配置测试库跳过）；当前没有改变过期任务的终态写入，后续应补偿取消/归档策略。
+
+## 第八十四批：过期 autonomous child 的 scheduler 收敛（2026-10-19）
+
+仅从 runnable 查询中过滤过期 child 会留下永久 coordinating 记录。本批增加 Store 的 `cancelExpiredAutonomousTasks`：scheduler 每次 wake 先在同一数据库事务内把已过期的 autonomous child 标记为 `cancel_requested`，再执行 runnable 查询；普通 Team task 和没有 autonomous metadata 的旧路径不受影响。
+
+Node 22 当前环境下 scheduler 6/6、Team interruption SQLite 8/8、Store/Control API typecheck 和格式检查通过；PostgreSQL runtime 仍需配置隔离测试库后重跑。

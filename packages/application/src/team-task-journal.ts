@@ -77,6 +77,10 @@ export interface TeamTaskJournalStore {
   listRunnable(
     scope: TeamTaskScope & { limit: number },
   ): Promise<readonly TeamTaskLocator[]>;
+  /** Marks persisted autonomous children whose frozen deadline has elapsed. */
+  cancelExpiredAutonomousTasks(
+    scope: TeamTaskScope,
+  ): Promise<readonly TeamTaskLocator[]>;
   create(intent: TeamTaskIntent): Promise<TeamTaskRecord>;
   /**
    * Atomically reserves the main Thread, appends its user message and creates

@@ -180,6 +180,48 @@ export class ExperimentalSqliteTeamTaskJournal implements TeamTaskJournalStore {
       taskId: row.task_id,
     }));
   }
+  async cancelExpiredAutonomousTasks(scope: TeamTaskScope) {
+    validateTeamTaskScope(scope);
+    this.host.assertOpen();
+    this.#schema();
+    const hasAutonomousAdmissions =
+      this.database
+        .prepare(
+          `SELECT 1 FROM sqlite_master WHERE type='table' AND name=? LIMIT 1`,
+        )
+        .get(AUTONOMOUS_TASK_CHILD_ADMISSIONS_TABLE) !== undefined;
+    if (!hasAutonomousAdmissions) return [];
+    return this.#transaction(() => {
+      const now = this.host.now();
+      const rows = this.database
+        .prepare(
+          `SELECT t.tenant_id,t.space_id,t.task_id
+           FROM team_task_journals t
+           JOIN ${AUTONOMOUS_TASK_CHILD_ADMISSIONS_TABLE} a
+             ON a.tenant_id=t.tenant_id AND a.space_id=t.space_id AND a.child_task_id=t.task_id
+           WHERE t.tenant_id=? AND t.space_id=? AND t.status='coordinating'
+             AND t.cancel_requested=0
+             AND json_extract(a.budget_json,'$.deadlineAt')<=?
+           ORDER BY t.task_id`,
+        )
+        .all(scope.tenantId, scope.spaceId, new Date(now).toISOString()) as {
+        tenant_id: string;
+        space_id: string;
+        task_id: string;
+      }[];
+      for (const row of rows)
+        this.database
+          .prepare(
+            "UPDATE team_task_journals SET cancel_requested=1,revision=revision+1 WHERE tenant_id=? AND space_id=? AND task_id=? AND status='coordinating' AND cancel_requested=0",
+          )
+          .run(row.tenant_id, row.space_id, row.task_id);
+      return rows.map((row) => ({
+        tenantId: row.tenant_id,
+        spaceId: row.space_id,
+        taskId: row.task_id,
+      }));
+    });
+  }
   #read(locator: TeamTaskLocator) {
     return decodeTeamTask(
       this.database

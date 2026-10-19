@@ -212,6 +212,39 @@ export class ExperimentalPostgresTeamTaskJournal
       taskId: row.task_id as string,
     }));
   }
+  async cancelExpiredAutonomousTasks(scope: TeamTaskScope) {
+    validateTeamTaskScope(scope);
+    this.host.assertOpen();
+    return this.#transaction(null, async (client) => {
+      const { rows: admissionTables } = await client.query(
+        "SELECT to_regclass($1) AS table_name",
+        [this.#table(AUTONOMOUS_TASK_CHILD_ADMISSIONS_TABLE)],
+      );
+      if (admissionTables[0]?.table_name === null) return [];
+      const { rows } = await client.query(
+        `SELECT t.tenant_id,t.space_id,t.task_id
+         FROM ${this.#table("team_task_journals")} t
+         JOIN ${this.#table(AUTONOMOUS_TASK_CHILD_ADMISSIONS_TABLE)} a
+           ON a.tenant_id=t.tenant_id AND a.space_id=t.space_id AND a.child_task_id=t.task_id
+         WHERE t.tenant_id=$1 AND t.space_id=$2 AND t.status='coordinating'
+           AND t.cancel_requested=0
+           AND ((a.budget_json::jsonb->>'deadlineAt')::timestamptz <= clock_timestamp())
+         ORDER BY t.task_id
+         FOR UPDATE OF t`,
+        [scope.tenantId, scope.spaceId],
+      );
+      for (const row of rows)
+        await client.query(
+          `UPDATE ${this.#table("team_task_journals")} SET cancel_requested=1,revision=revision+1 WHERE tenant_id=$1 AND space_id=$2 AND task_id=$3 AND status='coordinating' AND cancel_requested=0`,
+          [row.tenant_id, row.space_id, row.task_id],
+        );
+      return rows.map((row) => ({
+        tenantId: row.tenant_id as string,
+        spaceId: row.space_id as string,
+        taskId: row.task_id as string,
+      }));
+    });
+  }
   async #read(
     client: PoolClient | Pool,
     locator: TeamTaskLocator,

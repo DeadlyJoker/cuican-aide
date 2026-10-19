@@ -11,7 +11,7 @@ import {
 } from "./team-task-journal.ts";
 
 type RunnableTaskStore = Pick<TeamTaskJournalStore, "listRunnable" | "claim"> &
-  Partial<Pick<TeamTaskJournalStore, "read">>;
+  Partial<Pick<TeamTaskJournalStore, "read" | "cancelExpiredAutonomousTasks">>;
 
 export type TeamTaskSchedulerInput = Readonly<{
   store: RunnableTaskStore;
@@ -134,6 +134,7 @@ export class TeamTaskScheduler {
     if (this.#closed) return { started: 0, skipped: 0, capacity: 0 };
     const capacity = this.#concurrency - this.#inFlight.size;
     if (capacity <= 0) return { started: 0, skipped: 0, capacity: 0 };
+    await this.#store.cancelExpiredAutonomousTasks?.(this.#scope);
     const locators = await this.#store.listRunnable({
       ...this.#scope,
       limit: Math.min(this.#listLimit, capacity),
