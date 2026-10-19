@@ -1027,3 +1027,7 @@ Standalone Control 现在为显式 Team operations 提供 host-only terminal wai
 ## 第一百一十批：Run runtime binding 缺口审计（2026-10-19）
 
 复核 Runtime Worker 的真实路径后确认：`WorkerAgentRuntime` 按 AgentVersion resolver 返回 `toolRuntime` 与 `toolDefinitions`，普通 RunState 没有 Team task/fence 关联字段；因此当前无法仅在 Worker 侧安全判断某个 Run 是否属于 durable Team parent。Team-scoped spawn adapter 需要在 Run 创建/admission 时显式写入并校验绑定，或由受信 Team host 提供独立 runtime resource，不应在 Worker 中根据 thread 名称或普通 Run 字段猜测。
+
+## 第一百一十一批：Run binding 内部值对象（2026-10-19）
+
+新增 `TeamTaskRunBinding` 内部值对象及严格 capture：固定 tenant/space、teamTask、parentTask、admission epoch 和 capability snapshot identity，拒绝未知 authority 字段、accessor 与非法 epoch。该对象尚未接入 Run 持久化或 public projection；Application 回归 2/2、typecheck 通过，为下一步 SQLite/PostgreSQL 同事务写入提供单一校验入口。
