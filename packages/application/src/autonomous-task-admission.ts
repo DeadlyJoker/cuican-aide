@@ -25,6 +25,88 @@ export type AutonomousTaskChildAdmission = Readonly<{
   childIntent: TeamTaskIntent;
 }>;
 
+/** Model/tool-facing request; parent capability and fence are deliberately absent. */
+export type AutonomousTaskChildSpawnRequest = Readonly<
+  Omit<AutonomousTaskChildAdmission, "parentCapability">
+>;
+
+/** Captures a Team-scoped spawn request before a trusted host binds authority. */
+export function captureAutonomousTaskChildSpawnRequest(
+  input: unknown,
+): AutonomousTaskChildSpawnRequest {
+  if (
+    input === null ||
+    typeof input !== "object" ||
+    Array.isArray(input) ||
+    (Object.getPrototypeOf(input) !== Object.prototype &&
+      Object.getPrototypeOf(input) !== null)
+  )
+    invalid();
+  const keys = Reflect.ownKeys(input);
+  const allowed = [
+    "schemaVersion",
+    "idempotencyKey",
+    "parentTaskId",
+    "childTaskId",
+    "edge",
+    "budget",
+    "capability",
+    "childIntent",
+  ];
+  if (
+    keys.length !== allowed.length ||
+    keys.some((key) => typeof key !== "string" || !allowed.includes(key))
+  )
+    invalid();
+  const record: Record<string, unknown> = Object.create(null);
+  for (const key of keys as string[]) {
+    const descriptor = Object.getOwnPropertyDescriptor(input, key);
+    if (!descriptor || !descriptor.enumerable || !("value" in descriptor))
+      invalid();
+    record[key] = descriptor.value;
+  }
+  if (record.schemaVersion !== "crewon.autonomous-task-child-admission.v0")
+    invalid();
+  const idempotencyKey = record.idempotencyKey;
+  if (
+    typeof idempotencyKey !== "string" ||
+    !idempotencyKey ||
+    idempotencyKey.trim() !== idempotencyKey ||
+    idempotencyKey.length > 256
+  )
+    invalid();
+  const parentTaskId = requireId(record.parentTaskId);
+  const childTaskId = requireId(record.childTaskId);
+  const edge = captureAutonomousTaskEdgeLink(record.edge);
+  const budget = captureAutonomousTaskBudget(record.budget);
+  const capability = captureAutonomousTaskCapability(record.capability);
+  const childIntent = captureTeamTaskIntent(
+    record.childIntent as TeamTaskIntent,
+  );
+  if (
+    edge.parentTaskId !== parentTaskId ||
+    edge.childTaskId !== childTaskId ||
+    edge.depth > budget.maxDepth ||
+    edge.childOrdinal > budget.maxChildren ||
+    childIntent.taskId !== childTaskId ||
+    childIntent.tenantId !== capability.tenantId ||
+    childIntent.spaceId !== capability.spaceId ||
+    childIntent.actorId !== capability.actorId ||
+    childIntent.principalId !== capability.principalId
+  )
+    invalid();
+  return Object.freeze({
+    schemaVersion: "crewon.autonomous-task-child-admission.v0",
+    idempotencyKey,
+    parentTaskId,
+    childTaskId,
+    edge,
+    budget,
+    capability,
+    childIntent,
+  });
+}
+
 /**
  * Captures the complete child admission input before a Store transaction.
  * This does not write a task, edge, wake item or effect receipt.

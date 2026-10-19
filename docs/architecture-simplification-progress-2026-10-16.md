@@ -1015,3 +1015,7 @@ Standalone Control 现在为显式 Team operations 提供 host-only terminal wai
 ## 第一百零七批：durable Team UI 真实回流验收（2026-10-19）
 
 运行仓库现有 `test:durable-team-ui` harness：真实 standalone Control HTTP、Worker、Team scheduler、Run SSE 和 `ControlThreadRuntime` durable 分支完成一轮任务，测试 `1/1` 通过。该验收确认后续 child waiter/reader 接线没有破坏提交、最终 assistant 消息和 SSE 回流；实验入口仍默认关闭。
+
+## 第一百零八批：Team-scoped spawn request contract（2026-10-19）
+
+新增 `captureAutonomousTaskChildSpawnRequest`，作为未来显式 Team tool 的输入边界：严格拒绝 getter、未知字段和伪造 `parentCapability`，校验 child identity、edge、budget、capability 与 intent 一致性。它只返回不含 parent authority 的 spawn request，后续必须由 host fence/admission port 绑定 parent capability；当前没有接入通用模型工具或 HTTP。

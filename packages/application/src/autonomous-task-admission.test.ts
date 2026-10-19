@@ -4,7 +4,10 @@ import {
   captureAutonomousTaskBudget,
   captureAutonomousTaskCapability,
 } from "./task-lineage-policy.ts";
-import { captureAutonomousTaskChildAdmission } from "./autonomous-task-admission.ts";
+import {
+  captureAutonomousTaskChildAdmission,
+  captureAutonomousTaskChildSpawnRequest,
+} from "./autonomous-task-admission.ts";
 
 const childIntent = {
   schemaVersion: "crewon.team-task.v1" as const,
@@ -88,6 +91,20 @@ test("child admission capture binds edge, intent, capability and budget without 
     captureAutonomousTaskCapability(capability),
   );
   assert.deepEqual(captured.parentCapability, captured.capability);
+});
+
+test("spawn request capture excludes parent authority and preserves strict input", () => {
+  const { parentCapability: _parentCapability, ...request } = admission;
+  const captured = captureAutonomousTaskChildSpawnRequest(request);
+  assert.equal(captured.childTaskId, "child-task");
+  assert.equal("parentCapability" in captured, false);
+  assert.ok(Object.isFrozen(captured));
+  assert.throws(() =>
+    captureAutonomousTaskChildSpawnRequest({
+      ...request,
+      parentCapability: capability,
+    }),
+  );
 });
 
 test("child admission capture rejects mismatched identity, depth and accessors", () => {
