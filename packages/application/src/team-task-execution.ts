@@ -15,10 +15,13 @@ import {
   type TeamTaskFence,
   type TeamTaskJournalStore,
 } from "./team-task-journal.ts";
+import type { AutonomousTaskCapabilitySnapshot } from "./task-lineage-policy.ts";
 
 /** Explicit host identity and operations required by a durable Team executor. */
 export type TeamTaskExecutionHost = Readonly<{
   actor: ActorContext;
+  /** Optional host-generated capability; never populated from task/model input. */
+  autonomousCapability?: AutonomousTaskCapabilitySnapshot;
   operations: ControlTeamRuntimeClient;
   digester: ContentDigester;
   leaseDurationMs?: number;
@@ -37,12 +40,22 @@ export function createTeamTaskExecutor(input: {
       input.host.actor.spaceId !== fence.spaceId
     )
       teamJournalFail("team_task_host_scope_mismatch");
+    const capability = input.host.autonomousCapability;
+    if (
+      capability !== undefined &&
+      (capability.tenantId !== input.host.actor.tenantId ||
+        capability.spaceId !== input.host.actor.spaceId ||
+        capability.actorId !== input.host.actor.actorId ||
+        capability.principalId !== input.host.actor.principalId)
+    )
+      teamJournalFail("team_task_host_capability_scope_mismatch");
     await executeTeamTask({
       store: input.store,
       actor: input.host.actor,
       fence,
       operations: input.host.operations,
       digester: input.host.digester,
+      ...(capability === undefined ? {} : { autonomousCapability: capability }),
       ...(input.host.leaseDurationMs === undefined
         ? {}
         : { leaseDurationMs: input.host.leaseDurationMs }),
@@ -68,6 +81,7 @@ export async function executeTeamTask(input: {
   fence: TeamTaskFence;
   operations: ControlTeamRuntimeClient;
   digester: ContentDigester;
+  autonomousCapability?: AutonomousTaskCapabilitySnapshot;
   leaseDurationMs?: number;
   pollIntervalMs?: number;
   runDeadlineMs?: number;
@@ -86,6 +100,14 @@ export async function executeTeamTask(input: {
     input.actor.principalId !== task.intent.principalId
   )
     teamJournalFail("team_task_issuer_mismatch");
+  if (
+    input.autonomousCapability !== undefined &&
+    (input.autonomousCapability.tenantId !== task.intent.tenantId ||
+      input.autonomousCapability.spaceId !== task.intent.spaceId ||
+      input.autonomousCapability.actorId !== task.intent.actorId ||
+      input.autonomousCapability.principalId !== task.intent.principalId)
+  )
+    teamJournalFail("team_task_capability_scope_mismatch");
   if (task.cancelRequested) teamJournalFail("team_task_cancel_requested");
   if (task.status === "finalAccepted") return task.result!;
   const fencedOperations = operations.withTeamTaskFence

@@ -9,6 +9,7 @@ import type {
   TeamTaskFence,
   TeamTaskJournalStore,
 } from "./team-task-journal.ts";
+import type { AutonomousTaskCapabilitySnapshot } from "./task-lineage-policy.ts";
 
 const actor = {
   principalId: "principal-1",
@@ -46,4 +47,42 @@ test("Team execution host rejects a scheduler fence from another scope before St
     /team_task_host_scope_mismatch/u,
   );
   assert.equal(reads, 0);
+});
+
+test("Team execution host rejects a capability snapshot from another identity", async () => {
+  const host: TeamTaskExecutionHost = {
+    actor,
+    autonomousCapability: {
+      schemaVersion: "crewon.autonomous-task-capability.v0",
+      tenantId: actor.tenantId,
+      spaceId: actor.spaceId,
+      actorId: "other-actor",
+      principalId: actor.principalId,
+      authorityId: "authority-1",
+      runtimeGeneration: "runtime-1",
+      policySnapshotId: "policy-1",
+      workspaceBindingId: null,
+      toolPermissionMode: "requestApproval",
+    } satisfies AutonomousTaskCapabilitySnapshot,
+    operations: {} as ControlTeamRuntimeClient,
+    digester: { sha256: () => "sha256:" + "0".repeat(64) },
+  };
+  const execute = createTeamTaskExecutor({
+    host,
+    store: { read: async () => null } as unknown as TeamTaskJournalStore,
+  });
+  await assert.rejects(
+    execute(
+      {
+        tenantId: actor.tenantId,
+        spaceId: actor.spaceId,
+        taskId: "task-1",
+        ownerId: "owner-1",
+        leaseId: "lease-1",
+        epoch: 1,
+      },
+      new AbortController().signal,
+    ),
+    /team_task_host_capability_scope_mismatch/u,
+  );
 });

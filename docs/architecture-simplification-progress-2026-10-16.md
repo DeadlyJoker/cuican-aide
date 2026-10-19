@@ -927,3 +927,9 @@ child admission 输入现在同时携带 parent capability snapshot，并在 cap
 当 parent 本身是 autonomous child 时，SQLite/PostgreSQL admission 事务现在读取 parent admission 持久化的 capability JSON，并与本次提交的 `parentCapability` 精确比较。缺失/损坏按 authority corruption 拒绝，不匹配按 parent capability mismatch 拒绝；root parent 没有上级 metadata 时仍要求受信 host 提供 snapshot。
 
 该校验复用同一 parent transaction 和幂等 effect 边界，没有新增 HTTP 或模型入口。
+
+## 第八十八批：executor host capability source 边界（2026-10-19）
+
+`TeamTaskExecutionHost` 现在可接收由 host 生成的完整 capability snapshot，并在 executor 启动前校验其 tenant/space/actor/principal 与 host 和 task 一致。该字段是可选的，缺省不会把任意环境变量或模型输入转换成 capability；一旦提供，scope 不匹配立即 fail closed 且不读取 journal。
+
+新增 application executor 回归覆盖 capability snapshot 冒用。真正接入 autonomous spawn 时必须从受信 standalone/production composition 填充该字段。
