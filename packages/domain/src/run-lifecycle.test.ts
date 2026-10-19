@@ -130,6 +130,38 @@ test("freezes one valid Tool permission mode and rejects unknown modes", () => {
   );
 });
 
+test("replays an optional durable Team Run binding and enforces scope", () => {
+  const base = created() as Extract<
+    RunLifecycleEvent,
+    { type: "run.created" }
+  >;
+  const binding = {
+    schemaVersion: "crewon.team-task-run-binding.v0" as const,
+    tenantId: "tenant-1",
+    spaceId: "space-1",
+    teamTaskId: "task-1",
+    parentTaskId: "task-1",
+    admissionEpoch: 1,
+    capabilitySnapshotId: "capability-1",
+  };
+  const state = reduceRunLifecycleEvent(null, {
+    ...base,
+    data: { ...base.data, teamTaskBinding: binding },
+  });
+  assert.deepEqual(state.teamTaskBinding, binding);
+  assert.throws(
+    () =>
+      reduceRunLifecycleEvent(null, {
+        ...base,
+        data: {
+          ...base.data,
+          teamTaskBinding: { ...binding, tenantId: "tenant-other" },
+        },
+      }),
+    hasCode("team_task_binding_scope_invalid"),
+  );
+});
+
 test("rejects forged, mismatched and injected Automation Run origins", () => {
   const origin = automationOrigin("run-automation");
   for (const invalid of [

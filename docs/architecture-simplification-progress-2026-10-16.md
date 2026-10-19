@@ -1039,3 +1039,7 @@ Standalone Control 现在为显式 Team operations 提供 host-only terminal wai
 ## 第一百一十三批：Run binding 下沉到领域边界（2026-10-19）
 
 将 `TeamTaskRunBinding` 及严格 capture 从 Application 下沉到 `@crewon/domain`，Application 只保留受信 fence builder 和兼容 re-export。这样未来把 binding 写入 `run.created` 事件与 `RunState` 时不会引入 Domain 依赖 Application，也不会让 Runtime Worker 依赖应用层实现。新增领域回归 2/2、Domain 全量 406/406、Application typecheck 通过；本批仍未写入持久 Run，避免在 capability snapshot 来源未确定前伪造运行时授权。
+
+## 第一百一十四批：Run 生命周期承载 Team binding（2026-10-19）
+
+将可选 `teamTaskBinding` 接入 `run.created` 事件和 `RunState`，旧事件保持兼容；领域 reducer 对 binding 做严格 capture，并要求 tenant/space 与 Run 一致，跨作用域直接拒绝。由于 Store 持久化的是事件 JSON，现有 SQLite/PostgreSQL 回放天然保留该字段；本批尚未让普通创建命令自行生成 binding，避免在 capability snapshot 尚无受信来源时扩大授权面。Domain 全量 407/407、Application typecheck 通过。

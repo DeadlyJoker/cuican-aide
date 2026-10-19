@@ -30,6 +30,10 @@ import {
   parseWorkflowVersionIdentityId,
   type FrozenWorkflowVersionBinding,
 } from "./workflow-version.ts";
+import {
+  captureTeamTaskRunBinding,
+  type TeamTaskRunBinding,
+} from "./team-task-run-binding.ts";
 
 export const RUN_STATUSES = [
   "queued",
@@ -80,6 +84,8 @@ export type RunLifecycleEvent =
         agentVersionId: string;
         policySnapshotId: string;
         workspaceBindingId: string | null;
+        /** Present only for Runs admitted by a durable Team task. */
+        teamTaskBinding?: TeamTaskRunBinding;
         /** Present only for Workflow Runs; ordinary and legacy Runs omit it. */
         workflowVersionBinding?: FrozenWorkflowVersionBinding;
         collaborationMode: RunCollaborationMode;
@@ -322,6 +328,8 @@ export type RunState = Readonly<{
   agentVersionId: string;
   policySnapshotId: string;
   workspaceBindingId: string | null;
+  /** Present only for Runs admitted by a durable Team task. */
+  teamTaskBinding?: TeamTaskRunBinding;
   /** Present only for Workflow Runs; absence remains the compatible non-Workflow shape. */
   workflowVersionBinding?: FrozenWorkflowVersionBinding;
   collaborationMode: RunCollaborationMode;
@@ -802,6 +810,17 @@ function createRun(event: RunLifecycleEvent): RunState {
     event.data.workflowVersionBinding === undefined
       ? undefined
       : parseFrozenWorkflowVersionBinding(event.data.workflowVersionBinding);
+  const teamTaskBinding =
+    event.data.teamTaskBinding === undefined
+      ? undefined
+      : captureTeamTaskRunBinding(event.data.teamTaskBinding);
+  if (
+    teamTaskBinding !== undefined &&
+    (teamTaskBinding.tenantId !== event.data.tenantId ||
+      teamTaskBinding.spaceId !== event.data.spaceId)
+  ) {
+    throw new RunLifecycleError("team_task_binding_scope_invalid");
+  }
   if (
     event.data.collaborationMode !== "default" &&
     event.data.collaborationMode !== "plan"
@@ -889,6 +908,7 @@ function createRun(event: RunLifecycleEvent): RunState {
     agentVersionId: event.data.agentVersionId,
     policySnapshotId: event.data.policySnapshotId,
     workspaceBindingId: event.data.workspaceBindingId,
+    ...(teamTaskBinding === undefined ? {} : { teamTaskBinding }),
     ...(workflowVersionBinding === undefined ? {} : { workflowVersionBinding }),
     collaborationMode: event.data.collaborationMode,
     ...(event.data.toolPermissionMode === undefined
@@ -953,6 +973,7 @@ function validateRunCreatedDataShape(
     "purpose",
     "toolPermissionMode",
     "workflowVersionBinding",
+    "teamTaskBinding",
   ]);
   if (
     !isPlainObject(data) ||
