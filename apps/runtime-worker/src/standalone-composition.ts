@@ -41,6 +41,7 @@ import {
 import {
   createTeamTaskExecutor,
   createTeamTaskAutonomousChildAdmission,
+  createTeamTaskAutonomousChildReader,
   type TeamTaskExecutionHost,
 } from "@crewon/application/team-task-execution";
 import type {
@@ -835,6 +836,9 @@ async function composeRuntimeWorker(
                       store: journal,
                       capability,
                     }),
+                  autonomousChildReader:
+                    teamConfig.host.autonomousChildReader ??
+                    createTeamTaskAutonomousChildReader({ store: journal }),
                 } satisfies TeamTaskExecutionHost;
               })(),
             }),

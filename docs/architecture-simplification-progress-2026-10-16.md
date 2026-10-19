@@ -995,3 +995,7 @@ Standalone Control 现在为显式 Team operations 提供 host-only terminal wai
 ## 第一百零二批：父 task 绑定 child snapshot reader（2026-10-19）
 
 `TeamTaskExecutionHost` 现在可显式提供 host-only child reader；运行中的 Team client 只能读取当前 lease fence 对应 parent task 的 children，调用者不能提交另一个 parent ID。该 port 复用 journal 的组合快照，不新增 HTTP 或模型输入字段；新增 application 回归确认 tenant、space、parentTaskId 和 limit 均由父 fence 绑定。
+
+## 第一百零三批：Runtime Worker 自动绑定 child reader（2026-10-19）
+
+显式 Runtime Worker Team host 现在像 child admission 一样自动绑定同一 Team journal 的 child reader；显式传入的 host reader 优先保留。Standalone composition 回归 19/19 通过，Runtime Worker typecheck 通过。该接线仍只提供内部观察能力，未开启模型自主 spawn 或改变默认 scheduler。
