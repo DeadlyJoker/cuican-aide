@@ -70,3 +70,16 @@ test("waitForAutonomousChildren fails when a child never settles", async () => {
     /autonomous_child_wait_deadline_exceeded/u,
   );
 });
+
+test("waitForAutonomousChildren stops promptly when the parent signal aborts", async () => {
+  const controller = new AbortController();
+  const pending = waitForAutonomousChildren({
+    read: async () => [child("child-a", "coordinating")],
+    childTaskIds: ["child-a"],
+    deadlineMs: 5_000,
+    pollIntervalMs: 5_000,
+    signal: controller.signal,
+  });
+  controller.abort(new Error("parent_cancelled"));
+  await assert.rejects(pending, /parent_cancelled/u);
+});

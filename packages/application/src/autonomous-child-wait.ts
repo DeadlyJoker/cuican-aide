@@ -37,6 +37,7 @@ export async function waitForAutonomousChildren(input: {
   while (true) {
     input.signal?.throwIfAborted();
     const snapshots = await input.read({ limit: MAX_CHILD_WAIT_IDS });
+    input.signal?.throwIfAborted();
     const byId = new Map(
       snapshots.map((snapshot) => [snapshot.task.intent.taskId, snapshot]),
     );
