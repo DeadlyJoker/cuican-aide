@@ -514,7 +514,9 @@ export function CommandWorkflowPanel({
             <span>团队协作</span>
             <h3 id="team-workflow-room-title">{selected.config.name}</h3>
             <p title={workflowRoomSummary(selected, stages)}>
-              {workflowRoomSummary(selected, stages)}
+              {readOnly
+                ? "仅可查看历史记录 · 持久协作执行未启用"
+                : workflowRoomSummary(selected, stages)}
             </p>
           </div>
           <div className="workflow-room-actions">
@@ -584,8 +586,14 @@ export function CommandWorkflowPanel({
               />
               {!submittedInput && !visibleExecution && !error ? (
                 <div className="workflow-thread-empty">
-                  <strong>从一个明确目标开始</strong>
-                  <p>输入目标后，团队会按既定步骤接力完成。</p>
+                  <strong>
+                    {readOnly ? "当前仅可查看记录" : "从一个明确目标开始"}
+                  </strong>
+                  <p>
+                    {readOnly
+                      ? "服务尚未启用持久协作流执行，暂不能发起或继续运行。"
+                      : "输入目标后，团队会按既定步骤接力完成。"}
+                  </p>
                 </div>
               ) : null}
               {visibleInput ? (
@@ -762,6 +770,8 @@ export function CommandWorkflowPanel({
                 <span className="composer-state" role="status">
                   {pendingSubmission
                     ? "请恢复原请求"
+                    : readOnly
+                      ? "仅可查看历史记录"
                     : pendingGate
                       ? "等待你确认"
                       : busy || runActive
