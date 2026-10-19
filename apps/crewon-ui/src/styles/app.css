@@ -15481,6 +15481,33 @@ button.library-item:hover .library-card-chevron {
   }
 }
 
+/* A desktop window can still have a narrow conversation column when the
+ * shared sidebar and workbench are both open. Keep composer controls usable
+ * instead of letting flex items collapse to a single clipped character. */
+@media (min-width: 861px) and (max-width: 2200px) {
+  .screen-shell.command-screen .command-input .composer-controls {
+    min-width: 0;
+  }
+
+  .screen-shell.command-screen .command-input .composer-controls > :is(
+      button,
+      [role="combobox"],
+      .workspace-picker
+    ) {
+    flex: 0 1 auto;
+    min-width: 96px;
+  }
+
+  .screen-shell.command-screen .command-input .composer-controls > button span,
+  .screen-shell.command-screen
+    .command-input
+    .composer-controls
+    > [role="combobox"]
+    span {
+    min-width: 0;
+  }
+}
+
 @media (min-width: 761px) and (max-width: 860px) {
   :root[data-surface="desktop"]
     .screen-shell.command-screen
