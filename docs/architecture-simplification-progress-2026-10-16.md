@@ -873,3 +873,9 @@ PostgreSQL edge schema 现在与 SQLite 对齐，包含 child admission metadata
 新增显式 `cancelAutonomousTree` Store 操作。SQLite/PostgreSQL 都按 edge 递归枚举 descendants，在同一事务中标记 parent 和所有仍处于 coordinating 的 child；普通 `requestCancel` 语义未改变。当前 admission 集成测试同时验证 parent/child 的 durable `cancelRequested` 状态，未把 AbortSignal 当成外部副作用回滚证明。
 
 Node 24 下 Store、Control API typecheck 通过，SQLite 原子 admission 集成 1/1 通过；PostgreSQL runtime 继续因无测试库跳过。下一步补 scheduler watcher 对后代取消的端到端恢复验证。
+
+## 第七十九批：后代取消到 scheduler abort 的真实 SQLite 回流（2026-10-19）
+
+扩展原子 admission 集成场景：child 被真实 `TeamTaskScheduler` claim 后，父树调用 `cancelAutonomousTree`，durable cancellation watcher 读取 child 状态并 abort 在途 executor；测试断言 executor 收到取消、scheduler error 收敛且 scheduler 能正常 close。这个路径验证了 admission → edge → tree cancel → watcher → executor abort 的连续链路。
+
+Node 24 SQLite/Control 集成测试 1/1 通过，Store/Application/Control API typecheck 通过；PostgreSQL runtime 仍按环境缺少测试库跳过。外部副作用仍遵循未知 effect/reconcile 边界，没有把 abort 当作供应商回滚证明。

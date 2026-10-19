@@ -7,6 +7,7 @@ import { setTimeout } from "node:timers/promises";
 import { fileURLToPath } from "node:url";
 import { executeTeamTask } from "@crewon/application/team-task-execution";
 import { resolveControlTeamPlan } from "@crewon/application/team-turn";
+import { TeamTaskScheduler } from "@crewon/application/team-task-scheduler";
 import {
   TeamTaskJournalError,
   type TeamTaskIntent,
@@ -347,9 +348,49 @@ workflowDeploymentIntegrationTest(
       ),
       false,
     );
+    let childStartedResolve!: () => void;
+    const childStarted = new Promise<void>((resolve) => {
+      childStartedResolve = resolve;
+    });
+    let childAborted = false;
+    let schedulerErrors = 0;
+    const scheduler = new TeamTaskScheduler({
+      store: journal,
+      scope: { tenantId: f.actor.tenantId, spaceId: f.actor.spaceId },
+      ownerId: "autonomous-child-scheduler",
+      concurrency: 1,
+      listLimit: 10,
+      leaseDurationMs: 5000,
+      cancellationPollIntervalMs: 5,
+      createLeaseId: ({ locator, sequence }) =>
+        `autonomous-${locator.taskId}-${sequence}`,
+      execute: async (fence, signal) => {
+        assert.equal(fence.taskId, child.taskId);
+        childStartedResolve();
+        await new Promise<void>((_resolve, reject) => {
+          signal.addEventListener(
+            "abort",
+            () => {
+              childAborted = true;
+              reject(signal.reason ?? new Error("child_cancelled"));
+            },
+            { once: true },
+          );
+        });
+      },
+      onError: () => {
+        schedulerErrors++;
+      },
+    });
+    assert.equal((await scheduler.wake()).started, 1);
+    await childStarted;
     await journal.cancelAutonomousTree(parent);
     assert.equal((await journal.read(parent))?.cancelRequested, true);
     assert.equal((await journal.read(child))?.cancelRequested, true);
+    await scheduler.idle();
+    assert.equal(childAborted, true);
+    assert.equal(schedulerErrors, 1);
+    await scheduler.close();
   },
 );
 
