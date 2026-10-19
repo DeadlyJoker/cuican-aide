@@ -959,3 +959,7 @@ host admission port 在绑定时会复制并冻结 capability snapshot，后续�
 ## 第九十三批：等待期间过期 child 的真实 scheduler 回归（2026-10-19）
 
 扩展 SQLite/PostgreSQL 参数化 interruption 集成：先用短 deadline 成功写入 autonomous child，再等待其跨过 deadline，最后让真实 `TeamTaskScheduler` wake。回归确认 scheduler 在发现 runnable work 前先通过数据库事务把过期 child 标为 `cancel_requested`，有效 child 仍可被 claim，过期 child 不会进入 executor。原有 admission 失败回滚（child、edge、parent effect 均无残留）继续保留。当前环境没有 `CREWON_TEST_POSTGRES_URL`，PostgreSQL 分支仍只注册并跳过，未声称运行时验收。
+
+## 第九十四批：临时 PostgreSQL 实例双 backend 验收（2026-10-19）
+
+使用本机 PostgreSQL 服务端工具在临时数据目录和隔离端口启动一次性测试实例，未连接或修改项目数据库。`team-task-interruption.integration.test.ts` 的 SQLite 与 PostgreSQL 16 项全部通过，包含原子 admission、deadline 过期回滚、等待期间过期收敛、scheduler claim、取消 watcher、SIGKILL 租约恢复和未知 effect 恢复。测试结束后临时实例已停止；这次结果证明 PostgreSQL 事务实现和 SQLite 行为在该隔离环境中一致，但不替代生产规模或网络数据库压测。
