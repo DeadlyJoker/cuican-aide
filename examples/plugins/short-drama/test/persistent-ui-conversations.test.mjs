@@ -4,6 +4,7 @@ import { pathToFileURL } from "node:url";
 import { join } from "node:path";
 import { readFile, writeFile } from "node:fs/promises";
 import { browser, fixture, settle } from "./ui.test-support.mjs";
+import { sourceUiDefinition } from "./source-ui.test-support.mjs";
 import {
   metadataService,
   persistentProps,
@@ -12,9 +13,9 @@ const version = process.env.CREWON_EXAMPLE_PLUGIN_VERSION ?? "20.0.2";
 const directory =
   process.env.CREWON_SHORT_DRAMA_TEST_PACKAGE_DIRECTORY ??
   new URL(`../dist/${version}/`, import.meta.url).pathname;
-const { default: definition } = await import(
-  pathToFileURL(join(directory, "ui.mjs")).href
-);
+const definition = process.env.CREWON_SHORT_DRAMA_TEST_SOURCE_UI === "1"
+  ? await sourceUiDefinition()
+  : (await import(pathToFileURL(join(directory, "ui.mjs")).href)).default;
 after(async () => browser.happyDOM.close());
 function props(workspaceId = "workspace-one", ready = true) {
   const value = persistentProps(ready);

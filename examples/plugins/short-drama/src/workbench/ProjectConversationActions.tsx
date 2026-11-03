@@ -158,19 +158,25 @@ export function ProjectConversationActions({
           </button>
         </div>
         {snapshot.bindings.map((binding, index) => (
-          <div className="version-card" key={binding.threadId}>
-            <div className="panel-heading">
-              <strong>创作对话 {index + 1}</strong>
+          <div className="drama-conversation-row" key={binding.threadId}>
               <button
-                className="button secondary"
+                className="drama-conversation-link"
+                aria-label="进入对话"
+                title={`创作对话 ${index + 1}`}
+                aria-current={snapshot.openedThreadId === binding.threadId ? "page" : undefined}
                 disabled={binding.state !== "active" || controller.locked}
                 onClick={() => void controller.open(binding.threadId)}
               >
-                {snapshot.openingThreadId === binding.threadId
-                  ? "正在打开…"
-                  : "进入对话"}
+                <span>创作对话 {index + 1}</span>
+                <time dateTime={binding.createdAt}>
+                  {snapshot.openingThreadId === binding.threadId
+                    ? "正在打开…"
+                    : new Date(binding.createdAt).toLocaleDateString("zh-CN", {
+                        month: "numeric",
+                        day: "numeric",
+                      })}
+                </time>
               </button>
-            </div>
             {snapshot.sourceRefreshThreadId === binding.threadId &&
               !activeSourceExpired &&
               !snapshot.pendingSourceRefresh && (
@@ -184,10 +190,7 @@ export function ProjectConversationActions({
                   更新关联并进入
                 </button>
               )}
-            <p className="detail-note">
-              {new Date(binding.createdAt).toLocaleString("zh-CN")}
-              {binding.state === "revoked" ? " · 已停止关联" : ""}
-            </p>
+            {binding.state === "revoked" && <small>已停止关联</small>}
           </div>
         ))}
         {snapshot.nextThreadId && (

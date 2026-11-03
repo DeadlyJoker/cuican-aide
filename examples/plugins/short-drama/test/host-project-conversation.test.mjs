@@ -161,6 +161,10 @@ test("entering a project opens shared chat from the left navigation once while r
       /^project-chat-v1-[a-f0-9]{64}$/u,
     );
     assert.ok(left.container.textContent.includes("项目对话已就绪"));
+    const conversationRow = left.container.querySelector(".drama-conversation-link");
+    assert.ok(conversationRow);
+    assert.equal(conversationRow.getAttribute("aria-current"), "page");
+    assert.equal(left.container.querySelector(".drama-agent-entry .version-card"), null);
     assert.equal(
       [...left.container.querySelectorAll("button")].some((b) =>
         /开始与 Agent 对话|继续与 Agent 对话/.test(b.textContent),

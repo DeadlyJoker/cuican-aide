@@ -1941,6 +1941,50 @@
   font-size: 11px;
 }
 
+/* Conversation navigation uses compact rows, never version/output cards. */
+.drama-workbench .drama-conversation-row {
+  min-width: 0;
+}
+.drama-workbench .drama-conversation-link {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  width: 100%;
+  min-height: 32px;
+  padding: 6px 8px;
+  border: 0;
+  border-radius: 6px;
+  background: transparent;
+  color: var(--text);
+  font: inherit;
+  text-align: left;
+  cursor: pointer;
+}
+.drama-workbench .drama-conversation-link > span {
+  flex: 1;
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+.drama-workbench .drama-conversation-link > time {
+  flex: none;
+  color: var(--text-muted);
+  font-size: 11px;
+}
+.drama-workbench .drama-conversation-link:hover,
+.drama-workbench .drama-conversation-link[aria-current="page"] {
+  background: var(--surface-soft);
+}
+.drama-workbench .drama-conversation-link:focus-visible {
+  outline: 2px solid var(--accent);
+  outline-offset: -2px;
+}
+.drama-workbench .drama-conversation-link:disabled {
+  cursor: default;
+  opacity: 0.5;
+}
+
 .drama-workbench .drama-home-hero {
   align-items: flex-start;
   padding: 22px 0 10px;

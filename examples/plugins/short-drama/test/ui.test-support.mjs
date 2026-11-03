@@ -66,7 +66,7 @@ export function fixture(definition, configuration = {}) {
   assert.equal(typeof instance.dispose, "function");
   const button = (label) => {
     const found = [...container.querySelectorAll("button")].find(
-      (item) => item.textContent.trim() === label,
+      (item) => item.textContent.trim() === label || item.getAttribute("aria-label") === label,
     );
     assert.ok(found, "missing button: " + label);
     return found;
