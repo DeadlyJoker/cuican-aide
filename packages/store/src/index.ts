@@ -28,6 +28,7 @@ export * from "./sqlite-run-store.ts";
 export * from "./sqlite-model-cache-report.ts";
 export * from "./sqlite-model-usage-observation-report.ts";
 export * from "./filesystem-storage-admission.ts";
+export * from "./local-project-documents.ts";
 export * from "./workflow-version-store.ts";
 export * from "./workflow-execution-store.ts";
 export { SQLITE_SCHEMA_VERSION } from "./sqlite-schema.ts";
