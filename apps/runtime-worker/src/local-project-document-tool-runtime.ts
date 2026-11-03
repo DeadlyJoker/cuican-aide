@@ -1,4 +1,7 @@
-import { LocalProjectDocuments } from "@crewon/store/local-project-documents";
+import {
+  LocalProjectDocuments,
+  localProjectDocumentScope,
+} from "@crewon/store/local-project-documents";
 import {
   InMemoryToolBroker,
   ToolBrokerError,
@@ -50,8 +53,11 @@ export const LOCAL_PROJECT_DOCUMENT_TOOLS: readonly ToolDefinition[] = [
 
 export function createLocalProjectDocumentToolRuntime(
   root: string,
+  scope?: string,
 ): ToolRuntimePort {
-  return documentRuntime(new LocalProjectDocuments(root));
+  return documentRuntime(
+    new LocalProjectDocuments(root, scope === undefined ? undefined : { scope }),
+  );
 }
 
 export function createDeclaredLocalProjectDocumentRuntime(
@@ -83,7 +89,42 @@ export function createDeclaredLocalProjectDocumentRuntime(
     databasePath,
     tenantId,
     spaceId,
-    createRuntime: async (root) => createLocalProjectDocumentToolRuntime(root),
+    createRuntime: async (root, scope) =>
+      createLocalProjectDocumentToolRuntime(root, scope),
+    async resolveRuntimeScope({ store, runId, binding }) {
+      const conversations = store.projectConversationStore?.();
+      if (!conversations)
+        throw new Error("project_document_binding_unavailable");
+      const locator = { tenantId, spaceId, runId };
+      const required = await conversations.readRequiredStageDigest(locator);
+      const stage = await conversations.loadStageAdmission(locator);
+      if (stage === null) {
+        if (
+          required !== null ||
+          (await conversations.hasThreadBinding({
+            tenantId,
+            spaceId,
+            threadId: binding.threadId,
+          }))
+        )
+          throw new Error("project_document_binding_unavailable");
+        return undefined;
+      }
+      if (
+        required !== stage.contentDigest ||
+        stage.runId !== runId ||
+        stage.threadId !== binding.threadId ||
+        stage.actor.tenantId !== tenantId ||
+        stage.actor.spaceId !== spaceId ||
+        stage.workspaceId !== binding.workspaceId
+      )
+        throw new Error("project_document_binding_mismatch");
+      return localProjectDocumentScope({
+        tenantId,
+        spaceId,
+        projectId: stage.projectId,
+      });
+    },
   });
 }
 

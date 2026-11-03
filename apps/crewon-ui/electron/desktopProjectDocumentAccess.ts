@@ -36,9 +36,20 @@ export async function openDesktopProjectDocumentAccess(input: {
     },
   );
   if (!response.ok) throw new Error("project_document_access_denied");
+  const payload: unknown = await response.json();
+  if (
+    !payload ||
+    typeof payload !== "object" ||
+    Array.isArray(payload) ||
+    Object.keys(payload).some(
+      (key) => key !== "context" && key !== "storageScope",
+    ) ||
+    !("storageScope" in payload)
+  )
+    throw new Error("project_document_scope_invalid");
   const { context } = parseProjectConversationContextResponse(
     input.target.threadId,
-    await response.json(),
+    { context: "context" in payload ? payload.context : null },
   );
   if (
     !context ||
@@ -51,12 +62,18 @@ export async function openDesktopProjectDocumentAccess(input: {
     throw new Error("project_document_binding_mismatch");
   if (!context.binding.workspaceId)
     throw new Error("project_document_workspace_required");
+  if (
+    typeof payload.storageScope !== "string" ||
+    !/^[a-f0-9]{64}$/.test(payload.storageScope)
+  )
+    throw new Error("project_document_scope_invalid");
   input.assertCurrent();
   return desktopNativeProjectDocuments({
     owner: input.owner,
     workspaces: input.workspaces,
     target: input.target,
     expectedWorkspaceId: context.binding.workspaceId,
+    storageScope: payload.storageScope,
     async assertOperationCurrent(operation, projectId) {
       if (operation !== input.operation || projectId !== input.target.projectId)
         throw new Error("project_document_operation_mismatch");

@@ -27,11 +27,34 @@ const MAX_BYTES = 256 * 1024;
 const digest = (text: string) =>
   createHash("sha256").update(text).digest("hex");
 
+export function localProjectDocumentScope(input: {
+  tenantId: string;
+  spaceId: string;
+  projectId: string;
+}): string {
+  const values = [input.tenantId, input.spaceId, input.projectId];
+  if (
+    values.some(
+      (value) =>
+        typeof value !== "string" ||
+        !value ||
+        value.length > 256 ||
+        value.includes("\0"),
+    )
+  )
+    throw new Error("project_document_scope_invalid");
+  return digest(JSON.stringify(values));
+}
+
 /** Opt-in storage for an already authorized project root. It grants no workspace access. */
 export class LocalProjectDocuments {
   readonly #root: string;
   readonly #identity: { dev: number; ino: number };
-  constructor(projectRoot: string) {
+  readonly #prefix: readonly string[];
+  constructor(projectRoot: string, options?: { scope: string }) {
+    if (options && !/^[a-f0-9]{64}$/.test(options.scope))
+      throw new Error("project_document_scope_invalid");
+    this.#prefix = options ? ["projects", options.scope] : [];
     this.#root = resolve(projectRoot);
     this.#identity = lstatSync(this.#root);
     if (
@@ -50,9 +73,9 @@ export class LocalProjectDocuments {
       (_event, filename) => {
         if (
           filename &&
-          new RegExp(`^documents/${documentId}/[0-9]{10}\\.md$`).test(
-            String(filename).replaceAll("\\", "/"),
-          )
+          new RegExp(
+            `^${[...this.#prefix, "documents", documentId].join("/")}/[0-9]{10}\\.md$`,
+          ).test(String(filename).replaceAll("\\", "/"))
         )
           changed();
       },
@@ -73,7 +96,7 @@ export class LocalProjectDocuments {
     )
       throw new Error("project_document_root_changed");
     let path = this.#root;
-    for (const part of ["documents", documentId]) {
+    for (const part of [...this.#prefix, "documents", documentId]) {
       path = join(path, part);
       if (create) {
         try {

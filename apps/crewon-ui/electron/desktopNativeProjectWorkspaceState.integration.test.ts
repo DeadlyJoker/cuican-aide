@@ -171,6 +171,7 @@ it("Native documents resolve the original project allocation and enforce the liv
   const documents = new DesktopNativeProjectDocuments({
     nativeAuthority: f.native,
     workspaces: f.workspaces,
+    storageScope: "a".repeat(64),
     async assertOperationCurrent(operation, projectId) {
       expect(projectId).toBe(f.projectId);
       if (operation === "write" && !allowWrite)
@@ -217,6 +218,7 @@ it("existing project conversations use only their authenticated registered works
       documentId: "script",
     },
     expectedWorkspaceId: workspaceId,
+    storageScope: "a".repeat(64),
     async assertOperationCurrent() {
       if (!allowed) throw new Error("revoked");
     },
@@ -226,9 +228,31 @@ it("existing project conversations use only their authenticated registered works
     expectedRevision: 0,
     content: "原有工作空间剧本",
   });
-  expect(new LocalProjectDocuments(f.ordinary).read("script")?.content).toBe(
-    "原有工作空间剧本",
-  );
+  expect(
+    new LocalProjectDocuments(f.ordinary, { scope: "a".repeat(64) }).read(
+      "script",
+    )?.content,
+  ).toBe("原有工作空间剧本");
+  const sibling = desktopNativeProjectDocuments({
+    owner,
+    workspaces: f.workspaces,
+    target: {
+      threadId: "other-thread",
+      projectId: "other-project",
+      packageIdentity: f.packageIdentity,
+      documentId: "script",
+    },
+    expectedWorkspaceId: workspaceId,
+    storageScope: "b".repeat(64),
+    async assertOperationCurrent() {},
+  });
+  expect(await sibling.read("script")).toBeNull();
+  await sibling.save({
+    documentId: "script",
+    expectedRevision: 0,
+    content: "独立项目",
+  });
+  expect((await access.read("script"))?.content).toBe("原有工作空间剧本");
   allowed = false;
   await expect(
     access.save({
@@ -237,9 +261,11 @@ it("existing project conversations use only their authenticated registered works
       content: "不能覆盖",
     }),
   ).rejects.toThrow("revoked");
-  expect(new LocalProjectDocuments(f.ordinary).read("script")?.revision).toBe(
-    1,
-  );
+  expect(
+    new LocalProjectDocuments(f.ordinary, { scope: "a".repeat(64) }).read(
+      "script",
+    )?.revision,
+  ).toBe(1);
 });
 it("archiving after ticket preparation rejects the actual child request before Native allocation", async () => {
   const f = await fixture(),

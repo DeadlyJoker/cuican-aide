@@ -9,6 +9,7 @@ import {
 import { isAbsolute, resolve } from "node:path";
 import { SqliteRunStore } from "@crewon/store/sqlite-run-store";
 import type { RunState, ThreadState } from "@crewon/domain";
+import type { ProjectConversationStore } from "@crewon/application";
 import {
   ToolBrokerError,
   type ToolRuntimePort,
@@ -40,9 +41,17 @@ export interface DesktopWorkspaceThreadStore {
     "tenantId" | "spaceId" | "threadId" | "status" | "workspaceId"
   > | null>;
   close?(): Promise<void>;
+  projectConversationStore?(): Pick<
+    ProjectConversationStore,
+    "loadStageAdmission" | "readRequiredStageDigest" | "hasThreadBinding"
+  >;
 }
 
-type Binding = Readonly<{ workspaceId: string; root: string }>;
+type Binding = Readonly<{
+  workspaceId: string;
+  root: string;
+  threadId: string;
+}>;
 
 /** Reads only immutable Thread ownership; the selected UI workspace is irrelevant. */
 export async function resolveDesktopThreadWorkspace(config: {
@@ -83,6 +92,7 @@ export async function resolveDesktopThreadWorkspace(config: {
     throw new ToolBrokerError("desktop_workspace_thread_unbound");
   return {
     workspaceId,
+    threadId: thread.threadId,
     root: readDesktopWorkspaceRoot(config.registryPath, workspaceId),
   };
 }
@@ -174,7 +184,12 @@ type DesktopThreadWorkspaceRuntimeConfig = {
   databasePath: string;
   tenantId: string;
   spaceId: string;
-  createRuntime: (root: string) => Promise<ToolRuntimePort>;
+  createRuntime: (root: string, scope?: string) => Promise<ToolRuntimePort>;
+  resolveRuntimeScope?: (input: {
+    store: DesktopWorkspaceThreadStore;
+    runId: string;
+    binding: Binding;
+  }) => Promise<string | undefined>;
   store?: DesktopWorkspaceThreadStore;
 };
 
@@ -346,27 +361,36 @@ export class DesktopThreadWorkspaceToolRuntime implements ToolRuntimePort {
       store: this.#store,
       runId: command.runId,
     });
+    const scope = await this.#config.resolveRuntimeScope?.({
+      store: this.#store,
+      runId: command.runId,
+      binding,
+    });
+    const runtimeKey =
+      scope === undefined
+        ? binding.workspaceId
+        : JSON.stringify([binding.workspaceId, scope]);
     if (this.#closed) throw new ToolBrokerError("tool_runtime_closed");
     signal.throwIfAborted();
     const previousRoot = this.#roots.get(binding.workspaceId);
     if (previousRoot !== undefined && previousRoot !== binding.root)
       throw new ToolBrokerError("desktop_workspace_binding_changed");
-    let pending = this.#pending.get(binding.workspaceId);
+    let pending = this.#pending.get(runtimeKey);
     if (pending === undefined) {
       if (this.#pending.size >= 100)
         throw new ToolBrokerError("desktop_workspace_runtime_capacity");
       this.#roots.set(binding.workspaceId, binding.root);
       pending = this.#config
-        .createRuntime(binding.root)
+        .createRuntime(binding.root, scope)
         .then((runtime) => {
-          this.#runtimes.set(binding.workspaceId, runtime);
+          this.#runtimes.set(runtimeKey, runtime);
           return runtime;
         })
         .catch((error) => {
-          this.#pending.delete(binding.workspaceId);
+          this.#pending.delete(runtimeKey);
           throw error;
         });
-      this.#pending.set(binding.workspaceId, pending);
+      this.#pending.set(runtimeKey, pending);
     }
     const runtime = await pending;
     if (this.#closed) throw new ToolBrokerError("tool_runtime_closed");

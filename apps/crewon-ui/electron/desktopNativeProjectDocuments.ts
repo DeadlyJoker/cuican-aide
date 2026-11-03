@@ -13,6 +13,7 @@ type Input = Readonly<{
   nativeAuthority: unknown;
   workspaces: LocalWorkspaceAuthority;
   expectedWorkspaceId?: string;
+  storageScope: string;
   assertOperationCurrent(
     operation: "read" | "write",
     projectId: string,
@@ -87,6 +88,6 @@ export class DesktopNativeProjectDocuments {
       allocation.workspaceId,
     );
     source.assertCurrent();
-    return new LocalProjectDocuments(root);
+    return new LocalProjectDocuments(root, { scope: this.#input.storageScope });
   }
 }

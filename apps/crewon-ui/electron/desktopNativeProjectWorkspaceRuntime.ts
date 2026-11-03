@@ -18,6 +18,7 @@ export function desktopNativeProjectDocuments(input: {
   workspaces: LocalWorkspaceAuthority;
   target: DesktopProjectDocumentTarget;
   expectedWorkspaceId: string;
+  storageScope: string;
   assertOperationCurrent(
     operation: "read" | "write",
     projectId: string,
@@ -58,7 +59,9 @@ export function desktopNativeProjectDocuments(input: {
       input.workspaces,
       input.expectedWorkspaceId,
     );
-    const store = new LocalProjectDocuments(root);
+    const store = new LocalProjectDocuments(root, {
+      scope: input.storageScope,
+    });
     const current = async (operation: "read" | "write") => {
       await authorize(operation);
       if (
@@ -97,6 +100,7 @@ export function desktopNativeProjectDocuments(input: {
     nativeAuthority: source.nativeAuthority,
     workspaces: input.workspaces,
     expectedWorkspaceId: input.expectedWorkspaceId,
+    storageScope: input.storageScope,
     async assertOperationCurrent(operation, projectId) {
       source.assertCurrent();
       await input.assertOperationCurrent(operation, projectId);

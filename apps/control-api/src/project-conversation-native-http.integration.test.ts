@@ -11,7 +11,10 @@ import {
 import { conversationPackage } from "./project-conversation-package.test-support.ts";
 import { bindDesktopNativeProjectWorkspaceRuntime } from "../../crewon-ui/electron/desktopNativeProjectWorkspaceRuntime.ts";
 import { openDesktopProjectDocumentAccess } from "../../crewon-ui/electron/desktopProjectDocumentAccess.ts";
-import { LocalProjectDocuments } from "@crewon/store";
+import {
+  LocalProjectDocuments,
+  localProjectDocumentScope,
+} from "@crewon/store/local-project-documents";
 
 const profileId = "00000000-0000-4000-8000-000000000001";
 const standaloneUrl = new URL("./standalone-composition.ts", import.meta.url)
@@ -296,9 +299,9 @@ test(
       expectedRevision: 0,
     });
     assert.equal(
-      new LocalProjectDocuments(f.workspaces.root(target.workspaceId)).read(
-        "script",
-      )?.digest,
+      new LocalProjectDocuments(f.workspaces.root(target.workspaceId), {
+        scope: localProjectDocumentScope({ ...actor, projectId }),
+      }).read("script")?.digest,
       document.digest,
     );
     const readAccess = await access("read");
@@ -388,9 +391,9 @@ test(
     );
     await assert.rejects(access("read"), /access_denied/);
     assert.equal(
-      new LocalProjectDocuments(f.workspaces.root(target.workspaceId)).read(
-        "script",
-      )?.content,
+      new LocalProjectDocuments(f.workspaces.root(target.workspaceId), {
+        scope: localProjectDocumentScope({ ...actor, projectId }),
+      }).read("script")?.content,
       document.content,
     );
     const ordinaryBorrow = await fetch(started.origin + "/api/v1/threads", {

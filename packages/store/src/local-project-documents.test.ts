@@ -11,7 +11,66 @@ import {
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import test from "node:test";
-import { LocalProjectDocuments } from "./local-project-documents.ts";
+import {
+  LocalProjectDocuments,
+  localProjectDocumentScope,
+} from "./local-project-documents.ts";
+
+test("projects sharing one folder retain independent files and notifications while legacy files remain intact", async (t) => {
+  const { root, store: legacy } = fixture(t);
+  legacy.save({ documentId: "script", content: "legacy", expectedRevision: 0 });
+  const scopeA = localProjectDocumentScope({
+    tenantId: "tenant",
+    spaceId: "space",
+    projectId: "a",
+  });
+  const scopeB = localProjectDocumentScope({
+    tenantId: "tenant",
+    spaceId: "space",
+    projectId: "b",
+  });
+  assert.notEqual(
+    scopeA,
+    localProjectDocumentScope({
+      tenantId: "other",
+      spaceId: "space",
+      projectId: "a",
+    }),
+  );
+  const a = new LocalProjectDocuments(root, { scope: scopeA });
+  const b = new LocalProjectDocuments(root, { scope: scopeB });
+  assert.equal(a.read("script"), null);
+  let aEvents = 0;
+  const stopA = a.subscribe("script", () => aEvents++);
+  let stopB = () => {};
+  t.after(() => {
+    stopA();
+    stopB();
+  });
+  const notified = new Promise<void>((resolve) => {
+    stopB = b.subscribe("script", resolve);
+  });
+  b.save({ documentId: "script", content: "only-b", expectedRevision: 0 });
+  await Promise.race([
+    notified,
+    new Promise((_, reject) =>
+      setTimeout(() => reject(new Error("missing notification")), 3000).unref(),
+    ),
+  ]);
+  assert.equal(aEvents, 0);
+  assert.equal(a.read("script"), null);
+  a.save({ documentId: "script", content: "only-a", expectedRevision: 0 });
+  assert.equal(
+    new LocalProjectDocuments(root, { scope: scopeA }).read("script")?.content,
+    "only-a",
+  );
+  assert.equal(b.read("script")?.content, "only-b");
+  assert.equal(legacy.read("script")?.content, "legacy");
+  assert.throws(
+    () => new LocalProjectDocuments(root, { scope: "../escape" }),
+    /scope_invalid/,
+  );
+});
 
 function fixture(t: test.TestContext) {
   const root = realpathSync(mkdtempSync(join(tmpdir(), "crewon-documents-")));

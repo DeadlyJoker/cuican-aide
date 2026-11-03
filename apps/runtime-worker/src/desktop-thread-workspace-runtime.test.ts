@@ -25,9 +25,66 @@ import { createLocalWorkspaceCommandToolRuntime } from "./local-workspace-comman
 import { createConfiguredToolRuntime } from "./runtime-process-environment.ts";
 import { withToolExecutionCapacity } from "./tool-execution-capacity.ts";
 import { createLocalProjectDocumentToolRuntime } from "./local-project-document-tool-runtime.ts";
-import { LocalProjectDocuments } from "@crewon/store/local-project-documents";
+import {
+  LocalProjectDocuments,
+  localProjectDocumentScope,
+} from "@crewon/store/local-project-documents";
 
 const readTool = "mcp__workspace_checks__read_file";
+
+test("separate project scopes share a selected folder without sharing document runtimes", async (context) => {
+  const f = fixture();
+  context.after(() => rmSync(f.directory, { recursive: true, force: true }));
+  f.config.store.loadThreadInSpace = async (locator) => ({
+    ...locator,
+    status: "active",
+    workspaceId: "workspace-A",
+  });
+  const runtime = new DesktopThreadWorkspaceToolRuntime(
+    createLocalProjectDocumentToolRuntime(f.catalog),
+    {
+      ...f.config,
+      resolveRuntimeScope: async ({ runId }) =>
+        localProjectDocumentScope({
+          tenantId: "tenant",
+          spaceId: "space",
+          projectId: runId,
+        }),
+      createRuntime: async (root, scope) =>
+        createLocalProjectDocumentToolRuntime(root, scope),
+    },
+  );
+  context.after(() => runtime.close());
+  for (const id of ["A", "B"]) {
+    const result = await runtime.execute(
+      command(
+        runtime,
+        `run-${id}`,
+        "project_document_save",
+        JSON.stringify({
+          documentId: "script",
+          expectedRevision: 0,
+          content: `only-${id}`,
+        }),
+      ),
+      new AbortController().signal,
+    );
+    assert.equal(result.status, "completed");
+    assert.equal(result.result.isError, false);
+  }
+  for (const id of ["A", "B"]) {
+    const scope = localProjectDocumentScope({
+      tenantId: "tenant",
+      spaceId: "space",
+      projectId: `run-${id}`,
+    });
+    assert.equal(
+      new LocalProjectDocuments(f.roots.A, { scope }).read("script")?.content,
+      `only-${id}`,
+    );
+  }
+  assert.equal(new LocalProjectDocuments(f.roots.A).read("script"), null);
+});
 
 test("document tools retain each Thread directory across selection changes and runtime resume", async (context) => {
   const f = fixture();

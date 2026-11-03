@@ -22,7 +22,11 @@ import { loadDeviceToolRuntime } from "./device-tool-runtime-config.ts";
 import { createConfiguredLocalWorkspaceCommandToolRuntime } from "./local-workspace-command-tool-runtime.ts";
 import { createConfiguredPimSandboxToolRuntime } from "./pim-sandbox-tool-runtime.ts";
 import { DesktopThreadWorkspaceToolRuntime } from "./desktop-thread-workspace-runtime.ts";
-import { createLocalProjectDocumentToolRuntime } from "./local-project-document-tool-runtime.ts";
+import {
+  createLocalProjectDocumentToolRuntime,
+  createDeclaredLocalProjectDocumentRuntime,
+  LOCAL_PROJECT_DOCUMENT_TOOLS,
+} from "./local-project-document-tool-runtime.ts";
 
 import {
   parseNonNegativeInteger,
@@ -119,6 +123,13 @@ export async function createConfiguredToolRuntime(
       throw new Error("desktop_workspace_registry_forbidden");
     }
     const workspaceTools = await createWorkspaceTools(environment);
+    if (registryPath !== undefined) {
+      const documents = createDeclaredLocalProjectDocumentRuntime(
+        environment,
+        LOCAL_PROJECT_DOCUMENT_TOOLS,
+      );
+      if (documents) runtimes.push(documents);
+    }
     if (workspaceTools !== undefined) {
       if (registryPath === undefined) runtimes.push(workspaceTools);
       else {
@@ -225,9 +236,11 @@ async function createWorkspaceTools(
   );
   const documentRoot =
     workspaceRoot ?? environment.CREWON_DESKTOP_WORKSPACE_ROOT;
-  const documents = documentRoot
-    ? createLocalProjectDocumentToolRuntime(realpathSync(documentRoot))
-    : undefined;
+  const documents =
+    documentRoot &&
+    environment.CREWON_DESKTOP_WORKSPACE_REGISTRY_PATH === undefined
+      ? createLocalProjectDocumentToolRuntime(realpathSync(documentRoot))
+      : undefined;
   try {
     const mcp = await createConfiguredMcpRuntime(environment, workspaceRoot);
     const runtimes = [local, documents, mcp].filter(

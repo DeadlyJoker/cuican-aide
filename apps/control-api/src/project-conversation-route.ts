@@ -22,6 +22,7 @@ import type {
 } from "./control-api-ports.ts";
 import type { ProjectConversationControlOwner } from "./project-conversation-control-owner.ts";
 import { requestContext } from "./request-context.ts";
+import { localProjectDocumentScope } from "@crewon/store/local-project-documents";
 import { wakeOutbox, type OutboxWakeupPort } from "./outbox-wakeup.ts";
 
 export type ProjectConversationRouting = Pick<
@@ -105,7 +106,7 @@ export function registerProjectConversationRoutes(
         "authorization",
         "project_document_owner_unavailable",
       );
-    return parseProjectConversationContextResponse(
+    const result = parseProjectConversationContextResponse(
       threadId,
       await input.owner.getContext(
         context,
@@ -115,6 +116,16 @@ export function registerProjectConversationRoutes(
         body.operation,
       ),
     );
+    return {
+      ...result,
+      storageScope: result.context
+        ? localProjectDocumentScope({
+            tenantId: actor.tenantId,
+            spaceId: actor.spaceId,
+            projectId: result.context.binding.projectId,
+          })
+        : null,
+    };
   });
   app.post<{
     Params: { threadId: string };

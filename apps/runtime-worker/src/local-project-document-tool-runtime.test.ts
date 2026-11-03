@@ -17,6 +17,10 @@ test("real tool broker and page store share revisions, changes, conflicts and ap
     mkdtempSync(join(tmpdir(), "crewon-document-tool-")),
   );
   const runtime = createLocalProjectDocumentToolRuntime(root);
+  assert.throws(
+    () => createLocalProjectDocumentToolRuntime(root, ""),
+    /scope_invalid/,
+  );
   const page = new LocalProjectDocuments(root);
   let stop = () => {};
   try {
