@@ -55,17 +55,15 @@ export function TranscriptWindowControls({
   if (!window || !runtime) return null;
   const zh = locale === "zh";
   const disabled = busy || Boolean(replay?.selection);
-  async function navigate(cursor: string | null, includeTaskChanges = false) {
-    if (!runtime || disabled) return;
-    request.current?.abort();
+  async function reloadToolHistory() {
+    if (!runtime || !window || disabled || request.current !== null) return;
     const controller = new AbortController();
     request.current = controller;
     setBusy(true);
     setError(false);
     try {
-      await runtime.navigateTranscript(thread.id, cursor, {
+      await runtime.navigateTranscript(thread.id, window.cursor, {
         signal: controller.signal,
-        includeTaskChanges,
       });
     } catch (cause) {
       if (
@@ -83,53 +81,14 @@ export function TranscriptWindowControls({
       }
     }
   }
+  if (window.toolHistory !== "partial" && !busy && !error) return null;
   return (
-    <nav
+    <div
       className="transcript-window-controls"
-      aria-label={zh ? "对话历史" : "Conversation history"}
+      aria-label={zh ? "工具过程状态" : "Tool history status"}
       aria-busy={busy}
     >
-      <button
-        type="button"
-        disabled={disabled || window.olderCursor === null}
-        onClick={() => void navigate(window.olderCursor)}
-      >
-        {zh ? "更早消息" : "Older messages"}
-      </button>
-      <span role="status">
-        {busy
-          ? zh
-            ? "正在读取…"
-            : "Loading…"
-          : window.newerCursor !== null
-            ? zh
-              ? "正在查看历史，任务继续运行"
-              : "Viewing history; tasks keep running"
-            : zh
-              ? "最新消息"
-              : "Latest messages"}
-      </span>
-      <button
-        type="button"
-        disabled={disabled || window.newerCursor === null}
-        onClick={() => void navigate(window.newerCursor)}
-      >
-        {zh ? "较新消息" : "Newer messages"}
-      </button>
-      <button
-        type="button"
-        disabled={disabled || window.cursor === null}
-        onClick={() => void navigate(null)}
-      >
-        {zh ? "回到最新" : "Jump to latest"}
-      </button>
-      <button
-        type="button"
-        disabled={disabled}
-        onClick={() => void navigate(window.cursor, true)}
-      >
-        {zh ? "汇总文件变更" : "Summarize file changes"}
-      </button>
+      {busy ? <span role="status">{zh ? "正在读取…" : "Loading…"}</span> : null}
       {window.toolHistory === "partial" ? (
         <span className="transcript-history-note">
           {zh
@@ -138,7 +97,7 @@ export function TranscriptWindowControls({
           <button
             type="button"
             disabled={disabled}
-            onClick={() => void navigate(window.cursor)}
+            onClick={() => void reloadToolHistory()}
           >
             {zh ? "重新读取工具过程" : "Reload tool history"}
           </button>
@@ -151,6 +110,6 @@ export function TranscriptWindowControls({
             : "Loading failed. Current messages are retained; please retry."}
         </span>
       ) : null}
-    </nav>
+    </div>
   );
 }

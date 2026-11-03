@@ -319,6 +319,7 @@ export function hasKnownActiveAgentPlatformRun(input: {
 export type CommandWorkspaceControlNav = CommandControlWorkspaceNav;
 
 type CommandWorkspaceProps = {
+  workbenchOpen?: boolean;
   businessExtensionEntry?: ReactNode;
   hostModule?: CommandWorkspaceHostModule;
   hostModules?: readonly CommandWorkspaceHostModule[];
@@ -869,6 +870,7 @@ export function shouldCloseComposerPalette({
 }
 
 export function CommandWorkspace({
+  workbenchOpen = false,
   businessExtensionEntry = null,
   hostModule,
   hostModules,
@@ -991,7 +993,9 @@ export function CommandWorkspace({
   );
   const activeViewRef = useRef(activeView);
   activeViewRef.current = activeView;
-  const [sidebarCollapsed, setSidebarCollapsed] = useCommandSidebarCollapse();
+  const [sidebarCollapsed, setSidebarCollapsed] = useCommandSidebarCollapse({
+    workbenchOpen,
+  });
   const [sidebarSearchOpen, setSidebarSearchOpen] = useState(false);
   const [localSidebarSearchQuery, setLocalSidebarSearchQuery] = useState("");
   const sidebarSearchQuery = threadCatalogSearch ?? localSidebarSearchQuery;
@@ -3668,12 +3672,12 @@ export function CommandWorkspace({
                       <p className="scene-subtitle">
                         {locale === "zh"
                           ? activePluginModule?.conversationProjectId
-                            ? "项目对话尚未就绪，连接状态见左侧。"
+                            ? "从左侧选择项目会话，或新建会话开始。"
                             : projectCreationComposer.eligible
                               ? "描述你的故事想法，发送后将建立项目，与 Agent 一起完善。"
                               : "选择左侧项目即可开始对话，成果在右侧查看与编辑。"
                           : activePluginModule?.conversationProjectId
-                            ? "The project conversation is not ready. Check its status in the sidebar."
+                            ? "Choose a project conversation in the sidebar, or start a new one."
                             : "Choose a project to start chatting. View and edit results on the right."}
                       </p>
                     </header>

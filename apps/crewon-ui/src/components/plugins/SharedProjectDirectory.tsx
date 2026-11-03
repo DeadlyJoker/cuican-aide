@@ -322,7 +322,7 @@ function SharedProjectDirectory({
           {error}
         </p>
       ) : null}
-      {!projects.length ? (
+      {!projects.length && !error ? (
         <p className="sidebar-empty-hint">{busy ? "正在读取…" : "暂无项目"}</p>
       ) : null}
       {projects.map((project) => {

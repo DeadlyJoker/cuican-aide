@@ -113,6 +113,7 @@ type Candidate = {
   identity: PluginIdentity;
   controller: AbortController;
   state: "staged" | "active" | "stopped";
+  hostPublication: Promise<void> | null;
   instance: PluginUiInstance | null;
   unmanagedInstance: boolean;
   instanceTask: Promise<PluginUiInstance> | null;
@@ -307,6 +308,12 @@ export class TrustedPluginUiLoader {
     const child = root.ownerDocument.createElement("div");
     child.dataset.pluginUiRoot = lease.contributionId;
     child.dataset.pluginId = lease.descriptor.pluginId;
+    let publishHost: (() => void) | undefined;
+    const hostPublication = hostDefinition
+      ? new Promise<void>((resolve) => {
+          publishHost = resolve;
+        })
+      : null;
     const candidate: Candidate = {
       slot,
       root,
@@ -319,6 +326,7 @@ export class TrustedPluginUiLoader {
       }),
       controller: new AbortController(),
       state: "staged",
+      hostPublication,
       instance: null,
       unmanagedInstance: false,
       instanceTask: null,
@@ -436,6 +444,7 @@ export class TrustedPluginUiLoader {
       candidate.state = "active";
       slot.current = candidate;
       slot.candidate = null;
+      publishHost?.();
       if (previous) this.#discard(previous);
       return Object.freeze({
         identity: candidate.identity,
@@ -488,6 +497,10 @@ export class TrustedPluginUiLoader {
     rawInput: unknown,
     rawOptions: unknown,
   ): Promise<PluginJsonValue> {
+    // Host React effects may run while the final publication fence is pending.
+    // Their reads start only after this instance becomes the authorized owner.
+    if (candidate.state === "staged" && candidate.hostPublication)
+      await this.#await(candidate, candidate.hostPublication);
     this.#current(candidate, true);
     const action = checkedPluginUiAction(rawAction);
     const input = copyPluginUiJson(

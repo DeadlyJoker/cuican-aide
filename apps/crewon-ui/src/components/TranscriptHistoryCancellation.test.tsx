@@ -58,25 +58,29 @@ it("releases actual runtime history on selection change and unmount, then permit
   const openHistory = async (count: number) =>
     act(async () => {
       [...container.querySelectorAll<HTMLButtonElement>("button")]
-        .find((button) => button.textContent === "Older messages")!
+        .find((button) => button.textContent === "Reload tool history")!
         .click();
       await vi.waitFor(() => expect(signals).toHaveLength(count));
     });
   try {
     await render(thread.id);
     await openHistory(4);
-    expect(container.querySelector("nav")?.getAttribute("aria-busy")).toBe(
-      "true",
-    );
+    expect(
+      container
+        .querySelector(".transcript-window-controls")
+        ?.getAttribute("aria-busy"),
+    ).toBe("true");
     await render("another-thread");
     await vi.waitFor(() => {
       expect(signals.every((signal) => signal.aborted)).toBe(true);
       expect(controlHistoryReadBudget.usage.active).toBe(0);
     });
     expect(container.querySelector('[role="alert"]')).toBeNull();
-    expect(container.querySelector("nav")?.getAttribute("aria-busy")).toBe(
-      "false",
-    );
+    expect(
+      container
+        .querySelector(".transcript-window-controls")
+        ?.getAttribute("aria-busy"),
+    ).toBe("false");
     await render(thread.id);
     await openHistory(8);
     expect(signals.slice(4).every((signal) => !signal.aborted)).toBe(true);

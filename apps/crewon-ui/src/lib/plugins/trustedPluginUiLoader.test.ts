@@ -33,6 +33,47 @@ async function mount(harness: ReturnType<typeof uiHarness>, lease = uiLease()) {
 }
 
 describe("trusted UI loader (explicit importer unit tests)", () => {
+  it.each([true, false])(
+    "defers initial host reads until publication authorization succeeds (%s)",
+    async (authorized) => {
+      const h = uiHarness();
+      const publication = deferred<void>();
+      h.ports.validateMount
+        .mockResolvedValueOnce(undefined)
+        .mockResolvedValueOnce(undefined)
+        .mockImplementationOnce(() => publication.promise);
+      let read: Promise<PluginJsonValue> | undefined;
+      const mounted = h.loader.mount({
+        root: h.root,
+        lease: uiLease(),
+        props: uiProps(),
+        hostDefinition: {
+          apiVersion: "crewon.plugin-ui.v1",
+          pluginId: uiLease().descriptor.pluginId,
+          mount(_root, _props, services) {
+            read = services.invoke("crewon.test.read", {}, {});
+            void read.catch(() => undefined);
+            return { update() {}, dispose() {} };
+          },
+        },
+      });
+      await flush();
+      expect(read).toBeDefined();
+      expect(h.ports.invoke).not.toHaveBeenCalled();
+      if (authorized) {
+        publication.resolve();
+        handles.push(await mounted);
+        await expect(read).resolves.toEqual({ echoed: {} });
+        expect(h.ports.invoke).toHaveBeenCalledTimes(1);
+      } else {
+        publication.reject(new Error("revoked"));
+        await expect(mounted).rejects.toThrow();
+        await expect(read).rejects.toThrow();
+        expect(h.ports.invoke).not.toHaveBeenCalled();
+      }
+    },
+  );
+
   it("reuses live mount authorization and services for a host-provided directory", async () => {
     const h = uiHarness();
     let services: PluginUiServices | undefined;

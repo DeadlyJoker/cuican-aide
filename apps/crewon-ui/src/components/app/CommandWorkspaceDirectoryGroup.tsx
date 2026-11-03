@@ -45,7 +45,12 @@ export function CommandWorkspaceDirectoryGroup({
       )}
       data-workspace-id={id}
     >
-      <div className="space-title real-workspace-title">
+      <div
+        className={classNames(
+          "space-title real-workspace-title",
+          onOpen && "workspace-title-split",
+        )}
+      >
         {onOpen ? (
           <>
             <button

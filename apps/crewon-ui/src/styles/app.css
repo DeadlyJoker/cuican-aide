@@ -15034,6 +15034,15 @@ button.library-item:hover .library-card-chevron {
   color: var(--n-600);
 }
 
+.screen-shell.command-screen .real-workspace-title.workspace-title-split {
+  grid-template-columns: 18px minmax(0, 1fr) auto;
+  gap: 4px;
+}
+
+.screen-shell.command-screen .tree-head-label {
+  margin-right: auto;
+}
+
 .screen-shell.command-screen .workspace-directory-disclosure svg {
   width: 14px;
   height: 14px;

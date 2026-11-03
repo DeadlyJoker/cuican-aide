@@ -33,6 +33,44 @@ vi.mock("@crewon/contracts/project-conversations", async (original) => ({
 Object.assign(globalThis, { IS_REACT_ACT_ENVIRONMENT: true });
 
 describe("shared plugin project directory", () => {
+  it("shows a retryable failure without presenting a failed read as an empty directory", async () => {
+    api.list.mockRejectedValueOnce(new Error("unavailable"));
+    const root = document.createElement("div");
+    document.body.append(root);
+    const definition = sharedProjectDirectoryDefinition({
+      pluginId: "test.plugin",
+      contributionId: "workbench",
+      client: {} as ControlApiClient,
+    });
+    let instance: Awaited<ReturnType<typeof definition.mount>>;
+    try {
+      await act(async () => {
+        instance = await definition.mount(
+          root,
+          {
+            schemaVersion: "crewon.plugin-ui-props.v1",
+            contributionId: "workbench",
+            theme: { mode: "light", tokens: {} },
+            data: { locale: "zh" },
+          } as PluginUiProps,
+          { invoke: vi.fn() },
+        );
+      });
+      expect(root.textContent).toContain("目录暂不可用，请重试。");
+      expect(root.textContent).not.toContain("暂无项目");
+      await act(async () =>
+        root
+          .querySelector<HTMLButtonElement>('[aria-label="刷新项目"]')!
+          .click(),
+      );
+      expect(root.textContent).toContain("重录");
+      expect(root.textContent).not.toContain("目录暂不可用");
+    } finally {
+      await act(async () => instance?.dispose());
+      root.remove();
+    }
+  });
+
   it("uses workspace rows and lazy conversation rows without the old duplicate cards", async () => {
     const root = document.createElement("div");
     document.body.append(root);
@@ -62,6 +100,7 @@ describe("shared plugin project directory", () => {
       );
     });
     expect(root.querySelectorAll(".real-workspace-node")).toHaveLength(2);
+    expect(root.querySelectorAll(".workspace-title-split")).toHaveLength(2);
     expect(root.querySelectorAll(".command-sidebar-thread-row")).toHaveLength(
       1,
     );
