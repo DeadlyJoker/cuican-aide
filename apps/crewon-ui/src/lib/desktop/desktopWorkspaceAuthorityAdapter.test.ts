@@ -23,6 +23,31 @@ const request = {
 } as const;
 
 describe("desktopWorkspaceAuthorityAdapter", () => {
+  it("removes exactly one workspace while retaining its archived identity", async () => {
+    const first = { workspaceId: "workspace-a", displayName: "Project A" };
+    const second = { workspaceId: "workspace-b", displayName: "Project B" };
+    const before = status({ current: first, workspaces: [first, second] });
+    const snapshot = status({
+      revision: 5,
+      current: null,
+      workspaces: [second],
+      archivedWorkspaceIds: [first.workspaceId],
+    });
+    const invoke = vi
+      .fn<Invoke>()
+      .mockResolvedValueOnce(before)
+      .mockResolvedValueOnce({ outcome: "committed", snapshot });
+    expect(
+      await createDesktopWorkspaceAuthorityAdapter(invoke).remove!(
+        first.workspaceId,
+        request,
+      ),
+    ).toEqual({ outcome: "committed", snapshot });
+    expect(invoke.mock.calls[1]).toEqual([
+      "desktop_workspace_remove",
+      { workspaceId: first.workspaceId, request },
+    ]);
+  });
   it("keeps missing-folder IPC failures uncertain while exposing only a safe directory hint", async () => {
     const workspaces = [
       { workspaceId: "workspace-a", displayName: "Project A" },

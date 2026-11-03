@@ -9,6 +9,7 @@ import type { PluginUiPageNavigation } from "../plugins/pluginUiPageNavigation";
 import { createProjectChatCreation } from "../plugins/projectChatCreation";
 import { PluginUiLoaderError } from "../plugins/pluginUiValidation";
 import type { ControlThreadRuntime } from "../control-runtime/controlThreadRuntime";
+import { desktopWorkspaceAuthority } from "../desktop/desktopWorkspaceAuthorityAdapter";
 
 /** Borrows the existing account, mounted host and task navigation; no second chat runtime. */
 export function useInstalledPluginProjectChatCreation<
@@ -85,6 +86,14 @@ export function useInstalledPluginProjectChatCreation<
           ])
         : JSON.stringify([scope.client.requestOrigin, scope.sessionKey]),
       assertCurrent,
+      currentWorkspaceId: async () => {
+        assertCurrent();
+        const status = await desktopWorkspaceAuthority()?.status();
+        assertCurrent();
+        if (status && status.availability !== "available")
+          throw new PluginUiLoaderError("plugin_ui_task_runtime_unavailable");
+        return status?.current?.workspaceId ?? null;
+      },
       acquire: (module, signal) =>
         host.acquireMount(module.plugin, module.contributionId, signal),
       release: (lease) => host.loader.closeUnusedMount(lease),

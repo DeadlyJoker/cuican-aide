@@ -105,6 +105,29 @@ test("actual SQLite HTTP admission preserves workspace ownership across selectio
   });
   assert.equal(forked.statusCode, 201, forked.body);
   assert.equal(forked.json().thread.workspaceId, "workspace-a");
+  writeFileSync(
+    registryPath,
+    JSON.stringify({
+      ...registry,
+      revision: 3,
+      activeWorkspaceId: "workspace-b",
+      archivedWorkspaceIds: ["workspace-a"],
+    }),
+  );
+  const afterRemoval = await runtime.app.inject({
+    method: "GET",
+    url: `/api/v1/threads/${thread.threadId}`,
+    headers,
+  });
+  assert.equal(afterRemoval.statusCode, 200);
+  assert.equal(afterRemoval.json().thread.workspaceId, "workspace-a");
+  const newAfterRemoval = await runtime.app.inject({
+    method: "POST",
+    url: "/api/v1/threads",
+    headers: { ...headers, "idempotency-key": "after-removal" },
+    payload: { title: null, workspaceId: "workspace-a" },
+  });
+  assert.equal(newAfterRemoval.statusCode, 404);
 });
 
 test("desktop registry configuration is explicit and forbidden in production", () => {

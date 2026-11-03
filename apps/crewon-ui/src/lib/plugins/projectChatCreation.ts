@@ -36,6 +36,7 @@ type Intent = {
   projectId: string | null;
   threadId: string | null;
   workspaceId: string | null;
+  legacyWorkspaceCaptured?: true;
   binding: PublicProjectConversationBinding | null;
   threadRevision: number | null;
   runId: string | null;
@@ -59,6 +60,7 @@ export type ProjectChatCreationPorts = Readonly<{
     binding: PublicProjectConversationBinding,
   ): void;
   diagnostic(error: unknown): void;
+  currentWorkspaceId?(): Promise<string | null>;
 }>;
 
 /** User Send starts a project directly. Every write uses existing authenticated APIs and stable original keys. */
@@ -92,7 +94,7 @@ export function createProjectChatCreation(ports: ProjectChatCreationPorts) {
     const run = async () => {
       ports.assertCurrent();
       const previous = ports.storage.getItem(storageKey);
-      const intent =
+      const intent: Intent =
         previous === null
           ? {
               version: 1 as const,
@@ -130,8 +132,21 @@ export function createProjectChatCreation(ports: ProjectChatCreationPorts) {
           await invoke(PROJECT_CREATION_CONTEXT_ACTION, {}),
         );
         if (
-          creationContext.workspaceMode === "legacy-nullable" &&
-          intent.workspaceId !== null
+          !intent.legacyWorkspaceCaptured &&
+          intent.projectId === null &&
+          intent.workspaceId === null &&
+          creationContext.workspaceMode === "legacy-nullable"
+        ) {
+          intent.workspaceId = (await ports.currentWorkspaceId?.()) ?? null;
+          intent.legacyWorkspaceCaptured = true;
+          save();
+        }
+        if (
+          (creationContext.workspaceMode === "legacy-nullable" &&
+            intent.workspaceId !== null &&
+            !intent.legacyWorkspaceCaptured) ||
+          (creationContext.workspaceMode !== "legacy-nullable" &&
+            intent.legacyWorkspaceCaptured)
         )
           throw new Error("project_chat_workspace_mode_changed");
         if (intent.projectId === null) {
@@ -308,12 +323,15 @@ function readIntent(raw: string): Intent {
           "projectId",
           "threadId",
           "workspaceId",
+          "legacyWorkspaceCaptured",
           "binding",
           "threadRevision",
           "runId",
         ].includes(key),
     ) ||
     v.version !== 1 ||
+    (v.legacyWorkspaceCaptured !== undefined &&
+      v.legacyWorkspaceCaptured !== true) ||
     typeof v.key !== "string" ||
     !/^[a-f0-9-]{36}$/u.test(v.key) ||
     typeof v.content !== "string" ||

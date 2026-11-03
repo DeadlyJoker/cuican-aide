@@ -410,6 +410,13 @@ describe("plugin panels in the formal Agent shell", () => {
     );
     await click('[data-plugin-navigation-target="first"]');
     expect(
+      (
+        container.querySelector(
+          '[data-workspace-session-scope="global"]',
+        ) as HTMLElement | null
+      )?.hidden,
+    ).toBe(true);
+    expect(
       container.querySelector(
         '[data-plugin-navigation-target="first"] .lucide-film',
       ),

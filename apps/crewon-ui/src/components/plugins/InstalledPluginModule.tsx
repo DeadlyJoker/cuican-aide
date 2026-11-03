@@ -35,6 +35,8 @@ import {
 } from "../../lib/plugins/useInstalledPluginProjectSelectionContext";
 
 import styles from "./InstalledPluginModule.module.css";
+import { LocalProjectDocumentPanel } from "./LocalProjectDocumentPanel";
+import { sharedProjectDirectoryDefinition } from "./SharedProjectDirectory";
 import { isTransientPluginUiValidationError } from "../../lib/plugins/pluginUiPresentationUpdate";
 import { PluginUiLeaseRenewalDeferredError } from "../../lib/plugins/pluginUiLeaseLifecycle";
 import { PluginUiLoaderError } from "../../lib/plugins/pluginUiValidation";
@@ -112,6 +114,38 @@ export function InstalledPluginModule({
       requirement.apiVersion === "1",
   );
   const pageContext = uiPage?.context;
+  const [localFiles, setLocalFiles] = useState(false);
+  const localProjectId =
+    pageContext &&
+    typeof pageContext === "object" &&
+    !Array.isArray(pageContext) &&
+    "projectId" in pageContext &&
+    typeof pageContext.projectId === "string"
+      ? pageContext.projectId
+      : null;
+  const directoryDefinition = useMemo(() => {
+    if (
+      surface !== "sidebar" ||
+      !projectWorkspaceChangeClient ||
+      !["crewon.creative-projects", "crewon.project-conversations"].every(
+        (service) =>
+          module.plugin.descriptor.requires.some(
+            (requirement) =>
+              requirement.service === service && requirement.apiVersion === "1",
+          ),
+      )
+    )
+      return undefined;
+    const contribution = module.plugin.descriptor.contributions.find(
+      (entry) =>
+        entry.kind === "module" && entry.surfaces?.includes("workbench"),
+    );
+    return sharedProjectDirectoryDefinition({
+      pluginId: module.plugin.descriptor.pluginId,
+      contributionId: contribution?.id ?? module.contributionId,
+      client: projectWorkspaceChangeClient,
+    });
+  }, [surface, module, projectWorkspaceChangeClient]);
   const workspaceRevision = useInstalledPluginWorkspaceRevision({
     client:
       active && surface === "workbench" ? projectWorkspaceChangeClient : null,
@@ -487,6 +521,45 @@ export function InstalledPluginModule({
     );
   return (
     <div className={styles.module}>
+      {surface === "workbench" && localProjectId && selectedThreadId ? (
+        <>
+          <div
+            className={styles.documentTabs}
+            role="group"
+            aria-label="项目视图"
+          >
+            <button
+              type="button"
+              aria-pressed={!localFiles}
+              onClick={() => setLocalFiles(false)}
+            >
+              项目页面
+            </button>
+            <button
+              type="button"
+              aria-pressed={localFiles}
+              onClick={() => setLocalFiles(true)}
+            >
+              本地文件
+            </button>
+          </div>
+          <div hidden={!localFiles} className={styles.content}>
+            <LocalProjectDocumentPanel
+              key={`${localProjectId}:${selectedThreadId}`}
+              target={{
+                projectId: localProjectId,
+                threadId: selectedThreadId,
+                packageIdentity: {
+                  pluginId: module.plugin.descriptor.pluginId,
+                  publisherId: module.plugin.descriptor.publisherId,
+                  version: module.plugin.descriptor.version,
+                  packageDigest: module.plugin.packageDigest,
+                },
+              }}
+            />
+          </div>
+        </>
+      ) : null}
       {ready !== context ? (
         <p role="status">
           {locale === "zh" ? "正在加载模块…" : "Loading module…"}
@@ -502,12 +575,17 @@ export function InstalledPluginModule({
         />
       ) : null}
       <PluginModuleMount
-        className={styles.content}
+        className={
+          localFiles && localProjectId && selectedThreadId
+            ? styles.hiddenContent
+            : styles.content
+        }
         active={active}
         loader={host.loader}
         acquireMount={acquireMount}
         mountKey={module.mountKey}
         props={props}
+        hostDefinition={directoryDefinition}
         onError={report}
         onMounted={onMounted}
       />

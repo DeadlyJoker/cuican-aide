@@ -47,6 +47,7 @@ export {
 export {
   parseInstalledPluginPeerRequest,
   parseInstalledPluginPeerResponse,
+  compactInstalledPluginPeerCatalog,
 } from "./installed-plugin-peer-api.ts";
 export { InstalledPluginPeerContractError } from "./installed-plugin-peer-values.ts";
 export {

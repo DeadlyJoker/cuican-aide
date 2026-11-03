@@ -263,6 +263,7 @@ export class ProjectConversationControlOwner {
     actor: ActorContext,
     threadId: string,
     signal?: AbortSignal,
+    documentOperation?: "read" | "write",
   ) {
     return this.#track(() =>
       this.runAuthenticatedRequest(
@@ -284,12 +285,12 @@ export class ProjectConversationControlOwner {
               context: null,
             } as import("@crewon/contracts/project-conversations").ProjectConversationContextResponse,
             read: (authority, options) =>
-              this.#input.service.getContext(
-                actor,
-                { threadId },
-                authority,
-                options,
-              ),
+              this.#input.service.getContext(actor, { threadId }, authority, {
+                ...options,
+                ...(documentOperation === undefined
+                  ? {}
+                  : { documentOperation }),
+              }),
           }),
       ),
     );

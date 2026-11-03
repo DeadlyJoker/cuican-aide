@@ -112,6 +112,77 @@ async function withMountedSidebar(
 }
 
 describe("CommandSidebar", () => {
+  it("collapses individual spaces and confirms removal through the native callback", async () => {
+    const onRemove = vi.fn();
+    const onActivate = vi.fn();
+    await withMountedSidebar(
+      <CommandSidebar
+        activeView="command"
+        cwd=""
+        isSearchOpen={false}
+        linkedThreads={[
+          {
+            id: "thread-a",
+            workspaceId: "workspace-a",
+            cwd: null,
+            title: "Retained task",
+            preview: "",
+            updatedLabel: "Today",
+          },
+        ]}
+        locale="zh"
+        query=""
+        selectedLinkedThreadId={null}
+        slots={sidebarSlots}
+        workspaceAuthority="control"
+        controlWorkspace={{
+          name: "Project A",
+          workspaceId: "workspace-a",
+          workspaces: [
+            { workspaceId: "workspace-a", displayName: "Project A" },
+          ],
+          busy: false,
+          onRemove,
+          onActivate,
+        }}
+        onCloseSearch={vi.fn()}
+        onNewThread={vi.fn()}
+        onOpenLinkedThread={vi.fn()}
+        onQueryChange={vi.fn()}
+        onSwitchView={vi.fn()}
+        onToggleCollapse={vi.fn()}
+        onToggleSearch={vi.fn()}
+      />,
+      async () => {
+        const toggle = document.querySelector<HTMLButtonElement>(
+          '[aria-controls="workspace-threads-workspace-a"]',
+        )!;
+        await act(async () => toggle.click());
+        expect(toggle.getAttribute("aria-expanded")).toBe("false");
+        expect(
+          document.getElementById("workspace-threads-workspace-a")?.hidden,
+        ).toBe(true);
+        expect(onActivate).not.toHaveBeenCalled();
+        await act(async () => toggle.click());
+        expect(
+          document.getElementById("workspace-threads-workspace-a")?.hidden,
+        ).toBe(false);
+        const remove = document.querySelector<HTMLButtonElement>(
+          '[data-workspace-id="workspace-a"] button[aria-label*="移出"]',
+        )!;
+        await act(async () => remove.click());
+        expect(
+          document.querySelector('[role="dialog"]')?.textContent,
+        ).toContain("本地文件和历史会话会保留");
+        await act(async () =>
+          document
+            .querySelector<HTMLButtonElement>('[role="dialog"] button.danger')!
+            .click(),
+        );
+        expect(onRemove).toHaveBeenCalledExactlyOnceWith("workspace-a");
+      },
+    );
+  });
   it.each([
     ["zh", false, "折叠侧栏"],
     ["zh", true, "展开侧栏"],

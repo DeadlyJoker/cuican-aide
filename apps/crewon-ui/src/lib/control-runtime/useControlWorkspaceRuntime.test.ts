@@ -681,7 +681,9 @@ describe("ControlWorkspaceRuntimeComposition", () => {
 function composition(config: {
   controlConfigured: boolean;
   nativeAuthority?: DesktopWorkspaceAuthorityPort | null;
-  idempotencyKey?: (operation: "activate" | "clear" | "select") => string;
+  idempotencyKey?: (
+    operation: "activate" | "clear" | "select" | "remove",
+  ) => string;
   rehydrateThreadAuthority?: (threadId: string) => Promise<void>;
 }) {
   const runtime = fakeRuntime();

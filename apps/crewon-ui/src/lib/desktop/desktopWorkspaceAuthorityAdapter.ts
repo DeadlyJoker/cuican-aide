@@ -23,6 +23,7 @@ export type DesktopWorkspaceStatus = Readonly<{
   current: Readonly<{ workspaceId?: string; displayName: string }> | null;
   /** Omitted only by a legacy host that predates the native registry. */
   workspaces?: readonly DesktopWorkspaceSummary[];
+  archivedWorkspaceIds?: readonly string[];
 }>;
 
 export type DesktopWorkspaceSummary = Readonly<{
@@ -60,6 +61,10 @@ export interface DesktopWorkspaceAuthorityPort {
     request: DesktopWorkspaceMutationRequest,
   ): Promise<DesktopWorkspaceClearResponse>;
   clear(
+    request: DesktopWorkspaceMutationRequest,
+  ): Promise<DesktopWorkspaceClearResponse>;
+  remove?(
+    workspaceId: string,
     request: DesktopWorkspaceMutationRequest,
   ): Promise<DesktopWorkspaceClearResponse>;
 }
@@ -290,6 +295,50 @@ export function createDesktopWorkspaceAuthorityAdapter(
         { workspaceId: parsedId },
       );
     },
+    async remove(workspaceId, request) {
+      const parsedId = parseWorkspaceId(workspaceId);
+      const prepared = await prepareMutation(request);
+      if (
+        !prepared.before.workspaces?.some(
+          (entry) => entry.workspaceId === parsedId,
+        )
+      )
+        throw new DesktopWorkspaceProtocolError("desktop_workspace_id_unknown");
+      return invokeMutation(
+        "desktop_workspace_remove",
+        prepared.request,
+        (value) => {
+          requireWireSize(value, MUTATION_RESPONSE_WIRE_MAX_BYTES);
+          exactObject(value, ["outcome", "snapshot"]);
+          const snapshot = parseStatus(value.snapshot);
+          const expectedWorkspaces = prepared.before.workspaces?.filter(
+            (entry) => entry.workspaceId !== parsedId,
+          );
+          const expectedCurrent =
+            prepared.before.current?.workspaceId === parsedId
+              ? null
+              : prepared.before.current;
+          if (
+            value.outcome !== "committed" ||
+            snapshot.availability !== "available" ||
+            snapshot.revision !== prepared.before.revision + 1 ||
+            snapshot.supervisorGeneration <
+              prepared.before.supervisorGeneration ||
+            !sameCurrentWorkspace(snapshot.current, expectedCurrent) ||
+            JSON.stringify(snapshot.workspaces) !==
+              JSON.stringify(expectedWorkspaces) ||
+            JSON.stringify(snapshot.archivedWorkspaceIds) !==
+              JSON.stringify([
+                ...(prepared.before.archivedWorkspaceIds ?? []),
+                parsedId,
+              ])
+          )
+            throw new DesktopWorkspaceProtocolError();
+          return { outcome: "committed", snapshot };
+        },
+        { workspaceId: parsedId },
+      );
+    },
   };
 }
 
@@ -310,6 +359,12 @@ export function desktopWorkspaceAuthority(): DesktopWorkspaceAuthorityPort | nul
           return bridge.clear(args?.request);
         case "desktop_workspace_activate":
           return bridge.activate(args?.workspaceId as string, args?.request);
+        case "desktop_workspace_remove":
+          if (!bridge.remove)
+            throw new DesktopWorkspaceProtocolError(
+              "desktop_workspace_remove_unavailable",
+            );
+          return bridge.remove(args?.workspaceId as string, args?.request);
         default:
           throw new Error("desktop_workspace_command_unknown");
       }
@@ -381,7 +436,11 @@ function sameWorkspaceRoster(
   left: DesktopWorkspaceStatus,
   right: DesktopWorkspaceStatus,
 ): boolean {
-  return JSON.stringify(left.workspaces) === JSON.stringify(right.workspaces);
+  return (
+    JSON.stringify(left.workspaces) === JSON.stringify(right.workspaces) &&
+    JSON.stringify(left.archivedWorkspaceIds ?? []) ===
+      JSON.stringify(right.archivedWorkspaceIds ?? [])
+  );
 }
 
 function parseClearResponse(
@@ -439,6 +498,10 @@ function parseStatus(value: unknown): DesktopWorkspaceStatus {
     typeof value === "object" &&
     value !== null &&
     Object.hasOwn(value, "workspaces");
+  const hasArchived =
+    typeof value === "object" &&
+    value !== null &&
+    Object.hasOwn(value, "archivedWorkspaceIds");
   exactObject(value, [
     "schemaVersion",
     "availability",
@@ -446,6 +509,7 @@ function parseStatus(value: unknown): DesktopWorkspaceStatus {
     "supervisorGeneration",
     "current",
     ...(hasRoster ? ["workspaces"] : []),
+    ...(hasArchived ? ["archivedWorkspaceIds"] : []),
   ]);
   if (value.schemaVersion !== STATUS_SCHEMA_VERSION) {
     throw new DesktopWorkspaceProtocolError();
@@ -453,6 +517,21 @@ function parseStatus(value: unknown): DesktopWorkspaceStatus {
   const availability = parseAvailability(value.availability);
   const current = parseCurrent(value.current);
   const workspaces = hasRoster ? parseWorkspaces(value.workspaces) : undefined;
+  const archivedWorkspaceIds = hasArchived
+    ? value.archivedWorkspaceIds
+    : undefined;
+  if (
+    hasArchived &&
+    (!Array.isArray(archivedWorkspaceIds) ||
+      archivedWorkspaceIds.length > 100 ||
+      new Set(archivedWorkspaceIds).size !== archivedWorkspaceIds.length ||
+      archivedWorkspaceIds.some(
+        (id) =>
+          parseWorkspaceId(id) !== id ||
+          workspaces?.some((entry) => entry.workspaceId === id),
+      ))
+  )
+    throw new DesktopWorkspaceProtocolError();
   if (
     workspaces &&
     current &&
@@ -472,6 +551,9 @@ function parseStatus(value: unknown): DesktopWorkspaceStatus {
     supervisorGeneration: canonicalInteger(value.supervisorGeneration),
     current,
     ...(workspaces ? { workspaces } : {}),
+    ...(hasArchived
+      ? { archivedWorkspaceIds: archivedWorkspaceIds as string[] }
+      : {}),
   };
 }
 

@@ -24,8 +24,83 @@ import {
 import { createLocalWorkspaceCommandToolRuntime } from "./local-workspace-command-tool-runtime.ts";
 import { createConfiguredToolRuntime } from "./runtime-process-environment.ts";
 import { withToolExecutionCapacity } from "./tool-execution-capacity.ts";
+import { createLocalProjectDocumentToolRuntime } from "./local-project-document-tool-runtime.ts";
+import { LocalProjectDocuments } from "@crewon/store/local-project-documents";
 
 const readTool = "mcp__workspace_checks__read_file";
+
+test("document tools retain each Thread directory across selection changes and runtime resume", async (context) => {
+  const f = fixture();
+  context.after(() => rmSync(f.directory, { recursive: true, force: true }));
+  const createRuntime = async (root: string) =>
+    createLocalProjectDocumentToolRuntime(root);
+  let runtime = new DesktopThreadWorkspaceToolRuntime(
+    await createRuntime(f.catalog),
+    { ...f.config, createRuntime },
+  );
+  context.after(() => runtime.close());
+  const signal = new AbortController().signal;
+  const saves = await Promise.all(
+    ["A", "B"].map((id) =>
+      runtime.execute(
+        command(
+          runtime,
+          `run-${id}`,
+          "project_document_save",
+          JSON.stringify({
+            documentId: "script",
+            expectedRevision: 0,
+            content: `only-${id}`,
+          }),
+        ),
+        signal,
+      ),
+    ),
+  );
+  assert.ok(
+    saves.every(
+      (result) => result.status === "completed" && !result.result.isError,
+    ),
+    JSON.stringify(saves),
+  );
+  f.select("B");
+  assert.equal(
+    new LocalProjectDocuments(f.roots.A).read("script")?.content,
+    "only-A",
+  );
+  assert.equal(
+    new LocalProjectDocuments(f.roots.B).read("script")?.content,
+    "only-B",
+  );
+  await runtime.close();
+  runtime = new DesktopThreadWorkspaceToolRuntime(
+    await createRuntime(f.catalog),
+    { ...f.config, createRuntime },
+  );
+  const read = await runtime.execute(
+    command(
+      runtime,
+      "run-A",
+      "project_document_read",
+      JSON.stringify({ documentId: "script" }),
+    ),
+    signal,
+  );
+  assert.equal(read.status, "completed");
+  assert.equal(JSON.parse(read.result.output).content, "only-A");
+  await assert.rejects(
+    runtime.execute(
+      command(
+        runtime,
+        "run-legacy",
+        "project_document_read",
+        JSON.stringify({ documentId: "script" }),
+      ),
+      signal,
+    ),
+    /thread_unbound/,
+  );
+});
 
 test("concurrent MCP reads and commands follow each Thread after selection and resume", async (context) => {
   const f = fixture();

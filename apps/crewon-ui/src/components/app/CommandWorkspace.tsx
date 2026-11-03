@@ -3505,6 +3505,7 @@ export function CommandWorkspace({
             id: module.id,
             label: module.label,
             pluginId: module.pluginId,
+            conversationThreadIds: module.conversationThreadIds,
             navigationLabel: module.navigationLabel,
             icon: module.icon,
             sidebarContent: commandWorkspaceHostModuleSidebar({
@@ -4419,7 +4420,10 @@ export function CommandWorkspace({
             }
             workflowExecutionContext={
               workspaceAuthority === "control"
-                ? { threadId: selectedThreadId, pending: controlWorkflows.pending }
+                ? {
+                    threadId: selectedThreadId,
+                    pending: controlWorkflows.pending,
+                  }
                 : undefined
             }
             onNewWorkflowRun={

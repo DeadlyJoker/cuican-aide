@@ -8,6 +8,7 @@ import {
   InstalledPluginPeerContractError,
   parseInstalledPluginPeerRequest,
   parseInstalledPluginPeerResponse,
+  compactInstalledPluginPeerCatalog,
   type InstalledPluginPeerJsonObject,
 } from "./plugins.ts";
 import {
@@ -124,6 +125,65 @@ const responses = [
     result: { outcome: "ready", target },
   },
 ];
+
+test("compact catalog shares large manifests across model targets while retaining exact validation", (t) => {
+  const base = parseInstalledPluginPeerResponse(responses[0]);
+  assert.equal(base.operation, "catalog");
+  if (base.operation !== "catalog") throw new Error("catalog expected");
+  const largeManifest = {
+    fields: Object.fromEntries(
+      Array.from({ length: 1700 }, (_, i) => [`f${i}`, "value"]),
+    ),
+  };
+  const catalog = {
+    ...base,
+    entries: Array.from({ length: 20 }, (_, i) => ({
+      ...base.entries[0]!,
+      manifest: largeManifest,
+      configuredTarget: { ...target, agentVersionId: `model-${i}` },
+    })),
+  };
+  assert.throws(
+    () => parseInstalledPluginPeerResponse(catalog),
+    InstalledPluginPeerContractError,
+  );
+  const wire = compactInstalledPluginPeerCatalog(catalog);
+  const decoded = parseInstalledPluginPeerResponse(wire);
+  assert.deepEqual(decoded, catalog);
+  assert.equal(wire.registrations.length, 1);
+  assert.ok(JSON.stringify(wire).length < JSON.stringify(catalog).length / 5);
+  assert.throws(
+    () =>
+      parseInstalledPluginPeerResponse({
+        ...wire,
+        targets: [{ registration: 2, configuredTarget: target }],
+      }),
+    InstalledPluginPeerContractError,
+  );
+  assert.throws(
+    () => parseInstalledPluginPeerResponse({ ...wire, targets: [] }),
+    InstalledPluginPeerContractError,
+  );
+  assert.throws(
+    () =>
+      parseInstalledPluginPeerResponse({
+        ...wire,
+        registrations: [{ ...wire.registrations[0], hidden: true }],
+      }),
+    InstalledPluginPeerContractError,
+  );
+  assert.deepEqual(
+    parseInstalledPluginPeerRequest({ ...requests[0], compact: true }),
+    { ...requests[0], compact: true },
+  );
+  assert.throws(
+    () => parseInstalledPluginPeerRequest({ ...requests[0], compact: false }),
+    InstalledPluginPeerContractError,
+  );
+  t.diagnostic(
+    `catalog bytes ${JSON.stringify(catalog).length} -> ${JSON.stringify(wire).length}`,
+  );
+});
 function invalid(read: () => unknown) {
   assert.throws(read, (error: unknown) => {
     assert.ok(error instanceof InstalledPluginPeerContractError);

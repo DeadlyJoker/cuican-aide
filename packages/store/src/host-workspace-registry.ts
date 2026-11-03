@@ -35,6 +35,7 @@ type WorkspaceState = Readonly<{
   revision: number;
   activeWorkspaceId: string | null;
   workspaces: readonly WorkspaceEntry[];
+  archivedWorkspaceIds?: readonly string[];
 }>;
 type WorkspaceRootSnapshot = Readonly<{
   revision: number;
@@ -82,10 +83,16 @@ export class LocalWorkspaceAuthority {
       const entry = this.#state.workspaces.find(
         (value) => value.workspaceId === workspaceId,
       )!;
-      return !this.#isProjectAllocation(entry);
+      return (
+        !this.#isProjectAllocation(entry) &&
+        !this.#state.archivedWorkspaceIds?.includes(workspaceId)
+      );
     });
     return {
       ...snapshot,
+      ...(this.#state.archivedWorkspaceIds?.length
+        ? { archivedWorkspaceIds: this.#state.archivedWorkspaceIds }
+        : {}),
       workspaces,
       current:
         workspaces.find(
@@ -143,6 +150,9 @@ export class LocalWorkspaceAuthority {
     return this.#commit({
       ...this.#state,
       activeWorkspaceId: entry.workspaceId,
+      archivedWorkspaceIds: this.#state.archivedWorkspaceIds?.filter(
+        (id) => id !== entry.workspaceId,
+      ),
       workspaces: existing
         ? this.#state.workspaces
         : [...this.#state.workspaces, entry],
@@ -160,6 +170,8 @@ export class LocalWorkspaceAuthority {
     );
     if (entry && this.#isProjectAllocation(entry))
       throw new Error("desktop_workspace_project_requires_scoped_execution");
+    if (this.#state.archivedWorkspaceIds?.includes(workspaceId))
+      throw new Error("desktop_workspace_id_unknown");
     this.root(workspaceId);
     return this.#commit({ ...this.#state, activeWorkspaceId: workspaceId });
   }
@@ -175,6 +187,31 @@ export class LocalWorkspaceAuthority {
   clear(request: unknown) {
     this.#requireMutation(request);
     return this.#commit({ ...this.#state, activeWorkspaceId: null });
+  }
+
+  /** Hide navigation while retaining original roots for historical thread execution. */
+  remove(workspaceId: string, request: unknown) {
+    this.#requireMutation(request);
+    const entry = this.#state.workspaces.find(
+      (value) => value.workspaceId === workspaceId,
+    );
+    if (
+      !entry ||
+      this.#isProjectAllocation(entry) ||
+      this.#state.archivedWorkspaceIds?.includes(workspaceId)
+    )
+      throw new Error("desktop_workspace_id_unknown");
+    return this.#commit({
+      ...this.#state,
+      activeWorkspaceId:
+        this.#state.activeWorkspaceId === workspaceId
+          ? null
+          : this.#state.activeWorkspaceId,
+      archivedWorkspaceIds: [
+        ...(this.#state.archivedWorkspaceIds ?? []),
+        workspaceId,
+      ],
+    });
   }
 
   /** Actual Native instance brand and private storage root; never exposed by the renderer bridge. */
@@ -357,6 +394,15 @@ export class LocalWorkspaceAuthority {
     );
     if (value.activeWorkspaceId !== null && !ids.has(value.activeWorkspaceId))
       return invalidRegistry();
+    const archived = value.archivedWorkspaceIds;
+    if (
+      archived !== undefined &&
+      (!Array.isArray(archived) ||
+        new Set(archived).size !== archived.length ||
+        archived.some((id) => typeof id !== "string" || !ids.has(id)) ||
+        archived.includes(value.activeWorkspaceId))
+    )
+      return invalidRegistry();
     return {
       persist: false,
       bytes,
@@ -365,6 +411,9 @@ export class LocalWorkspaceAuthority {
         revision: Number(value.revision),
         activeWorkspaceId: value.activeWorkspaceId,
         workspaces,
+        ...(archived !== undefined
+          ? { archivedWorkspaceIds: archived as string[] }
+          : {}),
       },
     };
   }

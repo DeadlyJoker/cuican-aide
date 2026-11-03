@@ -76,7 +76,7 @@ export type NativeInstalledProcessFixtureOptions = Readonly<{
   installedReportExecution?: NativeNamedReportExecutionConfiguration;
   reportModelCatalog?: Readonly<{ modelId: string }>;
   isolationModelCatalog?: Readonly<{ modelId: string }>;
-  workerStartupFailure?: true;
+  workerStartupFailure?: true | "installed-only";
   managementPackageIdentity?: Readonly<{ pluginId: string; version: string }>;
 }>;
 
@@ -371,7 +371,9 @@ export async function nativeInstalledProcessFixture(
   if (options.workerStartupFailure)
     await writeFile(
       failedWorker,
-      'console.error("named_worker_startup_failure"); process.exit(19);',
+      options.workerStartupFailure === "installed-only"
+        ? `if (process.env.CREWON_INSTALLED_PLUGIN_EXECUTION_CONFIG_PATH) { console.error("named_plugin_worker_startup_failure"); process.exit(19); } await import(${JSON.stringify(pathToFileURL(join(repository, "apps/runtime-worker/src/main.ts")).href)});`
+        : 'console.error("named_worker_startup_failure"); process.exit(19);',
       { mode: 0o600 },
     );
   const logs: string[] = [];

@@ -7,6 +7,12 @@ import {
   qualifyDesktopNativeProjectWorkspaceState as qualify,
 } from "./desktopNativeProjectWorkspaceState.ts";
 import { nativeProjectWorkspaceBridgeFixture } from "./desktopNativeProjectWorkspaceBridge.test-support.ts";
+import { DesktopNativeProjectDocuments } from "./desktopNativeProjectDocuments.ts";
+import {
+  bindDesktopNativeProjectWorkspaceRuntime,
+  desktopNativeProjectDocuments,
+} from "./desktopNativeProjectWorkspaceRuntime.ts";
+import { LocalProjectDocuments } from "@crewon/store/local-project-documents";
 import {
   installationRecipe,
   selectionRecipe,
@@ -151,6 +157,89 @@ it("actual Main refuses another plugin's persisted project without allocating a 
   expect(() => capture(f.input)).toThrow("metadata_owner_conflict");
   expect(f.workspaces.root()).toBe(f.ordinary);
   expect(f.workspaces.status().workspaces).toHaveLength(1);
+});
+
+it("Native documents resolve the original project allocation and enforce the live operation grant", async () => {
+  const f = await fixture();
+  const bridge = f.bridge();
+  const allocation = await f.send(
+    f.control,
+    f.request(bridge.prepareForProject(capture(f.input))),
+  );
+  expect(allocation?.outcome).toBe("observed");
+  let allowWrite = true;
+  const documents = new DesktopNativeProjectDocuments({
+    nativeAuthority: f.native,
+    workspaces: f.workspaces,
+    async assertOperationCurrent(operation, projectId) {
+      expect(projectId).toBe(f.projectId);
+      if (operation === "write" && !allowWrite)
+        throw new Error("write_revoked");
+    },
+  });
+  const saved = await documents.save(capture(f.input), {
+    documentId: "script",
+    expectedRevision: 0,
+    content: "Native 项目剧本",
+  });
+  expect(await documents.read(capture(f.input), "script")).toEqual(saved);
+  expect(f.workspaces.root()).toBe(f.ordinary);
+  allowWrite = false;
+  await expect(
+    documents.save(capture(f.input), {
+      documentId: "script",
+      expectedRevision: 1,
+      content: "不得保存",
+    }),
+  ).rejects.toThrow("write_revoked");
+  expect((await documents.read(capture(f.input), "script"))?.content).toBe(
+    saved.content,
+  );
+});
+
+it("existing project conversations use only their authenticated registered workspace and retain files after revocation", async () => {
+  const f = await fixture();
+  const owner = {};
+  bindDesktopNativeProjectWorkspaceRuntime({
+    owner,
+    nativeAuthority: f.native,
+    assertCurrent() {},
+  });
+  const workspaceId = f.workspaces.ordinaryStatus().current!.workspaceId;
+  let allowed = true;
+  const access = desktopNativeProjectDocuments({
+    owner,
+    workspaces: f.workspaces,
+    target: {
+      threadId: "thread",
+      projectId: f.projectId,
+      packageIdentity: f.packageIdentity,
+      documentId: "script",
+    },
+    expectedWorkspaceId: workspaceId,
+    async assertOperationCurrent() {
+      if (!allowed) throw new Error("revoked");
+    },
+  });
+  await access.save({
+    documentId: "script",
+    expectedRevision: 0,
+    content: "原有工作空间剧本",
+  });
+  expect(new LocalProjectDocuments(f.ordinary).read("script")?.content).toBe(
+    "原有工作空间剧本",
+  );
+  allowed = false;
+  await expect(
+    access.save({
+      documentId: "script",
+      expectedRevision: 1,
+      content: "不能覆盖",
+    }),
+  ).rejects.toThrow("revoked");
+  expect(new LocalProjectDocuments(f.ordinary).read("script")?.revision).toBe(
+    1,
+  );
 });
 it("archiving after ticket preparation rejects the actual child request before Native allocation", async () => {
   const f = await fixture(),

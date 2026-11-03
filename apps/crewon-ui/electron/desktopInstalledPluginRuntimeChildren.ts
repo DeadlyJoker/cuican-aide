@@ -111,6 +111,7 @@ export async function startDesktopInstalledPluginRuntimeChildren(input: {
       protocol: INSTALLED_PLUGIN_PEER_REQUEST_PROTOCOL,
       requestId: randomUUID(),
       operation: "catalog",
+      compact: true,
       actor: DESKTOP_RUNTIME_OWNER,
       scope,
     });

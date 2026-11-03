@@ -21,6 +21,35 @@ afterEach(() => {
 });
 
 describe("LocalWorkspaceAuthority registry", () => {
+  it("removes navigation durably while retaining files and historical bindings, then restores the same ID", () => {
+    const fixture = createFixture();
+    const authority = new LocalWorkspaceAuthority(fixture.state);
+    const first = authority.select(fixture.first, mutation(0)).snapshot
+      .current!;
+    writeFileSync(join(fixture.first, "retained.md"), "original");
+    expect(() => authority.remove(first.workspaceId, mutation(0))).toThrow(
+      "desktop_workspace_authority_conflict",
+    );
+    expect(
+      authority.remove(first.workspaceId, mutation(1)).snapshot,
+    ).toMatchObject({
+      current: null,
+      workspaces: [],
+      archivedWorkspaceIds: [first.workspaceId],
+    });
+    const restarted = new LocalWorkspaceAuthority(fixture.state);
+    expect(restarted.ordinaryStatus().workspaces).toEqual([]);
+    expect(restarted.root(first.workspaceId)).toBe(fixture.first);
+    expect(readFileSync(join(fixture.first, "retained.md"), "utf8")).toBe(
+      "original",
+    );
+    expect(() => restarted.activate(first.workspaceId, mutation(2))).toThrow(
+      "desktop_workspace_id_unknown",
+    );
+    expect(
+      restarted.select(fixture.first, mutation(2)).snapshot.current,
+    ).toEqual(first);
+  });
   it("adds distinct workspaces, activates by stable ID, and keeps all IDs across restart and clear", () => {
     const fixture = createFixture();
     const authority = new LocalWorkspaceAuthority(fixture.state);

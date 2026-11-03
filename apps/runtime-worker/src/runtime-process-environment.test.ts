@@ -18,7 +18,11 @@ test("composes the desktop workspace command into the released tool catalog", as
     });
     assert.deepEqual(
       runtime?.definitions().map(({ name }) => name),
-      ["workspace_run_command"],
+      [
+        "project_document_read",
+        "project_document_save",
+        "workspace_run_command",
+      ],
     );
     await runtime?.close?.();
   } finally {

@@ -146,11 +146,20 @@ function send(
   response.writeHead(200, { "content-type": "application/json" });
   response.end(
     JSON.stringify({
-      ...request,
+      ...responseFields(request),
       protocol: INSTALLED_PLUGIN_PEER_RESPONSE_PROTOCOL,
       entries,
     }),
   );
+}
+
+function responseFields(request: InstalledPluginPeerRequest) {
+  return {
+    requestId: request.requestId,
+    operation: request.operation,
+    actor: request.actor,
+    scope: request.scope,
+  };
 }
 
 async function fixture(
@@ -399,7 +408,7 @@ it.each(["requestId", "actor", "scope"])(
         response.writeHead(200, { "content-type": "application/json" });
         response.end(
           JSON.stringify({
-            ...request,
+            ...responseFields(request),
             protocol: INSTALLED_PLUGIN_PEER_RESPONSE_PROTOCOL,
             entries: [],
             ...patch,
@@ -572,7 +581,7 @@ it.each(["status", "contentType", "protocol", "bodyLimit", "declaredLimit"])(
           kind === "bodyLimit"
             ? " ".repeat(INSTALLED_PLUGIN_PEER_WIRE_LIMITS.messageBytes + 1)
             : JSON.stringify({
-                ...request,
+                ...responseFields(request),
                 protocol:
                   kind === "protocol"
                     ? "crewon.extension-host-response.v0"

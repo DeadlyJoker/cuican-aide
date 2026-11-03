@@ -159,6 +159,7 @@ export class InstalledPluginPeerClient {
       ...base,
       requestId: randomUUID(),
       operation: "catalog",
+      compact: true,
     });
     const response = await this.#transport.post(request, signal);
     if (response.operation !== "catalog") invalid("response");

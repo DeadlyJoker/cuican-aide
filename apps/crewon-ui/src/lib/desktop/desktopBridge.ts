@@ -3,6 +3,7 @@ import type {
   DESKTOP_HTTP_VERSION,
 } from "./desktopHttpProtocol.ts";
 import type { DesktopPluginUiAssets } from "./desktopPluginUiProtocol.ts";
+import type { DesktopProjectDocuments } from "./desktopProjectDocuments.ts";
 import type { DesktopLocalPluginSourceImportClient } from "./desktopLocalPluginSourceImportProtocol.ts";
 import type { DesktopLocalPluginExecutionSetupClient } from "./desktopLocalPluginExecutionSetupProtocol.ts";
 import type {
@@ -102,6 +103,7 @@ export interface CrewonDesktopBridge {
   readonly version: typeof DESKTOP_BRIDGE_VERSION;
   /** Additive capability: older desktop preloads remain valid and cannot load installed UI assets. */
   readonly pluginUiAssets?: DesktopPluginUiAssets;
+  readonly projectDocuments?: DesktopProjectDocuments;
   /** Additive Native chooser and approval capability; absent on Web and older preloads. */
   readonly pluginSourceImports?: DesktopLocalPluginSourceImportClient;
   /** Explicit Native business execution preparation; absent on Web and older preloads. */
@@ -150,6 +152,7 @@ export interface CrewonDesktopBridge {
     selectAndRegister(request: unknown): Promise<unknown>;
     activate(workspaceId: string, request: unknown): Promise<unknown>;
     clear(request: unknown): Promise<unknown>;
+    remove?(workspaceId: string, request: unknown): Promise<unknown>;
     pickDirectory(title?: string): Promise<string | null>;
   };
   readonly providers: {

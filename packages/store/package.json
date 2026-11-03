@@ -5,6 +5,7 @@
   "type": "module",
   "exports": {
     ".": "./src/index.ts",
+    "./local-project-documents": "./src/local-project-documents.ts",
     "./extension-recovery": "./src/extension-recovery-reader.ts",
     "./host-project-workspaces": "./src/native-project-workspace-state-reader.ts",
     "./host-workspace-management": "./src/host-workspace-management.ts",

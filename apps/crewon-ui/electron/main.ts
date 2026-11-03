@@ -1,3 +1,4 @@
+import { bindDesktopProjectDocumentIpc } from "./desktopProjectDocumentIpc.ts";
 import {
   gatewayModelCatalogKey,
   writeGatewayModelCatalog,
@@ -413,6 +414,7 @@ function registerIpc(options: {
   };
 
   handle("crewon:runtime:bootstrap", () => runtime.session());
+  bindDesktopProjectDocumentIpc({ register: handle, window, runtime });
   handle(
     "crewon:plugins:set-selection",
     async (request: unknown): Promise<DesktopPluginSelectionReply> => {
@@ -519,6 +521,9 @@ function registerIpc(options: {
   );
   handle("crewon:workspace:clear", (request: unknown) =>
     authority.clear(request),
+  );
+  handle("crewon:workspace:remove", (workspaceId: string, request: unknown) =>
+    authority.remove(workspaceId, request),
   );
   handle("crewon:providers:catalog", () => providers.catalog());
   handle("crewon:providers:activate", (providerId: string) =>

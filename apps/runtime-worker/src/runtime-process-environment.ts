@@ -1,4 +1,4 @@
-import { readFileSync, statSync } from "node:fs";
+import { readFileSync, statSync, realpathSync } from "node:fs";
 
 import {
   DeterministicFakeModelTransport,
@@ -22,6 +22,7 @@ import { loadDeviceToolRuntime } from "./device-tool-runtime-config.ts";
 import { createConfiguredLocalWorkspaceCommandToolRuntime } from "./local-workspace-command-tool-runtime.ts";
 import { createConfiguredPimSandboxToolRuntime } from "./pim-sandbox-tool-runtime.ts";
 import { DesktopThreadWorkspaceToolRuntime } from "./desktop-thread-workspace-runtime.ts";
+import { createLocalProjectDocumentToolRuntime } from "./local-project-document-tool-runtime.ts";
 
 import {
   parseNonNegativeInteger,
@@ -222,10 +223,19 @@ async function createWorkspaceTools(
           CREWON_DESKTOP_WORKSPACE_ROOT: workspaceRoot,
         },
   );
+  const documentRoot =
+    workspaceRoot ?? environment.CREWON_DESKTOP_WORKSPACE_ROOT;
+  const documents = documentRoot
+    ? createLocalProjectDocumentToolRuntime(realpathSync(documentRoot))
+    : undefined;
   try {
     const mcp = await createConfiguredMcpRuntime(environment, workspaceRoot);
-    if (local && mcp) return new CompositeToolRuntime([local, mcp]);
-    return local ?? mcp;
+    const runtimes = [local, documents, mcp].filter(
+      (runtime): runtime is ToolRuntimePort => runtime !== undefined,
+    );
+    return runtimes.length > 1
+      ? new CompositeToolRuntime(runtimes)
+      : runtimes[0];
   } catch (error) {
     await local?.close?.();
     throw error;

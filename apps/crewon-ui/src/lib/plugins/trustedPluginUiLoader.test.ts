@@ -33,6 +33,31 @@ async function mount(harness: ReturnType<typeof uiHarness>, lease = uiLease()) {
 }
 
 describe("trusted UI loader (explicit importer unit tests)", () => {
+  it("reuses live mount authorization and services for a host-provided directory", async () => {
+    const h = uiHarness();
+    let services: PluginUiServices | undefined;
+    const handle = await h.loader.mount({
+      root: h.root,
+      lease: uiLease(),
+      props: uiProps(),
+      hostDefinition: {
+        apiVersion: "crewon.plugin-ui.v1",
+        pluginId: uiLease().descriptor.pluginId,
+        mount(root, _props, supplied) {
+          services = supplied;
+          root.textContent = "Shared directory";
+          return { update() {}, dispose() {} };
+        },
+      },
+    });
+    handles.push(handle);
+    expect(h.root.textContent).toBe("Shared directory");
+    expect(services?.invoke).toBeTypeOf("function");
+    await handle.stop();
+    await expect(
+      services!.invoke("crewon.test.read", {}, {}),
+    ).rejects.toThrow();
+  });
   it("phase diagnostics cannot skip live fences or interrupt publication", async () => {
     const h = uiHarness();
     const phases: string[] = [];

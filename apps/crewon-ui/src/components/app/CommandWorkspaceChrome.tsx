@@ -94,6 +94,8 @@ export type CommandControlWorkspaceNav = {
   onClear?: () => void;
   onSelect?: () => void;
   onActivate?: (workspaceId: string) => void;
+  onRemove?: (workspaceId: string) => void;
+  archivedWorkspaceIds?: readonly string[];
   /** Status recheck remains available while native mutations are fenced. */
   onRecheck?: () => void;
 };
@@ -146,7 +148,7 @@ export function CommandSidebar({
   controlWorkspace,
   cwd,
   isSearchOpen,
-  linkedThreads = [],
+  linkedThreads: allLinkedThreads = [],
   locale = "zh",
   platform = "web",
   query,
@@ -175,6 +177,7 @@ export function CommandSidebar({
     id: string;
     label: string;
     pluginId?: string;
+    conversationThreadIds?: readonly string[];
     navigationLabel?: string;
     icon?: import("@crewon/contracts/plugins").PluginNavigationIcon;
     sidebarContent?: ReactNode;
@@ -185,6 +188,7 @@ export function CommandSidebar({
     id: string;
     label: string;
     pluginId?: string;
+    conversationThreadIds?: readonly string[];
     navigationLabel?: string;
     icon?: import("@crewon/contracts/plugins").PluginNavigationIcon;
     sidebarContent?: ReactNode;
@@ -220,6 +224,10 @@ export function CommandSidebar({
   const contextCollapsed = collapsed ?? sidebarCollapsed;
   const section = commandSidebarSection(activeView);
   const activePlugin = modules.find((module) => module.active);
+  const threadScope = new Set(activePlugin?.conversationThreadIds ?? []);
+  const linkedThreads = activePlugin?.pluginId
+    ? allLinkedThreads.filter((thread) => threadScope.has(thread.id))
+    : allLinkedThreads;
   const pluginSidebar = activePlugin?.sidebarContent;
   const hasPluginSidebar =
     pluginSidebar !== null && pluginSidebar !== undefined;
@@ -584,8 +592,8 @@ export function CommandSidebar({
 
         <div
           className="command-sidebar-workspaces"
-          hidden={section !== "work" && !hasPluginSidebar}
-          data-shared-workspace-sessions={hasPluginSidebar ? "true" : undefined}
+          hidden={section !== "work" || hasPluginSidebar}
+          data-workspace-session-scope={activePlugin?.pluginId ?? "global"}
         >
           <CommandSidebarWorkspaceTree
             workspaceAuthority={workspaceAuthority}
@@ -615,7 +623,22 @@ export function CommandSidebar({
             standaloneWorkspaceCollapsed={standaloneWorkspaceCollapsed}
             pendingRemoval={pendingRemoval}
             removeWorkspace={removeWorkspace}
-            controlWorkspace={controlWorkspace}
+            controlWorkspace={
+              activePlugin?.pluginId && controlWorkspace
+                ? {
+                    ...controlWorkspace,
+                    workspaces: controlWorkspace.workspaces?.filter(
+                      (workspace) =>
+                        linkedThreads.some(
+                          (thread) =>
+                            thread.workspaceId === workspace.workspaceId,
+                        ),
+                    ),
+                    onSelect: undefined,
+                    onClear: undefined,
+                  }
+                : controlWorkspace
+            }
           />
           {threadCatalogNavigation &&
           (threadCatalogNavigation.hasOlder ||

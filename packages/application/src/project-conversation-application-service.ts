@@ -348,18 +348,31 @@ export class ProjectConversationApplicationService {
     actor: ActorContext,
     input: ProjectConversationsRequests["getBinding"],
     authority: ProjectConversationCommitAuthority,
-    options: Readonly<{ projectReadScope?: PluginProjectReadScope }> = {},
+    options: Readonly<{
+      projectReadScope?: PluginProjectReadScope;
+      documentOperation?: "read" | "write";
+    }> = {},
   ): Promise<ProjectConversationContextResponse> {
-    return projectConversationCall(() =>
-      readProjectConversationContextResponse({
+    return projectConversationCall(async () => {
+      const result = await readProjectConversationContextResponse({
         dependencies: this.#d,
         actor,
         authority,
         ...options,
         readBinding: (current) =>
           this.getBinding(actor, input, current, options),
-      }),
-    );
+      });
+      if (result.context !== null && options.documentOperation === "write") {
+        await authorizeConversationProject({
+          authority,
+          projectId: result.context.binding.projectId,
+          action: "creativeProject:write",
+          authorization: this.#d.authorization,
+        });
+        await authority.assertCurrent();
+      }
+      return result;
+    });
   }
   async #getBinding(
     actor: ActorContext,

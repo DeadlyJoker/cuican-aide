@@ -87,7 +87,7 @@ type ReadinessRequest = ConfigurationRequest &
 export type InstalledPluginPeerRequest = Common &
   Readonly<{ protocol: typeof INSTALLED_PLUGIN_PEER_REQUEST_PROTOCOL }> &
   (
-    | Readonly<{ operation: "catalog" }>
+    | Readonly<{ operation: "catalog"; compact?: true }>
     | (ConfigurationRequest & Readonly<{ operation: "validateConfiguration" }>)
     | (ReadinessRequest & Readonly<{ operation: "readiness" }>)
     | (ReadinessRequest &

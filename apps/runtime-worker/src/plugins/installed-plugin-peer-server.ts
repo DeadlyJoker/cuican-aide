@@ -10,6 +10,7 @@ import {
   InstalledPluginPeerContractError,
   parseInstalledPluginPeerRequest,
   parseInstalledPluginPeerResponse,
+  compactInstalledPluginPeerCatalog,
 } from "@crewon/contracts/plugins";
 import {
   InstalledPluginPeerError,
@@ -202,8 +203,11 @@ async function handle(
       () => physical.delete(signal),
       () => physical.delete(signal),
     );
+    const raw = await abortable(execution, signal);
     const result = parseInstalledPluginPeerResponse(
-      await abortable(execution, signal),
+      raw.operation === "catalog"
+        ? compactInstalledPluginPeerCatalog(raw)
+        : raw,
     );
     if (
       result.operation !== parsed.operation ||
@@ -212,7 +216,15 @@ async function handle(
       JSON.stringify(result.scope) !== JSON.stringify(parsed.scope)
     )
       throw new Error("installed_plugin_peer_server_response_invalid");
-    const encoded = Buffer.from(JSON.stringify(result));
+    const encoded = Buffer.from(
+      JSON.stringify(
+        parsed.operation === "catalog" &&
+          parsed.compact &&
+          result.operation === "catalog"
+          ? compactInstalledPluginPeerCatalog(result)
+          : result,
+      ),
+    );
     if (encoded.length > INSTALLED_PLUGIN_PEER_WIRE_LIMITS.messageBytes)
       throw new Error("installed_plugin_peer_server_response_invalid");
     if (!response.destroyed) {

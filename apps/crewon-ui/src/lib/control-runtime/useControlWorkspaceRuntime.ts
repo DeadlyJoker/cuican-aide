@@ -82,6 +82,7 @@ export type ControlWorkspaceCompositionSnapshot = Readonly<{
     displayName: string;
   }>[];
   nativeWorkspaceRevision: string | null;
+  archivedWorkspaceIds: readonly string[];
 }>;
 
 export interface ControlWorkspaceRuntimePort {
@@ -102,7 +103,7 @@ export interface ControlWorkspaceRuntimePort {
 export class ControlWorkspaceRuntimeComposition {
   readonly #controlConfigured: boolean;
   readonly #idempotencyKey: (
-    operation: "activate" | "clear" | "select",
+    operation: "activate" | "clear" | "select" | "remove",
   ) => string;
   readonly #nativeAuthority: DesktopWorkspaceAuthorityPort | null;
   readonly #rehydrateThreadAuthority:
@@ -126,7 +127,9 @@ export class ControlWorkspaceRuntimeComposition {
     controlConfigured: boolean;
     nativeAuthority: DesktopWorkspaceAuthorityPort | null;
     runtime: ControlWorkspaceRuntimePort;
-    idempotencyKey?: (operation: "activate" | "clear" | "select") => string;
+    idempotencyKey?: (
+      operation: "activate" | "clear" | "select" | "remove",
+    ) => string;
     rehydrateThreadAuthority?: (threadId: string) => Promise<void>;
   }) {
     this.#controlConfigured = config.controlConfigured;
@@ -249,6 +252,28 @@ export class ControlWorkspaceRuntimeComposition {
       const response = await authority.activate(workspaceId, {
         expectedRevision: before.revision,
         idempotencyKey: this.#idempotencyKey("activate"),
+      });
+      if (!this.#isAuthorityCurrent(generation)) return;
+      this.#nativeStatus = response.snapshot;
+      await this.#rehydrateAfterNativeMutation(authority, generation);
+    } catch (error) {
+      this.#recordNativeError(error, generation);
+      throw error;
+    } finally {
+      this.#finishNativeMutation(generation);
+    }
+  }
+
+  async removeNativeWorkspace(workspaceId: string): Promise<void> {
+    const authority = this.#requireNativeAuthority();
+    if (!authority.remove)
+      throw new Error("desktop_workspace_remove_unavailable");
+    const before = this.#requireAvailableNativeStatus();
+    const generation = this.#beginNativeMutation();
+    try {
+      const response = await authority.remove(workspaceId, {
+        expectedRevision: before.revision,
+        idempotencyKey: this.#idempotencyKey("remove"),
       });
       if (!this.#isAuthorityCurrent(generation)) return;
       this.#nativeStatus = response.snapshot;
@@ -452,6 +477,7 @@ export class ControlWorkspaceRuntimeComposition {
       safeError: this.#safeError,
       nativeWorkspace,
       nativeWorkspaces: this.#nativeStatus?.workspaces ?? [],
+      archivedWorkspaceIds: this.#nativeStatus?.archivedWorkspaceIds ?? [],
       nativeWorkspaceRevision:
         this.#nativeStatus === null
           ? null
@@ -482,6 +508,7 @@ export function useControlWorkspaceRuntime(params: {
     displayName: string;
   }>[];
   nativeWorkspaceRevision: string | null;
+  archivedWorkspaceIds: readonly string[];
   create: () => Promise<void>;
   reconcile: (executionId: string) => Promise<void>;
   cancel: (executionId: string) => Promise<void>;
@@ -489,6 +516,7 @@ export function useControlWorkspaceRuntime(params: {
   selectNativeWorkspace: () => Promise<boolean>;
   clearNativeWorkspace: () => Promise<void>;
   activateNativeWorkspace: (workspaceId: string) => Promise<void>;
+  removeNativeWorkspace: (workspaceId: string) => Promise<void>;
 }> {
   const [binding, setBinding] = useState<Readonly<{
     client: ControlApiClient | null;
@@ -549,6 +577,7 @@ export function useControlWorkspaceRuntime(params: {
               displayName: null,
             },
       nativeWorkspaces: [],
+      archivedWorkspaceIds: [],
       nativeWorkspaceRevision: null,
     }),
     [params.client, params.nativeAuthority],
@@ -586,6 +615,7 @@ export function useControlWorkspaceRuntime(params: {
       safeError: snapshot.safeError,
       nativeWorkspace: snapshot.nativeWorkspace,
       nativeWorkspaces: snapshot.nativeWorkspaces,
+      archivedWorkspaceIds: snapshot.archivedWorkspaceIds,
       nativeWorkspaceRevision: snapshot.nativeWorkspaceRevision,
       create: async () => requireComposition().create(),
       reconcile: async (executionId: string) =>
@@ -600,6 +630,8 @@ export function useControlWorkspaceRuntime(params: {
         requireComposition().clearNativeWorkspace(),
       activateNativeWorkspace: async (workspaceId: string) =>
         requireComposition().activateNativeWorkspace(workspaceId),
+      removeNativeWorkspace: async (workspaceId: string) =>
+        requireComposition().removeNativeWorkspace(workspaceId),
     }),
     [requireComposition, snapshot],
   );

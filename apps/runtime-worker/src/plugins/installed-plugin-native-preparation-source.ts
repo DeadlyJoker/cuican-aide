@@ -24,6 +24,7 @@ import {
 } from "./installed-plugin-release-document.ts";
 import { nativePreparationFailure as fail } from "./installed-plugin-native-preparation-files.ts";
 import { nativePreparationCanonicalJson } from "./installed-plugin-native-preparation-json.ts";
+import { LOCAL_PROJECT_DOCUMENT_TOOLS } from "../local-project-document-tool-runtime.ts";
 
 /** Validate the shared model/default inputs even when every requested plugin is blocked. */
 export function assertNativeInstalledPluginModelPreparation(
@@ -108,7 +109,9 @@ export function compileNativeInstalledPluginReleaseEntry(
     model: { ...bootstrap.model, modelId },
     execution: bootstrap.execution,
     resources: { workspaceRequired: false, governedContextDigest: null },
-    tools: [],
+    tools: input.environment.CREWON_DESKTOP_WORKSPACE_REGISTRY_PATH
+      ? LOCAL_PROJECT_DOCUMENT_TOOLS
+      : [],
   };
   const sourceSeed = digester
     .sha256(

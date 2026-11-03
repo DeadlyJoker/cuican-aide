@@ -10,6 +10,7 @@ import {
 import { useState, type FormEvent } from "react";
 import { TooltipProvider } from "@/components/ui/tooltip";
 import { CommandSidebarThreadList } from "./CommandSidebarThreadList";
+import { CommandWorkspaceDirectoryGroup } from "./CommandWorkspaceDirectoryGroup";
 import type {
   CommandControlWorkspaceNav,
   CommandLinkedThread,
@@ -123,9 +124,18 @@ export function CommandSidebarWorkspaceTree(props: {
   const [expandedThreadGroups, setExpandedThreadGroups] = useState<
     ReadonlySet<string>
   >(() => new Set());
+  const [pendingControlRemoval, setPendingControlRemoval] = useState<{
+    id: string;
+    name: string;
+  } | null>(null);
   const controlGroups = groupControlWorkspaceThreads(
     controlWorkspace?.workspaces ?? [],
-    linkedThreads,
+    linkedThreads.filter(
+      (thread) =>
+        !controlWorkspace?.archivedWorkspaceIds?.includes(
+          thread.workspaceId ?? "",
+        ),
+    ),
   );
   const renderThreadItems = ({
     threads,
@@ -189,36 +199,13 @@ export function CommandSidebarWorkspaceTree(props: {
               const current =
                 group.workspaceId === controlWorkspace?.workspaceId;
               return (
-                <div
-                  className={classNames(
-                    "space-node real-workspace-node",
-                    current && "current",
-                  )}
+                <CommandWorkspaceDirectoryGroup
                   key={group.workspaceId}
-                  data-workspace-id={group.workspaceId}
-                >
-                  <div className="space-title real-workspace-title">
-                    <button
-                      aria-label={copy.switchWorkspace(name)}
-                      className="workspace-title-toggle"
-                      type="button"
-                      disabled={
-                        controlWorkspace?.busy ||
-                        group.displayName === null ||
-                        !controlWorkspace?.onActivate
-                      }
-                      onClick={() =>
-                        controlWorkspace?.onActivate?.(group.workspaceId)
-                      }
-                    >
-                      {current ? (
-                        <FolderOpen aria-hidden="true" />
-                      ) : (
-                        <Folder aria-hidden="true" />
-                      )}
-                      <strong>{name}</strong>
-                    </button>
-                    <span className="workspace-row-actions">
+                  id={group.workspaceId}
+                  name={name}
+                  current={current}
+                  actions={
+                    <>
                       <button
                         aria-label={copy.threadInWorkspace(name)}
                         title={copy.threadInWorkspace(name)}
@@ -253,22 +240,38 @@ export function CommandSidebarWorkspaceTree(props: {
                           <X aria-hidden="true" />
                         </button>
                       ) : null}
-                    </span>
-                  </div>
-                  <div className="conversation-list recent-thread-list">
-                    {group.threads.length ? (
-                      renderThreadItems({
-                        threads: group.threads,
-                        workspaceLabel: name,
-                        workspaceKey: group.workspaceId,
-                      })
-                    ) : (
-                      <p className="sidebar-empty-hint">
-                        {copy.workspaceThreadsEmpty}
-                      </p>
-                    )}
-                  </div>
-                </div>
+                      {controlWorkspace?.onRemove &&
+                      group.displayName !== null ? (
+                        <button
+                          aria-label={copy.removeWorkspace(name)}
+                          title={copy.removeWorkspace(name)}
+                          type="button"
+                          disabled={controlWorkspace.busy}
+                          onClick={() =>
+                            setPendingControlRemoval({
+                              id: group.workspaceId,
+                              name,
+                            })
+                          }
+                        >
+                          <Trash2 aria-hidden="true" />
+                        </button>
+                      ) : null}
+                    </>
+                  }
+                >
+                  {group.threads.length ? (
+                    renderThreadItems({
+                      threads: group.threads,
+                      workspaceLabel: name,
+                      workspaceKey: group.workspaceId,
+                    })
+                  ) : (
+                    <p className="sidebar-empty-hint">
+                      {copy.workspaceThreadsEmpty}
+                    </p>
+                  )}
+                </CommandWorkspaceDirectoryGroup>
               );
             })}
             {!controlGroups.groups.length ? (
@@ -598,6 +601,20 @@ export function CommandSidebarWorkspaceTree(props: {
           onConfirm={() => {
             removeWorkspace(pendingRemoval);
             setPendingRemoval(null);
+          }}
+        />
+      ) : null}
+      {workspaceAuthority === "control" && pendingControlRemoval ? (
+        <WorkspaceRemoveDialog
+          cancelLabel={copy.cancel}
+          confirmLabel={copy.remove}
+          hint="本地文件和历史会话会保留。重新添加同一文件夹可恢复目录。"
+          path={pendingControlRemoval.name}
+          title={copy.removeWorkspaceTitle(pendingControlRemoval.name)}
+          onCancel={() => setPendingControlRemoval(null)}
+          onConfirm={() => {
+            controlWorkspace?.onRemove?.(pendingControlRemoval.id);
+            setPendingControlRemoval(null);
           }}
         />
       ) : null}

@@ -34,6 +34,7 @@ import {
 } from "./configured-agent-version-runtime-factory.ts";
 import { loadDeviceToolRuntime } from "./device-tool-runtime-config.ts";
 import { createDeclaredPimSandboxToolRuntime } from "./pim-sandbox-tool-runtime.ts";
+import { createDeclaredLocalProjectDocumentRuntime } from "./local-project-document-tool-runtime.ts";
 import { loadRemoteMcpRuntimeConfig } from "./remote-mcp-runtime-config.ts";
 import type { RemoteMcpRuntimeConfig } from "./remote-mcp-runtime-config.ts";
 import {
@@ -347,6 +348,11 @@ async function createBoundToolRuntime(
       throw new Error("remote_mcp_runtime_not_composed");
     }
     const runtimes: ToolRuntimePort[] = [];
+    const documents = createDeclaredLocalProjectDocumentRuntime(
+      environment,
+      version.tools,
+    );
+    if (documents) runtimes.push(creation.own(documents));
     const extensionTarget =
       extension === undefined
         ? undefined

@@ -11,6 +11,7 @@ import {
   INSTALLED_PLUGIN_PEER_RESPONSE_PROTOCOL,
   parseInstalledPluginPeerRequest,
   parseInstalledPluginPeerResponse,
+  compactInstalledPluginPeerCatalog,
   type InstalledPluginPeerIdentity,
   type InstalledPluginPeerRequest,
   type InstalledPluginPeerResponse,
@@ -239,7 +240,7 @@ export class InstalledPluginPeerService {
       operation: request.operation,
       actor: request.actor,
       scope: hosts.scope,
-    };
+    } as const;
     if (request.operation === "catalog") {
       const entries = [];
       // Model variants share package/configuration metadata. Validate each exact
@@ -334,7 +335,13 @@ export class InstalledPluginPeerService {
           fail("source_changed");
       }
       await this.#current(request.actor, hosts.scope, signal);
-      return parseInstalledPluginPeerResponse({ ...response, entries });
+      return parseInstalledPluginPeerResponse(
+        compactInstalledPluginPeerCatalog({
+          ...response,
+          operation: "catalog",
+          entries,
+        }),
+      );
     }
     if (
       request.operation === "validateConfiguration" ||

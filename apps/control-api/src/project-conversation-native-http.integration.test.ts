@@ -9,6 +9,9 @@ import {
   waitMessage,
 } from "../../crewon-ui/electron/desktopNativeProjectWorkspaceBridge.test-support.ts";
 import { conversationPackage } from "./project-conversation-package.test-support.ts";
+import { bindDesktopNativeProjectWorkspaceRuntime } from "../../crewon-ui/electron/desktopNativeProjectWorkspaceRuntime.ts";
+import { openDesktopProjectDocumentAccess } from "../../crewon-ui/electron/desktopProjectDocumentAccess.ts";
+import { LocalProjectDocuments } from "@crewon/store";
 
 const profileId = "00000000-0000-4000-8000-000000000001";
 const standaloneUrl = new URL("./standalone-composition.ts", import.meta.url)
@@ -255,6 +258,63 @@ test(
       `/api/v1/threads/${conversation.binding.threadId}`,
     );
     assert.equal(thread.thread.workspaceId, target.workspaceId);
+    const nativeOwner = {};
+    bindDesktopNativeProjectWorkspaceRuntime({
+      owner: nativeOwner,
+      nativeAuthority: f.native,
+      assertCurrent() {},
+    });
+    const documentTarget = {
+      projectId,
+      threadId: conversation.binding.threadId,
+      documentId: "script",
+      packageIdentity: {
+        pluginId: pkg.pluginId,
+        publisherId: pkg.publisherId,
+        version: pkg.version,
+        packageDigest: pkg.packageDigest,
+      },
+    };
+    const access = (operation: "read" | "write", overrides = {}) =>
+      openDesktopProjectDocumentAccess({
+        owner: nativeOwner,
+        workspaces: f.workspaces,
+        target: { ...documentTarget, ...overrides },
+        operation,
+        session: () => ({
+          baseUrl: started.origin + "/",
+          sessionToken: "s".repeat(32),
+          csrfToken: "c".repeat(32),
+          origin: "crewon://desktop",
+        }),
+        assertCurrent() {},
+      });
+    const writeAccess = await access("write");
+    const document = await writeAccess.save({
+      documentId: "script",
+      content: "真实 Native HTTP 文档",
+      expectedRevision: 0,
+    });
+    assert.equal(
+      new LocalProjectDocuments(f.workspaces.root(target.workspaceId)).read(
+        "script",
+      )?.digest,
+      document.digest,
+    );
+    const readAccess = await access("read");
+    assert.equal((await readAccess.read("script"))?.content, document.content);
+    await assert.rejects(
+      readAccess.save({
+        documentId: "script",
+        content: "读取权限不能保存",
+        expectedRevision: 1,
+      }),
+      /operation_mismatch/,
+    );
+    await assert.rejects(
+      access("read", { projectId: "wrong-project" }),
+      /binding_mismatch/,
+    );
     const secondProject = await invoke(
       "crewon.creative-projects.v1.createProject",
       {
@@ -316,6 +376,23 @@ test(
     );
     assert.equal(f.workspaces.root(), f.ordinary);
     assert.equal(f.workspaces.status().workspaces.length, 3);
+    await request(
+      "PUT",
+      `/api/v1/plugins/selections/${pkg.pluginId}`,
+      {
+        expectedSelectionRevision: 2,
+        state: "disabled",
+        selectedPackageDigest: pkg.packageDigest,
+      },
+      "native-document-disable",
+    );
+    await assert.rejects(access("read"), /access_denied/);
+    assert.equal(
+      new LocalProjectDocuments(f.workspaces.root(target.workspaceId)).read(
+        "script",
+      )?.content,
+      document.content,
+    );
     const ordinaryBorrow = await fetch(started.origin + "/api/v1/threads", {
       method: "POST",
       headers: {

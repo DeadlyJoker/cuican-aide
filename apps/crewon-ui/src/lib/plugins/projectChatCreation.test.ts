@@ -370,6 +370,39 @@ it("resumes the original ordinary project and conversation key using explicit le
   ).toHaveLength(0);
   expect(f.invoke.mock.calls.at(-1)![1]).toEqual(first);
 });
+
+it("captures the selected legacy workspace once and retains it after a lost acknowledgement", async () => {
+  const f = fixture();
+  const selected = vi.fn(async () => "workspace-selected");
+  const original = f.invoke.getMockImplementation()!;
+  Object.assign(f.ports, { currentWorkspaceId: selected });
+  Object.assign(f.binding, { workspaceId: "workspace-selected" });
+  let fail = true;
+  f.invoke.mockImplementation(async (...args) => {
+    if (args[1].action.endsWith("getCreationContext"))
+      return {
+        output: {
+          schemaVersion: "crewon.project-conversation-creation-context.v1",
+          workspaceMode: "legacy-nullable",
+        },
+      };
+    if (args[1].action.endsWith("createConversation") && fail)
+      throw new Error("lost");
+    return original(...args);
+  });
+  await expect(f.create(f.module, idea)).rejects.toThrow("lost");
+  selected.mockResolvedValue("workspace-other");
+  fail = false;
+  await createProjectChatCreation(f.ports)(f.module, idea);
+  expect(selected).toHaveBeenCalledTimes(1);
+  expect(
+    f.invoke.mock.calls
+      .filter(([, request]) => request.action.endsWith("createConversation"))
+      .every(
+        ([, request]) => request.input.workspaceId === "workspace-selected",
+      ),
+  ).toBe(true);
+});
 for (const outcome of ["denied", "unknown"])
   it(`creation context ${outcome} causes zero subsequent writes`, async () => {
     const f = fixture();

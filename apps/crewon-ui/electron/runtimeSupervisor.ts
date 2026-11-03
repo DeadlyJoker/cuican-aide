@@ -40,6 +40,8 @@ import { processRuntimeLogs } from "./processRuntimeLogs.ts";
 import { runtimeStartupFailureCode } from "./runtimeStartupFailure.ts";
 import { desktopRuntimeChildStdio } from "./desktopRuntimeChildStdio.ts";
 import { attachDesktopNativeProjectWorkspaceRuntime } from "./desktopNativeProjectWorkspaceRuntime.ts";
+import type { DesktopProjectDocumentTarget } from "../src/lib/desktop/desktopProjectDocuments.ts";
+import { openDesktopProjectDocumentAccess } from "./desktopProjectDocumentAccess.ts";
 import type { DesktopNativeProjectWorkspaceBridge } from "./desktopNativeProjectWorkspaceBridge.ts";
 import type { LocalWorkspaceAuthority } from "./localWorkspaceRegistry.ts";
 import {
@@ -249,6 +251,10 @@ export class RuntimeSupervisor {
   }
 
   async start(): Promise<void> {
+    return this.#start("enabled");
+  }
+
+  async #start(plugins: "enabled" | "unavailable"): Promise<void> {
     if (this.#stopping !== null) await this.#stopping;
     if (this.#children.length > 0 || this.#startupAbort !== null) return;
     if (this.#pluginBootstrap !== null)
@@ -258,7 +264,7 @@ export class RuntimeSupervisor {
     if (this.#automaticInstalledRuntimeOwner !== null)
       throw new Error("desktop_installed_plugin_preparation_cleanup_required");
     const configuration =
-      this.#extensionRuntime?.() ??
+      (plugins === "enabled" ? this.#extensionRuntime?.() : undefined) ??
       parseDesktopExtensionRuntimeConfiguration({
         schemaVersion: "crewon.desktop-extension-runtime.v0",
         enabled: false,
@@ -270,6 +276,7 @@ export class RuntimeSupervisor {
     this.#managementRecovery = false;
     this.#startupAbort = startup;
     this.#runtimeAbort = startup;
+    let startingPlugin = false;
     try {
       this.#financialEnvironment =
         captureDesktopPluginCreditSettlementEnvironment(process.env);
@@ -328,11 +335,15 @@ export class RuntimeSupervisor {
         agentPlatformRuntimeEnvironments(environment, agentPlatformApiKey);
       let assertPreparedDefaultCurrent: (() => void) | undefined;
       const installedConfiguration =
-        preparation.state === "quarantined"
+        plugins === "unavailable" || preparation.state === "quarantined"
           ? undefined
           : this.#installedRuntime?.();
       let nativeInstalled: AutomaticDesktopInstalledPluginRuntime | null = null;
-      if (!installedConfiguration?.enabled && bootstrap !== null) {
+      if (
+        plugins === "enabled" &&
+        !installedConfiguration?.enabled &&
+        bootstrap !== null
+      ) {
         try {
           nativeInstalled = prepareNativeDesktopInstalledPluginRuntime({
             dataDirectory: this.#dataDirectory,
@@ -353,6 +364,7 @@ export class RuntimeSupervisor {
         }
       }
       if (installedConfiguration?.enabled || nativeInstalled !== null) {
+        startingPlugin = true;
         const expectedProvider = { ...provider };
         const assertProviderCurrent = () => {
           const current = this.#provider();
@@ -548,7 +560,7 @@ export class RuntimeSupervisor {
           : { dataRoot: this.#dataDirectory },
       });
       let currentEnvironments = initialExtensions;
-      if (this.#resolveExtensionCredential) {
+      if (plugins === "enabled" && this.#resolveExtensionCredential) {
         const upgrade = await prepareDesktopExtensionCurrentUpgradeInputs({
           dataRoot: this.#dataDirectory,
           configuration,
@@ -567,12 +579,15 @@ export class RuntimeSupervisor {
             `${upgrade.reasonCode}\n`,
           );
       }
-      const recovery = desktopExtensionRecoveryAttempt({
-        dataRoot: this.#dataDirectory,
-        provider: runtimeProvider,
-        source: this.#paths.source,
-        environments: currentEnvironments,
-      });
+      const recovery =
+        plugins === "unavailable"
+          ? { environments: currentEnvironments, attempt: null }
+          : desktopExtensionRecoveryAttempt({
+              dataRoot: this.#dataDirectory,
+              provider: runtimeProvider,
+              source: this.#paths.source,
+              environments: currentEnvironments,
+            });
       let extensions = recovery.environments;
       startup.signal.throwIfAborted();
       assertPreparedDefaultCurrent?.();
@@ -667,7 +682,22 @@ export class RuntimeSupervisor {
           "desktop_installed_plugin_peer_worker_exited",
           "desktop_installed_plugin_peer_stdout_closed",
         ].includes(error.message);
+      const recoverDefault =
+        plugins === "enabled" &&
+        startingPlugin &&
+        this.#startupAbort === startup &&
+        !startup.signal.aborted;
       if (this.#startupAbort === startup) await this.#stopRuntime();
+      if (recoverDefault && this.#stopIntent === stopIntent) {
+        this.#logs.resume();
+        this.#logs.write(
+          "stderr",
+          "Plugin unavailable",
+          "Starting the ordinary conversation runtime with plugin execution isolated.\n",
+        );
+        await this.#start("unavailable");
+        return;
+      }
       if (recover && this.#stopIntent === stopIntent) {
         await this.#recoverManagementControl(error);
         return;
@@ -874,6 +904,31 @@ export class RuntimeSupervisor {
     this.session();
     this.#nativeInstalledRuntimeOwner?.assertCurrent();
     return this.#nativeInstalledRuntimeOwner;
+  }
+
+  projectDocumentAccess(
+    target: DesktopProjectDocumentTarget,
+    operation: "read" | "write",
+  ) {
+    const owner = this.currentPreparedPluginRuntime();
+    if (!owner || !this.#workspaceAuthority)
+      throw new Error("project_document_owner_unavailable");
+    const generation = this.#sessionGeneration;
+    return openDesktopProjectDocumentAccess({
+      owner,
+      workspaces: this.#workspaceAuthority,
+      target,
+      operation,
+      session: () => this.session(),
+      assertCurrent: () => {
+        if (
+          generation !== this.#sessionGeneration ||
+          owner !== this.#nativeInstalledRuntimeOwner
+        )
+          throw new Error("project_document_session_changed");
+        owner.assertCurrent();
+      },
+    });
   }
 
   /** Updates cloud Agent profiles and restarts the runtime so they take effect. */

@@ -44,6 +44,27 @@ const invokeHttp = async <T>(channel: string, value: unknown): Promise<T> => {
 
 const bridge: CrewonDesktopBridge = {
   version: DESKTOP_BRIDGE_VERSION,
+  projectDocuments: {
+    read: (target) => invoke("crewon:project-document:read", target),
+    save: (target) => invoke("crewon:project-document:save", target),
+    async subscribe(target, changed) {
+      let id: string | undefined;
+      const listener = (_event: unknown, changedId: string) => {
+        if (id === changedId) changed();
+      };
+      ipcRenderer.on("crewon:project-document:changed", listener);
+      try {
+        id = await invoke<string>("crewon:project-document:subscribe", target);
+      } catch (error) {
+        ipcRenderer.removeListener("crewon:project-document:changed", listener);
+        throw error;
+      }
+      return () => {
+        ipcRenderer.removeListener("crewon:project-document:changed", listener);
+        void invoke("crewon:project-document:unsubscribe", id).catch(() => {});
+      };
+    },
+  },
   pluginExecutionSetup: Object.freeze<DesktopLocalPluginExecutionSetupClient>({
     version: DESKTOP_LOCAL_PLUGIN_EXECUTION_SETUP_VERSION,
     preview: (request) => invoke("crewon:plugin-execution:preview-v1", request),
@@ -171,6 +192,8 @@ const bridge: CrewonDesktopBridge = {
     activate: (workspaceId, request) =>
       invoke<unknown>("crewon:workspace:activate", workspaceId, request),
     clear: (request) => invoke<unknown>("crewon:workspace:clear", request),
+    remove: (workspaceId, request) =>
+      invoke<unknown>("crewon:workspace:remove", workspaceId, request),
     pickDirectory: (title) =>
       invoke<string | null>("crewon:workspace:pick-directory", title),
   },

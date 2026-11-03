@@ -1454,6 +1454,7 @@ export function App({
                     workspaceId:
                       controlWorkspace.nativeWorkspace?.workspaceId ?? null,
                     workspaces: controlWorkspace.nativeWorkspaces,
+                    archivedWorkspaceIds: controlWorkspace.archivedWorkspaceIds,
                     busy: controlWorkspace.nativeBusy,
                     threadWorkspaceReady: selectedWorkspaceReady,
                     revisionKey: controlWorkspace.nativeWorkspaceRevision,
@@ -1517,6 +1518,17 @@ export function App({
                                   );
                                 });
                             }
+                          }
+                        : undefined,
+                    onRemove:
+                      controlWorkspace.mutationAuthority === "desktop"
+                        ? (workspaceId) => {
+                            setWorkspaceSelectError(null);
+                            void controlWorkspace
+                              .removeNativeWorkspace(workspaceId)
+                              .catch(() => {
+                                setWorkspaceSelectError("移除工作空间失败，请重试。");
+                              });
                           }
                         : undefined,
                   }

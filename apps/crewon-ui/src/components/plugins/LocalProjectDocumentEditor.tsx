@@ -12,9 +12,11 @@ export type LocalProjectDocumentClient = Readonly<{
 export function LocalProjectDocumentEditor({
   client,
   title,
+  onDirtyChange,
 }: {
   client: LocalProjectDocumentClient;
   title: string;
+  onDirtyChange?(dirty: boolean): void;
 }) {
   const [document, setDocument] = useState<Document | null>(null);
   const [content, setContent] = useState("");
@@ -28,6 +30,7 @@ export function LocalProjectDocumentEditor({
     let active = true;
     let unsubscribe: (() => void) | undefined;
     dirty.current = false;
+    onDirtyChange?.(false);
     setReady(false);
     setSaving(false);
     setContent("");
@@ -45,8 +48,8 @@ export function LocalProjectDocumentEditor({
         setDocument(next);
         setContent(next?.content ?? "");
         setReady(true);
-      } catch {
-        if (active) setNotice("无法读取项目文件，请检查连接与访问权限。");
+      } catch (error) {
+        if (active) setNotice(documentError(error));
       }
     }
     // Subscribe before the first read so no committed update is lost between them.
@@ -62,15 +65,15 @@ export function LocalProjectDocumentEditor({
         unsubscribe = stop;
         void refresh();
       })
-      .catch(() => {
-        if (active) setNotice("无法连接项目文件更新。");
+      .catch((error) => {
+        if (active) setNotice(documentError(error));
       });
     return () => {
       active = false;
       ++generation.current;
       unsubscribe?.();
     };
-  }, [client, reload]);
+  }, [client, reload, onDirtyChange]);
 
   async function save() {
     if (!ready || saving) return;
@@ -85,6 +88,7 @@ export function LocalProjectDocumentEditor({
       if (request !== generation.current) return;
       setDocument(next);
       dirty.current = false;
+      onDirtyChange?.(false);
       setNotice("已保存到项目文件。");
     } catch {
       if (request === generation.current)
@@ -104,6 +108,7 @@ export function LocalProjectDocumentEditor({
           disabled={!ready || saving}
           onChange={(event) => {
             dirty.current = true;
+            onDirtyChange?.(true);
             setContent(event.target.value);
           }}
         />
@@ -126,4 +131,13 @@ export function LocalProjectDocumentEditor({
       <p role="status">{notice}</p>
     </section>
   );
+}
+
+function documentError(error: unknown) {
+  if (
+    error instanceof Error &&
+    error.message.includes("project_document_workspace_required")
+  )
+    return "此项目会话尚未绑定本地工作空间。请先选择项目文件夹，再新建项目会话。原有内容仍保留在项目页面。";
+  return "无法读取项目文件，请检查连接与访问权限。";
 }

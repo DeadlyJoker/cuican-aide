@@ -82,6 +82,42 @@ export function registerProjectConversationRoutes(
   );
   app.post<{
     Params: { threadId: string };
+    Body: { operation?: unknown };
+    Querystring: unknown;
+  }>(`${ROOT}/document-access`, async (request) => {
+    const context = requestContext(request);
+    const actor = await input.identity.resolveActor(context);
+    const threadId = parseThreadId(request.params.threadId);
+    parseProjectTextEmptyQuery(request.query);
+    const body = request.body;
+    if (
+      !body ||
+      Object.keys(body).length !== 1 ||
+      (body.operation !== "read" && body.operation !== "write")
+    )
+      throw new ApplicationError(
+        "validation",
+        "project_document_operation_invalid",
+      );
+    await input.threads.getThread(actor, threadId);
+    if (input.owner == null)
+      throw new ApplicationError(
+        "authorization",
+        "project_document_owner_unavailable",
+      );
+    return parseProjectConversationContextResponse(
+      threadId,
+      await input.owner.getContext(
+        context,
+        actor,
+        threadId,
+        undefined,
+        body.operation,
+      ),
+    );
+  });
+  app.post<{
+    Params: { threadId: string };
     Body: unknown;
     Querystring: unknown;
   }>(

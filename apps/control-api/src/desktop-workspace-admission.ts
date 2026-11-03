@@ -79,6 +79,9 @@ function readWorkspaceIds(path: string): ReadonlySet<string> {
         "revision",
         "activeWorkspaceId",
         "workspaces",
+        ...(Object.hasOwn(value, "archivedWorkspaceIds")
+          ? ["archivedWorkspaceIds"]
+          : []),
       ]) ||
       value.schemaVersion !== "crewon.desktop-workspace-authority.v2" ||
       !Number.isSafeInteger(value.revision) ||
@@ -106,6 +109,17 @@ function readWorkspaceIds(path: string): ReadonlySet<string> {
         !ids.has(value.activeWorkspaceId))
     )
       invalid();
+    if (value.archivedWorkspaceIds !== undefined) {
+      const archived = value.archivedWorkspaceIds;
+      if (
+        !Array.isArray(archived) ||
+        new Set(archived).size !== archived.length ||
+        archived.some((id) => typeof id !== "string" || !ids.has(id)) ||
+        archived.includes(value.activeWorkspaceId)
+      )
+        invalid();
+      for (const id of archived) ids.delete(id);
+    }
     return ids;
   } finally {
     closeSync(descriptor);

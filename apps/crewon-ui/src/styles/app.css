@@ -15014,6 +15014,35 @@ button.library-item:hover .library-card-chevron {
   transition: transform 0.16s ease;
 }
 
+.screen-shell.command-screen .real-workspace-title .workspace-title-toggle[aria-expanded="true"] > svg:first-child {
+  transform: rotate(90deg);
+}
+
+.screen-shell.command-screen .real-workspace-node > .conversation-list[hidden] {
+  display: none;
+}
+
+.screen-shell.command-screen .workspace-directory-disclosure {
+  display: inline-flex;
+  flex: 0 0 auto;
+  align-items: center;
+  justify-content: center;
+  width: 18px;
+  padding: 0;
+  border: 0;
+  background: transparent;
+  color: var(--n-600);
+}
+
+.screen-shell.command-screen .workspace-directory-disclosure svg {
+  width: 14px;
+  height: 14px;
+}
+
+.screen-shell.command-screen .workspace-directory-disclosure[aria-expanded="true"] svg {
+  transform: rotate(90deg);
+}
+
 .screen-shell.command-screen
   .standalone-workspace-toggle[aria-expanded="true"]
   svg {

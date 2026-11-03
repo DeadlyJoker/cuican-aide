@@ -28,6 +28,7 @@ import {
   type PluginUiInstance,
   type PluginUiProps,
   type PluginUiServices,
+  type PluginUiDefinition,
 } from "@crewon/plugin-sdk/ui";
 import {
   abortedPluginUiOperation,
@@ -84,6 +85,8 @@ export type PluginUiMountInput = Readonly<{
   root: HTMLElement;
   lease: PluginUiLease;
   props: PluginUiProps;
+  /** First-party presentation reuses this loader's original lease and service boundaries. */
+  hostDefinition?: PluginUiDefinition;
   signal?: AbortSignal;
   /** Host diagnostics only; never supplied to plugin code or used as authorization. */
   onProgress?(phase: PluginUiMountPhase): void;
@@ -258,6 +261,10 @@ export class TrustedPluginUiLoader {
 
   async mount(input: PluginUiMountInput): Promise<PluginUiMountHandle> {
     const lease = parsePluginUiLease(input.lease);
+    const hostDefinition =
+      input.hostDefinition === undefined
+        ? undefined
+        : parsePluginUiDefinition(input.hostDefinition);
     if (this.#mounts.has(lease.mountRef))
       uiFailure("plugin_ui_mount_ref_already_mounted");
     let props: PluginUiProps;
@@ -346,20 +353,22 @@ export class TrustedPluginUiLoader {
       progress("authorize-import");
       await this.#fence(candidate);
       progress("import");
-      const imported = await this.#await(
-        candidate,
-        Promise.resolve().then(() => {
-          this.#current(candidate);
-          return this.#entryImporter
-            ? this.#entryImporter({
-                url,
-                lease: candidate.lease,
-                signal: candidate.controller.signal,
-                onEntryRead: progress,
-              })
-            : this.#importer(url);
-        }),
-      );
+      const imported = hostDefinition
+        ? { default: hostDefinition }
+        : await this.#await(
+            candidate,
+            Promise.resolve().then(() => {
+              this.#current(candidate);
+              return this.#entryImporter
+                ? this.#entryImporter({
+                    url,
+                    lease: candidate.lease,
+                    signal: candidate.controller.signal,
+                    onEntryRead: progress,
+                  })
+                : this.#importer(url);
+            }),
+          );
       progress("authorize-instance");
       await this.#fence(candidate);
       if (!imported || typeof imported !== "object")

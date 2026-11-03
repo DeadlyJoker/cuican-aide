@@ -12,6 +12,7 @@ import {
   realpathSync,
   unlinkSync,
   writeFileSync,
+  watch,
 } from "node:fs";
 import { join, resolve } from "node:path";
 
@@ -29,8 +30,10 @@ const digest = (text: string) =>
 /** Opt-in storage for an already authorized project root. It grants no workspace access. */
 export class LocalProjectDocuments {
   readonly #root: string;
+  readonly #identity: { dev: number; ino: number };
   constructor(projectRoot: string) {
     this.#root = resolve(projectRoot);
+    this.#identity = lstatSync(this.#root);
     if (
       realpathSync(this.#root) !== this.#root ||
       !lstatSync(this.#root).isDirectory()
@@ -38,10 +41,36 @@ export class LocalProjectDocuments {
       throw new Error("project_document_root_invalid");
   }
 
+  /** Observe committed revision names only, including writes from another process. */
+  subscribe(documentId: string, changed: () => void): () => void {
+    this.#directory(documentId, false);
+    const watcher = watch(
+      this.#root,
+      { recursive: true },
+      (_event, filename) => {
+        if (
+          filename &&
+          new RegExp(`^documents/${documentId}/[0-9]{10}\\.md$`).test(
+            String(filename).replaceAll("\\", "/"),
+          )
+        )
+          changed();
+      },
+    );
+    watcher.on("error", changed);
+    return () => watcher.close();
+  }
+
   #directory(documentId: string, create: boolean): string | null {
     if (!/^[a-z][a-z0-9_-]{0,79}$/.test(documentId))
       throw new Error("project_document_id_invalid");
     if (realpathSync(this.#root) !== this.#root)
+      throw new Error("project_document_root_changed");
+    const currentRoot = lstatSync(this.#root);
+    if (
+      currentRoot.dev !== this.#identity.dev ||
+      currentRoot.ino !== this.#identity.ino
+    )
       throw new Error("project_document_root_changed");
     let path = this.#root;
     for (const part of ["documents", documentId]) {

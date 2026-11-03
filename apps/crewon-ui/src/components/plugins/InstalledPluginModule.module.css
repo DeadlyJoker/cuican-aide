@@ -17,6 +17,27 @@
   min-width: 0;
   overflow: auto;
 }
+.hiddenContent {
+  display: none;
+}
+.documentTabs {
+  display: flex;
+  gap: 4px;
+  padding: 8px 12px;
+  border-bottom: 1px solid var(--border);
+  flex-shrink: 0;
+}
+.documentTabs button {
+  border: 0;
+  border-radius: 6px;
+  background: transparent;
+  color: inherit;
+  padding: 6px 10px;
+  font: inherit;
+}
+.documentTabs button[aria-pressed="true"] {
+  background: var(--accent);
+}
 
 /* Opt-in headers reserve horizontal room without a second title row. */
 .module:has([data-plugin-header-insets="inline"]) {

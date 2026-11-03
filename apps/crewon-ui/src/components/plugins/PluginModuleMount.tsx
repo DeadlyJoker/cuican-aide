@@ -1,6 +1,6 @@
 import { useEffect, useLayoutEffect, useMemo, useRef } from "react";
 import type { PluginUiLease } from "@crewon/contracts/plugins";
-import type { PluginUiProps } from "@crewon/plugin-sdk/ui";
+import type { PluginUiProps, PluginUiDefinition } from "@crewon/plugin-sdk/ui";
 import {
   TrustedPluginUiLoader,
   type PluginUiMountHandle,
@@ -18,6 +18,7 @@ export type PluginModuleMountProps = Readonly<{
   mountKey: string;
   active: boolean;
   props: PluginUiProps;
+  hostDefinition?: PluginUiDefinition;
   className?: string;
   onError?(error: unknown): void;
   onMounted?(): void;
@@ -30,14 +31,15 @@ export function PluginModuleMount({
   mountKey,
   active,
   props,
+  hostDefinition,
   className,
   onError,
   onMounted,
 }: PluginModuleMountProps) {
   const root = useRef<HTMLDivElement>(null);
   const owner = useMemo(
-    () => ({ loader, acquireMount, mountKey, active }),
-    [loader, acquireMount, mountKey, active],
+    () => ({ loader, acquireMount, mountKey, active, hostDefinition }),
+    [loader, acquireMount, mountKey, active, hostDefinition],
   );
   const committedOwner = useRef(owner);
   const current = useRef<{
@@ -125,6 +127,7 @@ export function PluginModuleMount({
         root: root.current,
         lease,
         props: initialProps,
+        hostDefinition,
         signal: controller.signal,
         onProgress: progress,
       });

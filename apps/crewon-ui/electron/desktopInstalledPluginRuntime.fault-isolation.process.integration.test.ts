@@ -30,6 +30,56 @@ const professionalDirectory =
   process.env.CREWON_TEST_PROFESSIONAL_PLUGIN_V1_DIR;
 const kreaDirectory = process.env.CREWON_TEST_KREA_PLUGIN_DIR;
 
+it.runIf(professionalDirectory !== undefined)(
+  "plugin Worker startup failure leaves the original default Agent available through real HTTP and streaming",
+  async () => {
+    const f = await nativeIsolationProcessFixture(
+      professionalDirectory!,
+      undefined,
+      { workerStartupFailure: "installed-only" },
+    );
+    let failure: { error: unknown } | undefined;
+    try {
+      const source = f.sources[0]!;
+      const management = f.supervisor(false);
+      await management.start();
+      const installed = await installIsolationPlugin(
+        management.session(),
+        source,
+      );
+      await configureIsolationPlugin(f, management.session(), source);
+      await management.stop();
+      const configurationPath = await writeIsolationRuntimeConfiguration(f, [
+        source.pluginId,
+      ]);
+      const configurationBytes = await readFile(configurationPath);
+      const runtime = f.supervisor(true);
+      await runtime.start();
+      const session = runtime.session();
+      expect(
+        (await nativeProcessHttp(session, "GET", "/api/v1/health/ready"))
+          .status,
+      ).toBe(200);
+      await assertIsolationSelection(session, installed.selection);
+      const publication = await isolationActivePublication(f);
+      await runIsolationDefaultAgent(
+        f,
+        session,
+        publication.active.bundle.defaultAgentVersionId,
+      );
+      expect(await readFile(configurationPath)).toEqual(configurationBytes);
+      expect(f.logs.join("")).toContain("Plugin unavailable");
+      await runtime.stop();
+    } catch (error) {
+      failure = { error };
+      throw error;
+    } finally {
+      await closeNativeProcessFixture(f, failure);
+    }
+  },
+  90000,
+);
+
 for (const reason of [
   "notInstalled",
   "configurationMissing",

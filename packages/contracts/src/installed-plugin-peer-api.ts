@@ -41,8 +41,17 @@ export function parseInstalledPluginPeerRequest(
     } as const;
     switch (value.operation) {
       case "catalog":
-        peerRecord(value, commonFields);
-        return Object.freeze({ ...common, operation: "catalog" });
+        peerRecord(value, [
+          ...commonFields,
+          ...(Object.hasOwn(value, "compact") ? ["compact"] : []),
+        ]);
+        if (Object.hasOwn(value, "compact") && value.compact !== true)
+          peerFail();
+        return Object.freeze({
+          ...common,
+          operation: "catalog",
+          ...(value.compact === true ? { compact: true as const } : {}),
+        });
       case "validateConfiguration":
         peerRecord(value, [...commonFields, ...configurationFields]);
         return Object.freeze({
@@ -135,6 +144,71 @@ function catalogEntry(input: unknown): InstalledPluginPeerCatalogEntry {
     configuredTarget: peerTarget(value.configuredTarget),
   });
 }
+
+/** Private wire projection. Identical package/configuration bytes appear once across model variants. */
+export function compactInstalledPluginPeerCatalog(
+  input: Extract<InstalledPluginPeerResponse, { operation: "catalog" }>,
+) {
+  const registrations: Omit<
+    InstalledPluginPeerCatalogEntry,
+    "configuredTarget"
+  >[] = [];
+  const indices = new Map<string, number>();
+  const targets = input.entries.map(({ configuredTarget, ...registration }) => {
+    const key = JSON.stringify(registration);
+    let index = indices.get(key);
+    if (index === undefined) {
+      index = registrations.length;
+      indices.set(key, index);
+      registrations.push(registration);
+    }
+    return { registration: index, configuredTarget };
+  });
+  const { entries: _entries, ...common } = input;
+  return { ...common, registrations, targets };
+}
+
+function compactCatalogEntries(
+  value: Record<string, unknown>,
+): readonly InstalledPluginPeerCatalogEntry[] {
+  peerRecord(value, [...commonFields, "registrations", "targets"]);
+  if (
+    !Array.isArray(value.registrations) ||
+    !Array.isArray(value.targets) ||
+    value.registrations.length > limits.entries ||
+    value.targets.length > limits.entries
+  )
+    peerFail();
+  const registrations = value.registrations.map((input) => {
+    const record = peerRecord(input, ["identity", "manifest", "configuration"]);
+    return Object.freeze({
+      identity: peerIdentity(record.identity),
+      manifest: peerJsonObject(record.manifest, limits.manifestBytes),
+      configuration: peerJsonObject(
+        record.configuration,
+        limits.configurationBytes,
+      ),
+    });
+  });
+  const used = new Set<number>();
+  const entries = value.targets.map((input) => {
+    const target = peerRecord(input, ["registration", "configuredTarget"]);
+    if (
+      typeof target.registration !== "number" ||
+      !Number.isSafeInteger(target.registration) ||
+      target.registration < 0 ||
+      target.registration >= registrations.length
+    )
+      peerFail();
+    used.add(target.registration);
+    return Object.freeze({
+      ...registrations[target.registration]!,
+      configuredTarget: peerTarget(target.configuredTarget),
+    });
+  });
+  if (used.size !== registrations.length) peerFail();
+  return Object.freeze(entries);
+}
 export function parseInstalledPluginPeerResponse(
   input: unknown,
 ): InstalledPluginPeerResponse {
@@ -149,6 +223,12 @@ export function parseInstalledPluginPeerResponse(
     } as const;
     switch (value.operation) {
       case "catalog":
+        if (Object.hasOwn(value, "registrations"))
+          return Object.freeze({
+            ...common,
+            operation: "catalog",
+            entries: compactCatalogEntries(value),
+          });
         peerRecord(value, [...commonFields, "entries"]);
         if (
           !Array.isArray(value.entries) ||
