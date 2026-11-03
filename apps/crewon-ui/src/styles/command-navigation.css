@@ -816,8 +816,34 @@ body:has(.command-navigation-rail) .crewon-session-pill {
 
 :root[data-surface="desktop"]
   .command-shell-route
-  .command-workbench[data-maximized="true"]
+  .command-workbench[data-maximized="true"]:not([data-preserve-directory="true"])
   .command-workbench-tabbar {
+  padding-left: 112px;
+}
+
+/* The existing directory toggle stays available above an expanded workbench. */
+.command-shell-route:has(> .command-workbench[data-maximized="true"])
+  > .command-panel-header {
+  z-index: 95;
+  pointer-events: none;
+  background: transparent;
+  border-bottom-color: transparent;
+  -webkit-app-region: no-drag;
+}
+
+.command-shell-route:has(> .command-workbench[data-maximized="true"])
+  > .command-panel-header .command-panel-heading {
+  visibility: hidden;
+}
+
+.command-shell-route:has(> .command-workbench[data-maximized="true"])
+  > .command-panel-header .command-sidebar-chrome {
+  pointer-events: auto;
+}
+
+:root[data-surface="desktop"]
+  .command-shell-route:has(.command-window.sidebar-collapsed)
+  .command-workbench[data-maximized="true"] .command-workbench-tabbar {
   padding-left: 112px;
 }
 

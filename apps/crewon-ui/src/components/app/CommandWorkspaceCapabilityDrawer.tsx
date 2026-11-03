@@ -1,8 +1,8 @@
+import { useCommandWorkbenchResize } from "./useCommandWorkbenchResize";
 import { CommandWorkbenchTabStrip } from "./CommandWorkbenchTabStrip";
 import { PanelRight, Maximize2, Minimize2 } from "lucide-react";
 import {
   type KeyboardEvent as ReactKeyboardEvent,
-  type PointerEvent as ReactPointerEvent,
   useEffect,
   useRef,
   useState,
@@ -46,66 +46,7 @@ type WorkbenchTab = BaseWorkbenchTab & {
   recordedChanges?: RecordedTaskChanges;
 };
 
-const DEFAULT_WORKBENCH_WIDTH = 480;
-const MIN_WORKBENCH_WIDTH = 360;
-const MAX_WORKBENCH_WIDTH = 840;
-const MIN_COMMAND_AREA_WIDTH = 560;
-const WORKBENCH_KEYBOARD_STEP = 24;
-const WORKBENCH_WIDTH_STORAGE_KEY = "crewon:command-workbench-width:v2";
 export const DEFAULT_COMMAND_WORKBENCH_ID = "command-workbench";
-
-function maximumWorkbenchWidth(viewportWidth: number): number {
-  return Math.max(
-    MIN_WORKBENCH_WIDTH,
-    Math.min(MAX_WORKBENCH_WIDTH, viewportWidth - MIN_COMMAND_AREA_WIDTH),
-  );
-}
-
-function clampWorkbenchWidth(width: number, viewportWidth: number): number {
-  return Math.round(
-    Math.min(
-      Math.max(width, MIN_WORKBENCH_WIDTH),
-      maximumWorkbenchWidth(viewportWidth),
-    ),
-  );
-}
-
-function currentViewportWidth(): number {
-  return typeof window === "undefined" ? 1440 : window.innerWidth;
-}
-
-function initialWorkbenchWidth(): number {
-  if (typeof window === "undefined") {
-    return DEFAULT_WORKBENCH_WIDTH;
-  }
-  let storedWidth: number | null = null;
-  try {
-    const rawWidth = window.localStorage.getItem(WORKBENCH_WIDTH_STORAGE_KEY);
-    if (rawWidth !== null) {
-      const parsedWidth = Number(rawWidth);
-      if (Number.isFinite(parsedWidth)) {
-        storedWidth = parsedWidth;
-      }
-    }
-  } catch {
-    // Storage can be unavailable in privacy-restricted desktop webviews.
-  }
-  return clampWorkbenchWidth(
-    storedWidth ?? DEFAULT_WORKBENCH_WIDTH,
-    window.innerWidth,
-  );
-}
-
-function persistWorkbenchWidth(width: number) {
-  if (typeof window === "undefined") {
-    return;
-  }
-  try {
-    window.localStorage.setItem(WORKBENCH_WIDTH_STORAGE_KEY, String(width));
-  } catch {
-    // Resizing remains functional when storage is unavailable.
-  }
-}
 
 export type CommandWorkspaceCapabilityDrawerProps = {
   pluginPanel?: CommandWorkspacePluginPanelSelection | null;
@@ -227,16 +168,24 @@ export function CommandWorkspaceCapabilityDrawer({
   const browserTabSequenceRef = useRef(1);
   const dismissedToolIdsRef = useRef(new Set<WorkbenchToolId>());
   const [launcherOpen, setLauncherOpen] = useState(false);
-  const [maximized, setMaximized] = useState(false);
-  const [resizing, setResizing] = useState(false);
-  const [workbenchWidth, setWorkbenchWidth] = useState(initialWorkbenchWidth);
+  const {
+    maximized,
+    workbenchRef,
+    conversationLeft,
+    setMaximized,
+    resizing,
+    workbenchWidth,
+    minimumWidth,
+    maximumWidth,
+    handleResizePointerDown,
+    handleResizePointerMove,
+    finishResize,
+    handleResizeKeyDown,
+  } = useCommandWorkbenchResize();
   const launcherRef = useRef<HTMLDivElement>(null);
   const launcherMenuRef = useRef<HTMLDivElement>(null);
   const [launcherMenuLeft, setLauncherMenuLeft] = useState(8);
-  const resizePointerIdRef = useRef<number | null>(null);
-  const workbenchWidthRef = useRef(workbenchWidth);
   activeTabIdRef.current = activeTabId;
-  workbenchWidthRef.current = workbenchWidth;
 
   useEffect(() => {
     setTabs((current) => {
@@ -258,35 +207,6 @@ export function CommandWorkspaceCapabilityDrawer({
     setActiveTabId(tab.id);
     setLauncherOpen(false);
   }, [workbenchRequest, taskSnapshot?.scopeId]);
-
-  useEffect(() => {
-    function handleWindowResize() {
-      setWorkbenchWidth((currentWidth) => {
-        const nextWidth = clampWorkbenchWidth(
-          currentWidth,
-          currentViewportWidth(),
-        );
-        workbenchWidthRef.current = nextWidth;
-        return nextWidth;
-      });
-    }
-    window.addEventListener("resize", handleWindowResize);
-    return () => window.removeEventListener("resize", handleWindowResize);
-  }, []);
-
-  useEffect(() => {
-    if (!resizing) {
-      return;
-    }
-    const previousCursor = document.documentElement.style.cursor;
-    const previousUserSelect = document.documentElement.style.userSelect;
-    document.documentElement.style.cursor = "col-resize";
-    document.documentElement.style.userSelect = "none";
-    return () => {
-      document.documentElement.style.cursor = previousCursor;
-      document.documentElement.style.userSelect = previousUserSelect;
-    };
-  }, [resizing]);
 
   useEffect(() => {
     if (!panel) {
@@ -564,79 +484,7 @@ export function CommandWorkspaceCapabilityDrawer({
     });
   }
 
-  function updateWorkbenchWidth(nextWidth: number) {
-    const clampedWidth = clampWorkbenchWidth(nextWidth, currentViewportWidth());
-    workbenchWidthRef.current = clampedWidth;
-    setWorkbenchWidth(clampedWidth);
-  }
-
-  function handleResizePointerDown(event: ReactPointerEvent<HTMLDivElement>) {
-    if (maximized || event.button !== 0) {
-      return;
-    }
-    event.preventDefault();
-    resizePointerIdRef.current = event.pointerId;
-    /*
-     * Capture is what keeps the drag alive once the pointer leaves this 9px
-     * strip; without it a browser tab's iframe swallows every later move and the
-     * workbench freezes mid-resize. It is still only an optimisation: losing it
-     * must not abort the drag, so a failure here cannot be allowed to skip
-     * `setResizing` the way a thrown error did.
-     */
-    try {
-      event.currentTarget.setPointerCapture(event.pointerId);
-    } catch {
-      // Some engines reject capture for synthetic or already-released pointers.
-    }
-    setResizing(true);
-  }
-
-  function handleResizePointerMove(event: ReactPointerEvent<HTMLDivElement>) {
-    if (resizePointerIdRef.current !== event.pointerId) {
-      return;
-    }
-    updateWorkbenchWidth(currentViewportWidth() - event.clientX);
-  }
-
-  function finishResize(event: ReactPointerEvent<HTMLDivElement>) {
-    if (resizePointerIdRef.current !== event.pointerId) {
-      return;
-    }
-    resizePointerIdRef.current = null;
-    // Releasing is best-effort for the same reason acquiring is: a throw here
-    // would strand the workbench in its resizing state forever.
-    try {
-      if (event.currentTarget.hasPointerCapture(event.pointerId)) {
-        event.currentTarget.releasePointerCapture(event.pointerId);
-      }
-    } catch {
-      // Capture was already gone; nothing to release.
-    }
-    setResizing(false);
-    persistWorkbenchWidth(workbenchWidthRef.current);
-  }
-
-  function handleResizeKeyDown(event: ReactKeyboardEvent<HTMLDivElement>) {
-    let nextWidth: number | null = null;
-    if (event.key === "ArrowLeft") {
-      nextWidth = workbenchWidth + WORKBENCH_KEYBOARD_STEP;
-    } else if (event.key === "ArrowRight") {
-      nextWidth = workbenchWidth - WORKBENCH_KEYBOARD_STEP;
-    } else if (event.key === "Home") {
-      nextWidth = MIN_WORKBENCH_WIDTH;
-    } else if (event.key === "End") {
-      nextWidth = maximumWorkbenchWidth(currentViewportWidth());
-    }
-    if (nextWidth === null) {
-      return;
-    }
-    event.preventDefault();
-    updateWorkbenchWidth(nextWidth);
-    persistWorkbenchWidth(workbenchWidthRef.current);
-  }
-
   const activeTab = tabs.find((tab) => tab.id === activeTabId) ?? null;
-  const maximumWidth = maximumWorkbenchWidth(currentViewportWidth());
   /*
    * The panel tool has no launch action of its own; it is only reachable while
    * a generic panel exists, so it stays out of the launcher otherwise.
@@ -657,26 +505,35 @@ export function CommandWorkspaceCapabilityDrawer({
         </button>
       ) : null}
       <aside
+        ref={workbenchRef}
         aria-hidden={interactionInactive || undefined}
         aria-label={locale === "zh" ? "工作区工作台" : "Workspace workbench"}
         className="command-workbench"
         data-empty={!pluginPanel && tabs.length === 0 ? "true" : undefined}
-        data-maximized={maximized && !pluginPanel ? "true" : undefined}
+        data-maximized={maximized ? "true" : undefined}
+        data-preserve-directory={
+          maximized && conversationLeft > 0 ? "true" : undefined
+        }
         data-resizing={resizing ? "true" : undefined}
         hidden={!open}
         id={DEFAULT_COMMAND_WORKBENCH_ID}
         inert={interactionInactive || undefined}
         style={
-          maximized && !pluginPanel ? undefined : { width: workbenchWidth }
+          maximized
+            ? {
+                left: conversationLeft,
+                width: `calc(100vw - ${conversationLeft}px)`,
+              }
+            : { width: workbenchWidth }
         }
         onKeyDown={handleWorkbenchKeyDown}
       >
-        {!maximized || pluginPanel ? (
+        {!maximized ? (
           <div
             aria-label={locale === "zh" ? "调整工作台宽度" : "Resize workbench"}
             aria-orientation="vertical"
             aria-valuemax={maximumWidth}
-            aria-valuemin={MIN_WORKBENCH_WIDTH}
+            aria-valuemin={minimumWidth}
             aria-valuenow={workbenchWidth}
             className="command-workbench-resize-handle"
             role="separator"
@@ -745,7 +602,7 @@ export function CommandWorkspaceCapabilityDrawer({
             })),
           ]}
           windowActions={
-            !pluginPanel && tabs.length > 0 ? (
+            pluginPanel || tabs.length > 0 ? (
               <button
                 type="button"
                 className="command-workbench-maximize"

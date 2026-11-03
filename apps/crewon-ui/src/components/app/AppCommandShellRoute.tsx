@@ -531,7 +531,6 @@ export function AppCommandShellRoute({
         </header>
         <CommandWorkspace
           {...commandWorkspaceProps}
-          workbenchOpen={pluginPanel !== null || capabilityDrawer.open}
           panelHeaderTarget={panelHeaderTarget}
           panelHeaderActions={taskDetailTrigger}
           hostModulePanelTarget={pluginPanelTarget}

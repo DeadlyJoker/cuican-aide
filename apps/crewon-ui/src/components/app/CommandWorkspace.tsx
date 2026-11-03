@@ -319,7 +319,6 @@ export function hasKnownActiveAgentPlatformRun(input: {
 export type CommandWorkspaceControlNav = CommandControlWorkspaceNav;
 
 type CommandWorkspaceProps = {
-  workbenchOpen?: boolean;
   businessExtensionEntry?: ReactNode;
   hostModule?: CommandWorkspaceHostModule;
   hostModules?: readonly CommandWorkspaceHostModule[];
@@ -870,7 +869,6 @@ export function shouldCloseComposerPalette({
 }
 
 export function CommandWorkspace({
-  workbenchOpen = false,
   businessExtensionEntry = null,
   hostModule,
   hostModules,
@@ -993,9 +991,7 @@ export function CommandWorkspace({
   );
   const activeViewRef = useRef(activeView);
   activeViewRef.current = activeView;
-  const [sidebarCollapsed, setSidebarCollapsed] = useCommandSidebarCollapse({
-    workbenchOpen,
-  });
+  const [sidebarCollapsed, setSidebarCollapsed] = useCommandSidebarCollapse();
   const [sidebarSearchOpen, setSidebarSearchOpen] = useState(false);
   const [localSidebarSearchQuery, setLocalSidebarSearchQuery] = useState("");
   const sidebarSearchQuery = threadCatalogSearch ?? localSidebarSearchQuery;

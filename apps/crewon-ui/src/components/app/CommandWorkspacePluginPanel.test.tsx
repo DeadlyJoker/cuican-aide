@@ -365,7 +365,27 @@ describe("plugin panels in the formal Agent shell", () => {
         '.command-workbench-tabbar [role="tab"][data-active="true"] > button',
       )?.textContent,
     ).toBe("项目 A");
-    expect(panel.querySelector('[aria-label="全屏工作台"]')).toBeNull();
+    expect(panel.querySelector('[aria-label="全屏工作台"]')).not.toBeNull();
+    const agentCanvas = container.querySelector<HTMLElement>(
+      '[data-od-id="desktop-main-pane"]',
+    )!;
+    vi.spyOn(agentCanvas, "getBoundingClientRect").mockReturnValue(
+      new DOMRect(268, 54, 560, 700),
+    );
+    await act(async () => window.dispatchEvent(new Event("resize")));
+    await click('[aria-label="全屏工作台"]');
+    expect(panel.dataset.maximized).toBe("true");
+    expect(panel.style.left).toBe("268px");
+    expect(panel.dataset.preserveDirectory).toBe("true");
+    expect(
+      container.querySelector<HTMLElement>(".command-sidebar-context")?.hidden,
+    ).toBe(false);
+    expect(panel.querySelector('[data-plugin-fixture="fixture-a"]')).toBe(
+      fixture,
+    );
+    expect(conversation!.querySelector("textarea")).toBe(composer);
+    await click('[aria-label="退出全屏工作台"]');
+    expect(panel.dataset.maximized).toBeUndefined();
     await click('[data-plugin-fixture="fixture-a"] button');
     await openPlugin("fixture-b");
     expect(panel.querySelector('[data-plugin-fixture="fixture-a"]')).toBe(
@@ -384,6 +404,52 @@ describe("plugin panels in the formal Agent shell", () => {
         .querySelector(".command-sidebar-workspaces")
         ?.getAttribute("hidden"),
     ).toBeNull();
+  });
+
+  it("keeps the shared directory toggle above the expanded workbench so it can be reopened", async () => {
+    const css = readFileSync(
+      new NodeURL("../../styles/command-navigation.css", import.meta.url),
+      "utf8",
+    );
+    const start = css.indexOf("/* The existing directory toggle");
+    expect(start).toBeGreaterThan(-1);
+    const style = document.createElement("style");
+    style.textContent = css.slice(
+      start,
+      css.indexOf("@media (max-width: 520px)", start),
+    );
+    document.head.append(style);
+    try {
+      await render({ hostModules: [contribution("fixture", "项目产物")] });
+      await openPlugin("fixture");
+      await click('[aria-label="全屏工作台"]');
+      const header = container.querySelector<HTMLElement>(
+        ".command-panel-header",
+      )!;
+      const toggle = container.querySelector<HTMLElement>(
+        ".command-sidebar-chrome",
+      )!;
+      expect(window.getComputedStyle(header).zIndex).toBe("95");
+      expect(window.getComputedStyle(header).pointerEvents).toBe("none");
+      expect(window.getComputedStyle(toggle).pointerEvents).toBe("auto");
+      await click("[data-sidebar-collapse]");
+      expect(
+        container.querySelector<HTMLElement>(".command-sidebar-context")
+          ?.hidden,
+      ).toBe(true);
+      await click("[data-sidebar-collapse]");
+      expect(
+        container.querySelector<HTMLElement>(".command-sidebar-context")
+          ?.hidden,
+      ).toBe(false);
+      expect(
+        container
+          .querySelector(".command-workbench")
+          ?.getAttribute("data-maximized"),
+      ).toBe("true");
+    } finally {
+      style.remove();
+    }
   });
 
   it("confines custom project navigation to the left context while preserving the central Agent and withdrawing it on plugin switch", async () => {
